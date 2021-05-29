@@ -113,7 +113,7 @@ sub set_favicon {
 
 sub listen:method {
 	my $self = shift;
-	
+		
 	for my $listen (@{ $self->{listen} }) {
 		my ($host,$service) = split ':',$listen,2;
 		$service = $self->{port} unless length $service;
@@ -257,40 +257,41 @@ sub incoming {
 		
 		my $write = sub {
 			$self and exists $self->{$id} or return;
-			use Data::Dumper;
+			my $ido=$self->{$id};
 			for my $buf (@_) {
-				ref $buf or do { $buf = \( my $str = $buf ); warn "Passed nonreference buffer from @{[ (caller)[1,2] ]}\n"; };
-				if ( $self->{$id}{wbuf} ) {
-					$self->{$id}{closeme} and return warn "Write ($$buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
-					${ $self->{$id}{wbuf} } .= defined $$buf ? $$buf : return $self->{$id}{closeme} = 1;
+				if ( $ido->{wbuf} ) {
+					$ido->{closeme} and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
+					${ $ido->{wbuf} } .= defined $buf ? $buf : return $ido->{closeme} = 1;
 					return;
 				}
-				elsif ( !defined $$buf ) { return $self->drop($id); }
+				elsif ( !defined $buf ) { return $self->drop($id); }
 				
-				$self->{$id}{fh} or return do {
-					warn "Lost filehandle while trying to send ".length($$buf)." data for $id";
+				$ido->{fh} or return do {
+					warn "Lost filehandle while trying to send ".length($buf)." data for $id";
 					$self->drop($id,"No filehandle");
 					();
 				};
-				my $w = syswrite( $self->{$id}{fh}, $$buf );
-				if ($w == length $$buf) {
+				my $w = syswrite( $ido->{fh}, $buf );
+				if ($w == length $buf) {
 					# ok;
+					if( $ido->{closeme} ) { $self->drop($id); };
 				}
 				elsif (defined $w) {
-					substr($$buf,0,$w,'');
-					$self->{$id}{wbuf} = $buf;
-					$self->{$id}{ww} = AE::io $self->{$id}{fh}, 1, sub {
+					#substr($buf,0,$w,'');
+					$ido->{wbuf} = substr($buf,0,$w,'');
+					#$buf;
+					$ido->{ww} = AE::io $ido->{fh}, 1, sub {
 						warn "ww.io.$id" if DEBUG;
-						$self and exists $self->{$id} or return;
-						$w = syswrite( $self->{$id}{fh}, ${ $self->{$id}{wbuf} } );
-						if ($w == length ${ $self->{$id}{wbuf} }) {
-							delete $self->{$id}{wbuf};
-							delete $self->{$id}{ww};
-							if( $self->{$id}{closeme} ) { $self->drop($id); }
+						$self and $ido or return;
+						$w = syswrite( $ido->{fh}, ${ $ido->{wbuf} } );
+						if ($w == length ${ $ido->{wbuf} }) {
+							delete $ido->{wbuf};
+							delete $ido->{ww};
+							if( $ido->{closeme} ) { $self->drop($id); }
 						}
 						elsif (defined $w) {
-							${ $self->{$id}{wbuf} } = substr( ${ $self->{$id}{wbuf} }, $w );
-							#substr( ${ $self->{$id}{wbuf} }, 0, $w, '');
+							${ $ido->{wbuf} } = substr( ${ $ido->{wbuf} }, $w );
+							#substr( ${ $ido->{wbuf} }, 0, $w, '');
 						}
 						else { return $self->drop($id, "$!"); }
 					};
@@ -318,6 +319,7 @@ sub incoming {
 								$state   = 1;
 								$lastkey = undef;
 								++$seq;
+								$self->{$id}{closeme}=1 if $version ne "1.1";
 								warn "Received request N.$seq over ".fileno($fh).": $method $uri" if DEBUG;
 								$self->{active_requests}++;
 								#push @{ $r{req} }, [{}];
@@ -397,8 +399,8 @@ sub incoming {
 									$self->badconn($fh,\$line, "Bad header for <$method $uri>+{@{[ %h ]}}");
 									my $content = 'Bad request headers';
 									my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
-									$write->(\$str);
-									$write->(\undef);
+									$write->($str);
+									$write->(undef);
 									return;
 								}
 							}
@@ -410,8 +412,8 @@ sub incoming {
 
 							if ( $method eq "GET" and $uri =~ m{^/favicon\.ico( \Z | \? )}sox and $self->{ico}) {
 								$self->{active_requests}--;
-								$write->(\$self->{ico});
-								$write->(\undef) if lc $h{connecton} =~ /^close\b/;
+								$write->($self->{ico});
+								$write->(undef) if lc $h{connecton} =~ /^close\b/;
 								$ixx = $pos + $h{'content-length'};
 							# } elsif ( $method eq "GET" and $uri =~ m{^/ping( \Z | \? )}sox) {
 							# 	my ( $header_str, $content ) = ref $self->{ping_sub} eq 'CODE' ? $self->{ping_sub}->() : ('200 OK', 'Pong');
@@ -689,8 +691,8 @@ sub incoming {
 					my $content = 'Non-consumable request';
 					my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
 					$self->{active_requests}--;
-					$write->(\$str);
-					$write->(\undef);
+					$write->($str);
+					$write->(undef);
 					return;
 				}
 				else {

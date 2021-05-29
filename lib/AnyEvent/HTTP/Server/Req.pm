@@ -330,8 +330,8 @@ use Digest::SHA1 'sha1';
 			$reply .= $LF.$content;
 			#if (!ref $content) { $reply .= $content }
 			if( $self->[3] ) {
-				$self->[3]->( \$reply );
-				$self->[3]->( \undef ) if $h->{connection} eq 'close' or $self->[SERVER]{graceful};
+				$self->[3]->( $reply );
+				$self->[3]->( undef ) if $h->{connection} eq 'close' or $self->[SERVER]{graceful};
 				delete $self->[3];
 				${ $self->[REQCOUNT] }--;
 			}
