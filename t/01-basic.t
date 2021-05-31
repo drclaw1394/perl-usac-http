@@ -63,6 +63,7 @@ test_server {
 	$PARTIAL ? () : ([[qq{GET /test7 HTTP/1.1\nHost:localhost\nConnection:keep-alive\nAccept:*/*;\n\t q="$bad"\n\n}], 200, { 'x-test' => 8 }, qq{GET:/test7:localhost:*/*; q="$bad":"$bad"} ]), # "
 if ALL;
 
+	print "DOING read body\n";
 test_server {
 	my $s = shift;
 	my $r = shift;
@@ -91,15 +92,19 @@ test_server {
 if ALL;
 
 
+	print "DOING CHUNKED\n";
 test_server {
 	my $s = shift;
 	my $r = shift;
 	my $replybody = "$r->[0]:$r->[1]:$r->[2]{host}";
 	my @reply = split //, $replybody;
 	my $t;$t = AE::timer 0,0.01, sub {
+		print "TIMER\n";
 		if (@reply) {
+		print "TIMER body\n";
 			$r->body(shift @reply);
 		} else {
+		print "TIMER done\n";
 			undef $t;
 			$r->finish;
 		}

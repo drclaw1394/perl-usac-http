@@ -242,14 +242,14 @@ use Digest::SHA1 'sha1';
 			defined() and $reply .= $_ for @good,@bad;
 			$reply .= $LF;
 			if( $self->[3] ) {
-				$self->[3]->( \$reply );
+				$self->[3]->( $reply );
 				while ($size > 0) {
 					my $l = sysread($f,my $buf,4096);
 					defined $l or last;
 					$size -= $l;
-					$self->[3]->( \$buf );
+					$self->[3]->( $buf );
 				}
-				$self->[3]->( \undef ) if $h->{connection} eq 'close' or $self->[SERVER]{graceful};
+				$self->[3]->( undef ) if $h->{connection} eq 'close' or $self->[SERVER]{graceful};
 				delete $self->[3];
 				${ $self->[REQCOUNT] }--;
 			}
@@ -420,7 +420,7 @@ use Digest::SHA1 'sha1';
 		sub send_100_continue {
 			my ($self,$code,%args) = @_;
 			my $reply = "HTTP/1.1 100 $http{100}$LF$LF";
-			$self->[3]->( \$reply );
+			$self->[3]->( $reply );
 		}
 
 		sub send_headers {
@@ -459,7 +459,7 @@ use Digest::SHA1 'sha1';
 			$self->attrs->{head_size} = length $reply;
 			$self->attrs->{body_size} = 0;
 			#warn "send headers: $reply";
-			$self->[3]->( \$reply );
+			$self->[3]->( $reply );
 			if (!$self->[4]) {
 				if ($args{clearance}) {
 					$self->[3] = undef;
@@ -475,7 +475,7 @@ use Digest::SHA1 'sha1';
 			$self->attrs->{body_size} += length $content;
 			my $length = sprintf "%x", length $content;
 			#warn "send body part $length / ".length($content)."\n";
-			$self->[3]->( \("$length$LF$content$LF") );
+			$self->[3]->( ("$length$LF$content$LF") );
 		}
 		
 		sub finish {
@@ -483,8 +483,8 @@ use Digest::SHA1 'sha1';
 			if ($self->[4]) {
 				#warn "send body end (".$self->connection.")\n";
 				if( $self->[3] ) {
-					$self->[3]->( \("0$LF$LF")  );
-					$self->[3]->(\undef) if $self->connection eq 'close' or $self->[SERVER]{graceful};
+					$self->[3]->( ("0$LF$LF")  );
+					$self->[3]->(undef) if $self->connection eq 'close' or $self->[SERVER]{graceful};
 					delete $self->[3];
 				}
 				undef $self->[4];
@@ -512,8 +512,8 @@ use Digest::SHA1 'sha1';
 			my $self = shift;
 			if( $self->[4] ) {
 				if( $self->[3] ) {
-					$self->[3]->( \("1$LF"));
-					$self->[3]->( \undef);
+					$self->[3]->( ("1$LF"));
+					$self->[3]->( undef);
 					delete $self->[3];
 				}
 				undef $self->[4];
