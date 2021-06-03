@@ -1,5 +1,6 @@
 package AnyEvent::HTTP::Server::Form;
 
+use common::sense;
 =head1 NAME
 
 AnyEvent::HTTP::Server::Req - Request object used by AnyEvent::HTTP::Server
@@ -10,7 +11,7 @@ Version 1.97
 
 =cut
 
-our $VERSION = '1.97';
+use version; our $VERSION = version->declare('v0.1');
 
 package AnyEvent::HTTP::Server::Req;
 {
@@ -27,12 +28,12 @@ use overload
 	fallback => 1;
 }
 
-use AnyEvent::HTTP::Server::Kit;
+#use AnyEvent::HTTP::Server::Kit;
 use AnyEvent::HTTP::Server::WS;
 use Time::HiRes qw/gettimeofday/;
-use MIME::Base64 qw(encode_base64);
+#use MIME::Base64 qw(encode_base64);
 use Scalar::Util qw(weaken);
-use Digest::SHA1 'sha1';
+#use Digest::SHA1 'sha1';
 
 	our @hdr = map { lc $_ }
 	our @hdrn  = qw(
@@ -54,30 +55,25 @@ use Digest::SHA1 'sha1';
 			["Internal Server $w[2]","Not Implemented","Bad $w[5]","Service Unavailable","$w[5] $w[10]","HTTP Version Not Supported","Variant Also Negotiates","Insufficient Storage",0,"Bandwidth Limit Exceeded","Not Extended",(0)x88,"Client $w[2]",],
 	};
 		
-		use constant {
-			METHOD    => 0,
-			URI       => 1,
-			HEADERS   => 2,
-			WRITE     => 3,
-			CHUNKED   => 4,
-			PARSEDURI => 5,
-			QUERY     => 6,
-			REQCOUNT  => 7,
-			SERVER    => 8,
-			TIME      => 9,
-			CTX       => 10,
-			HANDLE    => 11,
-			ATTRS     => 12,
-		};
+
+#Class attribute keys
+use enum (
+	"method_=0",qw<uri_ headers_ write_ chunked_ parsed_uri_ query_ reqcount_ server_ time_ ctx_ handle_ attrs_>
+);
+
+#Add a mechanism for sub classing
+use constant KEY_OFFSET=>0;
+use constant KEY_COUNT=>attrs_-method_+1;
+
+
+		sub connection { $_[0][headers_]{connection} =~ /^([^;]+)/ && lc( $1 ) }
 		
-		sub connection { $_[0][2]{connection} =~ /^([^;]+)/ && lc( $1 ) }
-		
-		sub method  { $_[0][0] }
-		sub full_uri { 'http://' . $_[0][2]{host} . $_[0][1] }
-		sub uri     { $_[0][1] }
-		sub headers { $_[0][2] }
-		sub attrs   { $_[0][ATTRS] //= {} }
-		sub server  { $_[0][SERVER] }
+		sub method  { $_[0][method_] }
+		sub full_uri { 'http://' . $_[0][headers_]{host} . $_[0][uri_] }
+		sub uri     { $_[0][uri_] }
+		sub headers { $_[0][headers_] }
+		sub attrs   { $_[0][attrs_] //= {} }
+		sub server  { $_[0][server_] }
 
 		sub replied {
 			my $r = shift;
@@ -119,8 +115,8 @@ use Digest::SHA1 'sha1';
 		}
 		
 		sub uri_parse {
-			$_[0][5] = [
-				$_[0][1] =~ m{ ^
+			$_[0][parsed_uri_] = [
+				$_[0][uri_] =~ m{ ^
 					(?:
 						(?:(?:([a-z]+):|)//|)
 						([^/]+)
@@ -133,31 +129,31 @@ use Digest::SHA1 'sha1';
 				$ }xso
 			];
 			# $_[0][5][2] = url_unescape( $_[0][5][2] );
-			$_[0][6] = +{ map { my ($k,$v) = split /=/,$_,2; +( url_unescape($k) => url_unescape($v) ) } split /&/, $_[0][5][3] };
+			$_[0][query_] = +{ map { my ($k,$v) = split /=/,$_,2; +( url_unescape($k) => url_unescape($v) ) } split /&/, $_[0][parsed_uri_][3] };
 		}
 		
 		
 		sub path    {
-			$_[0][5] or $_[0]->uri_parse;
-			$_[0][5][2];
+			$_[0][parsed_uri_] or $_[0]->uri_parse;
+			$_[0][parsed_uri_][2];
 		}
 		
 		sub query    {
-			$_[0][5] or $_[0]->uri_parse;
-			$_[0][5][3];
+			$_[0][parsed_uri_] or $_[0]->uri_parse;
+			$_[0][parsed_uri_][3];
 		}
 		
 		sub params {
-			$_[0][6] or $_[0]->uri_parse;
-			$_[0][6];
+			$_[0][query_] or $_[0]->uri_parse;
+			$_[0][query_];
 		}
 		
 		sub param {
-			$_[0][6] or $_[0]->uri_parse;
+			$_[0][query_] or $_[0]->uri_parse;
 			if ($_[1]) {
-				return $_[0][6]{$_[1]};
+				return $_[0][query_]{$_[1]};
 			} else {
-				return keys %{ $_[0][6] };
+				return keys %{ $_[0][query_] };
 			}
 		}
 		our $CALLDEPTH = 1;
@@ -241,17 +237,17 @@ use Digest::SHA1 'sha1';
 			}
 			defined() and $reply .= $_ for @good,@bad;
 			$reply .= $LF;
-			if( $self->[3] ) {
-				$self->[3]->( $reply );
+			if( $self->[write_] ) {
+				$self->[write_]->( $reply );
 				while ($size > 0) {
 					my $l = sysread($f,my $buf,4096);
 					defined $l or last;
 					$size -= $l;
-					$self->[3]->( $buf );
+					$self->[write_]->( $buf );
 				}
-				$self->[3]->( undef ) if $h->{connection} eq 'close' or $self->[SERVER]{graceful};
-				delete $self->[3];
-				${ $self->[REQCOUNT] }--;
+				$self->[write_]->( undef ) if $h->{connection} eq 'close' or $self->[server_]{graceful};
+				delete $self->[write_];
+				${ $self->[reqcount_] }--;
 			}
 		}
 		
@@ -329,11 +325,11 @@ use Digest::SHA1 'sha1';
 			$self->attrs->{body_size} = length $content;
 			$reply .= $LF.$content;
 			#if (!ref $content) { $reply .= $content }
-			if( $self->[3] ) {
-				$self->[3]->( $reply );
-				$self->[3]->( undef ) if $h->{connection} eq 'close' or $self->[SERVER]{graceful};
-				delete $self->[3];
-				${ $self->[REQCOUNT] }--;
+			if( $self->[write_] ) {
+				$self->[write_]->( $reply );
+				$self->[write_]->( undef ) if $h->{connection} eq 'close' or $self->[server_]{graceful};
+				delete $self->[write_];
+				${ $self->[reqcount_] }--;
 			}
 			if( $self->[8] && $self->[8]->{on_reply} ) {
 				$h->{ResponseTime} = gettimeofday() - $self->[9];
@@ -356,9 +352,9 @@ use Digest::SHA1 'sha1';
 			}
 			$self->replied(join ":", (caller $CALLDEPTH)[1,2]);
 
-			if( $self->[8] && $self->[8]->{stat_cb} ) {
+			if( $self->[server_] && $self->[server_]->{stat_cb} ) {
 				eval {
-					$self->[8]->{stat_cb}->($self->path, $self->method, gettimeofday() - $self->[9]);
+					$self->[server_]->{stat_cb}->($self->path, $self->method, gettimeofday() - $self->[time_]);
 				1} or do {
 					warn "stat_cb died with $@";
 				}
@@ -378,9 +374,11 @@ use Digest::SHA1 'sha1';
 			my $cb = pop;
 			my %args = @_;
 			if ( $self->headers->{'sec-websocket-version'} == 13 ) {
+				require MIME::Base64;
+				require Digest::SHA1;
 				my $key = $self->headers->{'sec-websocket-key'};
 				my $origin = exists $self->headers->{'sec-websocket-origin'} ? $self->headers->{'sec-websocket-origin'} : $self->headers->{'origin'};
-				my $accept = encode_base64(sha1( $key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11' ));
+				my $accept = MIME::Base64::encode_base64(Digest::SHA1::sha1( $key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11' ));
 				chomp $accept;
 				$self->send_headers( 101,headers => {
 					%{ $args{headers} || {} },
@@ -390,20 +388,20 @@ use Digest::SHA1 'sha1';
 					#'sec-websocket-protocol' => 'chat',
 				} );
 				
-				${ $self->[REQCOUNT] }--;
+				${ $self->[reqcount_] }--;
 				
 				my $create_ws = sub {
 					my $h = shift;
 					my $ws = AnyEvent::HTTP::Server::WS->new(
 						%args, h => $h,
 					);
-					weaken( $self->[SERVER]{wss}{ 0+$ws } = $ws );
+					weaken( $self->[server_]{wss}{ 0+$ws } = $ws );
 					@$self = ();
 					$cb->($ws);
 				};
 				
-				if ( $self->[HANDLE] ) {
-					$create_ws->($self->[HANDLE]);
+				if ( $self->[handle_] ) {
+					$create_ws->($self->[handle_]);
 					return
 				}
 				else {
@@ -420,7 +418,7 @@ use Digest::SHA1 'sha1';
 		sub send_100_continue {
 			my ($self,$code,%args) = @_;
 			my $reply = "HTTP/1.1 100 $http{100}$LF$LF";
-			$self->[3]->( $reply );
+			$self->[write_]->( $reply );
 		}
 
 		sub send_headers {
@@ -444,9 +442,9 @@ use Digest::SHA1 'sha1';
 			};
 			if (!exists $h->{'content-length'} and !exists $h->{upgrade}) {
 				$h->{'transfer-encoding'} = 'chunked';
-				$self->[4]= 1;
+				$self->[chunked_]= 1;
 			} else {
-				$self->[4]= 0;
+				$self->[chunked_]= 0;
 			}
 			for (keys %$h) {
 				if (exists $hdr{lc $_}) { $good[ $hdri{lc $_} ] = $hdr{ lc $_ }.": ".$h->{$_}.$LF; }
@@ -459,43 +457,43 @@ use Digest::SHA1 'sha1';
 			$self->attrs->{head_size} = length $reply;
 			$self->attrs->{body_size} = 0;
 			#warn "send headers: $reply";
-			$self->[3]->( $reply );
-			if (!$self->[4]) {
+			$self->[write_]->( $reply );
+			if (!$self->[chunked_]) {
 				if ($args{clearance}) {
-					$self->[3] = undef;
+					$self->[write_] = undef;
 				}
 			}
 		}
 		
 		sub body {
 			my $self = shift;
-			$self->[4] or die "Need to be chunked reply";
+			$self->[chunked_] or die "Need to be chunked reply";
 			my $content = shift;
 			utf8::encode $content if utf8::is_utf8 $content;
 			$self->attrs->{body_size} += length $content;
 			my $length = sprintf "%x", length $content;
 			#warn "send body part $length / ".length($content)."\n";
-			$self->[3]->( ("$length$LF$content$LF") );
+			$self->[write_]->( ("$length$LF$content$LF") );
 		}
 		
 		sub finish {
 			my $self = shift;
-			if ($self->[4]) {
+			if ($self->[chunked_]) {
 				#warn "send body end (".$self->connection.")\n";
-				if( $self->[3] ) {
-					$self->[3]->( ("0$LF$LF")  );
-					$self->[3]->(undef) if $self->connection eq 'close' or $self->[SERVER]{graceful};
-					delete $self->[3];
+				if( $self->[write_] ) {
+					$self->[write_]->( ("0$LF$LF")  );
+					$self->[write_]->(undef) if $self->connection eq 'close' or $self->[server_]{graceful};
+					delete $self->[write_];
 				}
-				undef $self->[4];
+				undef $self->[chunked_];
 			}
-			elsif(defined $self->[4]) {
-				undef $self->[4];
+			elsif(defined $self->[chunked_]) {
+				undef $self->[chunked_];
 			}
 			else {
 				die "Need to be chunked reply";
 			}
-			${ $self->[REQCOUNT] }--;
+			${ $self->[reqcount_] }--;
 			if ( $self->attrs->{sent_headers} ) {
 				my $h = delete $self->attrs->{sent_headers};
 				if( $self->[8] && $self->[8]->{on_reply} ) {
@@ -510,21 +508,21 @@ use Digest::SHA1 'sha1';
 
 		sub abort {
 			my $self = shift;
-			if( $self->[4] ) {
-				if( $self->[3] ) {
-					$self->[3]->( ("1$LF"));
-					$self->[3]->( undef);
-					delete $self->[3];
+			if( $self->[chunked_] ) {
+				if( $self->[write_] ) {
+					$self->[write_]->( ("1$LF"));
+					$self->[write_]->( undef);
+					delete $self->[write_];
 				}
-				undef $self->[4];
+				undef $self->[chunked_];
 			}
-			elsif (defined $self->[4]) {
-				undef $self->[4];
+			elsif (defined $self->[chunked_]) {
+				undef $self->[chunked_];
 			}
 			else {
 				die "Need to be chunked reply";
 			}
-			${ $self->[REQCOUNT] }--;
+			${ $self->[reqcount_] }--;
 			if ( $self->attrs->{sent_headers} ) {
 				my $h = delete $self->attrs->{sent_headers};
 				if( $self->[8] && $self->[8]->{on_reply} ) {
@@ -543,17 +541,17 @@ use Digest::SHA1 'sha1';
 			my $self = shift;
 			my $caller = "@{[ (caller)[1,2] ]}";
 			#warn "Destroy req $self->[0] $self->[1] by $caller";
-			if( $self->[3] ) {
+			if( $self->[write_] ) {
 				local $@;
 				eval {
-					if ($self->[4]) {
+					if ($self->[chunked_]) {
 						$self->abort();
 					} else {
 						if( $self->[8] && $self->[8]->{on_not_handled} ) {
 							$self->[8]->{on_not_handled}->($self, $caller);
 						}
-						if ($self->[3]) {
-							$self->reply( 500, "Request not handled\n$self->[0] $self->[1]\n", headers => { 'content-type' => 'text/plain', NotHandled => 1 } );
+						if ($self->[write_]) {
+							$self->reply( 500, "Request not handled\n$self->[method_] $self->[uri_]\n", headers => { 'content-type' => 'text/plain', NotHandled => 1 } );
 						}
 					}
 				1} or do {
@@ -565,8 +563,8 @@ use Digest::SHA1 'sha1';
 					}
 				};
 			}
-			elsif (defined $self->[4]) {
-				warn "[E] finish or abort was not called for ".( $self->[4] ? "chunked" : "partial" )." response";
+			elsif (defined $self->[chunked_]) {
+				warn "[E] finish or abort was not called for ".( $self->[chunked_] ? "chunked" : "partial" )." response";
 				$self->abort;
 			}
 			@$self = ();

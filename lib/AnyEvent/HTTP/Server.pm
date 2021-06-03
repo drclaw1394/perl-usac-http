@@ -1,20 +1,16 @@
 package AnyEvent::HTTP::Server;
-
+use common::sense;
 =head1 NAME
 
 AnyEvent::HTTP::Server - AnyEvent HTTP/1.1 Server
 
 =cut
 
-our $VERSION = '1.99981';
+use version;our $VERSION = version->declare('v0.1');
+use feature "refaliasing";
+#use feature ":all";
 
-#use common::sense;
-#use 5.008008;
-#use strict;
-#use warnings;
-#no  warnings 'uninitialized';
-#use mro 'c3';
-use AnyEvent::HTTP::Server::Kit;
+#use AnyEvent::HTTP::Server::Kit;
 
 #use Exporter;
 #our @ISA = qw(Exporter);
@@ -28,32 +24,29 @@ use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR IPPROTO_TCP TCP_NODELAY);
 
-use Encode ();
-use Compress::Zlib ();
-use MIME::Base64 ();
+#use Encode ();
+#use Compress::Zlib ();
+#use MIME::Base64 ();
 use Time::HiRes qw/gettimeofday/;
 
-#use Carp 'croak';
+use Carp 'croak';
 
 use AnyEvent::HTTP::Server::Req;
 
-our $MIME = Encode::find_encoding('MIME-Header');
+#Class attribute keys
+use enum (
+	"host_=0",qw<port_ cb_ listen_ fh_ backlog_ read_size_ max_header_size_ active_connections_ total_connections_ active_requests_ total_requests_>
+);
 
-sub MAX_READ_SIZE () { 128 * 1024 }
+#Add a mechanism for sub classing
+use constant KEY_OFFSET=>0;
+use constant KEY_COUNT=>total_requests_-host_+1;
+
+our $MIME;
+use constant MAX_READ_SIZE => 128 * 1024;
 sub DEBUG () { 0 }
 
 our $LF = "\015\012";
-my $ico_pk = pack "H*",
-	"1f8b08000000000000ff636060044201010620a9c090c1c2c020c6c0c0a001c4".
-	"4021a008441c0c807242dc100c03ffffff1f1418e2144c1a971836fd308c4f3f".
-	"08373434609883ac06248fac161b9b16fe47772736bfe1b29f1efa89713f363b".
-	"08d98d1ceec4b89f5cfd84dc8f4f3f480e19131306a484ffc0610630beba9e81".
-	"e1e86206860bcc10fec966289ecfc070b01d48b743d820b187cd0c707d000409".
-	"1d8c7e040000";
-our $ico = Compress::Zlib::memGunzip $ico_pk;
-
-sub start { croak "It's a new version of ".__PACKAGE__.". For old version use `legacy' branch, or better make some minor patches to support new version" };
-sub stop  { croak "It's a new version of ".__PACKAGE__.". For old version use `legacy' branch, or better make some minor patches to support new version" };
 
 
 sub new {
@@ -90,11 +83,6 @@ sub new {
 	$self->can("handle_request")
 		and croak "It's a new version of ".__PACKAGE__.". For old version use `legacy' branch, or better make some minor patches to support new version";
 	
-	$self->set_favicon( exists $self->{favicon} ? do {
-		open my $f, '<:raw', $self->{favicon} or die "Can't open favicon: $!";
-		local $/;
-		<$f>;
-	} : $ico ) if !exists $self->{favicon} or $self->{favicon};
 	$self->{request} = 'AnyEvent::HTTP::Server::Req';
 	
 	return $self;
@@ -105,13 +93,8 @@ sub destroy { %{ bless $_[0], 'AnyEvent::HTTP::Server::destroyed' } = (); }
 sub DESTROY { $_[0]->destroy };
 
 
-sub set_favicon {
-	my $self = shift;
-	my $icondata = shift;
-	$self->{ico} = "HTTP/1.1 200 OK${LF}Connection:close${LF}Content-Type:image/x-icon${LF}Content-Length:".length($icondata)."${LF}${LF}".$icondata;
-}
 
-sub listen:method {
+sub listen {
 	my $self = shift;
 		
 	for my $listen (@{ $self->{listen} }) {
@@ -166,25 +149,31 @@ sub listen:method {
 	}
 	
 	return wantarray ? do {
-		my ($service, $host) = AnyEvent::Socket::unpack_sockaddr( getsockname $self->{fh} );
-		(format_address $host, $service);
+		#my ($service, $host) = AnyEvent::Socket::unpack_sockaddr( getsockname $self->{fh} );
+		#(format_address $host, $service);
+		();
 	} : ();
 }
 
 sub prepare {}
-
-sub accept:method {
+sub incoming;
+sub accept {
 	weaken( my $self = shift );
 	for my $fl ( values %{ $self->{fhs} }) {
 		$self->{aws}{ fileno $fl } = AE::io $fl, 0, sub {
 			while ($fl and (my $peer = accept my $fh, $fl)) {
 				AnyEvent::Util::fh_nonblocking $fh, 1; # POSIX requires inheritance, the outside world does not
-				if ($self->{want_peer}) {
-					my ($service, $host) = AnyEvent::Socket::unpack_sockaddr $peer;
-					$self->incoming($fh, AnyEvent::Socket::format_address $host, $service);
-				} else {
-					$self->incoming($fh);
-				}
+				#$self->incoming($fh);
+				incoming $self,$fh;
+
+                                ####################################################################################
+                                # if ($self->{want_peer}) {                                                        #
+                                #         #my ($service, $host) = AnyEvent::Socket::unpack_sockaddr $peer;         #
+                                #         #$self->incoming($fh, AnyEvent::Socket::format_address $host, $service); #
+                                # } else {                                                                         #
+                                #         $self->incoming($fh);                                                    #
+                                # }                                                                                #
+                                ####################################################################################
 			}
 		};
 	}
@@ -198,8 +187,8 @@ sub noaccept {
 
 sub peer_info {
 	my $fh = shift;
-	my ($port, $host) = AnyEvent::Socket::unpack_sockaddr getpeername($fh);
-	return AnyEvent::Socket::format_address($host).':'.$port;
+	#my ($port, $host) = AnyEvent::Socket::unpack_sockaddr getpeername($fh);
+	#return AnyEvent::Socket::format_address($host).':'.$port;
 }
 
 sub drop {
@@ -241,469 +230,468 @@ sub incoming {
 	weaken( my $self = shift );
 	# warn "incoming @_";
 	$self->{total_connections}++;
-		my ($fh,$rhost,$rport) = @_;
-		my $id = ++$self->{seq}; #refaddr $fh;
+	my ($fh,$rhost,$rport) = @_;
+	my $id = ++$self->{seq}; #refaddr $fh;
 
-		
-		my %r = ( fh => $fh, id => $id );
-		my $buf;
-		
-		$self->{ $id } = \%r;
-		$self->{active_connections}++;
 
-	warn sprintf("Accepted connection $id (fd:%s) from %s ($self->{active_connections}/$self->{total_connections}; $self->{active_requests}/$self->{total_requests})\n", fileno($_[0]),
-		$self->{want_peer} ? "$_[1]:$_[2]" : peer_info($_[0])
-	) if $self->{debug_conn};
-		
-		my $write = sub {
-			$self and exists $self->{$id} or return;
-			my $ido=$self->{$id};
-			for my $buf (@_) {
-				if ( $ido->{wbuf} ) {
-					$ido->{closeme} and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
-					${ $ido->{wbuf} } .= defined $buf ? $buf : return $ido->{closeme} = 1;
-					return;
-				}
-				elsif ( !defined $buf ) { return $self->drop($id); }
-				
-				$ido->{fh} or return do {
-					warn "Lost filehandle while trying to send ".length($buf)." data for $id";
-					$self->drop($id,"No filehandle");
-					();
-				};
-				my $w = syswrite( $ido->{fh}, $buf );
-				if ($w == length $buf) {
-					# ok;
-					if( $ido->{closeme} ) { $self->drop($id); };
+	my %r = ( fh => $fh, id => $id );
+	my $buf;
+
+	$self->{ $id } = \%r;
+	$self->{active_connections}++;
+
+        #######################################################################################################################################################################################
+        # warn sprintf("Accepted connection $id (fd:%s) from %s ($self->{active_connections}/$self->{total_connections}; $self->{active_requests}/$self->{total_requests})\n", fileno($_[0]), #
+        #         $self->{want_peer} ? "$_[1]:$_[2]" : peer_info($_[0])                                                                                                                       #
+        # ) if $self->{debug_conn};                                                                                                                                                           #
+        #######################################################################################################################################################################################
+
+	my $write = sub {
+		$self and exists $self->{$id} or return;
+		my $ido=$self->{$id};
+		\my $buf=\$_[0];
+
+		if ( $ido->{wbuf} ) {
+			$ido->{closeme} and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
+			${ $ido->{wbuf} } .= defined $buf ? $buf : return $ido->{closeme} = 1;
+			return;
+		}
+		elsif ( !defined $buf ) { return $self->drop($id); }
+
+		$ido->{fh} or return do {
+			warn "Lost filehandle while trying to send ".length($buf)." data for $id";
+			$self->drop($id,"No filehandle");
+			();
+		};
+		my $w = syswrite( $ido->{fh}, $buf );
+		if ($w == length $buf) {
+			# ok;
+			if( $ido->{closeme} ) { $self->drop($id); };
+		}
+		elsif (defined $w) {
+			#substr($buf,0,$w,'');
+			$ido->{wbuf} = substr($buf,0,$w,'');
+			#$buf;
+			$ido->{ww} = AE::io $ido->{fh}, 1, sub {
+				warn "ww.io.$id" if DEBUG;
+				$self and $ido or return;
+				$w = syswrite( $ido->{fh}, ${ $ido->{wbuf} } );
+				if ($w == length ${ $ido->{wbuf} }) {
+					delete $ido->{wbuf};
+					delete $ido->{ww};
+					if( $ido->{closeme} ) { $self->drop($id); }
 				}
 				elsif (defined $w) {
-					#substr($buf,0,$w,'');
-					$ido->{wbuf} = substr($buf,0,$w,'');
-					#$buf;
-					$ido->{ww} = AE::io $ido->{fh}, 1, sub {
-						warn "ww.io.$id" if DEBUG;
-						$self and $ido or return;
-						$w = syswrite( $ido->{fh}, ${ $ido->{wbuf} } );
-						if ($w == length ${ $ido->{wbuf} }) {
-							delete $ido->{wbuf};
-							delete $ido->{ww};
-							if( $ido->{closeme} ) { $self->drop($id); }
-						}
-						elsif (defined $w) {
-							${ $ido->{wbuf} } = substr( ${ $ido->{wbuf} }, $w );
-							#substr( ${ $ido->{wbuf} }, 0, $w, '');
-						}
-						else { return $self->drop($id, "$!"); }
-					};
+					${ $ido->{wbuf} } = substr( ${ $ido->{wbuf} }, $w );
+					#substr( ${ $ido->{wbuf} }, 0, $w, '');
 				}
 				else { return $self->drop($id, "$!"); }
-			}
-		};
-		
-		my ($state,$seq) = (0,0);
-		my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
-		
-		my $ixx = 0;
-		$r{rw} = AE::io $fh, 0, sub {
-			# warn "rw.io.$id (".(fileno $fh).") seq:$seq (ok:".($self ? 1:0).':'.(( $self && exists $self->{$id}) ? 1 : 0).")";# if DEBUG;
-			$self and exists $self->{$id} or return;
-			while ( $self and ( $len = sysread( $fh, $buf, MAX_READ_SIZE-length $buf, length $buf ) ) ) {
-				# warn "rw.io.$id.rd $len ($state)";
-				if ($state == 0) {
-						AGAIN:
-						if (( my $i = index($buf,"\012", $ixx) ) > -1) {
-							if (substr($buf, $ixx, $i-$ixx) =~ /(\S+) \040 (\S+) \040 HTTP\/(\d+\.\d+)/xso) {
-								$method  = $1;
-								$uri     = $2;
-								$version = $3;
-								$state   = 1;
-								$lastkey = undef;
-								++$seq;
-								$self->{$id}{closeme}=1 if $version ne "1.1";
-								warn "Received request N.$seq over ".fileno($fh).": $method $uri" if DEBUG;
-								$self->{active_requests}++;
-								#push @{ $r{req} }, [{}];
-							}
-							elsif(substr($buf, $ixx, $i-$ixx) =~ /^\015?$/ms) {
-								# warn "Empty line";
-								$ixx = $i+1;
-								goto AGAIN;
-							}
-							else {
-								$self->badconn($fh,\substr($buf, $ixx, $i-$ixx), "Malformed request at offset $ixx+".($i-$ixx));
-								return $self->drop($id, "Malformed request");
-							}
-							$pos = $i+1;
-						} else {
-							return; # need more
-						}
+			};
+		}
+		else { return $self->drop($id, "$!"); }
+	};
+
+	my ($state,$seq) = (0,0);
+	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
+
+	my $ixx = 0;
+	$r{rw} = AE::io $fh, 0, sub {
+		# warn "rw.io.$id (".(fileno $fh).") seq:$seq (ok:".($self ? 1:0).':'.(( $self && exists $self->{$id}) ? 1 : 0).")";# if DEBUG;
+		$self and exists $self->{$id} or return;
+		while ( $self and ( $len = sysread( $fh, $buf, MAX_READ_SIZE-length $buf, length $buf ) ) ) {
+			# warn "rw.io.$id.rd $len ($state)";
+			if ($state == 0) {
+				AGAIN:
+				if (( my $i = index($buf,"\012", $ixx) ) > -1) {
+					if (substr($buf, $ixx, $i-$ixx) =~ /(\S+) \040 (\S+) \040 HTTP\/(\d+\.\d+)/xso) {
+						$method  = $1;
+						$uri     = $2;
+						$version = $3;
+						$state   = 1;
+						$lastkey = undef;
+						++$seq;
+						$self->{$id}{closeme}=1 if $version ne "1.1";
+						warn "Received request N.$seq over ".fileno($fh).": $method $uri" if DEBUG;
+						$self->{active_requests}++;
+						#push @{ $r{req} }, [{}];
+					}
+					elsif(substr($buf, $ixx, $i-$ixx) =~ /^\015?$/ms) {
+						# warn "Empty line";
+						$ixx = $i+1;
+						goto AGAIN;
+					}
+					else {
+						$self->badconn($fh,\substr($buf, $ixx, $i-$ixx), "Malformed request at offset $ixx+".($i-$ixx));
+						return $self->drop($id, "Malformed request");
+					}
+					$pos = $i+1;
+				} else {
+					return; # need more
 				}
-				# warn "rw.io.$id.rd $len ($state) -> $pos";
-				my %h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
-				if ($state == 1) {
-					# headers
-					pos($buf) = $pos;
-					warn "Parsing headers from pos $pos:".substr($buf,$pos) if DEBUG;
-							while () {
-								#warn "parse line >'".substr( $buf,pos($buf),index( $buf, "\012", pos($buf) )-pos($buf) )."'";
-								if( $buf =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]*+(;)?[^\012\015]*+) \015?\012/sxogc ){
-									$lastkey = lc $1;
-									$h{ $lastkey } = exists $h{ $lastkey } ? $h{ $lastkey }.','.$2: $2;
-									#warn "Captured header $lastkey = '$2'";
-									if ( defined $3 ) {
-										pos(my $v = $2) = $-[3] - $-[2];
-										#warn "scan ';'";
-										$h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-											while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-										$contstate = 1;
-									} else {
-										$contstate = 0;
-									}
-								}
-								elsif ($buf =~ /\G[\011\040]+/sxogc) { # continuation
-									#warn "Continuation";
-									if (length $lastkey) {
-										$buf =~ /\G ([^\015\012;]*+(;)?[^\015\012]*+) \015?\012/sxogc or return pos($buf) = $bpos; # need more data;
-										$h{ $lastkey } .= ' '.$1;
-										if ( ( defined $2 or $contstate ) ) {
-											#warn "With ;";
-											if ( ( my $ext = index( $h{ $lastkey }, ';', rindex( $h{ $lastkey }, ',' ) + 1) ) > -1 ) {
-												# Composite field. Need to reparse last field value (from ; after last ,)
-											# full key rescan, because of possible case: <key:value; field="value\n\tvalue continuation"\n>
-											# regexp needed to set \G
-												pos($h{ $lastkey }) = $ext;
-												#warn "Rescan from $ext";
-												#warn("<$1><$2><$3>"),
-												$h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-													while ( $h{ $lastkey } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-												$contstate = 1;
-											}
-										}
-									}
-								}
-								elsif ($buf =~ /\G\015?\012/sxogc) {
-									#warn "Last line";
-									last;
-								}
-								elsif($buf =~ /\G [^\012]* \Z/sxogc) {
-									if (length($buf) - $ixx > $self->{max_header_size}) {
-										$self->badconn($fh,\substr($buf, pos($buf), $ixx), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
-										return $self->drop($id, "Too big headers from $rhost for request <".substr($buf, $ixx, 32)."...>");
-									}
-									#warn "Need more";
-									return pos($buf) = $bpos; # need more data
-								}
-								else {
-									my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;
-									$self->{active_requests}--;
-									$self->badconn($fh,\$line, "Bad header for <$method $uri>+{@{[ %h ]}}");
-									my $content = 'Bad request headers';
-									my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
-									$write->($str);
-									$write->(undef);
-									return;
+			}
+			# warn "rw.io.$id.rd $len ($state) -> $pos";
+			my %h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
+			if ($state == 1) {
+				# headers
+				pos($buf) = $pos;
+				warn "Parsing headers from pos $pos:".substr($buf,$pos) if DEBUG;
+				while () {
+					#warn "parse line >'".substr( $buf,pos($buf),index( $buf, "\012", pos($buf) )-pos($buf) )."'";
+					if( $buf =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]*+(;)?[^\012\015]*+) \015?\012/sxogc ){
+						$lastkey = lc $1;
+						$h{ $lastkey } = exists $h{ $lastkey } ? $h{ $lastkey }.','.$2: $2;
+						#warn "Captured header $lastkey = '$2'";
+						if ( defined $3 ) {
+							pos(my $v = $2) = $-[3] - $-[2];
+							#warn "scan ';'";
+							$h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
+							while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
+							$contstate = 1;
+						} else {
+							$contstate = 0;
+						}
+					}
+					elsif ($buf =~ /\G[\011\040]+/sxogc) { # continuation
+						#warn "Continuation";
+						if (length $lastkey) {
+							$buf =~ /\G ([^\015\012;]*+(;)?[^\015\012]*+) \015?\012/sxogc or return pos($buf) = $bpos; # need more data;
+							$h{ $lastkey } .= ' '.$1;
+							if ( ( defined $2 or $contstate ) ) {
+								#warn "With ;";
+								if ( ( my $ext = index( $h{ $lastkey }, ';', rindex( $h{ $lastkey }, ',' ) + 1) ) > -1 ) {
+									# Composite field. Need to reparse last field value (from ; after last ,)
+									# full key rescan, because of possible case: <key:value; field="value\n\tvalue continuation"\n>
+									# regexp needed to set \G
+									pos($h{ $lastkey }) = $ext;
+									#warn "Rescan from $ext";
+									#warn("<$1><$2><$3>"),
+									$h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
+									while ( $h{ $lastkey } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
+									$contstate = 1;
 								}
 							}
-							
-							#warn Dumper \%h;
-							$pos = pos($buf);
-							
-							$self->{total_requests}++;
-
-							if ( $method eq "GET" and $uri =~ m{^/favicon\.ico( \Z | \? )}sox and $self->{ico}) {
-								$self->{active_requests}--;
-								$write->($self->{ico});
-								$write->(undef) if lc $h{connecton} =~ /^close\b/;
-								$ixx = $pos + $h{'content-length'};
-							# } elsif ( $method eq "GET" and $uri =~ m{^/ping( \Z | \? )}sox) {
-							# 	my ( $header_str, $content ) = ref $self->{ping_sub} eq 'CODE' ? $self->{ping_sub}->() : ('200 OK', 'Pong');
-							# 	my $str = "HTTP/1.1 $header_str${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
-							# 	$write->(\$str);
-							# 	$write->(\undef) if lc $h{connecton} =~ /^close\b/;
-							# 	$self->{active_requests}--;
-							# 	$ixx = $pos + $h{'content-length'};
-							} else {
-								#warn "Create request object";
-								#$req = AnyEvent::HTTP::Server::Req->new(
-								#	method  => $method,
-								#	uri     => $uri,
-								#	headers => \%h,
-								#	write   => $write,
-								#	guard   => guard { $self->{active_requests}--; },
-								#);
-								#my @rv = $self->{cb}->( $req );
-
-								my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'AnyEvent::HTTP::Server::Req' );
-								weaken( $req->[8] );
-								#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'AnyEvent::HTTP::Server::Req' );
-								if (@rv) {
-									if (ref $rv[0] eq 'CODE') {
-										$r{on_body} = $rv[0];
-									}
-									elsif ( ref $rv[0] eq 'HASH' ) {
-										if ( $h{'content-type'}  =~ m{^
-												multipart/form-data\s*;\s*
-												boundary\s*=\s*
-												(?:
-													"((?:[^\\"]++|\\.){0,4096})" # " quoted entry
-													|
-													([^;,\s]+)
-												)
-											$}xsio and exists $rv[0]{multipart}
-										) {
-										
-											my $bnd = '--'.( defined $1 ? do { my $x = $1; $x =~ s{\\(.)}{$1}gs; $x } : $2 );
-											my $body = '';
-											#warn "reading multipart with boundary '$bnd'";
-											#warn "set on_body";
-											my $cb = $rv[0]{multipart};
-											$r{on_body} = sub {
-												my ($last,$part) = @_;
-												if ( length($body) + length($$part) > $self->{max_body_size} ) {
-													# TODO;
-												}
-												$body .= $$part;
-												#warn "Checking body '".$body."'";
-												my $idx = index( $body, $bnd );
-												while ( $idx > -1 and (
-													( $idx + length($bnd) + 1 <= length($body) and substr($body,$idx+length($bnd),1) eq "\012" )
-													or
-													( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\015\012" )
-													or
-													( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\055\055" )
-												) ) {
-													#warn "have part";
-													my $part = substr($body,$idx-2,1) eq "\015" ? substr($body,0,$idx-2) : substr($body,0,$idx-1);
-													#warn Dumper $part;
-													#substr($part, 0, ( substr($part,0,1) eq "\015" ) ? 2 : 1,'');
-													#warn "captured $idx: '$part'";
-													$body = substr($body,$idx + length $bnd);
-													substr($body,0, ( substr($body,0,1) eq "\015" ) ? 2 : 1 ,'');
-													#warn "body = '$body'";
-													$idx = index( $body, $bnd );
-													#warn "next part idx: $idx";
-													length $part or next;
-													#warn "Process part '$part'";
-													
-													my %hd;
-													my $lk;
-													while() {
-														if( $part =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]++(;)?[^\012\015]*+) \015?\012/sxogc ){
-															$lk = lc $1;
-															$hd{ $lk } = exists $hd{ $lk } ? $hd{ $lk }.','.$2 : $2;
-															if ( defined $3 ) {
-																pos(my $v = $2) = $-[3] - $-[2];
-																# TODO: testme
-																$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-																	while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-															}
-														}
-														elsif ($part =~ /\G[\011\040]+/sxogc and length $lk) { # continuation
-															$part =~ /\G([^\015\012]+)\015?\012/sxogc or next;
-															$hd{ $lk } .= ' '.$1;
-															if ( ( my $ext = index( $hd{ $lk }, ';', rindex( $hd{ $lk }, ',' ) + 1) ) > -1 ) {
-																# Composite field. Need to reparse last field value (from ; after last ,)
-																pos($hd{ $lk }) = $ext;
-																$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-																	while ( $hd{ $lk } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-															}
-														}
-														elsif ($part =~ /\G\015?\012/sxogc) {
-															last;
-														}
-														elsif($part =~ /\G [^\012]* \Z/sxogc) {
-															# Truncated part???
-															last;
-														}
-														else {
-															pos($part) = 0;
-															last;
-														}
-													}
-													substr($part, 0,pos($part),'');
-													my $enc = lc $hd{'content-transfer-encoding'};
-													if ( $enc eq 'quoted-printable' ) { $part = $MIME->decode( $part ); }
-													elsif ( $enc eq 'base64' ) { $part = MIME::Base64::decode_base64( $part ); }
-													$hd{filename} = $hd{'content-disposition+filename'} if exists $hd{'content-disposition+filename'};
-													$hd{name}     = $hd{'content-disposition+name'}     if exists $hd{'content-disposition+name'};
-													#warn "call for part $hd{name} ($last)";
-													$cb->( $last && $idx == -1 ? 1 : 0,$part,\%hd );
-												}
-												#warn "just return";
-												#if ($last) {
-													#warn "leave with $body";
-												#}
-											};
-										}
-#										elsif ( $h{'content-type'} =~ m{^application/x-www-form-urlencoded(?:\Z|\s*;)}i and exists $rv[0]{form} ) {
-
-										elsif (  exists $rv[0]{form} ) {
-											my $body = '';
-											$r{on_body} = sub {
-												my ($last,$part) = @_;
-												if ( length($body) + length($$part) > $self->{max_body_size} ) {
-													# TODO;
-												}
-												$body .= $$part;
-												if ($last) {
-													$rv[0]{form}( $req->form($body), $body );
-													delete $r{on_body};
-												}
-											};
-										}
-										elsif( exists $rv[0]{raw} ) {
-											$r{on_body} = $rv[0]{raw};
-										}
-										else {
-											die "XXX";
-										}
-									}
-									elsif ($rv[0] eq 'HANDLE') {
-										delete $r{rw};
-										my $h = AnyEvent::Handle->new(
-											fh => $fh,
-										);
-										$h->{rbuf} = substr($buf,$pos);
-										#warn "creating handle ".Dumper $h->{rbuf};
-										$req->[3] = sub {
-											my $rbuf = shift;
-											if (defined $$rbuf) {
-												if ($h) {
-													$h->push_write( $$rbuf );
-												}
-												else {
-													warn "Requested write '$$rbuf' on destroyed handle";
-												}
-											} else {
-												if ($h) {
-													$h->push_shutdown;
-													$h->on_drain(sub {
-														$h->destroy;
-														undef $h;
-														$self->drop($id) if $self;
-													});
-													undef $h;
-												}
-												else {
-													$self->drop($id) if $self;
-												}
-											}
-										};
-										weaken($req->[11] = $h);
-										$rv[1]->($h);
-										weaken($req);
-										%r = ( );
-										return;
-									}
-									elsif ( $rv[0] ) {
-										$req->reply(@rv);
-									}
-									else {
-										#warn "Other rv";
-									}
-								}
-							}
-							weaken($req);
-							
-							if( $len = $h{'content-length'} ) {
-								#warn "have clen";
-								if ( length($buf) - $pos == $len ) {
-									#warn "Equally";
-									$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$pos)) );
-									$buf = '';$state = $ixx = 0;
-									#TEST && test_visited("finish:complete content length")
-									# FINISHED
-									#warn "1. finished request" . Dumper $req;
-									return;
-								}
-								elsif ( length($buf) - $pos > $len ) {
-									#warn "Complete body + trailing (".( length($buf) - $pos - $len )." bytes: ".substr( $buf,$pos + $len ).")";
-									$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$pos,$pos+$len)) );
-									$ixx = $pos + $len;
-									$state = 0;
-									# FINISHED
-									#warn "2. finished request" . Dumper $req;
-									redo;
-								}
-								else {
-									#warn "Not enough body";
-									$r{left} = $len - ( length($buf) - $pos );
-									if ($r{on_body}) {
-										$r{on_body}( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
-										$state = 2;
-									} else {
-										$state = 2;
-									}
-									$buf = ''; $ixx = 0;
-									return;
-								}
-							}
-							#elsif (chunked) { TODO }
-							else {
-								#warn "No clen";
-								$r{on_body}(1,\('')) if $r{on_body};
-								# FINISHED
-								#warn "3. finished request" . Dumper($req);
-								#warn "pos = $pos, lbuf=".length $buf;
-								#return %r=() if $req->connection eq 'close';
-								$state = 0;
-								if ($pos < length $buf) {
-									$ixx = $pos;
-									redo;
-								} else {
-									$buf = '';$state = $ixx = 0;
-									return;
-								}
-							}
-				} # state 1
-				if ($state == 2 ) {
-					#warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );
-					if (length($buf) - $ixx >= $r{left}) {
-						#warn sprintf "complete (%d of %d)", length $buf, $r{left};
-						$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$ixx, $r{left})) );
-						$buf = substr($buf,$ixx + $r{left});
-						$state = $ixx = 0;
-						# FINISHED
-						#warn "4. finished request" . Dumper $req;
-						#return $self->drop($id) if $req->connection eq 'close';
-						#$ixx = $pos + $r{left};
-						#$state = 0;
-						redo;
-					} else {
-						#warn sprintf "not complete (%d of %d)", length $buf, $r{left};
-						$r{on_body} && $r{on_body}( 0, \(substr($buf,$ixx)) );
-						$r{left} -= ( length($buf) - $ixx );
-						$buf = ''; $ixx = 0;
-						#return;
-						next;
+						}
+					}
+					elsif ($buf =~ /\G\015?\012/sxogc) {
+						#warn "Last line";
+						last;
+					}
+					elsif($buf =~ /\G [^\012]* \Z/sxogc) {
+						if (length($buf) - $ixx > $self->{max_header_size}) {
+							$self->badconn($fh,\substr($buf, pos($buf), $ixx), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
+							return $self->drop($id, "Too big headers from $rhost for request <".substr($buf, $ixx, 32)."...>");
+						}
+						#warn "Need more";
+						return pos($buf) = $bpos; # need more data
+					}
+					else {
+						my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;
+						$self->{active_requests}--;
+						$self->badconn($fh,\$line, "Bad header for <$method $uri>+{@{[ %h ]}}");
+						my $content = 'Bad request headers';
+						my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
+						$write->($str);
+						$write->(undef);
+						return;
 					}
 				}
-				#state 3: discard body
-				
-				#$r{_activity} = $r{_ractivity} = AE::now;
-				#$write->(\("HTTP/1.1 200 OK\r\nContent-Length:10\r\n\r\nTestTest1\n"),\undef);
-			} # while read
-			return unless $self and exists $self->{$id};
-			if (defined $len) {
-				if (length $buf == MAX_READ_SIZE) {
-					$self->badconn($fh,\$buf,"Can't read (@{[ MAX_READ_SIZE ]}), can't consume");
-					# $! = Errno::EMSGSIZE; # Errno is useless, since not calling drop
-					my $content = 'Non-consumable request';
-					my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
-					$self->{active_requests}--;
-					$write->($str);
-					$write->(undef);
-					return;
+				#Done with headers. 
+				#
+				#warn Dumper \%h;
+				$pos = pos($buf);
+
+				$self->{total_requests}++;
+
+				#warn "Create request object";
+				#$req = AnyEvent::HTTP::Server::Req->new(
+				#	method  => $method,
+				#	uri     => $uri,
+				#	headers => \%h,
+				#	write   => $write,
+				#	guard   => guard { $self->{active_requests}--; },
+				#);
+				#my @rv = $self->{cb}->( $req );
+
+				my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'AnyEvent::HTTP::Server::Req' );
+				weaken( $req->[8] );
+				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'AnyEvent::HTTP::Server::Req' );
+				if (@rv) {
+					if (ref $rv[0] eq 'CODE') {
+						#print "CODE \n";
+						$r{on_body} = $rv[0];
+					}
+					elsif ( ref $rv[0] eq 'HASH' ) {
+						if ( $h{'content-type'}  =~ m{^
+								multipart/form-data\s*;\s*
+								boundary\s*=\s*
+								(?:
+								"((?:[^\\"]++|\\.){0,4096})" # " quoted entry
+								|
+								([^;,\s]+)
+								)
+								$}xsio and exists $rv[0]{multipart}
+						) {
+
+							my $bnd = '--'.( defined $1 ? do { my $x = $1; $x =~ s{\\(.)}{$1}gs; $x } : $2 );
+							my $body = '';
+							#warn "reading multipart with boundary '$bnd'";
+							#warn "set on_body";
+							my $cb = $rv[0]{multipart};
+							$r{on_body} = sub {
+								my ($last,$part) = @_;
+								if ( length($body) + length($$part) > $self->{max_body_size} ) {
+									# TODO;
+								}
+								$body .= $$part;
+								#warn "Checking body '".$body."'";
+								my $idx = index( $body, $bnd );
+								while ( $idx > -1 and (
+										( $idx + length($bnd) + 1 <= length($body) and substr($body,$idx+length($bnd),1) eq "\012" )
+											or
+										( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\015\012" )
+											or
+										( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\055\055" )
+									) ) {
+									#warn "have part";
+									my $part = substr($body,$idx-2,1) eq "\015" ? substr($body,0,$idx-2) : substr($body,0,$idx-1);
+									#warn Dumper $part;
+									#substr($part, 0, ( substr($part,0,1) eq "\015" ) ? 2 : 1,'');
+									#warn "captured $idx: '$part'";
+									$body = substr($body,$idx + length $bnd);
+									substr($body,0, ( substr($body,0,1) eq "\015" ) ? 2 : 1 ,'');
+									#warn "body = '$body'";
+									$idx = index( $body, $bnd );
+									#warn "next part idx: $idx";
+									length $part or next;
+									#warn "Process part '$part'";
+
+									my %hd;
+									my $lk;
+									while() {
+										if( $part =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]++(;)?[^\012\015]*+) \015?\012/sxogc ){
+											$lk = lc $1;
+											$hd{ $lk } = exists $hd{ $lk } ? $hd{ $lk }.','.$2 : $2;
+											if ( defined $3 ) {
+												pos(my $v = $2) = $-[3] - $-[2];
+												# TODO: testme
+												$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
+												while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
+											}
+										}
+										elsif ($part =~ /\G[\011\040]+/sxogc and length $lk) { # continuation
+											$part =~ /\G([^\015\012]+)\015?\012/sxogc or next;
+											$hd{ $lk } .= ' '.$1;
+											if ( ( my $ext = index( $hd{ $lk }, ';', rindex( $hd{ $lk }, ',' ) + 1) ) > -1 ) {
+												# Composite field. Need to reparse last field value (from ; after last ,)
+												pos($hd{ $lk }) = $ext;
+												$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
+												while ( $hd{ $lk } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
+											}
+										}
+										elsif ($part =~ /\G\015?\012/sxogc) {
+											last;
+										}
+										elsif($part =~ /\G [^\012]* \Z/sxogc) {
+											# Truncated part???
+											last;
+										}
+										else {
+											pos($part) = 0;
+											last;
+										}
+									}
+									substr($part, 0,pos($part),'');
+									my $enc = lc $hd{'content-transfer-encoding'};
+									if ( $enc eq 'quoted-printable' ) {
+										require Encode;
+										$MIME = Encode::find_encoding('MIME-Header');
+										$part = $MIME->decode( $part );
+									}
+
+									elsif ( $enc eq 'base64' ) {
+										require MIME::Base64;
+										$part = MIME::Base64::decode_base64( $part ); 
+									}
+									$hd{filename} = $hd{'content-disposition+filename'} if exists $hd{'content-disposition+filename'};
+									$hd{name}     = $hd{'content-disposition+name'}     if exists $hd{'content-disposition+name'};
+									#warn "call for part $hd{name} ($last)";
+									$cb->( $last && $idx == -1 ? 1 : 0,$part,\%hd );
+								}
+								#warn "just return";
+								#if ($last) {
+								#warn "leave with $body";
+								#}
+							};
+						}
+						#										elsif ( $h{'content-type'} =~ m{^application/x-www-form-urlencoded(?:\Z|\s*;)}i and exists $rv[0]{form} ) {
+
+						elsif (  exists $rv[0]{form} ) {
+							my $body = '';
+							$r{on_body} = sub {
+								my ($last,$part) = @_;
+								if ( length($body) + length($$part) > $self->{max_body_size} ) {
+									# TODO;
+								}
+								$body .= $$part;
+								if ($last) {
+									$rv[0]{form}( $req->form($body), $body );
+									delete $r{on_body};
+								}
+							};
+						}
+						elsif( exists $rv[0]{raw} ) {
+							$r{on_body} = $rv[0]{raw};
+						}
+						else {
+							die "XXX";
+						}
+					}
+					elsif ($rv[0] eq 'HANDLE') {
+						delete $r{rw};
+						my $h = AnyEvent::Handle->new(
+							fh => $fh,
+						);
+						$h->{rbuf} = substr($buf,$pos);
+						#warn "creating handle ".Dumper $h->{rbuf};
+						$req->[3] = sub {
+							my $rbuf = shift;
+							if (defined $$rbuf) {
+								if ($h) {
+									$h->push_write( $$rbuf );
+								}
+								else {
+									warn "Requested write '$$rbuf' on destroyed handle";
+								}
+							} else {
+								if ($h) {
+									$h->push_shutdown;
+									$h->on_drain(sub {
+											$h->destroy;
+											undef $h;
+											$self->drop($id) if $self;
+										});
+									undef $h;
+								}
+								else {
+									$self->drop($id) if $self;
+								}
+							}
+						};
+						weaken($req->[11] = $h);
+						$rv[1]->($h);
+						weaken($req);
+						%r = ( );
+						return;
+					}
+					elsif ( $rv[0] ) {
+						#print "NORMAL REPLY\n";
+						$req->reply(@rv);
+					}
+					else {
+						#warn "Other rv";
+					}
 				}
+				weaken($req);
+
+				if( $len = $h{'content-length'} ) {
+					#warn "have clen";
+					if ( length($buf) - $pos == $len ) {
+						#warn "Equally";
+						$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$pos)) );
+						$buf = '';$state = $ixx = 0;
+						#TEST && test_visited("finish:complete content length")
+						# FINISHED
+						#warn "1. finished request" . Dumper $req;
+						return;
+					}
+					elsif ( length($buf) - $pos > $len ) {
+						#warn "Complete body + trailing (".( length($buf) - $pos - $len )." bytes: ".substr( $buf,$pos + $len ).")";
+						$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$pos,$pos+$len)) );
+						$ixx = $pos + $len;
+						$state = 0;
+						# FINISHED
+						#warn "2. finished request" . Dumper $req;
+						redo;
+					}
+					else {
+						#warn "Not enough body";
+						$r{left} = $len - ( length($buf) - $pos );
+						if ($r{on_body}) {
+							$r{on_body}( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
+							$state = 2;
+						} else {
+							$state = 2;
+						}
+						$buf = ''; $ixx = 0;
+						return;
+					}
+				}
+				#elsif (chunked) { TODO }
 				else {
-					# $! = Errno::EPIPE;
-					# This is not an error, just EOF
+					#warn "No clen";
+					$r{on_body}(1,\('')) if $r{on_body};
+					# FINISHED
+					#warn "3. finished request" . Dumper($req);
+					#warn "pos = $pos, lbuf=".length $buf;
+					#return %r=() if $req->connection eq 'close';
+					$state = 0;
+					if ($pos < length $buf) {
+						$ixx = $pos;
+						redo;
+					} else {
+						$buf = '';$state = $ixx = 0;
+						return;
+					}
 				}
-			} else {
-				return if $! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK;
+			} # state 1
+			if ($state == 2 ) {
+				#warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );
+				if (length($buf) - $ixx >= $r{left}) {
+					#warn sprintf "complete (%d of %d)", length $buf, $r{left};
+					$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$ixx, $r{left})) );
+					$buf = substr($buf,$ixx + $r{left});
+					$state = $ixx = 0;
+					# FINISHED
+					#warn "4. finished request" . Dumper $req;
+					#return $self->drop($id) if $req->connection eq 'close';
+					#$ixx = $pos + $r{left};
+					#$state = 0;
+					redo;
+				} else {
+					#warn sprintf "not complete (%d of %d)", length $buf, $r{left};
+					$r{on_body} && $r{on_body}( 0, \(substr($buf,$ixx)) );
+					$r{left} -= ( length($buf) - $ixx );
+					$buf = ''; $ixx = 0;
+					#return;
+					next;
+				}
 			}
-			$self->drop($id, $! ? "$!" : ());
-		}; # io
+			#state 3: discard body
+
+			#$r{_activity} = $r{_ractivity} = AE::now;
+			#$write->(\("HTTP/1.1 200 OK\r\nContent-Length:10\r\n\r\nTestTest1\n"),\undef);
+		} # while read
+		return unless $self and exists $self->{$id};
+		if (defined $len) {
+			if (length $buf == MAX_READ_SIZE) {
+				$self->badconn($fh,\$buf,"Can't read (@{[ MAX_READ_SIZE ]}), can't consume");
+				# $! = Errno::EMSGSIZE; # Errno is useless, since not calling drop
+				my $content = 'Non-consumable request';
+				my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
+				$self->{active_requests}--;
+				$write->($str);
+				$write->(undef);
+				return;
+			}
+			else {
+				# $! = Errno::EPIPE;
+				# This is not an error, just EOF
+			}
+		} else {
+			return if $! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK;
+		}
+		$self->drop($id, $! ? "$!" : ());
+	}; # io
 }
 
 sub ws_close {
@@ -933,10 +921,6 @@ B<application/x-www-form-urlencoded>, form callback will be called.
   Wait until all connections will be handled and execute supplied coderef after that.
   This method can be useful in signal handlers.
 
-=head2 set_favicon - change default favicon.ico
-
-  The only argument is a scalar, containing binary representation of icon.
-  Favicon will have content type set to 'image/x-icon'
 
 =head1 RESOURCES
 
