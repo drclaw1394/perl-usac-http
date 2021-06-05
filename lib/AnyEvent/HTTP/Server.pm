@@ -295,18 +295,20 @@ sub incoming {
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
 
 	my $ixx = 0;
+	my %h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 	$r{rw} = AE::io $fh, 0, sub {
 		# warn "rw.io.$id (".(fileno $fh).") seq:$seq (ok:".($self ? 1:0).':'.(( $self && exists $self->{$id}) ? 1 : 0).")";# if DEBUG;
 		$self and exists $self->{$id} or return;
-		while ( $self and ( $len = sysread( $fh, $buf, MAX_READ_SIZE-length $buf, length $buf ) ) ) {
+		my ($pos0,$pos1,$pos2,$pos3);
+		$len = sysread( $fh, $buf, MAX_READ_SIZE-length $buf, length $buf );
+		while ( $self and $len ) {
 			# warn "rw.io.$id.rd $len ($state)";
 			if ($state == 0) {
-				AGAIN:
-				if (( my $i = index($buf,"\012", $ixx) ) > -1) {
-					if (substr($buf, $ixx, $i-$ixx) =~ /(\S+) \040 (\S+) \040 HTTP\/(\d+\.\d+)/xso) {
-						$method  = $1;
-						$uri     = $2;
-						$version = $3;
+				$method=substr($buf, $ixx, ($pos1=index($buf, " ", $ixx))-$ixx);
+				$uri=substr($buf, ++$pos1, ($pos2=index($buf, " ", $pos1))-$pos1);
+				$version=substr($buf, ++$pos2, ($pos3=index($buf, "\015\012", $pos2))-$pos2);
+				if($pos3>=0){
+					#end of line found
 						$state   = 1;
 						$lastkey = undef;
 						++$seq;
@@ -314,24 +316,16 @@ sub incoming {
 						warn "Received request N.$seq over ".fileno($fh).": $method $uri" if DEBUG;
 						$self->{active_requests}++;
 						#push @{ $r{req} }, [{}];
-					}
-					elsif(substr($buf, $ixx, $i-$ixx) =~ /^\015?$/ms) {
-						# warn "Empty line";
-						$ixx = $i+1;
-						goto AGAIN;
-					}
-					else {
-						$self->badconn($fh,\substr($buf, $ixx, $i-$ixx), "Malformed request at offset $ixx+".($i-$ixx));
-						return $self->drop($id, "Malformed request");
-					}
-					$pos = $i+1;
-				} else {
-					return; # need more
+						$pos=$pos3+2;
+						redo;
+				}
+				else {
+					#need more. wait for event
+					#Don't update $pos
 				}
 			}
 			# warn "rw.io.$id.rd $len ($state) -> $pos";
-			my %h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
-			if ($state == 1) {
+			elsif ($state == 1) {
 				# headers
 				pos($buf) = $pos;
 				warn "Parsing headers from pos $pos:".substr($buf,$pos) if DEBUG;
@@ -644,7 +638,7 @@ sub incoming {
 					}
 				}
 			} # state 1
-			if ($state == 2 ) {
+			elsif ($state == 2 ) {
 				#warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );
 				if (length($buf) - $ixx >= $r{left}) {
 					#warn sprintf "complete (%d of %d)", length $buf, $r{left};
@@ -665,6 +659,8 @@ sub incoming {
 					#return;
 					next;
 				}
+			}
+			else {
 			}
 			#state 3: discard body
 

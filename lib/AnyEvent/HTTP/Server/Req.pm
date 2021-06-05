@@ -274,7 +274,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#	}
 			#	
 			#} else {
-				utf8::encode $content if utf8::is_utf8 $content;
+			#utf8::encode $content if utf8::is_utf8 $content;
 			#}
 			my $reply = "HTTP/1.0 $code $http{$code}$LF";
 			my @good;my @bad;
