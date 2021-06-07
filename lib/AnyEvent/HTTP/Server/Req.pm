@@ -1,6 +1,10 @@
 package AnyEvent::HTTP::Server::Form;
 
 use common::sense;
+
+use HTTP::Codes;
+use HTTP::Headers;
+
 =head1 NAME
 
 AnyEvent::HTTP::Server::Req - Request object used by AnyEvent::HTTP::Server
@@ -58,7 +62,7 @@ use Scalar::Util qw(weaken);
 
 #Class attribute keys
 use enum (
-	"method_=0",qw<uri_ headers_ write_ chunked_ parsed_uri_ query_ reqcount_ server_ time_ ctx_ handle_ attrs_>
+	"version_=0" ,qw<session_ method_ uri_ headers_ write_ chunked_ parsed_uri_ query_ reqcount_ server_ time_ ctx_ handle_ attrs_>
 );
 
 #Add a mechanism for sub classing
@@ -259,7 +263,38 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			local $CALLDEPTH = $CALLDEPTH + 1;
 			$self->reply( 302, "Moved", %args );
 		}
-		
+
+		#Reply the body and code specified. Adds Server and Content-Length headers
+		#close connection after
+		sub replySimple {
+			my $version="HTTP/1.0";
+			my $self=shift;
+			my ($code,$content,%args)=@_;
+			my $reply="$version $HTTP::Codes::values[$code] $HTTP::Codes::names[$code]$LF";
+			$reply.=$HTTP::Headers::names[HTTP::Headers::Server].": "."AE $VERSION".$LF;	#Set server
+			$reply.=$HTTP::Headers::names[HTTP::Headers::Content_Length].": ".length($content).$LF if defined $content;	#Set server
+			if($self->[session_]{closeme}){
+				$reply.=$HTTP::Headers::names[HTTP::Headers::Connection].": close".$LF;
+
+			}
+			else {
+				$reply.=$HTTP::Headers::names[HTTP::Headers::Connection].": Keep-Alive".$LF;
+				$reply.=$HTTP::Headers::names[HTTP::Headers::Keep_Alive].": timeout=5, max=1000".$LF;
+			}
+
+
+			$reply.=$LF.$content;
+			#say $reply;
+			#Write the headers
+			if( $self->[write_] ) {
+				$self->[write_]->( $reply );
+				$self->[write_]->( undef ) if $self->[session_]{closeme} or $self->[server_]{graceful};
+				#delete $self->[write_];
+				$self->[write_]=undef;
+				${ $self->[reqcount_] }--;
+			}
+
+		}
 		sub reply {
 			my $self = shift;
 			#return $self->headers(@_) if @_ % 2;
@@ -331,12 +366,12 @@ use constant KEY_COUNT=>attrs_-method_+1;
 				delete $self->[write_];
 				${ $self->[reqcount_] }--;
 			}
-			if( $self->[8] && $self->[8]->{on_reply} ) {
-				$h->{ResponseTime} = gettimeofday() - $self->[9];
+			if( $self->[server_] && $self->[server_]->{on_reply} ) {
+				$h->{ResponseTime} = gettimeofday() - $self->[time_];
 				$h->{Status} = $code;
 				$h->{NotHandled} = $nh if $nh;
 				#eval {
-					$self->[8]->{on_reply}->(
+					$self->[server_]->{on_reply}->(
 						$self,
 						$h,
 					);

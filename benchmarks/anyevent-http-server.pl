@@ -4,11 +4,13 @@ use FindBin;use lib "$FindBin::Bin/../blib/lib";
 use AnyEvent::HTTP::Server;
 use EV;
 use feature "switch";
+use HTTP::Codes;
+
 my $server = AnyEvent::HTTP::Server->new(
 	host=>"0.0.0.0",
 	port=>8080,
 	cb => sub {
-		(200,"GOOD");
+		(HTTP::Codes::OK,"GOOD");
 	}
 );
 

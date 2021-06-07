@@ -1,5 +1,6 @@
 package AnyEvent::HTTP::Server;
 use common::sense;
+use Data::Dumper;
 =head1 NAME
 
 AnyEvent::HTTP::Server - AnyEvent HTTP/1.1 Server
@@ -295,7 +296,8 @@ sub incoming {
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
 
 	my $ixx = 0;
-	my %h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
+	my %h;		#Define the header storage here, once per connection
+	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 	$r{rw} = AE::io $fh, 0, sub {
 		# warn "rw.io.$id (".(fileno $fh).") seq:$seq (ok:".($self ? 1:0).':'.(( $self && exists $self->{$id}) ? 1 : 0).")";# if DEBUG;
 		$self and exists $self->{$id} or return;
@@ -311,8 +313,11 @@ sub incoming {
 					#end of line found
 						$state   = 1;
 						$lastkey = undef;
+						#Reset header information for each request	
+						%h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 						++$seq;
-						$self->{$id}{closeme}=1 if $version ne "1.1";
+						#$self->{$id}{closeme}=0 if $version eq "HTTP/1.1";
+
 						warn "Received request N.$seq over ".fileno($fh).": $method $uri" if DEBUG;
 						$self->{active_requests}++;
 						#push @{ $r{req} }, [{}];
@@ -389,6 +394,7 @@ sub incoming {
 						return;
 					}
 				}
+				#say Dumper \%h;
 				#Done with headers. 
 				#
 				#warn Dumper \%h;
@@ -405,8 +411,11 @@ sub incoming {
 				#	guard   => guard { $self->{active_requests}--; },
 				#);
 				#my @rv = $self->{cb}->( $req );
+				$self->{$id}{closeme}= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
+				#say "close me set to: $self->{$id}{closeme}";
+				#say $h{connection};
 
-				my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'AnyEvent::HTTP::Server::Req' );
+				my @rv = $self->{cb}->( $req = bless [ $version, $self->{id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'AnyEvent::HTTP::Server::Req' );
 				weaken( $req->[8] );
 				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'AnyEvent::HTTP::Server::Req' );
 				if (@rv) {
@@ -579,7 +588,7 @@ sub incoming {
 					}
 					elsif ( $rv[0] ) {
 						#print "NORMAL REPLY\n";
-						$req->reply(@rv);
+						$req->replySimple(@rv);
 					}
 					else {
 						#warn "Other rv";
