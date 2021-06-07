@@ -415,7 +415,7 @@ sub incoming {
 				#say "close me set to: $self->{$id}{closeme}";
 				#say $h{connection};
 
-				my @rv = $self->{cb}->( $req = bless [ $version, $self->{id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'AnyEvent::HTTP::Server::Req' );
+				my @rv = $self->{cb}->( $req = bless [ $version, $self->{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'AnyEvent::HTTP::Server::Req' );
 				weaken( $req->[8] );
 				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'AnyEvent::HTTP::Server::Req' );
 				if (@rv) {
