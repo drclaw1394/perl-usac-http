@@ -1,6 +1,7 @@
 package AnyEvent::HTTP::Server;
 use common::sense;
 use Data::Dumper;
+use AnyEvent::HTTP::Server::Session;
 =head1 NAME
 
 AnyEvent::HTTP::Server - AnyEvent HTTP/1.1 Server
@@ -204,7 +205,7 @@ sub drop {
 	}
 	my $r = delete $self->{$id};
 	$self->{active_connections}--;
-	%{ $r } = () if $r;
+	@{ $r } = () if $r;
 	
 	( delete $self->{graceful} )->()
 		if $self->{graceful} and $self->{active_requests} == 0;
@@ -238,10 +239,10 @@ sub incoming {
 
 	#my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};
 	#weaken $timeout;
-	my %r = ( fh => $fh, id => $id);#, timeout=>$timeout);
+	my @r = ( AnyEvent::HTTP::Server::Session::fh_ => $fh, AnyEvent::HTTP::Server::Session::id_ => $id);#, timeout=>$timeout);
 	my $buf;
 
-	$self->{ $id } = \%r;
+	$self->{ $id } = \@r;
 	$self->{active_connections}++;
 
         #######################################################################################################################################################################################
@@ -255,38 +256,38 @@ sub incoming {
 		my $ido=$self->{$id};
 		\my $buf=\$_[0];
 
-		if ( $ido->{wbuf} ) {
-			$ido->{closeme} and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
-			${ $ido->{wbuf} } .= defined $buf ? $buf : return $ido->{closeme} = 1;
+		if ( $ido->[AnyEvent::HTTP::Server::Session::wbuf_] ) {
+			$ido->[AnyEvent::HTTP::Server::Session::closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
+			${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] } .= defined $buf ? $buf : return $ido->[AnyEvent::HTTP::Server::Session::closeme_] = 1;
 			return;
 		}
 		elsif ( !defined $buf ) { return $self->drop($id); }
 
-		$ido->{fh} or return do {
+		$ido->[AnyEvent::HTTP::Server::Session::fh_] or return do {
 			warn "Lost filehandle while trying to send ".length($buf)." data for $id";
 			$self->drop($id,"No filehandle");
 			();
 		};
-		my $w = syswrite( $ido->{fh}, $buf );
+		my $w = syswrite( $ido->[AnyEvent::HTTP::Server::Session::fh_], $buf );
 		if ($w == length $buf) {
 			# ok;
-			if( $ido->{closeme} ) { $self->drop($id); };
+			if( $ido->[AnyEvent::HTTP::Server::Session::closeme_] ) { $self->drop($id); };
 		}
 		elsif (defined $w) {
 			#substr($buf,0,$w,'');
-			$ido->{wbuf} = substr($buf,0,$w,'');
+			$ido->[AnyEvent::HTTP::Server::Session::wbuf_] = substr($buf,0,$w,'');
 			#$buf;
-			$ido->{ww} = AE::io $ido->{fh}, 1, sub {
+			$ido->[AnyEvent::HTTP::Server::Session::ww_] = AE::io $ido->[AnyEvent::HTTP::Server::Session::fh_], 1, sub {
 				warn "ww.io.$id" if DEBUG;
 				$self and $ido or return;
-				$w = syswrite( $ido->{fh}, ${ $ido->{wbuf} } );
-				if ($w == length ${ $ido->{wbuf} }) {
-					delete $ido->{wbuf};
-					delete $ido->{ww};
-					if( $ido->{closeme} ) { $self->drop($id); }
+				$w = syswrite( $ido->[AnyEvent::HTTP::Server::Session::fh_], ${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] } );
+				if ($w == length ${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] }) {
+					delete $ido->[AnyEvent::HTTP::Server::Session::wbuf_];
+					delete $ido->[AnyEvent::HTTP::Server::Session::ww_];
+					if( $ido->[AnyEvent::HTTP::Server::Session::closeme_] ) { $self->drop($id); }
 				}
 				elsif (defined $w) {
-					${ $ido->{wbuf} } = substr( ${ $ido->{wbuf} }, $w );
+					${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] } = substr( ${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] }, $w );
 					#substr( ${ $ido->{wbuf} }, 0, $w, '');
 				}
 				else { return $self->drop($id, "$!"); }
@@ -301,7 +302,7 @@ sub incoming {
 	my $ixx = 0;
 	my %h;		#Define the header storage here, once per connection
 	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
-	$r{rw} = AE::io $fh, 0, sub {
+	$r[AnyEvent::HTTP::Server::Session::rw_] = AE::io $fh, 0, sub {
 		# warn "rw.io.$id (".(fileno $fh).") seq:$seq (ok:".($self ? 1:0).':'.(( $self && exists $self->{$id}) ? 1 : 0).")";# if DEBUG;
 		$self and exists $self->{$id} or return;
 		my ($pos0,$pos1,$pos2,$pos3);
@@ -414,7 +415,7 @@ sub incoming {
 				#	guard   => guard { $self->{active_requests}--; },
 				#);
 				#my @rv = $self->{cb}->( $req );
-				$self->{$id}{closeme}= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
+				$self->{$id}[AnyEvent::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
 				#say "close me set to: $self->{$id}{closeme}";
 				#say $h{connection};
 
@@ -431,7 +432,7 @@ sub incoming {
 					}
 					when ('CODE') {
 						#print "CODE \n";
-						$r{on_body} = $rv[0];
+						$r[AnyEvent::HTTP::Server::Session::on_body_] = $rv[0];
 					}
 					when('HASH' ) {
 						if ( $h{'content-type'}  =~ m{^
@@ -450,7 +451,7 @@ sub incoming {
 							#warn "reading multipart with boundary '$bnd'";
 							#warn "set on_body";
 							my $cb = $rv[0]{multipart};
-							$r{on_body} = sub {
+							$r[AnyEvent::HTTP::Server::Session::on_body_] = sub {
 								my ($last,$part) = @_;
 								if ( length($body) + length($$part) > $self->{max_body_size} ) {
 									# TODO;
@@ -540,7 +541,7 @@ sub incoming {
 
 						elsif (  exists $rv[0]{form} ) {
 							my $body = '';
-							$r{on_body} = sub {
+							$r[AnyEvent::HTTP::Server::Session::on_body_] = sub {
 								my ($last,$part) = @_;
 								if ( length($body) + length($$part) > $self->{max_body_size} ) {
 									# TODO;
@@ -548,12 +549,12 @@ sub incoming {
 								$body .= $$part;
 								if ($last) {
 									$rv[0]{form}( $req->form($body), $body );
-									delete $r{on_body};
+									delete $r[AnyEvent::HTTP::Server::Session::on_body_];
 								}
 							};
 						}
 						elsif( exists $rv[0]{raw} ) {
-							$r{on_body} = $rv[0]{raw};
+							$r[AnyEvent::HTTP::Server::Session::on_body_] = $rv[0]{raw};
 						}
 						else {
 							die "XXX";
@@ -561,7 +562,7 @@ sub incoming {
 					}
 					#TODO: Convert this to system send file
 					when('HANDLE') {
-						delete $r{rw};
+						delete $r[AnyEvent::HTTP::Server::Session::rw_];
 						my $h = AnyEvent::Handle->new(
 							fh => $fh,
 						);
@@ -594,7 +595,7 @@ sub incoming {
 						weaken($req->[11] = $h);
 						$rv[1]->($h);
 						weaken($req);
-						%r = ( );
+						@r = ( );
 						return;
 					}
 					default{
@@ -608,7 +609,7 @@ sub incoming {
 					#warn "have clen";
 					if ( length($buf) - $pos == $len ) {
 						#warn "Equally";
-						$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$pos)) );
+						$r[AnyEvent::HTTP::Server::Session::on_body_] && (delete $r[AnyEvent::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos)) );
 						$buf = '';$state = $ixx = 0;
 						#TEST && test_visited("finish:complete content length")
 						# FINISHED
@@ -617,7 +618,7 @@ sub incoming {
 					}
 					elsif ( length($buf) - $pos > $len ) {
 						#warn "Complete body + trailing (".( length($buf) - $pos - $len )." bytes: ".substr( $buf,$pos + $len ).")";
-						$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$pos,$pos+$len)) );
+						$r[AnyEvent::HTTP::Server::Session::on_body_] && (delete $r[AnyEvent::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos,$pos+$len)) );
 						$ixx = $pos + $len;
 						$state = 0;
 						# FINISHED
@@ -626,9 +627,9 @@ sub incoming {
 					}
 					else {
 						#warn "Not enough body";
-						$r{left} = $len - ( length($buf) - $pos );
-						if ($r{on_body}) {
-							$r{on_body}( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
+						$r[AnyEvent::HTTP::Server::Session::left_] = $len - ( length($buf) - $pos );
+						if ($r[AnyEvent::HTTP::Server::Session::on_body_]) {
+							$r[AnyEvent::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
 							$state = 2;
 						} else {
 							$state = 2;
@@ -640,7 +641,7 @@ sub incoming {
 				#elsif (chunked) { TODO }
 				else {
 					#warn "No clen";
-					$r{on_body}(1,\('')) if $r{on_body};
+					$r[AnyEvent::HTTP::Server::Session::on_body_](1,\('')) if $r[AnyEvent::HTTP::Server::Session::on_body_];
 					# FINISHED
 					#warn "3. finished request" . Dumper($req);
 					#warn "pos = $pos, lbuf=".length $buf;
@@ -657,10 +658,10 @@ sub incoming {
 			} # state 1
 			elsif ($state == 2 ) {
 				#warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );
-				if (length($buf) - $ixx >= $r{left}) {
+				if (length($buf) - $ixx >= $r[AnyEvent::HTTP::Server::Session::left_]) {
 					#warn sprintf "complete (%d of %d)", length $buf, $r{left};
-					$r{on_body} && (delete $r{on_body})->( 1, \(substr($buf,$ixx, $r{left})) );
-					$buf = substr($buf,$ixx + $r{left});
+					$r[AnyEvent::HTTP::Server::Session::on_body_] && (delete $r[AnyEvent::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$ixx, $r[AnyEvent::HTTP::Server::Session::left_])) );
+					$buf = substr($buf,$ixx + $r[AnyEvent::HTTP::Server::Session::left_]);
 					$state = $ixx = 0;
 					# FINISHED
 					#warn "4. finished request" . Dumper $req;
@@ -670,8 +671,8 @@ sub incoming {
 					redo;
 				} else {
 					#warn sprintf "not complete (%d of %d)", length $buf, $r{left};
-					$r{on_body} && $r{on_body}( 0, \(substr($buf,$ixx)) );
-					$r{left} -= ( length($buf) - $ixx );
+					$r[AnyEvent::HTTP::Server::Session::on_body_] && $r[AnyEvent::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$ixx)) );
+					$r[AnyEvent::HTTP::Server::Session::left_] -= ( length($buf) - $ixx );
 					$buf = ''; $ixx = 0;
 					#return;
 					next;

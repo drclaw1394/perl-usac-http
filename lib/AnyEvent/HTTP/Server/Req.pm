@@ -4,6 +4,7 @@ use common::sense;
 
 use HTTP::Code;
 use HTTP::Header;
+use AnyEvent::HTTP::Server::Session;
 
 =head1 NAME
 
@@ -284,7 +285,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			$reply.=$HTTP::Header::names[HTTP::Header::Server].": "."AE $VERSION".$LF;	#Set server
 			$reply.=$HTTP::Header::names[HTTP::Header::Content_Length].": ".length($content).$LF if defined $content;	#Set server
 			#close connection after if marked
-			if($self->[session_]{closeme}){
+			if($self->[session_][AnyEvent::HTTP::Server::Session::closeme_]){
 				$reply.=$HTTP::Header::names[HTTP::Header::Connection].": close".$LF;
 
 			}
@@ -315,7 +316,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#Write the headers
 			if( $self->[write_] ) {
 				$self->[write_]->( $reply );
-				$self->[write_]->( undef ) if $self->[session_]{closeme} or $self->[server_]{graceful};
+				$self->[write_]->( undef ) if $self->[session_][AnyEvent::HTTP::Server::Session::closeme_] or $self->[server_]{graceful};
 				#delete $self->[write_];
 				$self->[write_]=undef;
 				${ $self->[reqcount_] }--;
