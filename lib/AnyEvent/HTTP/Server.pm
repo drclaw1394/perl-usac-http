@@ -193,6 +193,8 @@ sub peer_info {
 }
 
 sub drop {
+	#say "DROPING";
+	#say (caller);
 	my ($self,$id,$err) = @_;
 	$err =~ s/\015//sg;
 	if ($err and $self->{debug_drop}) {
@@ -234,8 +236,9 @@ sub incoming {
 	my ($fh,$rhost,$rport) = @_;
 	my $id = ++$self->{seq}; #refaddr $fh;
 
-
-	my %r = ( fh => $fh, id => $id );
+	#my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};
+	#weaken $timeout;
+	my %r = ( fh => $fh, id => $id);#, timeout=>$timeout);
 	my $buf;
 
 	$self->{ $id } = \%r;
@@ -416,14 +419,21 @@ sub incoming {
 				#say $h{connection};
 
 				my @rv = $self->{cb}->( $req = bless [ $version, $self->{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'AnyEvent::HTTP::Server::Req' );
+				weaken ($req->[1]);
 				weaken( $req->[8] );
 				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'AnyEvent::HTTP::Server::Req' );
+				my $ref=ref $rv[0];	#test if first element is ref, or code
 				if (@rv) {
-					if (ref $rv[0] eq 'CODE') {
+					given ($ref){
+					when ( "" ) {
+						#print "NORMAL REPLY\n";
+						$req->replySimple(@rv);
+					}
+					when ('CODE') {
 						#print "CODE \n";
 						$r{on_body} = $rv[0];
 					}
-					elsif ( ref $rv[0] eq 'HASH' ) {
+					when('HASH' ) {
 						if ( $h{'content-type'}  =~ m{^
 								multipart/form-data\s*;\s*
 								boundary\s*=\s*
@@ -549,7 +559,8 @@ sub incoming {
 							die "XXX";
 						}
 					}
-					elsif ($rv[0] eq 'HANDLE') {
+					#TODO: Convert this to system send file
+					when('HANDLE') {
 						delete $r{rw};
 						my $h = AnyEvent::Handle->new(
 							fh => $fh,
@@ -586,13 +597,10 @@ sub incoming {
 						%r = ( );
 						return;
 					}
-					elsif ( $rv[0] ) {
-						#print "NORMAL REPLY\n";
-						$req->replySimple(@rv);
-					}
-					else {
+					default{
 						#warn "Other rv";
 					}
+				}
 				}
 				weaken($req);
 

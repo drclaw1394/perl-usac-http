@@ -10,7 +10,7 @@ my $server = AnyEvent::HTTP::Server->new(
 	host=>"0.0.0.0",
 	port=>8080,
 	cb => sub {
-		(HTTP::Codes::OK,"GOOD");
+		(HTTP::Codes::OK,"GOOD");#[HTTP::Headers::Cache_Control=>"abc"],{Custom=>"value"});
 	}
 );
 

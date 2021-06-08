@@ -2,8 +2,8 @@ package AnyEvent::HTTP::Server::Form;
 
 use common::sense;
 
-use HTTP::Codes;
-use HTTP::Headers;
+use HTTP::Code;
+use HTTP::Header;
 
 =head1 NAME
 
@@ -263,28 +263,55 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			local $CALLDEPTH = $CALLDEPTH + 1;
 			$self->reply( 302, "Moved", %args );
 		}
+	
 
+		sub reply_GZIP {
+
+		}
+		#like simple reply but does a DEFLATE on the data.
+		#Sets the headers accordingly
+		sub reply_DEFLATE {
+			#call replySimple with extra headers
+		}
 		#Reply the body and code specified. Adds Server and Content-Length headers
-		#close connection after
 		sub replySimple {
-			my $version="HTTP/1.0";
 			my $self=shift;
-			my ($code,$content,%args)=@_;
-			my $reply="$version $HTTP::Codes::values[$code] $HTTP::Codes::names[$code]$LF";
-			$reply.=$HTTP::Headers::names[HTTP::Headers::Server].": "."AE $VERSION".$LF;	#Set server
-			$reply.=$HTTP::Headers::names[HTTP::Headers::Content_Length].": ".length($content).$LF if defined $content;	#Set server
+			#my $version=$self->[version_];#"HTTP/1.0";
+			my ($code,$content,$headers,$customHeaders)=@_;
+
+			my $reply="$self->[version_] $HTTP::Code::values[$code] $HTTP::Code::names[$code]$LF";
+
+			$reply.=$HTTP::Header::names[HTTP::Header::Server].": "."AE $VERSION".$LF;	#Set server
+			$reply.=$HTTP::Header::names[HTTP::Header::Content_Length].": ".length($content).$LF if defined $content;	#Set server
+			#close connection after if marked
 			if($self->[session_]{closeme}){
-				$reply.=$HTTP::Headers::names[HTTP::Headers::Connection].": close".$LF;
+				$reply.=$HTTP::Header::names[HTTP::Header::Connection].": close".$LF;
 
 			}
+			#or send explicit keep alive?
+			elsif($self->[version_] ne "HTTP/1.1") {
+				$reply.=$HTTP::Header::names[HTTP::Header::Connection].": Keep-Alive".$LF;
+				$reply.=$HTTP::Header::names[HTTP::Header::Keep_Alive].": timeout=5, max=1000".$LF;
+			}
+
 			else {
-				$reply.=$HTTP::Headers::names[HTTP::Headers::Connection].": Keep-Alive".$LF;
-				$reply.=$HTTP::Headers::names[HTTP::Headers::Keep_Alive].": timeout=5, max=1000".$LF;
 			}
 
+			#User requested headers. 
+			if(defined $headers){		#checking for defined speeds up no header case
+				for(0..@$headers/2-1){	
+					$reply.=$HTTP::Header::names[$headers->[$_]].": $headers->[$_+1]$LF";
+				}
+			}
+
+			#Custom headers
+			if(defined $customHeaders){	#checking for defined speeds up no header case
+				while(my ($name,$value)=each %$customHeaders){
+					$reply.="$name: $value$LF";
+				}
+			}
 
 			$reply.=$LF.$content;
-			#say $reply;
 			#Write the headers
 			if( $self->[write_] ) {
 				$self->[write_]->( $reply );
@@ -452,7 +479,9 @@ use constant KEY_COUNT=>attrs_-method_+1;
 		
 		sub send_100_continue {
 			my ($self,$code,%args) = @_;
-			my $reply = "HTTP/1.1 100 $http{100}$LF$LF";
+			#my $reply = "HTTP/1.1 100 $http{100}$LF$LF";
+			my $reply="$self->[version_] $HTTP::Code::values[HTTP::Code::Continue] $HTTP::Code::names[HTTP::Code::Continue]$LF$LF";
+
 			$self->[write_]->( $reply );
 		}
 
