@@ -436,185 +436,185 @@ sub incoming {
 				weaken ($req->[1]);
 				weaken( $req->[8] );
 				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'AnyEvent::HTTP::Server::Req' );
-				my $ref=ref $rv[0];	#test if first element is ref, or code
 				if (@rv) {
+					my $ref=ref $rv[0];	#test if first element is ref, or code
 					given ($ref){
-					when ( "" ) {
-						#print "NORMAL REPLY\n";
-						$req->replySimple(@rv);
-					}
-					when ('CODE') {
-						#print "CODE \n";
-						$r[AnyEvent::HTTP::Server::Session::on_body_] = $rv[0];
-					}
-					when('HASH' ) {
-						if ( $h{'content-type'}  =~ m{^
-								multipart/form-data\s*;\s*
-								boundary\s*=\s*
-								(?:
-								"((?:[^\\"]++|\\.){0,4096})" # " quoted entry
-								|
-								([^;,\s]+)
-								)
-								$}xsio and exists $rv[0]{multipart}
-						) {
+						when ( "" ) {
+							#print "NORMAL REPLY\n";
+							$req->replySimple(@rv);
+						}
+						when ('CODE') {
+							#print "CODE \n";
+							$r[AnyEvent::HTTP::Server::Session::on_body_] = $rv[0];
+						}
+						when('HASH' ) {
+							if ( $h{'content-type'}  =~ m{^
+									multipart/form-data\s*;\s*
+									boundary\s*=\s*
+									(?:
+									"((?:[^\\"]++|\\.){0,4096})" # " quoted entry
+									|
+									([^;,\s]+)
+									)
+									$}xsio and exists $rv[0]{multipart}
+							) {
 
-							my $bnd = '--'.( defined $1 ? do { my $x = $1; $x =~ s{\\(.)}{$1}gs; $x } : $2 );
-							my $body = '';
-							#warn "reading multipart with boundary '$bnd'";
-							#warn "set on_body";
-							my $cb = $rv[0]{multipart};
-							$r[AnyEvent::HTTP::Server::Session::on_body_] = sub {
-								my ($last,$part) = @_;
-								if ( length($body) + length($$part) > $self->{max_body_size} ) {
-									# TODO;
-								}
-								$body .= $$part;
-								#warn "Checking body '".$body."'";
-								my $idx = index( $body, $bnd );
-								while ( $idx > -1 and (
-										( $idx + length($bnd) + 1 <= length($body) and substr($body,$idx+length($bnd),1) eq "\012" )
-											or
-										( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\015\012" )
-											or
-										( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\055\055" )
-									) ) {
-									#warn "have part";
-									my $part = substr($body,$idx-2,1) eq "\015" ? substr($body,0,$idx-2) : substr($body,0,$idx-1);
-									#warn Dumper $part;
-									#substr($part, 0, ( substr($part,0,1) eq "\015" ) ? 2 : 1,'');
-									#warn "captured $idx: '$part'";
-									$body = substr($body,$idx + length $bnd);
-									substr($body,0, ( substr($body,0,1) eq "\015" ) ? 2 : 1 ,'');
-									#warn "body = '$body'";
-									$idx = index( $body, $bnd );
-									#warn "next part idx: $idx";
-									length $part or next;
-									#warn "Process part '$part'";
+								my $bnd = '--'.( defined $1 ? do { my $x = $1; $x =~ s{\\(.)}{$1}gs; $x } : $2 );
+								my $body = '';
+								#warn "reading multipart with boundary '$bnd'";
+								#warn "set on_body";
+								my $cb = $rv[0]{multipart};
+								$r[AnyEvent::HTTP::Server::Session::on_body_] = sub {
+									my ($last,$part) = @_;
+									if ( length($body) + length($$part) > $self->{max_body_size} ) {
+										# TODO;
+									}
+									$body .= $$part;
+									#warn "Checking body '".$body."'";
+									my $idx = index( $body, $bnd );
+									while ( $idx > -1 and (
+											( $idx + length($bnd) + 1 <= length($body) and substr($body,$idx+length($bnd),1) eq "\012" )
+												or
+											( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\015\012" )
+												or
+											( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\055\055" )
+										) ) {
+										#warn "have part";
+										my $part = substr($body,$idx-2,1) eq "\015" ? substr($body,0,$idx-2) : substr($body,0,$idx-1);
+										#warn Dumper $part;
+										#substr($part, 0, ( substr($part,0,1) eq "\015" ) ? 2 : 1,'');
+										#warn "captured $idx: '$part'";
+										$body = substr($body,$idx + length $bnd);
+										substr($body,0, ( substr($body,0,1) eq "\015" ) ? 2 : 1 ,'');
+										#warn "body = '$body'";
+										$idx = index( $body, $bnd );
+										#warn "next part idx: $idx";
+										length $part or next;
+										#warn "Process part '$part'";
 
-									my %hd;
-									my $lk;
-									while() {
-										if( $part =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]++(;)?[^\012\015]*+) \015?\012/sxogc ){
-											$lk = lc $1;
-											$hd{ $lk } = exists $hd{ $lk } ? $hd{ $lk }.','.$2 : $2;
-											if ( defined $3 ) {
-												pos(my $v = $2) = $-[3] - $-[2];
-												# TODO: testme
-												$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-												while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
+										my %hd;
+										my $lk;
+										while() {
+											if( $part =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]++(;)?[^\012\015]*+) \015?\012/sxogc ){
+												$lk = lc $1;
+												$hd{ $lk } = exists $hd{ $lk } ? $hd{ $lk }.','.$2 : $2;
+												if ( defined $3 ) {
+													pos(my $v = $2) = $-[3] - $-[2];
+													# TODO: testme
+													$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
+													while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
+												}
+											}
+											elsif ($part =~ /\G[\011\040]+/sxogc and length $lk) { # continuation
+												$part =~ /\G([^\015\012]+)\015?\012/sxogc or next;
+												$hd{ $lk } .= ' '.$1;
+												if ( ( my $ext = index( $hd{ $lk }, ';', rindex( $hd{ $lk }, ',' ) + 1) ) > -1 ) {
+													# Composite field. Need to reparse last field value (from ; after last ,)
+													pos($hd{ $lk }) = $ext;
+													$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
+													while ( $hd{ $lk } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
+												}
+											}
+											elsif ($part =~ /\G\015?\012/sxogc) {
+												last;
+											}
+											elsif($part =~ /\G [^\012]* \Z/sxogc) {
+												# Truncated part???
+												last;
+											}
+											else {
+												pos($part) = 0;
+												last;
 											}
 										}
-										elsif ($part =~ /\G[\011\040]+/sxogc and length $lk) { # continuation
-											$part =~ /\G([^\015\012]+)\015?\012/sxogc or next;
-											$hd{ $lk } .= ' '.$1;
-											if ( ( my $ext = index( $hd{ $lk }, ';', rindex( $hd{ $lk }, ',' ) + 1) ) > -1 ) {
-												# Composite field. Need to reparse last field value (from ; after last ,)
-												pos($hd{ $lk }) = $ext;
-												$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-												while ( $hd{ $lk } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-											}
+										substr($part, 0,pos($part),'');
+										my $enc = lc $hd{'content-transfer-encoding'};
+										if ( $enc eq 'quoted-printable' ) {
+											require Encode;
+											$MIME = Encode::find_encoding('MIME-Header');
+											$part = $MIME->decode( $part );
 										}
-										elsif ($part =~ /\G\015?\012/sxogc) {
-											last;
-										}
-										elsif($part =~ /\G [^\012]* \Z/sxogc) {
-											# Truncated part???
-											last;
-										}
-										else {
-											pos($part) = 0;
-											last;
-										}
-									}
-									substr($part, 0,pos($part),'');
-									my $enc = lc $hd{'content-transfer-encoding'};
-									if ( $enc eq 'quoted-printable' ) {
-										require Encode;
-										$MIME = Encode::find_encoding('MIME-Header');
-										$part = $MIME->decode( $part );
-									}
 
-									elsif ( $enc eq 'base64' ) {
-										require MIME::Base64;
-										$part = MIME::Base64::decode_base64( $part ); 
+										elsif ( $enc eq 'base64' ) {
+											require MIME::Base64;
+											$part = MIME::Base64::decode_base64( $part ); 
+										}
+										$hd{filename} = $hd{'content-disposition+filename'} if exists $hd{'content-disposition+filename'};
+										$hd{name}     = $hd{'content-disposition+name'}     if exists $hd{'content-disposition+name'};
+										#warn "call for part $hd{name} ($last)";
+										$cb->( $last && $idx == -1 ? 1 : 0,$part,\%hd );
 									}
-									$hd{filename} = $hd{'content-disposition+filename'} if exists $hd{'content-disposition+filename'};
-									$hd{name}     = $hd{'content-disposition+name'}     if exists $hd{'content-disposition+name'};
-									#warn "call for part $hd{name} ($last)";
-									$cb->( $last && $idx == -1 ? 1 : 0,$part,\%hd );
-								}
-								#warn "just return";
-								#if ($last) {
-								#warn "leave with $body";
-								#}
-							};
-						}
-						#										elsif ( $h{'content-type'} =~ m{^application/x-www-form-urlencoded(?:\Z|\s*;)}i and exists $rv[0]{form} ) {
-
-						elsif (  exists $rv[0]{form} ) {
-							my $body = '';
-							$r[AnyEvent::HTTP::Server::Session::on_body_] = sub {
-								my ($last,$part) = @_;
-								if ( length($body) + length($$part) > $self->{max_body_size} ) {
-									# TODO;
-								}
-								$body .= $$part;
-								if ($last) {
-									$rv[0]{form}( $req->form($body), $body );
-									delete $r[AnyEvent::HTTP::Server::Session::on_body_];
-								}
-							};
-						}
-						elsif( exists $rv[0]{raw} ) {
-							$r[AnyEvent::HTTP::Server::Session::on_body_] = $rv[0]{raw};
-						}
-						else {
-							die "XXX";
-						}
-					}
-					#TODO: Convert this to system send file
-					when('HANDLE') {
-						delete $r[AnyEvent::HTTP::Server::Session::rw_];
-						my $h = AnyEvent::Handle->new(
-							fh => $fh,
-						);
-						$h->{rbuf} = substr($buf,$pos);
-						#warn "creating handle ".Dumper $h->{rbuf};
-						$req->[3] = sub {
-							my $rbuf = shift;
-							if (defined $$rbuf) {
-								if ($h) {
-									$h->push_write( $$rbuf );
-								}
-								else {
-									warn "Requested write '$$rbuf' on destroyed handle";
-								}
-							} else {
-								if ($h) {
-									$h->push_shutdown;
-									$h->on_drain(sub {
-											$h->destroy;
-											undef $h;
-											$self->drop($id) if $self;
-										});
-									undef $h;
-								}
-								else {
-									$self->drop($id) if $self;
-								}
+									#warn "just return";
+									#if ($last) {
+									#warn "leave with $body";
+									#}
+								};
 							}
-						};
-						weaken($req->[11] = $h);
-						$rv[1]->($h);
-						weaken($req);
-						@r = ( );
-						return;
+							#										elsif ( $h{'content-type'} =~ m{^application/x-www-form-urlencoded(?:\Z|\s*;)}i and exists $rv[0]{form} ) {
+
+							elsif (  exists $rv[0]{form} ) {
+								my $body = '';
+								$r[AnyEvent::HTTP::Server::Session::on_body_] = sub {
+									my ($last,$part) = @_;
+									if ( length($body) + length($$part) > $self->{max_body_size} ) {
+										# TODO;
+									}
+									$body .= $$part;
+									if ($last) {
+										$rv[0]{form}( $req->form($body), $body );
+										delete $r[AnyEvent::HTTP::Server::Session::on_body_];
+									}
+								};
+							}
+							elsif( exists $rv[0]{raw} ) {
+								$r[AnyEvent::HTTP::Server::Session::on_body_] = $rv[0]{raw};
+							}
+							else {
+								die "XXX";
+							}
+						}
+						#TODO: Convert this to system send file
+						when('HANDLE') {
+							delete $r[AnyEvent::HTTP::Server::Session::rw_];
+							my $h = AnyEvent::Handle->new(
+								fh => $fh,
+							);
+							$h->{rbuf} = substr($buf,$pos);
+							#warn "creating handle ".Dumper $h->{rbuf};
+							$req->[3] = sub {
+								my $rbuf = shift;
+								if (defined $$rbuf) {
+									if ($h) {
+										$h->push_write( $$rbuf );
+									}
+									else {
+										warn "Requested write '$$rbuf' on destroyed handle";
+									}
+								} else {
+									if ($h) {
+										$h->push_shutdown;
+										$h->on_drain(sub {
+												$h->destroy;
+												undef $h;
+												$self->drop($id) if $self;
+											});
+										undef $h;
+									}
+									else {
+										$self->drop($id) if $self;
+									}
+								}
+							};
+							weaken($req->[11] = $h);
+							$rv[1]->($h);
+							weaken($req);
+							@r = ( );
+							return;
+						}
+						default{
+							#warn "Other rv";
+						}
 					}
-					default{
-						#warn "Other rv";
-					}
-				}
 				}
 				weaken($req);
 
