@@ -339,46 +339,59 @@ sub incoming {
 				pos($buf) = $pos;
 				warn "Parsing headers from pos $pos:".substr($buf,$pos) if DEBUG;
 				while () {
+					#TODO:
+					# Explicit support for multiple cookies. Possibly use seperate cookies list?
+					# Treat all headers as 'list' format for this round of parsing. 
+					# Understand what the continuation is supposed to achieve. Its depricated
+					#  
 					#warn "parse line >'".substr( $buf,pos($buf),index( $buf, "\012", pos($buf) )-pos($buf) )."'";
-					if( $buf =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]*+(;)?[^\012\015]*+) \015?\012/sxogc ){
-						$lastkey = lc $1;
-						$h{ $lastkey } = exists $h{ $lastkey } ? $h{ $lastkey }.','.$2: $2;
-						#warn "Captured header $lastkey = '$2'";
-						if ( defined $3 ) {
-							pos(my $v = $2) = $-[3] - $-[2];
-							#warn "scan ';'";
-							$h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-							while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-							$contstate = 1;
-						} else {
-							$contstate = 0;
-						}
-					}
-					elsif ($buf =~ /\G[\011\040]+/sxogc) { # continuation
-						#warn "Continuation";
-						if (length $lastkey) {
-							$buf =~ /\G ([^\015\012;]*+(;)?[^\015\012]*+) \015?\012/sxogc or return pos($buf) = $bpos; # need more data;
-							$h{ $lastkey } .= ' '.$1;
-							if ( ( defined $2 or $contstate ) ) {
-								#warn "With ;";
-								if ( ( my $ext = index( $h{ $lastkey }, ';', rindex( $h{ $lastkey }, ',' ) + 1) ) > -1 ) {
-									# Composite field. Need to reparse last field value (from ; after last ,)
-									# full key rescan, because of possible case: <key:value; field="value\n\tvalue continuation"\n>
-									# regexp needed to set \G
-									pos($h{ $lastkey }) = $ext;
-									#warn "Rescan from $ext";
-									#warn("<$1><$2><$3>"),
-									$h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-									while ( $h{ $lastkey } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-									$contstate = 1;
-								}
-							}
-						}
+					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogc ){
+					#if( $buf =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]*+(;)?[^\012\015]*+) \015?\012/sxogc ){
+						#$lastkey = lc $1;
+						\my $e=\$h{lc $1};
+						#$h{ $lastkey } = exists $h{ $lastkey } ? $h{ $lastkey }.','.$2: $2;
+						$e = $e ? $e.','.$2: $2;
+						#say $h{ $lastkey };
+                                                ########################################################################################################################
+                                                # #warn "Captured header $lastkey = '$2'";                                                                             #
+                                                # if ( defined $3 ) {                                                                                                  #
+                                                #         pos(my $v = $2) = $-[3] - $-[2];                                                                             #
+                                                #         #warn "scan ';'";                                                                                            #
+                                                #         $h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )            #
+                                                #         while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # " #
+                                                #         $contstate = 1;                                                                                              #
+                                                # } else {                                                                                                             #
+                                                #         $contstate = 0;                                                                                              #
+                                                # }                                                                                                                    #
+                                                ########################################################################################################################
 					}
 					elsif ($buf =~ /\G\015?\012/sxogc) {
 						#warn "Last line";
 						last;
 					}
+                                        ############################################################################################################################################################
+                                        # elsif ($buf =~ /\G[\011\040]+/sxogc) { # continuation                                                                                                    #
+                                        #         #warn "Continuation";                                                                                                                            #
+                                        #         if (length $lastkey) {                                                                                                                           #
+                                        #                 $buf =~ /\G ([^\015\012;]*+(;)?[^\015\012]*+) \015?\012/sxogc or return pos($buf) = $bpos; # need more data;                             #
+                                        #                 $h{ $lastkey } .= ' '.$1;                                                                                                                #
+                                        #                 if ( ( defined $2 or $contstate ) ) {                                                                                                    #
+                                        #                         #warn "With ;";                                                                                                                  #
+                                        #                         if ( ( my $ext = index( $h{ $lastkey }, ';', rindex( $h{ $lastkey }, ',' ) + 1) ) > -1 ) {                                       #
+                                        #                                 # Composite field. Need to reparse last field value (from ; after last ,)                                                #
+                                        #                                 # full key rescan, because of possible case: <key:value; field="value\n\tvalue continuation"\n>                          #
+                                        #                                 # regexp needed to set \G                                                                                                #
+                                        #                                 pos($h{ $lastkey }) = $ext;                                                                                              #
+                                        #                                 #warn "Rescan from $ext";                                                                                                #
+                                        #                                 #warn("<$1><$2><$3>"),                                                                                                   #
+                                        #                                 $h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )                        #
+                                        #                                 while ( $h{ $lastkey } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # " #
+                                        #                                 $contstate = 1;                                                                                                          #
+                                        #                         }                                                                                                                                #
+                                        #                 }                                                                                                                                        #
+                                        #         }                                                                                                                                                #
+                                        # }                                                                                                                                                        #
+                                        ############################################################################################################################################################
 					elsif($buf =~ /\G [^\012]* \Z/sxogc) {
 						if (length($buf) - $ixx > $self->{max_header_size}) {
 							$self->badconn($fh,\substr($buf, pos($buf), $ixx), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
