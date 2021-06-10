@@ -1,9 +1,10 @@
-package AnyEvent::HTTP::Server::WS;
+package uSAC::HTTP::Server::WS;
 
 use 5.010;
-use AnyEvent::HTTP::Server::Kit;
+#use AnyEvent::HTTP::Server::Kit;
 #use Devel::Hexdump;
 #use DDP;
+use AnyEvent;
 use Config;
 use Time::HiRes ();
 use JSON::XS;
@@ -397,7 +398,7 @@ sub DESTROY {
 
 package AnyEvent::HTTP::Server::WS::CLOSING;
 
-our @ISA = qw(AnyEvent::HTTP::Server::WS);
+our @ISA = qw(uSAC::HTTP::Server::WS);
 
 sub DESTROY {
 	

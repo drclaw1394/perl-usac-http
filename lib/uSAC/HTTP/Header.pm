@@ -1,5 +1,5 @@
 #Generate a list of header names as a hash or array
-package AnyEvent::HTTP::HeaderNames;
+package uSAC::HTTP::Header;
 BEGIN {
 	our @names=qw(
 		Accept
@@ -34,6 +34,7 @@ BEGIN {
 		If-None-Match
 		If-Range
 		If-Unmodified-Since
+		Keep-Alive
 		Last-Modified
 		Location
 		Max-Forwards
@@ -63,6 +64,6 @@ BEGIN {
 		DataServiceVersion
 	);
 };
-
-use enum (map s/-/_/gr, @names); #Make indexes, with underscores
+use enum (map s/-/_/gr, @names); 		#Make indexes, with underscores
+our %hash=map {$names[$_]=>$_} 0..@names-1;	#Map actual names to indexes, for parsing
 1;

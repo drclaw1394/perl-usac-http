@@ -1,4 +1,4 @@
-package AnyEvent::HTTP::Server::Session;
+package uSAC::HTTP::Server::Session;
 
 #Class attribute keys
 use enum ( "id_=0" ,qw<fh_ closeme_ rw_ ww_ wbuf_ left_ on_body_>);

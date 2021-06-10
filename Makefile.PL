@@ -1,18 +1,17 @@
-use 5.008008;
 use ExtUtils::MakeMaker;
-BEGIN{ $ENV{AUTHOR} and require CPAN::Meta and CPAN::Meta->import();  };
+#BEGIN{ $ENV{AUTHOR} and require CPAN::Meta and CPAN::Meta->import();  };
 
 WriteMakefile(
-	NAME              => 'AnyEvent::HTTP::Server',
-	VERSION_FROM      => 'lib/AnyEvent/HTTP/Server.pm',
+	NAME              => 'uSAC::HTTP::Server',
+	VERSION_FROM      => 'lib/uSAC/HTTP/Server.pm',
 	PREREQ_PM         => {
 		AnyEvent => 5,
 		'Digest::SHA1' => 2,
 		'JSON::XS'     => 3,
 	},
-	ABSTRACT_FROM     => 'lib/AnyEvent/HTTP/Server.pm', # retrieve abstract from module
-	AUTHOR            => 'Mons Anderson <mons@cpan.org>',
+	ABSTRACT_FROM     => 'lib/uSAC/HTTP/Server.pm', # retrieve abstract from module
+	AUTHOR            => 'Ruben Westerberg',
 	LICENSE           => 'perl',
-	PL_FILES          => { "Kit.pm.PL" => '$(INST_LIB)/AnyEvent/HTTP/Server/Kit.pm' },
-	clean             => { FILES => "Kit.pm" },
+	PL_FILES          => {},
+	clean             => {},
 );

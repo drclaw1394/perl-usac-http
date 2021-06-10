@@ -1,18 +1,12 @@
-package AnyEvent::HTTP::Server;
+package uSAC::HTTP::Server; 
 use common::sense;
 use Data::Dumper;
-use AnyEvent::HTTP::Server::Session;
-=head1 NAME
-
-AnyEvent::HTTP::Server - AnyEvent HTTP/1.1 Server
-
-=cut
 
 use version;our $VERSION = version->declare('v0.1');
 use feature "refaliasing";
 #use feature ":all";
 
-#use AnyEvent::HTTP::Server::Kit;
+#use uSAC::HTTP::Server::Kit;
 
 #use Exporter;
 #our @ISA = qw(Exporter);
@@ -33,7 +27,7 @@ use Time::HiRes qw/gettimeofday/;
 
 use Carp 'croak';
 
-use AnyEvent::HTTP::Server::Req;
+use uSAC::HTTP::Rex;
 
 #Class attribute keys
 use enum (
@@ -85,13 +79,13 @@ sub new {
 	$self->can("handle_request")
 		and croak "It's a new version of ".__PACKAGE__.". For old version use `legacy' branch, or better make some minor patches to support new version";
 	
-	$self->{request} = 'AnyEvent::HTTP::Server::Req';
+	$self->{request} = 'uSAC::HTTP::Rex';
 	
 	return $self;
 }
 
-sub AnyEvent::HTTP::Server::destroyed::AUTOLOAD {}
-sub destroy { %{ bless $_[0], 'AnyEvent::HTTP::Server::destroyed' } = (); }
+sub uSAC::HTTP::Server::destroyed::AUTOLOAD {}
+sub destroy { %{ bless $_[0], 'uSAC::HTTP::Server::destroyed' } = (); }
 sub DESTROY { $_[0]->destroy };
 
 
@@ -239,7 +233,7 @@ sub incoming {
 
 	#my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};
 	#weaken $timeout;
-	my @r = ( AnyEvent::HTTP::Server::Session::fh_ => $fh, AnyEvent::HTTP::Server::Session::id_ => $id);#, timeout=>$timeout);
+	my @r = ( uSAC::HTTP::Server::Session::fh_ => $fh, uSAC::HTTP::Server::Session::id_ => $id);#, timeout=>$timeout);
 	my $buf;
 
 	$self->{ $id } = \@r;
@@ -256,38 +250,38 @@ sub incoming {
 		my $ido=$self->{$id};
 		\my $buf=\$_[0];
 
-		if ( $ido->[AnyEvent::HTTP::Server::Session::wbuf_] ) {
-			$ido->[AnyEvent::HTTP::Server::Session::closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
-			${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] } .= defined $buf ? $buf : return $ido->[AnyEvent::HTTP::Server::Session::closeme_] = 1;
+		if ( $ido->[uSAC::HTTP::Server::Session::wbuf_] ) {
+			$ido->[uSAC::HTTP::Server::Session::closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
+			${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } .= defined $buf ? $buf : return $ido->[uSAC::HTTP::Server::Session::closeme_] = 1;
 			return;
 		}
 		elsif ( !defined $buf ) { return $self->drop($id); }
 
-		$ido->[AnyEvent::HTTP::Server::Session::fh_] or return do {
+		$ido->[uSAC::HTTP::Server::Session::fh_] or return do {
 			warn "Lost filehandle while trying to send ".length($buf)." data for $id";
 			$self->drop($id,"No filehandle");
 			();
 		};
-		my $w = syswrite( $ido->[AnyEvent::HTTP::Server::Session::fh_], $buf );
+		my $w = syswrite( $ido->[uSAC::HTTP::Server::Session::fh_], $buf );
 		if ($w == length $buf) {
 			# ok;
-			if( $ido->[AnyEvent::HTTP::Server::Session::closeme_] ) { $self->drop($id); };
+			if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $self->drop($id); };
 		}
 		elsif (defined $w) {
 			#substr($buf,0,$w,'');
-			$ido->[AnyEvent::HTTP::Server::Session::wbuf_] = substr($buf,0,$w,'');
+			$ido->[uSAC::HTTP::Server::Session::wbuf_] = substr($buf,0,$w,'');
 			#$buf;
-			$ido->[AnyEvent::HTTP::Server::Session::ww_] = AE::io $ido->[AnyEvent::HTTP::Server::Session::fh_], 1, sub {
+			$ido->[uSAC::HTTP::Server::Session::ww_] = AE::io $ido->[uSAC::HTTP::Server::Session::fh_], 1, sub {
 				warn "ww.io.$id" if DEBUG;
 				$self and $ido or return;
-				$w = syswrite( $ido->[AnyEvent::HTTP::Server::Session::fh_], ${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] } );
-				if ($w == length ${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] }) {
-					delete $ido->[AnyEvent::HTTP::Server::Session::wbuf_];
-					delete $ido->[AnyEvent::HTTP::Server::Session::ww_];
-					if( $ido->[AnyEvent::HTTP::Server::Session::closeme_] ) { $self->drop($id); }
+				$w = syswrite( $ido->[uSAC::HTTP::Server::Session::fh_], ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } );
+				if ($w == length ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] }) {
+					delete $ido->[uSAC::HTTP::Server::Session::wbuf_];
+					delete $ido->[uSAC::HTTP::Server::Session::ww_];
+					if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $self->drop($id); }
 				}
 				elsif (defined $w) {
-					${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] } = substr( ${ $ido->[AnyEvent::HTTP::Server::Session::wbuf_] }, $w );
+					${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } = substr( ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] }, $w );
 					#substr( ${ $ido->{wbuf} }, 0, $w, '');
 				}
 				else { return $self->drop($id, "$!"); }
@@ -302,7 +296,7 @@ sub incoming {
 	my $ixx = 0;
 	my %h;		#Define the header storage here, once per connection
 	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
-	$r[AnyEvent::HTTP::Server::Session::rw_] = AE::io $fh, 0, sub {
+	$r[uSAC::HTTP::Server::Session::rw_] = AE::io $fh, 0, sub {
 		# warn "rw.io.$id (".(fileno $fh).") seq:$seq (ok:".($self ? 1:0).':'.(( $self && exists $self->{$id}) ? 1 : 0).")";# if DEBUG;
 		$self and exists $self->{$id} or return;
 		my ($pos0,$pos1,$pos2,$pos3);
@@ -420,7 +414,7 @@ sub incoming {
 				$self->{total_requests}++;
 
 				#warn "Create request object";
-				#$req = AnyEvent::HTTP::Server::Req->new(
+				#$req = uSAC::HTTP::Server::Req->new(
 				#	method  => $method,
 				#	uri     => $uri,
 				#	headers => \%h,
@@ -428,14 +422,14 @@ sub incoming {
 				#	guard   => guard { $self->{active_requests}--; },
 				#);
 				#my @rv = $self->{cb}->( $req );
-				$self->{$id}[AnyEvent::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
+				$self->{$id}[uSAC::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
 				#say "close me set to: $self->{$id}{closeme}";
 				#say $h{connection};
 
-				my @rv = $self->{cb}->( $req = bless [ $version, $self->{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'AnyEvent::HTTP::Server::Req' );
+				my @rv = $self->{cb}->( $req = bless [ $version, $self->{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' );
 				weaken ($req->[1]);
 				weaken( $req->[8] );
-				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'AnyEvent::HTTP::Server::Req' );
+				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'uSAC::HTTP::Server::Req' );
 				if (@rv) {
 					my $ref=ref $rv[0];	#test if first element is ref, or code
 					given ($ref){
@@ -445,7 +439,7 @@ sub incoming {
 						}
 						when ('CODE') {
 							#print "CODE \n";
-							$r[AnyEvent::HTTP::Server::Session::on_body_] = $rv[0];
+							$r[uSAC::HTTP::Server::Session::on_body_] = $rv[0];
 						}
 						when('HASH' ) {
 							if ( $h{'content-type'}  =~ m{^
@@ -464,7 +458,7 @@ sub incoming {
 								#warn "reading multipart with boundary '$bnd'";
 								#warn "set on_body";
 								my $cb = $rv[0]{multipart};
-								$r[AnyEvent::HTTP::Server::Session::on_body_] = sub {
+								$r[uSAC::HTTP::Server::Session::on_body_] = sub {
 									my ($last,$part) = @_;
 									if ( length($body) + length($$part) > $self->{max_body_size} ) {
 										# TODO;
@@ -554,7 +548,7 @@ sub incoming {
 
 							elsif (  exists $rv[0]{form} ) {
 								my $body = '';
-								$r[AnyEvent::HTTP::Server::Session::on_body_] = sub {
+								$r[uSAC::HTTP::Server::Session::on_body_] = sub {
 									my ($last,$part) = @_;
 									if ( length($body) + length($$part) > $self->{max_body_size} ) {
 										# TODO;
@@ -562,12 +556,12 @@ sub incoming {
 									$body .= $$part;
 									if ($last) {
 										$rv[0]{form}( $req->form($body), $body );
-										delete $r[AnyEvent::HTTP::Server::Session::on_body_];
+										delete $r[uSAC::HTTP::Server::Session::on_body_];
 									}
 								};
 							}
 							elsif( exists $rv[0]{raw} ) {
-								$r[AnyEvent::HTTP::Server::Session::on_body_] = $rv[0]{raw};
+								$r[uSAC::HTTP::Server::Session::on_body_] = $rv[0]{raw};
 							}
 							else {
 								die "XXX";
@@ -575,7 +569,7 @@ sub incoming {
 						}
 						#TODO: Convert this to system send file
 						when('HANDLE') {
-							delete $r[AnyEvent::HTTP::Server::Session::rw_];
+							delete $r[uSAC::HTTP::Server::Session::rw_];
 							my $h = AnyEvent::Handle->new(
 								fh => $fh,
 							);
@@ -622,7 +616,7 @@ sub incoming {
 					#warn "have clen";
 					if ( length($buf) - $pos == $len ) {
 						#warn "Equally";
-						$r[AnyEvent::HTTP::Server::Session::on_body_] && (delete $r[AnyEvent::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos)) );
+						$r[uSAC::HTTP::Server::Session::on_body_] && (delete $r[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos)) );
 						$buf = '';$state = $ixx = 0;
 						#TEST && test_visited("finish:complete content length")
 						# FINISHED
@@ -631,7 +625,7 @@ sub incoming {
 					}
 					elsif ( length($buf) - $pos > $len ) {
 						#warn "Complete body + trailing (".( length($buf) - $pos - $len )." bytes: ".substr( $buf,$pos + $len ).")";
-						$r[AnyEvent::HTTP::Server::Session::on_body_] && (delete $r[AnyEvent::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos,$pos+$len)) );
+						$r[uSAC::HTTP::Server::Session::on_body_] && (delete $r[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos,$pos+$len)) );
 						$ixx = $pos + $len;
 						$state = 0;
 						# FINISHED
@@ -640,9 +634,9 @@ sub incoming {
 					}
 					else {
 						#warn "Not enough body";
-						$r[AnyEvent::HTTP::Server::Session::left_] = $len - ( length($buf) - $pos );
-						if ($r[AnyEvent::HTTP::Server::Session::on_body_]) {
-							$r[AnyEvent::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
+						$r[uSAC::HTTP::Server::Session::left_] = $len - ( length($buf) - $pos );
+						if ($r[uSAC::HTTP::Server::Session::on_body_]) {
+							$r[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
 							$state = 2;
 						} else {
 							$state = 2;
@@ -654,7 +648,7 @@ sub incoming {
 				#elsif (chunked) { TODO }
 				else {
 					#warn "No clen";
-					$r[AnyEvent::HTTP::Server::Session::on_body_](1,\('')) if $r[AnyEvent::HTTP::Server::Session::on_body_];
+					$r[uSAC::HTTP::Server::Session::on_body_](1,\('')) if $r[uSAC::HTTP::Server::Session::on_body_];
 					# FINISHED
 					#warn "3. finished request" . Dumper($req);
 					#warn "pos = $pos, lbuf=".length $buf;
@@ -671,10 +665,10 @@ sub incoming {
 			} # state 1
 			elsif ($state == 2 ) {
 				#warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );
-				if (length($buf) - $ixx >= $r[AnyEvent::HTTP::Server::Session::left_]) {
+				if (length($buf) - $ixx >= $r[uSAC::HTTP::Server::Session::left_]) {
 					#warn sprintf "complete (%d of %d)", length $buf, $r{left};
-					$r[AnyEvent::HTTP::Server::Session::on_body_] && (delete $r[AnyEvent::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$ixx, $r[AnyEvent::HTTP::Server::Session::left_])) );
-					$buf = substr($buf,$ixx + $r[AnyEvent::HTTP::Server::Session::left_]);
+					$r[uSAC::HTTP::Server::Session::on_body_] && (delete $r[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$ixx, $r[uSAC::HTTP::Server::Session::left_])) );
+					$buf = substr($buf,$ixx + $r[uSAC::HTTP::Server::Session::left_]);
 					$state = $ixx = 0;
 					# FINISHED
 					#warn "4. finished request" . Dumper $req;
@@ -684,8 +678,8 @@ sub incoming {
 					redo;
 				} else {
 					#warn sprintf "not complete (%d of %d)", length $buf, $r{left};
-					$r[AnyEvent::HTTP::Server::Session::on_body_] && $r[AnyEvent::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$ixx)) );
-					$r[AnyEvent::HTTP::Server::Session::left_] -= ( length($buf) - $ixx );
+					$r[uSAC::HTTP::Server::Session::on_body_] && $r[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$ixx)) );
+					$r[uSAC::HTTP::Server::Session::left_] -= ( length($buf) - $ixx );
 					$buf = ''; $ixx = 0;
 					#return;
 					next;
@@ -743,7 +737,7 @@ sub graceful {
 }
 
 
-1; # End of AnyEvent::HTTP::Server
+1; # End of uSAC::HTTP::Server
 __END__
 
 sub http_server($$&) {
@@ -789,8 +783,8 @@ sub __old_stop {
 
 =head1 SYNOPSIS
 
-    use AnyEvent::HTTP::Server;
-    my $s = AnyEvent::HTTP::Server->new(
+    use uSAC::HTTP::Server;
+    my $s = uSAC::HTTP::Server->new(
         host => '0.0.0.0',
         port => 80,
         cb => sub {
@@ -824,17 +818,17 @@ sub __old_stop {
 
 =head1 DESCRIPTION
 
-AnyEvent::HTTP::Server is a very fast asynchronous HTTP server written in perl. 
+uSAC::HTTP::Server is a very fast asynchronous HTTP server written in perl. 
 It has been tested in high load production environments and may be considered both fast and stable.
 
-One can easily implement own HTTP daemon with AnyEvent::HTTP::Server and Daemond::Lite module,
+One can easily implement own HTTP daemon with uSAC::HTTP::Server and Daemond::Lite module,
 both found at L<https://github.com/Mons>
 
 This is a second verson available as AnyEvent-HTTP-Server-II. The first version is now obsolette.
 
 =head1 HANDLING REQUEST
 
-You can handle HTTP request by passing cb parameter to AnyEvent::HTTP::Server->new() like this:
+You can handle HTTP request by passing cb parameter to uSAC::HTTP::Server->new() like this:
 
 
   my $dispatcher = sub {
@@ -843,7 +837,7 @@ You can handle HTTP request by passing cb parameter to AnyEvent::HTTP::Server->n
     1;
   };
 
-  my $s = AnyEvent::HTTP::Server->new( host => '0.0.0.0', port => 80, cb => $dispatcher,);
+  my $s = uSAC::HTTP::Server->new( host => '0.0.0.0', port => 80, cb => $dispatcher,);
 
 $dispatcher coderef will be called in a list context and it's return value should resolve 
 to true, or request processing will be aborted by AnyEvent:HTTP::Server.
@@ -877,7 +871,7 @@ B<application/x-www-form-urlencoded>, form callback will be called.
 
   };
 
-  my $s = AnyEvent::HTTP::Server->new( host => '0.0.0.0', port => 80, cb => $dispatcher,);
+  my $s = uSAC::HTTP::Server->new( host => '0.0.0.0', port => 80, cb => $dispatcher,);
 
 =head1 EXPORT
 
@@ -889,7 +883,7 @@ B<application/x-www-form-urlencoded>, form callback will be called.
 
   Arguments to constractor should be passed as a key=>value list, for example
 
-    my $s = AnyEvent::HTTP::Server->new(
+    my $s = uSAC::HTTP::Server->new(
         host => '0.0.0.0',
         port => 80,
         cb   => sub {
@@ -923,7 +917,7 @@ B<application/x-www-form-urlencoded>, form callback will be called.
     $request->reply($status, $content, headers => $headers);
   }
 
-  The first argument to callback will be request object (AnyEvent::HTTP::Server::Req).
+  The first argument to callback will be request object (uSAC::HTTP::Server::Req).
 
 =head2 listen - bind server socket to host and port, start listening for connections
 
@@ -965,7 +959,7 @@ L<http://github.com/Mons/AnyEvent-HTTP-Server-II>
 
 =item * Thanks to B<Marc Lehmann> for L<AnyEvent>
 
-=item * Thanks to B<Robin Redeker> for L<AnyEvent::HTTPD>
+=item * Thanks to B<Robin Redeker> for L<uSAC::HTTPD>
 
 =back
 
