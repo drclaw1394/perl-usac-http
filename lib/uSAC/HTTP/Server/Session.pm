@@ -10,7 +10,7 @@ use uSAC::HTTP::Server;
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ ww_ wbuf_ left_ read_ write_ server_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ ww_ wbuf_ left_ read_ write_ request_count_ server_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -25,6 +25,7 @@ sub new {
 	bless $self,__PACKAGE__;
 }
 
+#
 sub drop {
         my ($self,$err) = @_;
         $err =~ s/\015//sg if defined $err;
@@ -36,10 +37,11 @@ sub drop {
                 if $self->[server_][uSAC::HTTP::Server::graceful_] and $self->[server_][uSAC::HTTP::Server::active_requests_] == 0;
 }
 
-sub makeWriter {
+#raw writer. 
+sub make_writer{
 	#take a session and alias the variables to lexicals
 	my $ido=shift;
-	my $server=$ido->[server_];
+	#my $server=$ido->[server_];
 	\my $wbuf=\$ido->[wbuf_];
 	\my $fh=\$ido->[fh_];
 	

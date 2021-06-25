@@ -224,7 +224,7 @@ sub incoming {
 	$self->[sessions_]{ $id } = bless $r, "uSAC::HTTP::Server::Session";
 	$self->[active_connections_]++;
 
-	my $write= uSAC::HTTP::Server::Session::makeWriter $r;	#$self->[sessions_]{$id};
+	my $write= uSAC::HTTP::Server::Session::make_writer $r;	#$self->[sessions_]{$id};
 
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
@@ -378,7 +378,7 @@ sub incoming {
 				#say $h{connection};
 
 				#This really should be the 'application level' callback 
-				my @rv = $self->[cb_]->($req);
+				my @rv = $self->[cb_]($req);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
 				#my @rv = $self->[cb_]->( $req = bless [ $method, $uri, \%h, $write ], 'uSAC::HTTP::Server::Req' );

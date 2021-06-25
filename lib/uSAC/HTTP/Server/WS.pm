@@ -57,7 +57,19 @@ sub onclose {
 	$_[0]{onclose} = $_[1];
 }
 
+#must be utf8 encoded prior to calling this
+sub send_utf8{
+	my $self = shift;
+	my $data = shift;
+	$self->send_frame(1, 0, 0, 0, TEXT, $data);
+}
 
+#return a sub to format into frames and write when available
+#does framing and then calls the session writer
+sub make_writer {
+
+
+}
 
 #take http1.1 connection and make it websocket
 #does the handshake
@@ -86,11 +98,11 @@ sub upgrader {
 			$_->{'sec-websocket-key'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 			#
 			#reply
-			my $reply="$rex->[uSAC::HTTP::Rex::version_] $uSAC::HTTP::Code::values[uSAC::HTTP::Code::Switching_Protocols] $uSAC::HTTP::Code::names[uSAC::HTTP::Code::Switching_Protocols]$LF";
+			my $reply="$rex->[uSAC::HTTP::Rex::version_] ".uSAC::HTTP::Code::HTTP_CODE_SWITCHING_PROTOCOLS."$LF";
 
-			$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Upgrade].": "."websocket".$LF;	#Set server
-			$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Connection].": "."Upgrade".$LF;	#Set server
-			$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Sec_WebSocket_Key].": $key$LF";	#Set server
+			$reply.=uSAC::HTTP::Header::HTTP_CONNECTION.": Upgrade.$LF";
+			$reply.=uSAC::HTTP::Header::HTTP_UPGRADE.": websocket$LF";
+			$reply.=uSAC::HTTP::Header::HTTP_SEC_WEBSOCKET_KEY.": $key$LF";	#Set server
 			$reply.=$LF;
 			#write reply	
 			if( $rex->[uSAC::HTTP::Rex::write_] ) {
@@ -105,12 +117,16 @@ sub upgrader {
 			given ($rex->[uSAC::HTTP::Rex::session_]){
 				$_[uSAC::HTTP::Server::Session::rw_] =undef;
 				$_->[uSAC::HTTP::Server::Session::rw_]=AE::io  $_->[uSAC::HTTP::Server::Session::fh_], 0, sub {
-					#TODO: Sub protocal probably should do this
+					#read frames
 
 				};
+
+				#make anew writer
+
 				$_[uSAC::HTTP::Server::Session::ww_] =undef;
+				$_[uSAC::HTTP::Server::Session::write_] =undef;
 				$_->[uSAC::HTTP::Server::Session::ww_]=AE::io  $_->[uSAC::HTTP::Server::Session::fh_], 1, sub {
-					#TODO: Sub protocal probably should do this
+					#
 
 				};
 
