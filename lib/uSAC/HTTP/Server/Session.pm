@@ -3,7 +3,9 @@ use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
 
+#require uSAC::HTTP::Server;
 use Data::Dumper;
+use uSAC::HTTP::Server;
 #Session represents a logical connection. could be tcp or application defined UDP
 #
 #
@@ -26,13 +28,14 @@ sub new {
 sub drop {
         my ($self,$err) = @_;
         $err =~ s/\015//sg if defined $err;
-        my $r = delete $self->[server_]{$self->[id_]}; #remove from server
-        $self->[server_]{active_connections}--;
+        my $r = delete $self->[server_][uSAC::HTTP::Server::sessions_]{$self->[id_]}; #remove from server
+        $self->[server_][uSAC::HTTP::Server::active_connections_]--;
         @{ $r } = () if $r;
 
-        ( delete $self->[server_]{graceful} )->()
-                if $self->[server_]{graceful} and $self->[server_]{active_requests} == 0;
+        ( delete $self->[server_][uSAC::HTTP::Server::graceful_] )->()
+                if $self->[server_][uSAC::HTTP::Server::graceful_] and $self->[server_][uSAC::HTTP::Server::active_requests_] == 0;
 }
+
 sub makeWriter {
 	#take a session and alias the variables to lexicals
 	my $ido=shift;
@@ -42,23 +45,22 @@ sub makeWriter {
 	
 
 sub {
-	#$self and exists $self->{$id} or return;
-	#my $ido=shift;
-	#$server=$ido->[server_];	#$self->{$id};
 	\my $buf=\$_[0];	#give the input a name
 
 	if ( $wbuf ) {
-		$ido->[closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
+		#$ido->[closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
 		${ $wbuf } .= defined $buf ? $buf : return $ido->[closeme_] = 1;
 		return;
 	}
 	elsif ( !defined $buf ) { return drop($ido); }
 
-	$ido->[fh_] or return do {
-		warn "Lost filehandle while trying to send ".length($buf)." data for $ido->[id_]";
-		drop($ido,"No filehandle");
-		();
-	};
+        ##############################################################################################
+        # $ido->[fh_] or return do {                                                                 #
+        #         warn "Lost filehandle while trying to send ".length($buf)." data for $ido->[id_]"; #
+        #         drop($ido,"No filehandle");                                                        #
+        #         ();                                                                                #
+        # };                                                                                         #
+        ##############################################################################################
 
 	my $w = syswrite( $ido->[fh_], $buf );
 	if ($w == length $buf) {
@@ -71,11 +73,11 @@ sub {
 		$wbuf = substr($buf,0,$w,'');
 		#$buf;
 		$ido->[ww_] = AE::io $ido->[fh_], 1, sub {
-			$server and $ido or return;
+			$ido or return;
 			$w = syswrite( $ido->[fh_], ${$wbuf} );
 			if ($w == length ${ $wbuf }) {
 				#delete $ido->[wbuf_];
-				delete $ido->[ww_];
+				undef $ido->[ww_];
 				if( $ido->[closeme_] ) { drop($ido); }
 			}
 			elsif (defined $w) {

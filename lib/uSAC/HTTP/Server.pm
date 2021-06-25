@@ -27,14 +27,15 @@ use Time::HiRes qw/gettimeofday/;
 
 use Carp 'croak';
 
-use uSAC::HTTP::Rex;
-use uSAC::HTTP::Server::WS;
 
 #Class attribute keys
 use enum (
-	"host_=0",qw<port_ cb_ listen_ fh_ backlog_ read_size_ max_header_size_ active_connections_ total_connections_ active_requests_ total_requests_>
+	"host_=0",qw<port_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ max_header_size_ sessions_ active_connections_ total_connections_ active_requests_ total_requests_>
 );
 
+use uSAC::HTTP::Rex;
+use uSAC::HTTP::Server::WS;
+use uSAC::HTTP::Server::Session;
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>total_requests_-host_+1;
@@ -48,45 +49,57 @@ our $LF = "\015\012";
 
 sub new {
 	my $pkg = shift;
-	my $self = bless {
-		backlog   => 1024,
-		read_size => 4096,
-		max_header_size => MAX_READ_SIZE,
-		@_,
-		active_connections => 0,
-		total_connections => 0,
-		active_requests => 0,
-		total_requests => 0,
-		upgraders => 
-		{
-			"websocket" =>\&uSAC::HTTP::Server::WS::upgrader
-		}
+	my $self = bless [], $pkg;
+	my %options=@_;
+	$self->[host_]=$options{host}//"0.0.0.0";
+	$self->[port_]=$options{iport}//8080;
+	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 
-		,
-	}, $pkg;
+	$self->[backlog_]=1024;
+	$self->[read_size_]=4096;
+	$self->[max_header_size_]=MAX_READ_SIZE;
+	$self->[sessions_]={};
+	$self->[upgraders_]= {
+			"websocket" =>\&uSAC::HTTP::Server::WS::upgrader
+		};
+		
+        #############################################
+        #         backlog   => 1024,                #
+        #         read_size => 4096,                #
+        #         max_header_size => MAX_READ_SIZE, #
+        #         @_,                               #
+        #         active_connections => 0,          #
+        #         total_connections => 0,           #
+        #         active_requests => 0,             #
+        #         total_requests => 0,              #
+        #         upgraders =>                      #
+        #                                           #
+        #         ,                                 #
+        # }, $pkg;                                  #
+        #############################################
 	
-	if (exists $self->{listen}) {
-		$self->{listen} = [ $self->{listen} ] unless ref $self->{listen};
+	if (exists $self->[listen_]) {
+		$self->[listen_] = [ $self->[listen_] ] unless ref $self->[listen_];
 		my %dup;
-		for (@{ $self->{listen} }) {
+		for (@{ $self->[listen_] }) {
 			if($dup{ lc $_ }++) {
 				croak "Duplicate host $_ in listen\n";
 			}
 			my ($h,$p) = split ':',$_,2;
 			$h = '0.0.0.0' if $h eq '*';
-			$h = length ( $self->{host} ) ? $self->{host} : '0.0.0.0' unless length $h;
-			$p = length ( $self->{port} ) ? $self->{port} : 8080 unless length $p;
+			$h = length ( $self->[host_] ) ? $self->[host_] : '0.0.0.0' unless length $h;
+			$p = length ( $self->[port_] ) ? $self->[port_] : 8080 unless length $p;
 			$_ = join ':',$h,$p;
 		}
-		($self->{host},$self->{port}) = split ':',$self->{listen}[0],2;
+		($self->[host_],$self->[port_]) = split ':',$self->[listen_][0],2;
 	} else {
-		$self->{listen} = [ join(':',$self->{host},$self->{port}) ];
+		$self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];
 	}
 
 	$self->can("handle_request")
 		and croak "It's a new version of ".__PACKAGE__.". For old version use `legacy' branch, or better make some minor patches to support new version";
 	
-	$self->{request} = 'uSAC::HTTP::Rex';
+	#$self->{request} = 'uSAC::HTTP::Rex';
 	
 	return $self;
 }
@@ -100,10 +113,10 @@ sub DESTROY { $_[0]->destroy };
 sub listen {
 	my $self = shift;
 		
-	for my $listen (@{ $self->{listen} }) {
+	for my $listen (@{ $self->[listen_] }) {
 		my ($host,$service) = split ':',$listen,2;
-		$service = $self->{port} unless length $service;
-		$host = $self->{host} unless length $host;
+		$service = $self->[port_] unless length $service;
+		$host = $self->[host_] unless length $host;
 		$host = $AnyEvent::PROTOCOL{ipv4} < $AnyEvent::PROTOCOL{ipv6} && AF_INET6 ? "::" : "0" unless length $host;
 		
 		my $ipn = parse_address $host
@@ -140,19 +153,19 @@ sub listen {
 		
 		fh_nonblocking $fh, 1;
 	
-		$self->{fh} ||= $fh; # compat
-		$self->{fhs}{fileno $fh} = $fh;
+		$self->[fh_] ||= $fh; # compat
+		$self->[fhs_]{fileno $fh} = $fh;
 	}
 	
 	$self->prepare();
 	
-	for ( values  %{ $self->{fhs} } ) {
-		listen $_, $self->{backlog}
+	for ( values  %{ $self->[fhs_] } ) {
+		listen $_, $self->[backlog_]
 			or Carp::croak "listen/listen on ".(fileno $_).": $!";
 	}
 	
 	return wantarray ? do {
-		#my ($service, $host) = AnyEvent::Socket::unpack_sockaddr( getsockname $self->{fh} );
+		#my ($service, $host) = AnyEvent::Socket::unpack_sockaddr( getsockname $self->[fh_] );
 		#(format_address $host, $service);
 		();
 	} : ();
@@ -162,8 +175,8 @@ sub prepare {}
 sub incoming;
 sub accept {
 	weaken( my $self = shift );
-	for my $fl ( values %{ $self->{fhs} }) {
-		$self->{aws}{ fileno $fl } = AE::io $fl, 0, sub {
+	for my $fl ( values %{ $self->[fhs_] }) {
+		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			while ($fl and (my $peer = accept my $fh, $fl)) {
 				AnyEvent::Util::fh_nonblocking $fh, 1; # POSIX requires inheritance, the outside world does not
 				#$self->incoming($fh);
@@ -185,7 +198,7 @@ sub accept {
 
 sub noaccept {
 	my $self = shift;
-	delete $self->{aws};
+	delete $self->[aws_];
 }
 
 sub peer_info {
@@ -194,23 +207,25 @@ sub peer_info {
 	#return AnyEvent::Socket::format_address($host).':'.$port;
 }
 
-sub drop {
-	#say "DROPING";
-	#say (caller);
-	my ($self,$id,$err) = @_;
-	$err =~ s/\015//sg;
-	if ($err and $self->{debug_drop}) {
-		my $fh = $self->{$id}{fh};
-		my $remote = $fh && peer_info($fh);
-		warn "Dropping connection $id from $remote: $err  (by @{[ (caller)[1,2] ]})\n";
-	}
-	my $r = delete $self->{$id};
-	$self->{active_connections}--;
-	@{ $r } = () if $r;
-	
-	( delete $self->{graceful} )->()
-		if $self->{graceful} and $self->{active_requests} == 0;
-}
+###################################################################################################
+# sub drop {                                                                                      #
+#         #say "DROPING";                                                                         #
+#         #say (caller);                                                                          #
+#         my ($self,$id,$err) = @_;                                                               #
+#         $err =~ s/\015//sg;                                                                     #
+#         if ($err and $self->{debug_drop}) {                                                     #
+#                 my $fh = $self->{$id}[fh_];                                                     #
+#                 my $remote = $fh && peer_info($fh);                                             #
+#                 warn "Dropping connection $id from $remote: $err  (by @{[ (caller)[1,2] ]})\n"; #
+#         }                                                                                       #
+#         my $r = delete $self->{$id};                                                            #
+#         $self->[active_connections_]--;                                                         #
+#         @{ $r } = () if $r;                                                                     #
+#                                                                                                 #
+#         ( delete $self->[graceful_] )->()                                                       #
+#                 if $self->[graceful_] and $self->[active_requests_] == 0;                       #
+# }                                                                                               #
+###################################################################################################
 
 sub req_wbuf_len {
 	my $self = shift;
@@ -232,11 +247,12 @@ sub badconn {
 }
 
 sub incoming {
+	state $seq=0;
 	weaken( my $self = shift );
 	# warn "incoming @_";
-	$self->{total_connections}++;
+	$self->[total_connections_]++;
 	my ($fh,$rhost,$rport) = @_;
-	my $id = ++$self->{seq}; #refaddr $fh;
+	my $id = ++$seq;#++$self->{seq}; #refaddr $fh;
 
 	#my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};
 	#weaken $timeout;
@@ -246,15 +262,15 @@ sub incoming {
 	$r[uSAC::HTTP::Server::Session::server_]= $self;
 	my $buf;
 
-	$self->{ $id } = \@r;
-	$self->{active_connections}++;
+	$self->[sessions_]{ $id } = bless \@r, "uSAC::HTTP::Server::Session";
+	$self->[active_connections_]++;
 
         #######################################################################################################################################################################################
-        # warn sprintf("Accepted connection $id (fd:%s) from %s ($self->{active_connections}/$self->{total_connections}; $self->{active_requests}/$self->{total_requests})\n", fileno($_[0]), #
+        # warn sprintf("Accepted connection $id (fd:%s) from %s ($self->[active_connections_]/$self->[total_connections_]; $self->[active_requests_]/$self->[total_requests_])\n", fileno($_[0]), #
         #         $self->{want_peer} ? "$_[1]:$_[2]" : peer_info($_[0])                                                                                                                       #
         # ) if $self->{debug_conn};                                                                                                                                                           #
         #######################################################################################################################################################################################
-	my $write= uSAC::HTTP::Server::Session::makeWriter $self->{$id};
+	my $write= uSAC::HTTP::Server::Session::makeWriter $self->[sessions_]{$id};
         ####################################################################################################################################################################
         # my $write = sub {                                                                                                                                                #
         #         $self and exists $self->{$id} or return;                                                                                                                 #
@@ -310,8 +326,7 @@ sub incoming {
 	my %h;		#Define the header storage here, once per connection
 	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 	$r[uSAC::HTTP::Server::Session::rw_] = AE::io $fh, 0, sub {
-		# warn "rw.io.$id (".(fileno $fh).") seq:$seq (ok:".($self ? 1:0).':'.(( $self && exists $self->{$id}) ? 1 : 0).")";# if DEBUG;
-		$self and exists $self->{$id} or return;
+		$self and exists $self->[sessions_]{$id} or return;
 		my ($pos0,$pos1,$pos2,$pos3);
 		$len = sysread( $fh, $buf, MAX_READ_SIZE-length $buf, length $buf );
 		while ( $self and $len ) {
@@ -327,10 +342,9 @@ sub incoming {
 						#Reset header information for each request	
 						%h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 						++$seq;
-						#$self->{$id}{closeme}=0 if $version eq "HTTP/1.1";
 
 						warn "Received request N.$seq over ".fileno($fh).": $method $uri" if DEBUG;
-						$self->{active_requests}++;
+						$self->[active_requests_]++;
 						#push @{ $r{req} }, [{}];
 						$pos=$pos3+2;
 						redo;
@@ -400,16 +414,16 @@ sub incoming {
                                         # }                                                                                                                                                        #
                                         ############################################################################################################################################################
 					elsif($buf =~ /\G [^\012]* \Z/sxogc) {
-						if (length($buf) - $ixx > $self->{max_header_size}) {
+						if (length($buf) - $ixx > $self->[max_header_size_]) {
 							$self->badconn($fh,\substr($buf, pos($buf), $ixx), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
-							return $self->drop($id, "Too big headers from $rhost for request <".substr($buf, $ixx, 32)."...>");
+							return $self->[sessions_]{$id}->drop( "Too big headers from $rhost for request <".substr($buf, $ixx, 32)."...>");
 						}
 						#warn "Need more";
 						return pos($buf) = $bpos; # need more data
 					}
 					else {
 						my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;
-						$self->{active_requests}--;
+						$self->[active_requests_]--;
 						$self->badconn($fh,\$line, "Bad header for <$method $uri>+{@{[ %h ]}}");
 						my $content = 'Bad request headers';
 						my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
@@ -421,7 +435,7 @@ sub incoming {
 				#say Dumper \%h;
 				#Done with headers. 
 				#
-				$req = bless [ $version, $self->{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' ;
+				$req = bless [ $version, $self->[sessions_]{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->[active_requests_], $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' ;
 				#
 				# Need to decide what to do about the connection before passing request off to application
 				# - check for upgrades and setup ?
@@ -449,17 +463,17 @@ sub incoming {
 
 				$pos = pos($buf);
 
-				$self->{total_requests}++;
+				$self->[total_requests_]++;
 
-				$self->{$id}[uSAC::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
+				$self->[sessions_]{$id}[uSAC::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
 				#say "close me set to: $self->{$id}{closeme}";
 				#say $h{connection};
 
 				#This really should be the 'application level' callback 
-				my @rv = $self->{cb}->($req);
+				my @rv = $self->[cb_]->($req);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
-				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'uSAC::HTTP::Server::Req' );
+				#my @rv = $self->[cb_]->( $req = bless [ $method, $uri, \%h, $write ], 'uSAC::HTTP::Server::Req' );
 				if (@rv) {
 					my $ref=ref $rv[0];	#test if first element is ref, or code
 					given ($ref){
@@ -620,12 +634,12 @@ sub incoming {
 										$h->on_drain(sub {
 												$h->destroy;
 												undef $h;
-												$self->drop($id) if $self;
+												$self->[sessions_]{$id}->drop() if $self;
 											});
 										undef $h;
 									}
 									else {
-										$self->drop($id) if $self;
+										$self->[sessions_]{$id}->drop() if $self;
 									}
 								}
 							};
@@ -722,14 +736,14 @@ sub incoming {
 			#$r{_activity} = $r{_ractivity} = AE::now;
 			#$write->(\("HTTP/1.1 200 OK\r\nContent-Length:10\r\n\r\nTestTest1\n"),\undef);
 		} # while read
-		return unless $self and exists $self->{$id};
+		return unless $self and exists $self->[sessions_]{$id};
 		if (defined $len) {
 			if (length $buf == MAX_READ_SIZE) {
 				$self->badconn($fh,\$buf,"Can't read (@{[ MAX_READ_SIZE ]}), can't consume");
 				# $! = Errno::EMSGSIZE; # Errno is useless, since not calling drop
 				my $content = 'Non-consumable request';
 				my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
-				$self->{active_requests}--;
+				$self->[active_requests_]--;
 				$write->($str);
 				$write->(undef);
 				return;
@@ -741,7 +755,7 @@ sub incoming {
 		} else {
 			return if $! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK;
 		}
-		$self->drop($id, $! ? "$!" : ());
+		$self->[sessions_]{$id}->drop( $! ? "$!" : ());
 	}; # io
 }
 
@@ -750,18 +764,18 @@ sub ws_close {
 	for (values %{ $self->{wss} }) {
 		$_ && $_->close();
 	}
-	warn "$self->{active_requests} / $self->{active_connections}";
+	warn "$self->[active_requests_] / $self->[active_connections_]";
 }
 
 sub graceful {
 	my $self = shift;
 	my $cb = pop;
-	delete $self->{aws};
-	close $_ for values %{ $self->{fhs} };
-	if ($self->{active_requests} == 0 or $self->{active_connections} == 0) {
+	delete $self->[aws_];
+	close $_ for values %{ $self->[fhs_] };
+	if ($self->[active_requests_] == 0 or $self->[active_connections_] == 0) {
 		$cb->();
 	} else {
-		$self->{graceful} = $cb;
+		$self->[graceful_] = $cb;
 		$self->ws_close();
 	}
 }

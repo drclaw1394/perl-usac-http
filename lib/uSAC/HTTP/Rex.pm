@@ -243,7 +243,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 					$size -= $l;
 					$self->[write_]->( $buf );
 				}
-				$self->[write_]->( undef ) if $h->{connection} eq 'close' or $self->[server_]{graceful};
+				#$self->[write_]->( undef ) if $h->{connection} eq 'close' or $self->[server_][graceful_];
 				delete $self->[write_];
 				${ $self->[reqcount_] }--;
 			}
@@ -299,7 +299,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#Write the headers
 			if( $self->[write_] ) {
 				$self->[write_]->( $reply );
-				$self->[write_]->( undef ) if $self->[session_][uSAC::HTTP::Server::Session::closeme_] or $self->[server_]{graceful};
+				$self->[write_]->( undef ) if $self->[session_][uSAC::HTTP::Server::Session::closeme_];# or $self->[server_][graceful_];
 				#delete $self->[write_];
 				$self->[write_]=undef;
 				${ $self->[reqcount_] }--;
@@ -373,7 +373,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#if (!ref $content) { $reply .= $content }
 			if( $self->[write_] ) {
 				$self->[write_]->( $reply );
-				$self->[write_]->( undef ) if $h->{connection} eq 'close' or $self->[server_]{graceful};
+				$self->[write_]->( undef ) if $h->{connection} eq 'close';# or $self->[server_][graceful_];
 				delete $self->[write_];
 				${ $self->[reqcount_] }--;
 			}
@@ -533,7 +533,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 				#warn "send body end (".$self->connection.")\n";
 				if( $self->[write_] ) {
 					$self->[write_]->( ("0$LF$LF")  );
-					$self->[write_]->(undef) if $self->connection eq 'close' or $self->[server_]{graceful};
+					$self->[write_]->(undef) if $self->connection eq 'close';# or $self->[server_][graceful_];
 					delete $self->[write_];
 				}
 				undef $self->[chunked_];
