@@ -260,6 +260,7 @@ sub incoming {
 	$r[uSAC::HTTP::Server::Session::fh_]= $fh;
 	$r[uSAC::HTTP::Server::Session::id_]= $id;#, timeout=>$timeout);
 	$r[uSAC::HTTP::Server::Session::server_]= $self;
+	$r[uSAC::HTTP::Server::Session::wbuf_]="";
 	my $buf;
 
 	$self->[sessions_]{ $id } = bless \@r, "uSAC::HTTP::Server::Session";

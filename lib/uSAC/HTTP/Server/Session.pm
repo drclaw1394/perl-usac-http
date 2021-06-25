@@ -44,51 +44,47 @@ sub makeWriter {
 	\my $fh=\$ido->[fh_];
 	
 
-sub {
-	\my $buf=\$_[0];	#give the input a name
+	sub {
+		\my $buf=\$_[0];	#give the input a name
 
-	if ( $wbuf ) {
-		#$ido->[closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
-		${ $wbuf } .= defined $buf ? $buf : return $ido->[closeme_] = 1;
-		return;
-	}
-	elsif ( !defined $buf ) { return drop($ido); }
+		if ( $wbuf ) {
+			#$ido->[closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
+			${ $wbuf } .= defined $buf ? $buf : return $ido->[closeme_] = 1;
+			return;
+		}
+		elsif ( !defined $buf ) { return drop($ido); }
 
-        ##############################################################################################
-        # $ido->[fh_] or return do {                                                                 #
-        #         warn "Lost filehandle while trying to send ".length($buf)." data for $ido->[id_]"; #
-        #         drop($ido,"No filehandle");                                                        #
-        #         ();                                                                                #
-        # };                                                                                         #
-        ##############################################################################################
+		##############################################################################################
+		# $ido->[fh_] or return do {                                                                 #
+		#         warn "Lost filehandle while trying to send ".length($buf)." data for $ido->[id_]"; #
+		#         drop($ido,"No filehandle");                                                        #
+		#         ();                                                                                #
+		# };                                                                                         #
+		##############################################################################################
 
-	my $w = syswrite( $ido->[fh_], $buf );
-	if ($w == length $buf) {
-		# ok;
-		#say Dumper $ido;
-		if( $ido->[closeme_] ) { drop $ido};
-	}
-	elsif (defined $w) {
-		#substr($buf,0,$w,'');
-		$wbuf = substr($buf,0,$w,'');
-		#$buf;
-		$ido->[ww_] = AE::io $ido->[fh_], 1, sub {
-			$ido or return;
-			$w = syswrite( $ido->[fh_], ${$wbuf} );
-			if ($w == length ${ $wbuf }) {
-				#delete $ido->[wbuf_];
-				undef $ido->[ww_];
-				if( $ido->[closeme_] ) { drop($ido); }
-			}
-			elsif (defined $w) {
-				${ $wbuf } = substr( ${ $wbuf }, $w );
-				#substr( ${ $ido->{wbuf} }, 0, $w, '');
-			}
-			else { return drop( $ido, "$!"); }
-		};
-	}
-	else { return drop($ido, "$!"); }
-};
+		my $w = syswrite( $fh, $buf );
+		if ($w == length $buf) {
+			# ok;
+			#say Dumper $ido;
+			if( $ido->[closeme_] ) { drop $ido};
+		}
+		elsif (defined $w) {
+			$wbuf = substr($buf,$w);
+			$ido->[ww_] = AE::io $fh, 1, sub {
+				$ido or return;
+				$w = syswrite( $fh, $wbuf );
+				if ($w == length $wbuf) {
+					undef $ido->[ww_];
+					if( $ido->[closeme_] ) { drop($ido); }
+				}
+				elsif (defined $w) {
+					$wbuf= substr( $wbuf, $w );
+				}
+				else { return drop( $ido, "$!"); }
+			};
+		}
+		else { return drop($ido, "$!"); }
+	};
 
 }
 
