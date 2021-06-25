@@ -63,20 +63,6 @@ sub new {
 			"websocket" =>\&uSAC::HTTP::Server::WS::upgrader
 		};
 		
-        #############################################
-        #         backlog   => 1024,                #
-        #         read_size => 4096,                #
-        #         max_header_size => MAX_READ_SIZE, #
-        #         @_,                               #
-        #         active_connections => 0,          #
-        #         total_connections => 0,           #
-        #         active_requests => 0,             #
-        #         total_requests => 0,              #
-        #         upgraders =>                      #
-        #                                           #
-        #         ,                                 #
-        # }, $pkg;                                  #
-        #############################################
 	
 	if (exists $self->[listen_]) {
 		$self->[listen_] = [ $self->[listen_] ] unless ref $self->[listen_];
@@ -179,17 +165,8 @@ sub accept {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			while ($fl and (my $peer = accept my $fh, $fl)) {
 				AnyEvent::Util::fh_nonblocking $fh, 1; # POSIX requires inheritance, the outside world does not
-				#$self->incoming($fh);
 				incoming $self,$fh;
 
-                                ####################################################################################
-                                # if ($self->{want_peer}) {                                                        #
-                                #         #my ($service, $host) = AnyEvent::Socket::unpack_sockaddr $peer;         #
-                                #         #$self->incoming($fh, AnyEvent::Socket::format_address $host, $service); #
-                                # } else {                                                                         #
-                                #         $self->incoming($fh);                                                    #
-                                # }                                                                                #
-                                ####################################################################################
 			}
 		};
 	}
@@ -207,25 +184,6 @@ sub peer_info {
 	#return AnyEvent::Socket::format_address($host).':'.$port;
 }
 
-###################################################################################################
-# sub drop {                                                                                      #
-#         #say "DROPING";                                                                         #
-#         #say (caller);                                                                          #
-#         my ($self,$id,$err) = @_;                                                               #
-#         $err =~ s/\015//sg;                                                                     #
-#         if ($err and $self->{debug_drop}) {                                                     #
-#                 my $fh = $self->{$id}[fh_];                                                     #
-#                 my $remote = $fh && peer_info($fh);                                             #
-#                 warn "Dropping connection $id from $remote: $err  (by @{[ (caller)[1,2] ]})\n"; #
-#         }                                                                                       #
-#         my $r = delete $self->{$id};                                                            #
-#         $self->[active_connections_]--;                                                         #
-#         @{ $r } = () if $r;                                                                     #
-#                                                                                                 #
-#         ( delete $self->[graceful_] )->()                                                       #
-#                 if $self->[graceful_] and $self->[active_requests_] == 0;                       #
-# }                                                                                               #
-###################################################################################################
 
 sub req_wbuf_len {
 	my $self = shift;
@@ -256,69 +214,17 @@ sub incoming {
 
 	#my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};
 	#weaken $timeout;
-	my @r;
-	$r[uSAC::HTTP::Server::Session::fh_]= $fh;
-	$r[uSAC::HTTP::Server::Session::id_]= $id;#, timeout=>$timeout);
-	$r[uSAC::HTTP::Server::Session::server_]= $self;
-	$r[uSAC::HTTP::Server::Session::wbuf_]="";
+	my $r=[];
+	$r->[uSAC::HTTP::Server::Session::fh_]= $fh;
+	$r->[uSAC::HTTP::Server::Session::id_]= $id;#, timeout=>$timeout);
+	$r->[uSAC::HTTP::Server::Session::server_]= $self;
+	$r->[uSAC::HTTP::Server::Session::wbuf_]="";
 	my $buf;
 
-	$self->[sessions_]{ $id } = bless \@r, "uSAC::HTTP::Server::Session";
+	$self->[sessions_]{ $id } = bless $r, "uSAC::HTTP::Server::Session";
 	$self->[active_connections_]++;
 
-        #######################################################################################################################################################################################
-        # warn sprintf("Accepted connection $id (fd:%s) from %s ($self->[active_connections_]/$self->[total_connections_]; $self->[active_requests_]/$self->[total_requests_])\n", fileno($_[0]), #
-        #         $self->{want_peer} ? "$_[1]:$_[2]" : peer_info($_[0])                                                                                                                       #
-        # ) if $self->{debug_conn};                                                                                                                                                           #
-        #######################################################################################################################################################################################
-	my $write= uSAC::HTTP::Server::Session::makeWriter $self->[sessions_]{$id};
-        ####################################################################################################################################################################
-        # my $write = sub {                                                                                                                                                #
-        #         $self and exists $self->{$id} or return;                                                                                                                 #
-        #         my $ido=$self->{$id};                                                                                                                                    #
-        #         \my $buf=\$_[0];                                                                                                                                         #
-        #                                                                                                                                                                  #
-        #         if ( $ido->[uSAC::HTTP::Server::Session::wbuf_] ) {                                                                                                      #
-        #                 $ido->[uSAC::HTTP::Server::Session::closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}"; #
-        #                 ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } .= defined $buf ? $buf : return $ido->[uSAC::HTTP::Server::Session::closeme_] = 1;               #
-        #                 return;                                                                                                                                          #
-        #         }                                                                                                                                                        #
-        #         elsif ( !defined $buf ) { return $self->drop($id); }                                                                                                     #
-        #                                                                                                                                                                  #
-        #         $ido->[uSAC::HTTP::Server::Session::fh_] or return do {                                                                                                  #
-        #                 warn "Lost filehandle while trying to send ".length($buf)." data for $id";                                                                       #
-        #                 $self->drop($id,"No filehandle");                                                                                                                #
-        #                 ();                                                                                                                                              #
-        #         };                                                                                                                                                       #
-        #                                                                                                                                                                  #
-        #         my $w = syswrite( $ido->[uSAC::HTTP::Server::Session::fh_], $buf );                                                                                      #
-        #         if ($w == length $buf) {                                                                                                                                 #
-        #                 # ok;                                                                                                                                            #
-        #                 if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $self->drop($id); };                                                                       #
-        #         }                                                                                                                                                        #
-        #         elsif (defined $w) {                                                                                                                                     #
-        #                 #substr($buf,0,$w,'');                                                                                                                           #
-        #                 $ido->[uSAC::HTTP::Server::Session::wbuf_] = substr($buf,0,$w,'');                                                                               #
-        #                 #$buf;                                                                                                                                           #
-        #                 $ido->[uSAC::HTTP::Server::Session::ww_] = AE::io $ido->[uSAC::HTTP::Server::Session::fh_], 1, sub {                                             #
-        #                         warn "ww.io.$id" if DEBUG;                                                                                                               #
-        #                         $self and $ido or return;                                                                                                                #
-        #                         $w = syswrite( $ido->[uSAC::HTTP::Server::Session::fh_], ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } );                              #
-        #                         if ($w == length ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] }) {                                                                      #
-        #                                 delete $ido->[uSAC::HTTP::Server::Session::wbuf_];                                                                               #
-        #                                 delete $ido->[uSAC::HTTP::Server::Session::ww_];                                                                                 #
-        #                                 if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $self->drop($id); }                                                        #
-        #                         }                                                                                                                                        #
-        #                         elsif (defined $w) {                                                                                                                     #
-        #                                 ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } = substr( ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] }, $w );                 #
-        #                                 #substr( ${ $ido->{wbuf} }, 0, $w, '');                                                                                          #
-        #                         }                                                                                                                                        #
-        #                         else { return $self->drop($id, "$!"); }                                                                                                  #
-        #                 };                                                                                                                                               #
-        #         }                                                                                                                                                        #
-        #         else { return $self->drop($id, "$!"); }                                                                                                                  #
-        # };                                                                                                                                                               #
-        ####################################################################################################################################################################
+	my $write= uSAC::HTTP::Server::Session::makeWriter $r;	#$self->[sessions_]{$id};
 
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
@@ -326,13 +232,14 @@ sub incoming {
 	my $ixx = 0;
 	my %h;		#Define the header storage here, once per connection
 	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
-	$r[uSAC::HTTP::Server::Session::rw_] = AE::io $fh, 0, sub {
-		$self and exists $self->[sessions_]{$id} or return;
-		my ($pos0,$pos1,$pos2,$pos3);
+	$r->[uSAC::HTTP::Server::Session::rw_] = AE::io $fh, 0, sub {
+		$self and $r or return;
+		#$self and exists $self->[sessions_]{$id} or return;
 		$len = sysread( $fh, $buf, MAX_READ_SIZE-length $buf, length $buf );
 		while ( $self and $len ) {
 			# warn "rw.io.$id.rd $len ($state)";
 			if ($state == 0) {
+				my ($pos0,$pos1,$pos2,$pos3);
 				$method=substr($buf, $ixx, ($pos1=index($buf, " ", $ixx))-$ixx);
 				$uri=substr($buf, ++$pos1, ($pos2=index($buf, " ", $pos1))-$pos1);
 				$version=substr($buf, ++$pos2, ($pos3=index($buf, "\015\012", $pos2))-$pos2);
@@ -341,12 +248,12 @@ sub incoming {
 						$state   = 1;
 						$lastkey = undef;
 						#Reset header information for each request	
-						%h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
+						%h=();
+						#%h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 						++$seq;
 
 						warn "Received request N.$seq over ".fileno($fh).": $method $uri" if DEBUG;
 						$self->[active_requests_]++;
-						#push @{ $r{req} }, [{}];
 						$pos=$pos3+2;
 						redo;
 				}
@@ -367,7 +274,7 @@ sub incoming {
 					# Understand what the continuation is supposed to achieve. Its depricated
 					#  
 					#warn "parse line >'".substr( $buf,pos($buf),index( $buf, "\012", pos($buf) )-pos($buf) )."'";
-					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogc ){
+					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 					#if( $buf =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]*+(;)?[^\012\015]*+) \015?\012/sxogc ){
 						#$lastkey = lc $1;
 						\my $e=\$h{lc $1};
@@ -387,7 +294,7 @@ sub incoming {
                                                 # }                                                                                                                    #
                                                 ########################################################################################################################
 					}
-					elsif ($buf =~ /\G\015?\012/sxogc) {
+					elsif ($buf =~ /\G\015?\012/sxogca) {
 						#warn "Last line";
 						last;
 					}
@@ -414,10 +321,10 @@ sub incoming {
                                         #         }                                                                                                                                                #
                                         # }                                                                                                                                                        #
                                         ############################################################################################################################################################
-					elsif($buf =~ /\G [^\012]* \Z/sxogc) {
+					elsif($buf =~ /\G [^\012]* \Z/sxogca) {
 						if (length($buf) - $ixx > $self->[max_header_size_]) {
 							$self->badconn($fh,\substr($buf, pos($buf), $ixx), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
-							return $self->[sessions_]{$id}->drop( "Too big headers from $rhost for request <".substr($buf, $ixx, 32)."...>");
+							return $r->drop( "Too big headers from $rhost for request <".substr($buf, $ixx, 32)."...>");
 						}
 						#warn "Need more";
 						return pos($buf) = $bpos; # need more data
@@ -436,7 +343,7 @@ sub incoming {
 				#say Dumper \%h;
 				#Done with headers. 
 				#
-				$req = bless [ $version, $self->[sessions_]{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->[active_requests_], $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' ;
+				$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[active_requests_], $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' ;
 				#
 				# Need to decide what to do about the connection before passing request off to application
 				# - check for upgrades and setup ?
@@ -466,7 +373,7 @@ sub incoming {
 
 				$self->[total_requests_]++;
 
-				$self->[sessions_]{$id}[uSAC::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
+				$r->[uSAC::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
 				#say "close me set to: $self->{$id}{closeme}";
 				#say $h{connection};
 
@@ -484,7 +391,7 @@ sub incoming {
 						}
 						when ('CODE') {
 							#print "CODE \n";
-							$r[uSAC::HTTP::Server::Session::on_body_] = $rv[0];
+							$r->[uSAC::HTTP::Server::Session::on_body_] = $rv[0];
 						}
 						when('HASH' ) {
 							if ( $h{'content-type'}  =~ m{^
@@ -503,7 +410,7 @@ sub incoming {
 								#warn "reading multipart with boundary '$bnd'";
 								#warn "set on_body";
 								my $cb = $rv[0]{multipart};
-								$r[uSAC::HTTP::Server::Session::on_body_] = sub {
+								$r->[uSAC::HTTP::Server::Session::on_body_] = sub {
 									my ($last,$part) = @_;
 									if ( length($body) + length($$part) > $self->{max_body_size} ) {
 										# TODO;
@@ -593,7 +500,7 @@ sub incoming {
 
 							elsif (  exists $rv[0]{form} ) {
 								my $body = '';
-								$r[uSAC::HTTP::Server::Session::on_body_] = sub {
+								$r->[uSAC::HTTP::Server::Session::on_body_] = sub {
 									my ($last,$part) = @_;
 									if ( length($body) + length($$part) > $self->{max_body_size} ) {
 										# TODO;
@@ -601,12 +508,12 @@ sub incoming {
 									$body .= $$part;
 									if ($last) {
 										$rv[0]{form}( $req->form($body), $body );
-										delete $r[uSAC::HTTP::Server::Session::on_body_];
+										delete $r->[uSAC::HTTP::Server::Session::on_body_];
 									}
 								};
 							}
 							elsif( exists $rv[0]{raw} ) {
-								$r[uSAC::HTTP::Server::Session::on_body_] = $rv[0]{raw};
+								$r->[uSAC::HTTP::Server::Session::on_body_] = $rv[0]{raw};
 							}
 							else {
 								die "XXX";
@@ -614,7 +521,7 @@ sub incoming {
 						}
 						#TODO: Convert this to system send file
 						when('HANDLE') {
-							delete $r[uSAC::HTTP::Server::Session::rw_];
+							delete $r->[uSAC::HTTP::Server::Session::rw_];
 							my $h = AnyEvent::Handle->new(
 								fh => $fh,
 							);
@@ -635,19 +542,19 @@ sub incoming {
 										$h->on_drain(sub {
 												$h->destroy;
 												undef $h;
-												$self->[sessions_]{$id}->drop() if $self;
+												$r->drop() if $self;
 											});
 										undef $h;
 									}
 									else {
-										$self->[sessions_]{$id}->drop() if $self;
+										$r->drop() if $self;
 									}
 								}
 							};
 							weaken($req->[11] = $h);
 							$rv[1]->($h);
 							weaken($req);
-							@r = ( );
+							@$r = ( );
 							return;
 						}
 						default{
@@ -661,7 +568,7 @@ sub incoming {
 					#warn "have clen";
 					if ( length($buf) - $pos == $len ) {
 						#warn "Equally";
-						$r[uSAC::HTTP::Server::Session::on_body_] && (delete $r[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos)) );
+						$r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos)) );
 						$buf = '';$state = $ixx = 0;
 						#TEST && test_visited("finish:complete content length")
 						# FINISHED
@@ -670,7 +577,7 @@ sub incoming {
 					}
 					elsif ( length($buf) - $pos > $len ) {
 						#warn "Complete body + trailing (".( length($buf) - $pos - $len )." bytes: ".substr( $buf,$pos + $len ).")";
-						$r[uSAC::HTTP::Server::Session::on_body_] && (delete $r[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos,$pos+$len)) );
+						$r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos,$pos+$len)) );
 						$ixx = $pos + $len;
 						$state = 0;
 						# FINISHED
@@ -679,9 +586,9 @@ sub incoming {
 					}
 					else {
 						#warn "Not enough body";
-						$r[uSAC::HTTP::Server::Session::left_] = $len - ( length($buf) - $pos );
-						if ($r[uSAC::HTTP::Server::Session::on_body_]) {
-							$r[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
+						$r->[uSAC::HTTP::Server::Session::left_] = $len - ( length($buf) - $pos );
+						if ($r->[uSAC::HTTP::Server::Session::on_body_]) {
+							$r->[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
 							$state = 2;
 						} else {
 							$state = 2;
@@ -693,7 +600,7 @@ sub incoming {
 				#elsif (chunked) { TODO }
 				else {
 					#warn "No clen";
-					$r[uSAC::HTTP::Server::Session::on_body_](1,\('')) if $r[uSAC::HTTP::Server::Session::on_body_];
+					$r->[uSAC::HTTP::Server::Session::on_body_](1,\('')) if $r->[uSAC::HTTP::Server::Session::on_body_];
 					# FINISHED
 					#warn "3. finished request" . Dumper($req);
 					#warn "pos = $pos, lbuf=".length $buf;
@@ -710,10 +617,10 @@ sub incoming {
 			} # state 1
 			elsif ($state == 2 ) {
 				#warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );
-				if (length($buf) - $ixx >= $r[uSAC::HTTP::Server::Session::left_]) {
+				if (length($buf) - $ixx >= $r->[uSAC::HTTP::Server::Session::left_]) {
 					#warn sprintf "complete (%d of %d)", length $buf, $r{left};
-					$r[uSAC::HTTP::Server::Session::on_body_] && (delete $r[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$ixx, $r[uSAC::HTTP::Server::Session::left_])) );
-					$buf = substr($buf,$ixx + $r[uSAC::HTTP::Server::Session::left_]);
+					$r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$ixx, $r->[uSAC::HTTP::Server::Session::left_])) );
+					$buf = substr($buf,$ixx + $r->[uSAC::HTTP::Server::Session::left_]);
 					$state = $ixx = 0;
 					# FINISHED
 					#warn "4. finished request" . Dumper $req;
@@ -723,8 +630,8 @@ sub incoming {
 					redo;
 				} else {
 					#warn sprintf "not complete (%d of %d)", length $buf, $r{left};
-					$r[uSAC::HTTP::Server::Session::on_body_] && $r[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$ixx)) );
-					$r[uSAC::HTTP::Server::Session::left_] -= ( length($buf) - $ixx );
+					$r->[uSAC::HTTP::Server::Session::on_body_] && $r->[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$ixx)) );
+					$r->[uSAC::HTTP::Server::Session::left_] -= ( length($buf) - $ixx );
 					$buf = ''; $ixx = 0;
 					#return;
 					next;
@@ -737,7 +644,7 @@ sub incoming {
 			#$r{_activity} = $r{_ractivity} = AE::now;
 			#$write->(\("HTTP/1.1 200 OK\r\nContent-Length:10\r\n\r\nTestTest1\n"),\undef);
 		} # while read
-		return unless $self and exists $self->[sessions_]{$id};
+		return unless $self and $r;
 		if (defined $len) {
 			if (length $buf == MAX_READ_SIZE) {
 				$self->badconn($fh,\$buf,"Can't read (@{[ MAX_READ_SIZE ]}), can't consume");
@@ -756,7 +663,7 @@ sub incoming {
 		} else {
 			return if $! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK;
 		}
-		$self->[sessions_]{$id}->drop( $! ? "$!" : ());
+		$r->drop( $! ? "$!" : ());
 	}; # io
 }
 
