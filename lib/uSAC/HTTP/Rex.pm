@@ -27,7 +27,7 @@ use overload
 }
 
 #use AnyEvent::HTTP::Server::Kit;
-use uSAC::HTTP::Server::WS;
+#use uSAC::HTTP::Server::WS;
 use Time::HiRes qw/gettimeofday/;
 #use MIME::Base64 qw(encode_base64);
 use Scalar::Util qw(weaken);
@@ -271,41 +271,31 @@ use constant KEY_COUNT=>attrs_-method_+1;
 		sub replySimple {
 			my $self=shift;
 			#my $version=$self->[version_];#"HTTP/1.0";
-			my ($code,$content,$headers,$customHeaders)=@_;
+			#my ($code,$content,$headers)=@_;
 
-			my $reply="$self->[version_] $uSAC::HTTP::Code::values[$code] $uSAC::HTTP::Code::names[$code]$LF";
+			my $reply="$self->[version_] $_[0]$LF";# $uSAC::HTTP::Code::names[$_[0]]$LF";
 
-			$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Server].": "."AE $VERSION".$LF;	#Set server
-			$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Content_Length].": ".length($content).$LF if defined $content;	#Set server
+			$reply.=uSAC::HTTP::Header::HTTP_SERVER.": "."AE $VERSION".$LF;	#Set server
+			$reply.=uSAC::HTTP::Header::HTTP_CONTENT_LENGTH.": ".length($_[1]).$LF if defined $_[1];	#Set server
+			
 			#close connection after if marked
 			if($self->[session_][uSAC::HTTP::Server::Session::closeme_]){
-				$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Connection].": close".$LF;
+				$reply.=uSAC::HTTP::Header::HTTP_CONNECTION.": close".$LF;
 
 			}
 			#or send explicit keep alive?
 			elsif($self->[version_] ne "HTTP/1.1") {
-				$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Connection].": Keep-Alive".$LF;
-				$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Keep_Alive].": timeout=5, max=1000".$LF;
+				$reply.=uSAC::HTTP::Header::HTTP_CONNECTION.": Keep-Alive".$LF;
+				$reply.=uSAC::HTTP::Header::HTTP_KEEP_ALIVE.": timeout=5, max=1000".$LF;
 			}
 
-			else {
-			}
 
+			#say $reply;
 			#User requested headers. 
-			if(defined $headers){		#checking for defined speeds up no header case
-				for(0..@$headers/2-1){	
-					$reply.=$uSAC::HTTP::Header::names[$headers->[$_]].": $headers->[$_+1]$LF";
-				}
-			}
+			my $i=0;
+			$reply.=$_[2]->[$i++].": $_[2]->[$i++]$LF" for(0..@$_[2]/2-1);
 
-			#Custom headers
-			if(defined $customHeaders){	#checking for defined speeds up no header case
-				while(my ($name,$value)=each %$customHeaders){
-					$reply.="$name: $value$LF";
-				}
-			}
-
-			$reply.=$LF.$content;
+			$reply.=$LF.$_[1];
 			#Write the headers
 			if( $self->[write_] ) {
 				$self->[write_]->( $reply );
@@ -416,60 +406,63 @@ use constant KEY_COUNT=>attrs_-method_+1;
 				}
 			};
 		}
-		
-		sub is_websocket {
-			my $self = shift;
-			return 1 if lc($self->headers->{connection}) eq 'upgrade' and lc( $self->headers->{upgrade} ) eq 'websocket';
-			return 0;
-		}
-		
-		sub upgrade {
-			my $self = shift;
-			#my %h;$h{h} = \%h; $h{r} = $self;
-			
-			my $cb = pop;
-			my %args = @_;
-			if ( $self->headers->{'sec-websocket-version'} == 13 ) {
-				require MIME::Base64;
-				require Digest::SHA1;
-				my $key = $self->headers->{'sec-websocket-key'};
-				my $origin = exists $self->headers->{'sec-websocket-origin'} ? $self->headers->{'sec-websocket-origin'} : $self->headers->{'origin'};
-				my $accept = MIME::Base64::encode_base64(Digest::SHA1::sha1( $key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11' ));
-				chomp $accept;
-				$self->send_headers( 101,headers => {
-					%{ $args{headers} || {} },
-					upgrade => 'WebSocket',
-					connection => 'Upgrade',
-					'sec-websocket-accept' => $accept,
-					#'sec-websocket-protocol' => 'chat',
-				} );
-				
-				${ $self->[reqcount_] }--;
-				
-				my $create_ws = sub {
-					my $h = shift;
-					my $ws = uSAC::HTTP::Server::WS->new(
-						%args, h => $h,
-					);
-					weaken( $self->[server_]{wss}{ 0+$ws } = $ws );
-					@$self = ();
-					$cb->($ws);
-				};
-				
-				if ( $self->[handle_] ) {
-					$create_ws->($self->[handle_]);
-					return
-				}
-				else {
-					return HANDLE => $create_ws
-				}
-			}
-			else {
-				$self->reply(400, '', headers => {
-					'sec-websocket-version' => 13,
-				});
-			}
-		}
+	 
+
+                #########################################################################################################################################################
+                # sub is_websocket {                                                                                                                                    #
+                #         my $self = shift;                                                                                                                             #
+                #         return 1 if lc($self->headers->{connection}) eq 'upgrade' and lc( $self->headers->{upgrade} ) eq 'websocket';                                 #
+                #         return 0;                                                                                                                                     #
+                # }                                                                                                                                                     #
+                #                                                                                                                                                       #
+                # sub upgrade {                                                                                                                                         #
+                #         my $self = shift;                                                                                                                             #
+                #         #my %h;$h{h} = \%h; $h{r} = $self;                                                                                                            #
+                #                                                                                                                                                       #
+                #         my $cb = pop;                                                                                                                                 #
+                #         my %args = @_;                                                                                                                                #
+                #         if ( $self->headers->{'sec-websocket-version'} == 13 ) {                                                                                      #
+                #                 require MIME::Base64;                                                                                                                 #
+                #                 require Digest::SHA1;                                                                                                                 #
+                #                 my $key = $self->headers->{'sec-websocket-key'};                                                                                      #
+                #                 my $origin = exists $self->headers->{'sec-websocket-origin'} ? $self->headers->{'sec-websocket-origin'} : $self->headers->{'origin'}; #
+                #                 my $accept = MIME::Base64::encode_base64(Digest::SHA1::sha1( $key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11' ));                        #
+                #                 chomp $accept;                                                                                                                        #
+                #                 $self->send_headers( 101,headers => {                                                                                                 #
+                #                         %{ $args{headers} || {} },                                                                                                    #
+                #                         upgrade => 'WebSocket',                                                                                                       #
+                #                         connection => 'Upgrade',                                                                                                      #
+                #                         'sec-websocket-accept' => $accept,                                                                                            #
+                #                         #'sec-websocket-protocol' => 'chat',                                                                                          #
+                #                 } );                                                                                                                                  #
+                #                                                                                                                                                       #
+                #                 ${ $self->[reqcount_] }--;                                                                                                            #
+                #                                                                                                                                                       #
+                #                 my $create_ws = sub {                                                                                                                 #
+                #                         my $h = shift;                                                                                                                #
+                #                         my $ws = uSAC::HTTP::Server::WS->new(                                                                                         #
+                #                                 %args, h => $h,                                                                                                       #
+                #                         );                                                                                                                            #
+                #                         weaken( $self->[server_]{wss}{ 0+$ws } = $ws );                                                                               #
+                #                         @$self = ();                                                                                                                  #
+                #                         $cb->($ws);                                                                                                                   #
+                #                 };                                                                                                                                    #
+                #                                                                                                                                                       #
+                #                 if ( $self->[handle_] ) {                                                                                                             #
+                #                         $create_ws->($self->[handle_]);                                                                                               #
+                #                         return                                                                                                                        #
+                #                 }                                                                                                                                     #
+                #                 else {                                                                                                                                #
+                #                         return HANDLE => $create_ws                                                                                                   #
+                #                 }                                                                                                                                     #
+                #         }                                                                                                                                             #
+                #         else {                                                                                                                                        #
+                #                 $self->reply(400, '', headers => {                                                                                                    #
+                #                         'sec-websocket-version' => 13,                                                                                                #
+                #                 });                                                                                                                                   #
+                #         }                                                                                                                                             #
+                # }                                                                                                                                                     #
+                #########################################################################################################################################################
 		
 		sub send_100_continue {
 			my ($self,$code,%args) = @_;

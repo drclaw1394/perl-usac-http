@@ -66,4 +66,13 @@ BEGIN {
 };
 use enum (map s/-/_/gr, @names); 		#Make indexes, with underscores
 our %hash=map {$names[$_]=>$_} 0..@names-1;	#Map actual names to indexes, for parsing
+
+use constant {map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names}; #Direct constants to use
+
+#export the header constants
+
+
+
+#print "Content Type: ", HTTP_CONTENT_TYPE , "\n";
+
 1;

@@ -78,4 +78,8 @@ BEGIN {
 	our @values= map {$lookup[1+$_*2]} 0..@lookup/2-1; 
 }
 use enum (map s/ |-|'/_/gr, @names);
+
+use constant {map {(("HTTP_CODE_".uc $names[$_])=~s/ |-/_/gr, "$values[$_] $names[$_]")} 0..@names-1}; #Direct constants to use
+#use constant {map {(("HTTP_VALUE".uc $names[$_])=~s/ |-/_/gr, $names[$_])} 0..@names-1}; #Direct constants to use
+#print "HTTP OK: ".
 1;

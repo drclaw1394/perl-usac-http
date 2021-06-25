@@ -1,20 +1,17 @@
 package uSAC::HTTP::Server::WS;
+use common::sense;
 
-use 5.010;
-#use AnyEvent::HTTP::Server::Kit;
-#use Devel::Hexdump;
-#use DDP;
+
 use AnyEvent;
 use Config;
 use Time::HiRes ();
 use JSON::XS;
 use Scalar::Util 'weaken';
 
-BEGIN {
-	unless (eval { require DDP;DDP->import(); 1}) {
-		*p = sub { warn "no DDP for @_"; }
-	}
-}
+use uSAC::HTTP::Rex;
+
+my $LF=$uSAC::HTTP::Rex::LF;
+
 
 our $JSON = JSON::XS->new->utf8->convert_blessed;
 
@@ -47,6 +44,7 @@ our %OP = (
 	PONG()         => 'PONG',
 );
 
+
 sub onmessage {
 	$_[0]{onmessage} = $_[1];
 }
@@ -59,6 +57,74 @@ sub onclose {
 	$_[0]{onclose} = $_[1];
 }
 
+
+
+#take http1.1 connection and make it websocket
+#does the handshake
+sub upgrader {
+	DEBUG && say  "Testing for websocket";
+	my $rex=shift;
+	#attempt to do the match
+	given ($rex->[uSAC::HTTP::Rex::headers_]){
+		DEBUG && say Dumper $_;
+		DEBUG && say Dumper $rex;
+		when (
+			$rex->[uSAC::HTTP::Rex::uri_] =~ m|/ws| 			#uri match
+				and  $_->{connection} =~ /upgrade/i	#required
+				and  $_->{upgrade} =~ /websocket/i	#required
+				and  $_->{'sec-websocket-version'} ==13	#required
+				and  exists $_->{'sec-websocket-key'}	#required
+				and  $_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
+		){
+			#TODO:  origin testing, externsions,
+			DEBUG && say " Websocket upgrade";
+			# mangle the key
+			require MIME::Base64;		
+			require Digest::SHA1;
+			my $key=MIME::Base64::encode_base64 
+			Digest::SHA1::sha1 
+			$_->{'sec-websocket-key'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+			#
+			#reply
+			my $reply="$rex->[uSAC::HTTP::Rex::version_] $uSAC::HTTP::Code::values[uSAC::HTTP::Code::Switching_Protocols] $uSAC::HTTP::Code::names[uSAC::HTTP::Code::Switching_Protocols]$LF";
+
+			$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Upgrade].": "."websocket".$LF;	#Set server
+			$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Connection].": "."Upgrade".$LF;	#Set server
+			$reply.=$uSAC::HTTP::Header::names[uSAC::HTTP::Header::Sec_WebSocket_Key].": $key$LF";	#Set server
+			$reply.=$LF;
+			#write reply	
+			if( $rex->[uSAC::HTTP::Rex::write_] ) {
+				$rex->[uSAC::HTTP::Rex::write_]->( $reply );
+				$rex->[uSAC::HTTP::Rex::write_]->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_] or $rex->[uSAC::HTTP::Rex::server_]{graceful};
+				#delete $self->[write_];
+				$rex->[uSAC::HTTP::Rex::write_]=undef;
+				${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;
+			}
+
+			#Destroy the read watcher and create a new one 
+			given ($rex->[uSAC::HTTP::Rex::session_]){
+				$_[uSAC::HTTP::Server::Session::rw_] =undef;
+				$_->[uSAC::HTTP::Server::Session::rw_]=AE::io  $_->[uSAC::HTTP::Server::Session::fh_], 0, sub {
+					#TODO: Sub protocal probably should do this
+
+				};
+				$_[uSAC::HTTP::Server::Session::ww_] =undef;
+				$_->[uSAC::HTTP::Server::Session::ww_]=AE::io  $_->[uSAC::HTTP::Server::Session::fh_], 1, sub {
+					#TODO: Sub protocal probably should do this
+
+				};
+
+				#read and write setup create a new ws with just the session
+				uSAC::HTTP::Server::WS->new($_);
+			}
+
+		}
+		default {
+			DEBUG && say "Websocket did not match";
+			return;
+		}
+	}
+}
 
 sub new {
 	my $pkg = shift;

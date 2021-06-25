@@ -28,6 +28,7 @@ use Time::HiRes qw/gettimeofday/;
 use Carp 'croak';
 
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Server::WS;
 
 #Class attribute keys
 use enum (
@@ -56,6 +57,12 @@ sub new {
 		total_connections => 0,
 		active_requests => 0,
 		total_requests => 0,
+		upgraders => 
+		{
+			"websocket" =>\&uSAC::HTTP::Server::WS::upgrader
+		}
+
+		,
 	}, $pkg;
 	
 	if (exists $self->{listen}) {
@@ -233,7 +240,10 @@ sub incoming {
 
 	#my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};
 	#weaken $timeout;
-	my @r = ( uSAC::HTTP::Server::Session::fh_ => $fh, uSAC::HTTP::Server::Session::id_ => $id);#, timeout=>$timeout);
+	my @r;
+	$r[uSAC::HTTP::Server::Session::fh_]= $fh;
+	$r[uSAC::HTTP::Server::Session::id_]= $id;#, timeout=>$timeout);
+	$r[uSAC::HTTP::Server::Session::server_]= $self;
 	my $buf;
 
 	$self->{ $id } = \@r;
@@ -244,51 +254,54 @@ sub incoming {
         #         $self->{want_peer} ? "$_[1]:$_[2]" : peer_info($_[0])                                                                                                                       #
         # ) if $self->{debug_conn};                                                                                                                                                           #
         #######################################################################################################################################################################################
-
-	my $write = sub {
-		$self and exists $self->{$id} or return;
-		my $ido=$self->{$id};
-		\my $buf=\$_[0];
-
-		if ( $ido->[uSAC::HTTP::Server::Session::wbuf_] ) {
-			$ido->[uSAC::HTTP::Server::Session::closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
-			${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } .= defined $buf ? $buf : return $ido->[uSAC::HTTP::Server::Session::closeme_] = 1;
-			return;
-		}
-		elsif ( !defined $buf ) { return $self->drop($id); }
-
-		$ido->[uSAC::HTTP::Server::Session::fh_] or return do {
-			warn "Lost filehandle while trying to send ".length($buf)." data for $id";
-			$self->drop($id,"No filehandle");
-			();
-		};
-		my $w = syswrite( $ido->[uSAC::HTTP::Server::Session::fh_], $buf );
-		if ($w == length $buf) {
-			# ok;
-			if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $self->drop($id); };
-		}
-		elsif (defined $w) {
-			#substr($buf,0,$w,'');
-			$ido->[uSAC::HTTP::Server::Session::wbuf_] = substr($buf,0,$w,'');
-			#$buf;
-			$ido->[uSAC::HTTP::Server::Session::ww_] = AE::io $ido->[uSAC::HTTP::Server::Session::fh_], 1, sub {
-				warn "ww.io.$id" if DEBUG;
-				$self and $ido or return;
-				$w = syswrite( $ido->[uSAC::HTTP::Server::Session::fh_], ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } );
-				if ($w == length ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] }) {
-					delete $ido->[uSAC::HTTP::Server::Session::wbuf_];
-					delete $ido->[uSAC::HTTP::Server::Session::ww_];
-					if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $self->drop($id); }
-				}
-				elsif (defined $w) {
-					${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } = substr( ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] }, $w );
-					#substr( ${ $ido->{wbuf} }, 0, $w, '');
-				}
-				else { return $self->drop($id, "$!"); }
-			};
-		}
-		else { return $self->drop($id, "$!"); }
-	};
+	my $write= uSAC::HTTP::Server::Session::makeWriter $self->{$id};
+        ####################################################################################################################################################################
+        # my $write = sub {                                                                                                                                                #
+        #         $self and exists $self->{$id} or return;                                                                                                                 #
+        #         my $ido=$self->{$id};                                                                                                                                    #
+        #         \my $buf=\$_[0];                                                                                                                                         #
+        #                                                                                                                                                                  #
+        #         if ( $ido->[uSAC::HTTP::Server::Session::wbuf_] ) {                                                                                                      #
+        #                 $ido->[uSAC::HTTP::Server::Session::closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}"; #
+        #                 ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } .= defined $buf ? $buf : return $ido->[uSAC::HTTP::Server::Session::closeme_] = 1;               #
+        #                 return;                                                                                                                                          #
+        #         }                                                                                                                                                        #
+        #         elsif ( !defined $buf ) { return $self->drop($id); }                                                                                                     #
+        #                                                                                                                                                                  #
+        #         $ido->[uSAC::HTTP::Server::Session::fh_] or return do {                                                                                                  #
+        #                 warn "Lost filehandle while trying to send ".length($buf)." data for $id";                                                                       #
+        #                 $self->drop($id,"No filehandle");                                                                                                                #
+        #                 ();                                                                                                                                              #
+        #         };                                                                                                                                                       #
+        #                                                                                                                                                                  #
+        #         my $w = syswrite( $ido->[uSAC::HTTP::Server::Session::fh_], $buf );                                                                                      #
+        #         if ($w == length $buf) {                                                                                                                                 #
+        #                 # ok;                                                                                                                                            #
+        #                 if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $self->drop($id); };                                                                       #
+        #         }                                                                                                                                                        #
+        #         elsif (defined $w) {                                                                                                                                     #
+        #                 #substr($buf,0,$w,'');                                                                                                                           #
+        #                 $ido->[uSAC::HTTP::Server::Session::wbuf_] = substr($buf,0,$w,'');                                                                               #
+        #                 #$buf;                                                                                                                                           #
+        #                 $ido->[uSAC::HTTP::Server::Session::ww_] = AE::io $ido->[uSAC::HTTP::Server::Session::fh_], 1, sub {                                             #
+        #                         warn "ww.io.$id" if DEBUG;                                                                                                               #
+        #                         $self and $ido or return;                                                                                                                #
+        #                         $w = syswrite( $ido->[uSAC::HTTP::Server::Session::fh_], ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } );                              #
+        #                         if ($w == length ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] }) {                                                                      #
+        #                                 delete $ido->[uSAC::HTTP::Server::Session::wbuf_];                                                                               #
+        #                                 delete $ido->[uSAC::HTTP::Server::Session::ww_];                                                                                 #
+        #                                 if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $self->drop($id); }                                                        #
+        #                         }                                                                                                                                        #
+        #                         elsif (defined $w) {                                                                                                                     #
+        #                                 ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] } = substr( ${ $ido->[uSAC::HTTP::Server::Session::wbuf_] }, $w );                 #
+        #                                 #substr( ${ $ido->{wbuf} }, 0, $w, '');                                                                                          #
+        #                         }                                                                                                                                        #
+        #                         else { return $self->drop($id, "$!"); }                                                                                                  #
+        #                 };                                                                                                                                               #
+        #         }                                                                                                                                                        #
+        #         else { return $self->drop($id, "$!"); }                                                                                                                  #
+        # };                                                                                                                                                               #
+        ####################################################################################################################################################################
 
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
@@ -408,25 +421,42 @@ sub incoming {
 				#say Dumper \%h;
 				#Done with headers. 
 				#
-				#warn Dumper \%h;
+				$req = bless [ $version, $self->{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' ;
+				#
+				# Need to decide what to do about the connection before passing request off to application
+				# - check for upgrades and setup ?
+				DEBUG && say "URI $uri";	
+				do {
+					if( exists $h{connection} and exists $h{upgrade}){
+						DEBUG && say "Testing for upgradability";
+
+						given($self->{upgraders}{lc $h{upgrade}}){
+							when(defined){
+								#upgade target is viable
+								$_->();
+							}
+							default {
+								#upgrade target not supported
+								# response with error code
+							}
+
+						}
+
+						
+					}
+				} if 1;
+
+
 				$pos = pos($buf);
 
 				$self->{total_requests}++;
 
-				#warn "Create request object";
-				#$req = uSAC::HTTP::Server::Req->new(
-				#	method  => $method,
-				#	uri     => $uri,
-				#	headers => \%h,
-				#	write   => $write,
-				#	guard   => guard { $self->{active_requests}--; },
-				#);
-				#my @rv = $self->{cb}->( $req );
 				$self->{$id}[uSAC::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
 				#say "close me set to: $self->{$id}{closeme}";
 				#say $h{connection};
 
-				my @rv = $self->{cb}->( $req = bless [ $version, $self->{$id}, $method, $uri, \%h, $write, undef,undef,undef, \$self->{active_requests}, $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' );
+				#This really should be the 'application level' callback 
+				my @rv = $self->{cb}->($req);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
 				#my @rv = $self->{cb}->( $req = bless [ $method, $uri, \%h, $write ], 'uSAC::HTTP::Server::Req' );
@@ -739,47 +769,6 @@ sub graceful {
 
 1; # End of uSAC::HTTP::Server
 __END__
-
-sub http_server($$&) {
-	my ($lhost,$lport,$reqcb) = @_;
-	
-	# TBD
-	
-	return $self;
-}
-
-sub __old_stop {
-	my ($self,$cb) = @_;
-	delete $self->{aw};
-	close $self->{socket};
-	if (%{$self->{con}}) {
-		$log->debugf("Server have %d active connectinos while stopping...", 0+keys %{$self->{con}});
-		my $cv = &AE::cv( $cb );
-		$cv->begin;
-		for my $key ( keys %{$self->{con}} ) {
-			my $con = $self->{con}{$key};
-			$log->debug("$key: connection from $con->{host}:$con->{port}: $con->{state}");
-			if ($con->{state} eq 'idle' or $con->{state} eq 'closed') {
-				$con->close;
-				delete $self->{con}{$key};
-				use Devel::FindRef;
-				warn "closed <$con> ".Devel::FindRef::track $con;
-			} else {
-				$cv->begin;
-				$con->{close} = sub {
-					$log->debug("Connection $con->{host}:$con->{port} was closed");
-					$cv->end;
-				};
-			}
-		}
-		if (%{$self->{con}}) {
-			$log->debug("Still have @{[ 0+keys %{$self->{con}} ]}");
-		}
-		$cv->end;
-	} else {
-		$cb->();
-	}
-}
 
 =head1 SYNOPSIS
 
