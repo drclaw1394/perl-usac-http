@@ -5,17 +5,57 @@ use FindBin;use lib "$FindBin::Bin/../blib/lib";
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Code;
 use uSAC::HTTP::Rex;
-
+use Hustle::Table;
 use EV;
 use feature "switch";
+
+my $table=Hustle::Table->new;
+
+$table->set_default(sub{
+		#return a 404 error
+	});
+$table->add(
+	{
+		matcher=>"/",
+		sub=>sub{
+			my $uri=shift;
+			my $rex=shift;
+			my $ref=shift;
+			my @rv=(uSAC::HTTP::Code::HTTP_CODE_OK,"GOOD"); 
+			
+			@$ref=@rv;
+			1;
+		}
+	},
+	{
+		matcher=>"/test",
+		sub=>sub{
+			print " THIS IS A  TEST\n";
+		}
+	},
+
+);
+my $dispatcher=$table->prepare_dispatcher;
+
+$dispatcher->("/test");
 
 my $server = uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",
 	port=>8080,
-	cb => sub {
-		(uSAC::HTTP::Code::HTTP_CODE_OK,"GOOD"); #[HTTP::Headers::Cache_Control=>"abc"],{Custom=>"value"});
-	}
+	cb=>$dispatcher
 );
+#for normal get/head
+# read all the headers
+# test/build response
+# #read remaining data on connection* (should be none)
+# Send rely
+#
+#
+# for post
+# need to check if url exists
+# if so read body
+# then proces and generate reponse
+# if uri not accessable need reply 404 and then close connection instaed of reading 
 
 #####################################################################################################################################################
 #                 my $req=$_[0];                                                                                                                    #

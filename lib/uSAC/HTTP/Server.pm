@@ -348,25 +348,27 @@ sub incoming {
 				# Need to decide what to do about the connection before passing request off to application
 				# - check for upgrades and setup ?
 				DEBUG && say "URI $uri";	
-				do {
-					if( exists $h{connection} and exists $h{upgrade}){
-						DEBUG && say "Testing for upgradability";
-
-						given($self->{upgraders}{lc $h{upgrade}}){
-							when(defined){
-								#upgade target is viable
-								$_->();
-							}
-							default {
-								#upgrade target not supported
-								# response with error code
-							}
-
-						}
-
-						
-					}
-				} if 1;
+                                #################################################################
+                                # do {                                                          #
+                                #         if( exists $h{connection} and exists $h{upgrade}){    #
+                                #                 DEBUG && say "Testing for upgradability";     #
+                                #                                                               #
+                                #                 given($self->[upgraders_]{lc $h{upgrade}}){   #
+                                #                         when(defined){                        #
+                                #                                 #upgade target is viable      #
+                                #                                 $_->();                       #
+                                #                         }                                     #
+                                #                         default {                             #
+                                #                                 #upgrade target not supported #
+                                #                                 # response with error code    #
+                                #                         }                                     #
+                                #                                                               #
+                                #                 }                                             #
+                                #                                                               #
+                                #                                                               #
+                                #         }                                                     #
+                                # } if 1;                                                       #
+                                #################################################################
 
 
 				$pos = pos($buf);
@@ -378,7 +380,8 @@ sub incoming {
 				#say $h{connection};
 
 				#This really should be the 'application level' callback 
-				my @rv = $self->[cb_]($req);
+				my @rv;
+				$self->[cb_]($uri,$req,\@rv);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
 				#my @rv = $self->[cb_]->( $req = bless [ $method, $uri, \%h, $write ], 'uSAC::HTTP::Server::Req' );
@@ -563,6 +566,16 @@ sub incoming {
 					}
 				}
 				weaken($req);
+
+				#If get or head
+				$state = 0;
+				if ($pos < length $buf) {
+					$ixx = $pos;
+					redo;
+				} else {
+					$buf = '';$state = $ixx = 0;
+					return;
+				}
 
 				if( $len = $h{'content-length'} ) {
 					#warn "have clen";
