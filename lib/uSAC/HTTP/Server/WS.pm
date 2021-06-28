@@ -9,6 +9,8 @@ use JSON::XS;
 use Scalar::Util 'weaken';
 
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Header qw<:constants>;
+use uSAC::HTTP::Code qw<:constants>;
 
 my $LF=$uSAC::HTTP::Rex::LF;
 
@@ -98,11 +100,11 @@ sub upgrader {
 			$_->{'sec-websocket-key'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 			#
 			#reply
-			my $reply="$rex->[uSAC::HTTP::Rex::version_] ".uSAC::HTTP::Code::HTTP_CODE_SWITCHING_PROTOCOLS."$LF";
+			my $reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS."$LF";
 
-			$reply.=uSAC::HTTP::Header::HTTP_CONNECTION.": Upgrade.$LF";
-			$reply.=uSAC::HTTP::Header::HTTP_UPGRADE.": websocket$LF";
-			$reply.=uSAC::HTTP::Header::HTTP_SEC_WEBSOCKET_KEY.": $key$LF";	#Set server
+			$reply.=HTTP_CONNECTION.": Upgrade.$LF";
+			$reply.=HTTP_UPGRADE.": websocket$LF";
+			$reply.=HTTP_SEC_WEBSOCKET_KEY.": $key$LF";	#Set server
 			$reply.=$LF;
 			#write reply	
 			if( $rex->[uSAC::HTTP::Rex::write_] ) {

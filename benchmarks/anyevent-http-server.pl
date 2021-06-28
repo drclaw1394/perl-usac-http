@@ -1,36 +1,73 @@
 #!/usr/bin/env perl
+use common::sense;
 
 use FindBin;use lib "$FindBin::Bin/../blib/lib";
 
 use uSAC::HTTP::Server;
-use uSAC::HTTP::Code;
+use uSAC::HTTP::Code qw<:constants>;
+use uSAC::HTTP::Method qw<:constants>;
+use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use Hustle::Table;
 use EV;
-use feature "switch";
 
 my $table=Hustle::Table->new;
+$table->set_default(sub {
+		my ($uri,$rex,$ref)=@_;
 
-$table->set_default(sub{
-		#return a 404 error
-	});
+		@$ref=(HTTP_NOT_FOUND,"Go away");
+});
 $table->add(
 	{
-		matcher=>"/",
+		matcher=>qr|^(?<root>/)$|,
 		sub=>sub{
-			my $uri=shift;
-			my $rex=shift;
-			my $ref=shift;
-			my @rv=(uSAC::HTTP::Code::HTTP_CODE_OK,"GOOD"); 
-			
-			@$ref=@rv;
+			my ($uri, $rex,$ref)=@_;
+			given($rex->[uSAC::HTTP::Rex::method_]){
+				when(HTTP_GET){
+					#response is imidiate
+					#process and reply
+					#no need to swap out reader
+					#say  "GET METHOD"
+					my @rv=(HTTP_OK,"GOODasdf"); 
+					
+					@$ref=@rv;
+					
+				}
+				when(HTTP_POST){
+					#Validate headers: do we want to service this method on this uri?
+					#request has body.
+					@$ref=(HTTP_METHOD_NOT_ALLOWED, "No way man..");
+					$rex->[uSAC::HTTP::Rex::session_]->drop();
+
+					#push reader sessions stack
+
+					#process request body
+					#Renstate older reader
+					#Send reply
+					#
+					#When 
+				}
+				when("UPDATE"){
+				}
+				when("DELETE"){
+				}
+				when("PUT"){
+				}
+				when("HEAD"){
+				}
+				default {
+					#unkown method
+					#respond as such.
+				}
+
+			}
 			1;
 		}
 	},
 	{
 		matcher=>"/test",
 		sub=>sub{
-			print " THIS IS A  TEST\n";
+			say " THIS IS A  TEST\n";
 		}
 	},
 

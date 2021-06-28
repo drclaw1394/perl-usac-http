@@ -1,5 +1,6 @@
 #Generate a list of header names as a hash or array
 package uSAC::HTTP::Header;
+use Exporter 'import';
 BEGIN {
 	our @names=qw(
 		Accept
@@ -63,16 +64,14 @@ BEGIN {
 		Sec-WebSocket-Protocol
 		DataServiceVersion
 	);
+	our @const_names=map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names;
 };
-use enum (map s/-/_/gr, @names); 		#Make indexes, with underscores
-our %hash=map {$names[$_]=>$_} 0..@names-1;	#Map actual names to indexes, for parsing
+#use enum (@const_names); 		#Make indexes, with underscores
+#our %hash=map {$names[$_]=>$_} 0..@names-1;	#Map actual names to indexes, for parsing
 
-use constant {map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names}; #Direct constants to use
-
-#export the header constants
-
-
-
-#print "Content Type: ", HTTP_CONTENT_TYPE , "\n";
-
+use constant {@const_names}; #Direct constants to use
+our @EXPORT_OK=@const_names;
+our %EXPORT_TAGS=(
+	constants=>\@const_names
+);
 1;

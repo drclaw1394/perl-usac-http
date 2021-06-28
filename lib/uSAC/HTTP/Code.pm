@@ -1,4 +1,5 @@
 package uSAC::HTTP::Code;
+use Exporter 'import';
 
 BEGIN {
 
@@ -76,10 +77,13 @@ BEGIN {
 	);
 	our @names= map {$lookup[$_*2]} 0..@lookup/2-1; 
 	our @values= map {$lookup[1+$_*2]} 0..@lookup/2-1; 
+	our @const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr, "$values[$_] $names[$_]")} 0..@names-1;
 }
 use enum (map s/ |-|'/_/gr, @names);
 
-use constant {map {(("HTTP_CODE_".uc $names[$_])=~s/ |-/_/gr, "$values[$_] $names[$_]")} 0..@names-1}; #Direct constants to use
-#use constant {map {(("HTTP_VALUE".uc $names[$_])=~s/ |-/_/gr, $names[$_])} 0..@names-1}; #Direct constants to use
-#print "HTTP OK: ".
+use constant {@const_names}; #Direct constants to use
+our @EXPORT_OK=@const_names;
+our %EXPORT_TAGS=(
+	constants=>\@const_names
+);
 1;

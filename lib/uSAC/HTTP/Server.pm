@@ -224,7 +224,7 @@ sub incoming {
 	$self->[sessions_]{ $id } = bless $r, "uSAC::HTTP::Server::Session";
 	$self->[active_connections_]++;
 
-	my $write= uSAC::HTTP::Server::Session::make_writer $r;	#$self->[sessions_]{$id};
+	my $write= uSAC::HTTP::Server::Session::make_writer $r, ;	#$self->[sessions_]{$id};
 
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
@@ -567,15 +567,6 @@ sub incoming {
 				}
 				weaken($req);
 
-				#If get or head
-				$state = 0;
-				if ($pos < length $buf) {
-					$ixx = $pos;
-					redo;
-				} else {
-					$buf = '';$state = $ixx = 0;
-					return;
-				}
 
 				if( $len = $h{'content-length'} ) {
 					#warn "have clen";

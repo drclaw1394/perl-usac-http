@@ -10,7 +10,7 @@ use uSAC::HTTP::Server;
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ ww_ wbuf_ left_ read_ write_ request_count_ server_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ left_ read_ write_ request_count_ server_ read_stack_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -25,7 +25,6 @@ sub new {
 	bless $self,__PACKAGE__;
 }
 
-#
 sub drop {
         my ($self,$err) = @_;
         $err =~ s/\015//sg if defined $err;
@@ -41,7 +40,7 @@ sub drop {
 sub make_writer{
 	#take a session and alias the variables to lexicals
 	my $ido=shift;
-	#my $server=$ido->[server_];
+	my $server=$ido->[server_];
 	\my $wbuf=\$ido->[wbuf_];
 	\my $fh=\$ido->[fh_];
 	
@@ -89,5 +88,39 @@ sub make_writer{
 	};
 
 }
+
+#http1.1 reader
+sub make_reader {
+	my $ido=shift;
+	my $server=$ido->[server_];
+	\my $rbuf=\$ido->[rbuf_];
+	\my $fh=\$ido->[fh_];
+	sub {
+
+	}
+}
+
+#cancel existing read watcher
+# create a new watcher with the passed sub (created beforehand)
+# push to the reader_stack
+sub push_reader {
+	my ($self,$sub)=@_;
+	$self->[rw_]=undef;
+	$self->[rw_]=AE::io $self->[fh_],0,$sub;
+	push @{$self->[read_stack_]},$sub;
+	#trigger reader if read buffer is not empty
+
+}
+# cancel existing read watcher
+# create new watcher from top of stack
+# pop the stack
+sub pop_reader {
+	my $self=@_[0];
+	$self->[rw_]=undef;
+	$self->[rw_]=AE::io $self->[fh_],0, pop @{$self->[read_stack_]};
+}
+
+#readers need to be created previously, capturing the session and optionally making aliases
+#to session variables for better performance
 
 1;
