@@ -1,30 +1,36 @@
 #package AnyEvent::HTTP::Server::Form;
 
+package uSAC::HTTP::Rex;
 use version; our $VERSION = version->declare('v0.1');
 use common::sense;
 
-use AnyEvent;
-use uSAC::HTTP::Code;
-use uSAC::HTTP::Header;
-use uSAC::HTTP::Server::Session;
-
-
-
-
-package uSAC::HTTP::Rex;
-{
-package #hide
-	aehts::sv;
-use overload
-	'""' => sub { ${$_[0]} },
-	'@{}' => sub { [${$_[0]}] },
-	fallback => 1;
-package #hide
-	aehts::av;
-use overload
-	'""' => sub { $_[0][0] },
-	fallback => 1;
+BEGIN {
+	use uSAC::HTTP::Code qw<:constants>;
+	use uSAC::HTTP::Header qw<:constants>;
 }
+use uSAC::HTTP::Server::Session;
+use uSAC::HTTP::Server;
+use constant LF => "\015\012";
+use AnyEvent;
+
+
+
+
+########################################
+# {                                    #
+# package #hide                        #
+#         aehts::sv;                   #
+# use overload                         #
+#         '""' => sub { ${$_[0]} },    #
+#         '@{}' => sub { [${$_[0]}] }, #
+#         fallback => 1;               #
+# package #hide                        #
+#         aehts::av;                   #
+# use overload                         #
+#         '""' => sub { $_[0][0] },    #
+#         fallback => 1;               #
+# }                                    #
+########################################
 
 #use AnyEvent::HTTP::Server::Kit;
 #use uSAC::HTTP::Server::WS;
@@ -273,20 +279,20 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#my $version=$self->[version_];#"HTTP/1.0";
 			#my ($code,$content,$headers)=@_;
 
-			my $reply="$self->[version_] $_[0]$LF";# $uSAC::HTTP::Code::names[$_[0]]$LF";
+			my $reply="$self->[version_] $_[0]".LF;# $uSAC::HTTP::Code::names[$_[0]]$LF";
 
-			$reply.=uSAC::HTTP::Header::HTTP_SERVER.": "."AE $VERSION".$LF;	#Set server
-			$reply.=uSAC::HTTP::Header::HTTP_CONTENT_LENGTH.": ".length($_[1]).$LF if defined $_[1];	#Set server
+			$reply.=HTTP_SERVER.": ".uSAC::HTTP::Server::NAME." ".uSAC::HTTP::Server::VERSION.LF;	#Set server
+			$reply.=HTTP_CONTENT_LENGTH.": ".length($_[1]).LF if defined $_[1];	#Set server
 			
 			#close connection after if marked
 			if($self->[session_][uSAC::HTTP::Server::Session::closeme_]){
-				$reply.=uSAC::HTTP::Header::HTTP_CONNECTION.": close".$LF;
+				$reply.=HTTP_CONNECTION.": close".LF;
 
 			}
 			#or send explicit keep alive?
 			elsif($self->[version_] ne "HTTP/1.1") {
-				$reply.=uSAC::HTTP::Header::HTTP_CONNECTION.": Keep-Alive".$LF;
-				$reply.=uSAC::HTTP::Header::HTTP_KEEP_ALIVE.": timeout=5, max=1000".$LF;
+				$reply.=HTTP_CONNECTION.": Keep-Alive".LF;
+				$reply.=HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF;
 			}
 
 
@@ -295,7 +301,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			my $i=0;
 			$reply.=$_[2]->[$i++].": $_[2]->[$i++]$LF" for(0..@$_[2]/2-1);
 
-			$reply.=$LF.$_[1];
+			$reply.=LF.$_[1];
 			#Write the headers
 			if( $self->[write_] ) {
 				$self->[write_]->( $reply );

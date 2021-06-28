@@ -28,6 +28,8 @@ $table->add(
 					#process and reply
 					#no need to swap out reader
 					#say  "GET METHOD"
+					my $session=$rex->[uSAC::HTTP::Rex::session_];
+						
 					my @rv=(HTTP_OK,"GOODasdf"); 
 					
 					@$ref=@rv;

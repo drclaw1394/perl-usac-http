@@ -1,4 +1,6 @@
 package uSAC::HTTP::Server; 
+use constant NAME=>"uSAC";
+use constant VERSION=>"0.1";
 use common::sense;
 use Data::Dumper;
 
@@ -36,6 +38,7 @@ use enum (
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Server::WS;
 use uSAC::HTTP::Server::Session;
+use uSAC::HTTP::v1_1;
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>total_requests_-host_+1;
@@ -219,12 +222,14 @@ sub incoming {
 	$r->[uSAC::HTTP::Server::Session::id_]= $id;#, timeout=>$timeout);
 	$r->[uSAC::HTTP::Server::Session::server_]= $self;
 	$r->[uSAC::HTTP::Server::Session::wbuf_]="";
+	$r->[uSAC::HTTP::Server::Session::write_stack_]=[];
 	my $buf;
 
 	$self->[sessions_]{ $id } = bless $r, "uSAC::HTTP::Server::Session";
 	$self->[active_connections_]++;
 
-	my $write= uSAC::HTTP::Server::Session::make_writer $r, ;	#$self->[sessions_]{$id};
+	#my $write= uSAC::HTTP::v1_1::make_writer $r, ;	#$self->[sessions_]{$id};
+	my $write= uSAC::HTTP::Server::Session::push_writer $r, \&uSAC::HTTP::v1_1::make_writer;
 
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);

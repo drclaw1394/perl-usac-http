@@ -10,7 +10,7 @@ use uSAC::HTTP::Server;
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ left_ read_ write_ request_count_ server_ read_stack_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ left_ read_ write_ request_count_ server_ read_stack_ write_stack_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -36,58 +36,23 @@ sub drop {
                 if $self->[server_][uSAC::HTTP::Server::graceful_] and $self->[server_][uSAC::HTTP::Server::active_requests_] == 0;
 }
 
-#raw writer. 
-sub make_writer{
-	#take a session and alias the variables to lexicals
-	my $ido=shift;
-	my $server=$ido->[server_];
-	\my $wbuf=\$ido->[wbuf_];
-	\my $fh=\$ido->[fh_];
-	
+sub push_writer {
+	my ($self,$maker_sub,@args)=@_;	#pass the sub which will make the writer sub,
+	given($self->[write_stack_]){
+		push @{$_},$maker_sub->($self,@{$_},@args); #session, index of new writer, args to maker
+	}
 
-	sub {
-		\my $buf=\$_[0];	#give the input a name
-
-		if ( $wbuf ) {
-			#$ido->[closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
-			${ $wbuf } .= defined $buf ? $buf : return $ido->[closeme_] = 1;
-			return;
-		}
-		elsif ( !defined $buf ) { return drop($ido); }
-
-		##############################################################################################
-		# $ido->[fh_] or return do {                                                                 #
-		#         warn "Lost filehandle while trying to send ".length($buf)." data for $ido->[id_]"; #
-		#         drop($ido,"No filehandle");                                                        #
-		#         ();                                                                                #
-		# };                                                                                         #
-		##############################################################################################
-
-		my $w = syswrite( $fh, $buf );
-		if ($w == length $buf) {
-			# ok;
-			#say Dumper $ido;
-			if( $ido->[closeme_] ) { drop $ido};
-		}
-		elsif (defined $w) {
-			$wbuf = substr($buf,$w);
-			$ido->[ww_] = AE::io $fh, 1, sub {
-				$ido or return;
-				$w = syswrite( $fh, $wbuf );
-				if ($w == length $wbuf) {
-					undef $ido->[ww_];
-					if( $ido->[closeme_] ) { drop($ido); }
-				}
-				elsif (defined $w) {
-					$wbuf= substr( $wbuf, $w );
-				}
-				else { return drop( $ido, "$!"); }
-			};
-		}
-		else { return drop($ido, "$!"); }
-	};
-
+	$self->[write_]=$self->[write_stack_][@{$self->[write_stack_]}-1];
+	#retusn the writer created
 }
+sub pop_writer {
+	my ($self)=@_;
+	pop @{$self->[write_stack_]};
+
+	$self->[write_]=$self->[write_stack_][@{$self->[write_stack_]}-1];
+}
+
+#raw writer. 
 
 #http1.1 reader
 sub make_reader {
