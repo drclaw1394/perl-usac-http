@@ -8,9 +8,14 @@ BEGIN {
 	use uSAC::HTTP::Code qw<:constants>;
 	use uSAC::HTTP::Header qw<:constants>;
 }
+use constant LF => "\015\012";
+
+use constant STATIC_HEADERS=>
+HTTP_SERVER.": ".uSAC::HTTP::Server::NAME." ".uSAC::HTTP::Server::VERSION.LF
+;
+
 use uSAC::HTTP::Server::Session;
 use uSAC::HTTP::Server;
-use constant LF => "\015\012";
 use AnyEvent;
 
 
@@ -274,14 +279,15 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#call replySimple with extra headers
 		}
 		#Reply the body and code specified. Adds Server and Content-Length headers
-		sub replySimple {
+		sub reply_simple{
 			my $self=shift;
 			#my $version=$self->[version_];#"HTTP/1.0";
 			#my ($code,$content,$headers)=@_;
 
 			my $reply="$self->[version_] $_[0]".LF;# $uSAC::HTTP::Code::names[$_[0]]$LF";
 
-			$reply.=HTTP_SERVER.": ".uSAC::HTTP::Server::NAME." ".uSAC::HTTP::Server::VERSION.LF;	#Set server
+			#$reply.=HTTP_SERVER.": ".uSAC::HTTP::Server::NAME." ".uSAC::HTTP::Server::VERSION.LF;	#Set server
+			$reply.=STATIC_HEADERS;	 #server name
 			$reply.=HTTP_CONTENT_LENGTH.": ".length($_[1]).LF if defined $_[1];	#Set server
 			
 			#close connection after if marked
@@ -291,17 +297,22 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			}
 			#or send explicit keep alive?
 			elsif($self->[version_] ne "HTTP/1.1") {
-				$reply.=HTTP_CONNECTION.": Keep-Alive".LF;
-				$reply.=HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF;
+				$reply.=
+				HTTP_CONNECTION.": Keep-Alive".LF
+				.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
+				;
 			}
 
 
 			#say $reply;
 			#User requested headers. 
 			my $i=0;
-			$reply.=$_[2]->[$i++].": $_[2]->[$i++]$LF" for(0..@$_[2]/2-1);
+			$reply.=$_[2][$i++].": $_[2][$i++]$LF" for(0..@$_[2]/2-1);
 
+
+			#Append body
 			$reply.=LF.$_[1];
+
 			#Write the headers
 			if( $self->[write_] ) {
 				$self->[write_]->( $reply );

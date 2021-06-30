@@ -10,59 +10,6 @@ use uSAC::HTTP::Server;
 
 #base level  tcp writer.
 #Handles the event loop and writing to file handle
-sub make_writer{
-	#take a session and alias the variables to lexicals
-	my $ido=shift;
-	my $stackPos=shift;
-	my $server=$ido->[uSAC::HTTP::Server::Session::server_];
-	\my $wbuf=\$ido->[uSAC::HTTP::Server::Session::wbuf_];
-	\my $fh=\$ido->[uSAC::HTTP::Server::Session::fh_];
-	
-
-	sub {
-		\my $buf=\$_[0];	#give the input a name
-
-		if ( $wbuf ) {
-			#$ido->[closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
-			${ $wbuf } .= defined $buf ? $buf : return $ido->[uSAC::HTTP::Server::Session::closeme_] = 1;
-			return;
-		}
-		elsif ( !defined $buf ) { return $ido->drop(); }
-
-		##############################################################################################
-		# $ido->[fh_] or return do {                                                                 #
-		#         warn "Lost filehandle while trying to send ".length($buf)." data for $ido->[id_]"; #
-		#         drop($ido,"No filehandle");                                                        #
-		#         ();                                                                                #
-		# };                                                                                         #
-		##############################################################################################
-
-		my $w = syswrite( $fh, $buf );
-		if ($w == length $buf) {
-			# ok;
-			#say Dumper $ido;
-			if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop};
-		}
-		elsif (defined $w) {
-			$wbuf = substr($buf,$w);
-			$ido->[uSAC::HTTP::Server::Session::ww_] = AE::io $fh, 1, sub {
-				$ido or return;
-				$w = syswrite( $fh, $wbuf );
-				if ($w == length $wbuf) {
-					undef $ido->[uSAC::HTTP::Server::Session::ww_];
-					if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop(); }
-				}
-				elsif (defined $w) {
-					$wbuf= substr( $wbuf, $w );
-				}
-				else { return $ido->drop( "$!"); }
-			};
-		}
-		else { return $ido->drop("$!"); }
-	};
-
-}
-
 sub make_post_reader {
         ###################################
         # my $session=shift;              #
