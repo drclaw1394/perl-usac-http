@@ -280,6 +280,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 		}
 		#Reply the body and code specified. Adds Server and Content-Length headers
 		sub reply_simple{
+			use integer;
 			my $self=shift;
 			#my $version=$self->[version_];#"HTTP/1.0";
 			#my ($code,$content,$headers)=@_;
@@ -287,19 +288,24 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			my $reply="$self->[version_] $_[0]".LF;# $uSAC::HTTP::Code::names[$_[0]]$LF";
 
 			#$reply.=HTTP_SERVER.": ".uSAC::HTTP::Server::NAME." ".uSAC::HTTP::Server::VERSION.LF;	#Set server
-			$reply.=STATIC_HEADERS;	 #server name
-			$reply.=HTTP_CONTENT_LENGTH.": ".length($_[1]).LF if defined $_[1];	#Set server
+			$reply.=
+				STATIC_HEADERS
+				.HTTP_CONTENT_LENGTH.": ".(length($_[1])+0).LF	#this always render content length
+				;#if defined $_[1];	#Set server
+
+				#TODO: benchmark length(undef)+0;
 			
 			#close connection after if marked
 			if($self->[session_][uSAC::HTTP::Server::Session::closeme_]){
 				$reply.=HTTP_CONNECTION.": close".LF;
 
 			}
+
 			#or send explicit keep alive?
 			elsif($self->[version_] ne "HTTP/1.1") {
 				$reply.=
-				HTTP_CONNECTION.": Keep-Alive".LF
-				.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
+					HTTP_CONNECTION.": Keep-Alive".LF
+					.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
 				;
 			}
 
@@ -314,11 +320,12 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			$reply.=LF.$_[1];
 
 			#Write the headers
-			if( $self->[write_] ) {
-				$self->[write_]->( $reply );
-				$self->[write_]->( undef ) if $self->[session_][uSAC::HTTP::Server::Session::closeme_];# or $self->[server_][graceful_];
+			given ($self->[write_]){
+				#if( $self->[write_] ) {
+				$_->( $reply );
+				$_->( undef ) if $self->[session_][uSAC::HTTP::Server::Session::closeme_];# or $self->[server_][graceful_];
 				#delete $self->[write_];
-				$self->[write_]=undef;
+				$_=undef;
 				${ $self->[reqcount_] }--;
 			}
 

@@ -28,11 +28,14 @@ use constant MAX_READ_SIZE => 128 * 1024;
 #to the filehandle
 #
 sub new {
-	my $package=shift;
-	my $fh=shift;
-	my $self=[];
-	$self->[fh_]=$fh;
+	my $package=shift//__PACKAGE__;
 	
+	my $self=[];
+
+	$self->[id_]=$_[0];	
+	$self->[fh_]=$_[1];	
+	$self->[server_]=$_[2];	
+
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
 	$self->[read_stack_]=[];
@@ -40,7 +43,7 @@ sub new {
 
 	$$self[on_body_]=undef;	#allocate all the storage now
 	
-	bless $self,$package//__PACKAGE__;
+	bless $self,$package;
 	#make entry on the write stack
 	$self->_make_reader;
 	$self->push_writer(\&make_writer);	

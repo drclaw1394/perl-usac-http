@@ -3,26 +3,28 @@ use common::sense;
 
 use FindBin;use lib "$FindBin::Bin/../blib/lib";
 
+use EV;
+use AnyEvent;
+
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::v1_1_Reader;
 use Hustle::Table;
-use EV;
-use AnyEvent;
 
 my $table=Hustle::Table->new;
 $table->set_default(sub {
-		my ($uri,$rex,$ref)=@_;
-
-		@$ref=(HTTP_NOT_FOUND,"Go away");
+		my ($uri,$rex)=@_;
+		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_NOT_FOUND,"Go away");
 });
 $table->add(
 	{
-		matcher=>qr|^(?<root>/)$|,
+		#matcher=>qr|^(?<root>/)$|,
+		matcher=>"/",
 		sub=>sub{
-			my ($uri, $rex,$ref)=@_;
+			my ($uri, $rex)=@_;
 			given($rex->[uSAC::HTTP::Rex::method_]){
 				when(HTTP_GET){
 					#response is imidiate
@@ -30,11 +32,12 @@ $table->add(
 					#no need to swap out reader
 					#say  "GET METHOD";
 					#my $session=$rex->[uSAC::HTTP::Rex::session_];
-					$rex->reply_simple(HTTP_OK,"GOODasdf"); 
+					#$rex->reply_simple(HTTP_OK,"GOODasdf"); 
+					uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"GOODasdf");
 				}
 				when(HTTP_POST){
 					my $session=$rex->[uSAC::HTTP::Rex::session_];
-					say "IN POST HANDLER";
+					#say "IN POST HANDLER";
 					#test the headers:
 					#	content-length regular post
 					#	transfer-encoding=> posibly chunked
@@ -42,15 +45,17 @@ $table->add(
 					#Make a reader based on these headers
 					#
 					$session->push_reader(
-						\&uSAC::HTTP::v1_1_Reader::make_form_urlencoded_reader, #how to make it
+						\&make_form_urlencoded_reader, #how to make it
+						#\&uSAC::HTTP::v1_1_Reader::make_form_urlencoded_reader, #how to make it
 						$rex,	#the rex object
 						sub {
 							if(defined $_[0]){
-								say "GOT POST DATA $_[0]";
+								#say "GOT POST DATA $_[0]";
 							}
 							else{
-								say "END OF POST PROCESSING";
-								$rex->reply_simple(HTTP_OK,"finished post"); 
+								#say "END OF POST PROCESSING";
+								#$rex->reply_simple(HTTP_OK,"finished post"); 
+								uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"finished post");
 							}
 							#the callback to handle the posted data
 						},

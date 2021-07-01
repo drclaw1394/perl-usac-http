@@ -4,6 +4,16 @@ use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
 
+use Exporter 'import';
+
+our @EXPORT_OK=qw<
+		make_reader
+		make_form_data_reader
+		make_plain_text_reader
+		make_form_urlencoded_reader
+		>;
+
+our @EXPORT=@EXPORT_OK;
 
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
@@ -17,7 +27,14 @@ our $MIME;
 sub DEBUG () { 0 }
 our $LF = "\015\012";
 
-#read 1.1 headers
+#read request line
+#read headers
+#execute callback to perform uri/method/other matching based on headers
+#	-could also be an protocol upgrade => push a dedicated reader to the read stack
+#	-method could contain data => push a dedicated reader to the read stack
+#
+#
+
 sub make_reader{
 	#take a session and alias the variables to lexicals
 	my $r=shift;
@@ -34,7 +51,8 @@ sub make_reader{
 	my %h;		#Define the header storage here, once per connection
 	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 	sub {
-		\my $buf=shift;
+		use integer;
+		\my $buf=$_[0];#shift;
 		#say "IN 1.1 Reader";
 		$self and $r or return;
 		#$self and exists $self->[sessions_]{$id} or return;
@@ -82,12 +100,14 @@ sub make_reader{
 					# Understand what the continuation is supposed to achieve. Its depricated
 					#  
 					#warn "parse line >'".substr( $buf,pos($buf),index( $buf, "\012", pos($buf) )-pos($buf) )."'";
+
 					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 					#if( $buf =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]*+(;)?[^\012\015]*+) \015?\012/sxogc ){
 						#$lastkey = lc $1;
 						\my $e=\$h{lc $1};
 						#$h{ $lastkey } = exists $h{ $lastkey } ? $h{ $lastkey }.','.$2: $2;
-						$e = $e ? $e.','.$2: $2;
+						#$e.=','.$2 if defined $e;
+						$e = defined $e ? $e.','.$2: $2;
 						#say $h{ $lastkey };
                                                 ########################################################################################################################
                                                 # #warn "Captured header $lastkey = '$2'";                                                                             #
@@ -152,40 +172,15 @@ sub make_reader{
 				#Done with headers. 
 				#
 				$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' ;
-				#
-				# Need to decide what to do about the connection before passing request off to application
-				# - check for upgrades and setup ?
+
 				DEBUG && say "URI $uri";	
-                                #################################################################
-                                # do {                                                          #
-                                #         if( exists $h{connection} and exists $h{upgrade}){    #
-                                #                 DEBUG && say "Testing for upgradability";     #
-                                #                                                               #
-                                #                 given($self->[upgraders_]{lc $h{upgrade}}){   #
-                                #                         when(defined){                        #
-                                #                                 #upgade target is viable      #
-                                #                                 $_->();                       #
-                                #                         }                                     #
-                                #                         default {                             #
-                                #                                 #upgrade target not supported #
-                                #                                 # response with error code    #
-                                #                         }                                     #
-                                #                                                               #
-                                #                 }                                             #
-                                #                                                               #
-                                #                                                               #
-                                #         }                                                     #
-                                # } if 1;                                                       #
-                                #################################################################
 
 
 				$pos = pos($buf);
 
 				$self->[uSAC::HTTP::Server::total_requests_]++;
 
-				$r->[uSAC::HTTP::Server::Session::closeme_]= 1 unless $h{connection} =~/Keep-Alive/ or $version eq "HTTP/1.1";
-				#say "close me set to: $self->{$id}{closeme}";
-				#say $h{connection};
+				$r->[uSAC::HTTP::Server::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{connection} =~/^Keep-Alive/ );
 
 				#shift buffer
 				$buf=substr $buf,$pos;
@@ -193,248 +188,247 @@ sub make_reader{
 				$ixx=0;
 				$state=0;
 
-				#This really should be the 'application level' callback 
-				my @rv;
-				$self->[uSAC::HTTP::Server::cb_]($uri,$req,\@rv);
+				$self->[uSAC::HTTP::Server::cb_]($uri,$req);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
-				#my @rv = $self->[cb_]->( $req = bless [ $method, $uri, \%h, $write ], 'uSAC::HTTP::Server::Req' );
 				return;
 
 
-				if (@rv) {
-					my $ref=ref $rv[0];	#test if first element is ref, or code
-					given ($ref){
-						when ( "" ) {
-							#print "NORMAL REPLY\n";
-							$req->reply_simple(@rv);
-						}
-						when ('CODE') {
-							#print "CODE \n";
-							$r->[uSAC::HTTP::Server::Session::on_body_] = $rv[0];
-						}
-						when('HASH' ) {
-							if ( $h{'content-type'}  =~ m{^
-									multipart/form-data\s*;\s*
-									boundary\s*=\s*
-									(?:
-									"((?:[^\\"]++|\\.){0,4096})" # " quoted entry
-									|
-									([^;,\s]+)
-									)
-									$}xsio and exists $rv[0]{multipart}
-							) {
-
-								my $bnd = '--'.( defined $1 ? do { my $x = $1; $x =~ s{\\(.)}{$1}gs; $x } : $2 );
-								my $body = '';
-								#warn "reading multipart with boundary '$bnd'";
-								#warn "set on_body";
-								my $cb = $rv[0]{multipart};
-								$r->[uSAC::HTTP::Server::Session::on_body_] = sub {
-									my ($last,$part) = @_;
-									if ( length($body) + length($$part) > $self->{max_body_size} ) {
-										# TODO;
-									}
-									$body .= $$part;
-									#warn "Checking body '".$body."'";
-									my $idx = index( $body, $bnd );
-									while ( $idx > -1 and (
-											( $idx + length($bnd) + 1 <= length($body) and substr($body,$idx+length($bnd),1) eq "\012" )
-												or
-											( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\015\012" )
-												or
-											( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\055\055" )
-										) ) {
-										#warn "have part";
-										my $part = substr($body,$idx-2,1) eq "\015" ? substr($body,0,$idx-2) : substr($body,0,$idx-1);
-										#warn Dumper $part;
-										#substr($part, 0, ( substr($part,0,1) eq "\015" ) ? 2 : 1,'');
-										#warn "captured $idx: '$part'";
-										$body = substr($body,$idx + length $bnd);
-										substr($body,0, ( substr($body,0,1) eq "\015" ) ? 2 : 1 ,'');
-										#warn "body = '$body'";
-										$idx = index( $body, $bnd );
-										#warn "next part idx: $idx";
-										length $part or next;
-										#warn "Process part '$part'";
-
-										my %hd;
-										my $lk;
-										while() {
-											if( $part =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]++(;)?[^\012\015]*+) \015?\012/sxogc ){
-												$lk = lc $1;
-												$hd{ $lk } = exists $hd{ $lk } ? $hd{ $lk }.','.$2 : $2;
-												if ( defined $3 ) {
-													pos(my $v = $2) = $-[3] - $-[2];
-													# TODO: testme
-													$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-													while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-												}
-											}
-											elsif ($part =~ /\G[\011\040]+/sxogc and length $lk) { # continuation
-												$part =~ /\G([^\015\012]+)\015?\012/sxogc or next;
-												$hd{ $lk } .= ' '.$1;
-												if ( ( my $ext = index( $hd{ $lk }, ';', rindex( $hd{ $lk }, ',' ) + 1) ) > -1 ) {
-													# Composite field. Need to reparse last field value (from ; after last ,)
-													pos($hd{ $lk }) = $ext;
-													$hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )
-													while ( $hd{ $lk } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "
-												}
-											}
-											elsif ($part =~ /\G\015?\012/sxogc) {
-												last;
-											}
-											elsif($part =~ /\G [^\012]* \Z/sxogc) {
-												# Truncated part???
-												last;
-											}
-											else {
-												pos($part) = 0;
-												last;
-											}
-										}
-										substr($part, 0,pos($part),'');
-										my $enc = lc $hd{'content-transfer-encoding'};
-										if ( $enc eq 'quoted-printable' ) {
-											require Encode;
-											$MIME = Encode::find_encoding('MIME-Header');
-											$part = $MIME->decode( $part );
-										}
-
-										elsif ( $enc eq 'base64' ) {
-											require MIME::Base64;
-											$part = MIME::Base64::decode_base64( $part ); 
-										}
-										$hd{filename} = $hd{'content-disposition+filename'} if exists $hd{'content-disposition+filename'};
-										$hd{name}     = $hd{'content-disposition+name'}     if exists $hd{'content-disposition+name'};
-										#warn "call for part $hd{name} ($last)";
-										$cb->( $last && $idx == -1 ? 1 : 0,$part,\%hd );
-									}
-									#warn "just return";
-									#if ($last) {
-									#warn "leave with $body";
-									#}
-								};
-							}
-							#										elsif ( $h{'content-type'} =~ m{^application/x-www-form-urlencoded(?:\Z|\s*;)}i and exists $rv[0]{form} ) {
-
-							elsif (  exists $rv[0]{form} ) {
-								my $body = '';
-								$r->[uSAC::HTTP::Server::Session::on_body_] = sub {
-									my ($last,$part) = @_;
-									if ( length($body) + length($$part) > $self->{max_body_size} ) {
-										# TODO;
-									}
-									$body .= $$part;
-									if ($last) {
-										$rv[0]{form}( $req->form($body), $body );
-										delete $r->[uSAC::HTTP::Server::Session::on_body_];
-									}
-								};
-							}
-							elsif( exists $rv[0]{raw} ) {
-								$r->[uSAC::HTTP::Server::Session::on_body_] = $rv[0]{raw};
-							}
-							else {
-								die "XXX";
-							}
-						}
-						#TODO: Convert this to system send file
-						when('HANDLE') {
-							delete $r->[uSAC::HTTP::Server::Session::rw_];
-							my $h = AnyEvent::Handle->new(
-								fh => $fh,
-							);
-							$h->{rbuf} = substr($buf,$pos);
-							#warn "creating handle ".Dumper $h->{rbuf};
-							$req->[3] = sub {
-								my $rbuf = shift;
-								if (defined $$rbuf) {
-									if ($h) {
-										$h->push_write( $$rbuf );
-									}
-									else {
-										warn "Requested write '$$rbuf' on destroyed handle";
-									}
-								} else {
-									if ($h) {
-										$h->push_shutdown;
-										$h->on_drain(sub {
-												$h->destroy;
-												undef $h;
-												$r->drop() if $self;
-											});
-										undef $h;
-									}
-									else {
-										$r->drop() if $self;
-									}
-								}
-							};
-							weaken($req->[11] = $h);
-							$rv[1]->($h);
-							weaken($req);
-							@$r = ( );
-							return;
-						}
-						default{
-							#warn "Other rv";
-						}
-					}
-				}
-				weaken($req);
-
-
-				if( $len = $h{'content-length'} ) {
-					#warn "have clen";
-					if ( length($buf) - $pos == $len ) {
-						#warn "Equally";
-						$r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos)) );
-						$buf = '';$state = $ixx = 0;
-						#TEST && test_visited("finish:complete content length")
-						# FINISHED
-						#warn "1. finished request" . Dumper $req;
-						return;
-					}
-					elsif ( length($buf) - $pos > $len ) {
-						#warn "Complete body + trailing (".( length($buf) - $pos - $len )." bytes: ".substr( $buf,$pos + $len ).")";
-						$r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos,$pos+$len)) );
-						$ixx = $pos + $len;
-						$state = 0;
-						# FINISHED
-						#warn "2. finished request" . Dumper $req;
-						redo;
-					}
-					else {
-						#warn "Not enough body";
-						$r->[uSAC::HTTP::Server::Session::left_] = $len - ( length($buf) - $pos );
-						if ($r->[uSAC::HTTP::Server::Session::on_body_]) {
-							$r->[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$pos)) ) if $pos < length $buf;
-							$state = 2;
-						} else {
-							$state = 2;
-						}
-						$buf = ''; $ixx = 0;
-						return;
-					}
-				}
-				#elsif (chunked) { TODO }
-				else {
-					#warn "No clen";
-					$r->[uSAC::HTTP::Server::Session::on_body_](1,\('')) if $r->[uSAC::HTTP::Server::Session::on_body_];
-					# FINISHED
-					#warn "3. finished request" . Dumper($req);
-					#warn "pos = $pos, lbuf=".length $buf;
-					#return %r=() if $req->connection eq 'close';
-					$state = 0;
-					if ($pos < length $buf) {
-						$ixx = $pos;
-						redo;
-					} else {
-						$buf = '';$state = $ixx = 0;
-						return;
-					}
-				}
+                                #######################################################################################################################################################################################################################
+                                # if (@rv) {                                                                                                                                                                                                          #
+                                #         my $ref=ref $rv[0];     #test if first element is ref, or code                                                                                                                                              #
+                                #         given ($ref){                                                                                                                                                                                               #
+                                #                 when ( "" ) {                                                                                                                                                                                       #
+                                #                         #print "NORMAL REPLY\n";                                                                                                                                                                    #
+                                #                         $req->reply_simple(@rv);                                                                                                                                                                    #
+                                #                 }                                                                                                                                                                                                   #
+                                #                 when ('CODE') {                                                                                                                                                                                     #
+                                #                         #print "CODE \n";                                                                                                                                                                           #
+                                #                         $r->[uSAC::HTTP::Server::Session::on_body_] = $rv[0];                                                                                                                                       #
+                                #                 }                                                                                                                                                                                                   #
+                                #                 when('HASH' ) {                                                                                                                                                                                     #
+                                #                         if ( $h{'content-type'}  =~ m{^                                                                                                                                                             #
+                                #                                         multipart/form-data\s*;\s*                                                                                                                                                  #
+                                #                                         boundary\s*=\s*                                                                                                                                                             #
+                                #                                         (?:                                                                                                                                                                         #
+                                #                                         "((?:[^\\"]++|\\.){0,4096})" # " quoted entry                                                                                                                               #
+                                #                                         |                                                                                                                                                                           #
+                                #                                         ([^;,\s]+)                                                                                                                                                                  #
+                                #                                         )                                                                                                                                                                           #
+                                #                                         $}xsio and exists $rv[0]{multipart}                                                                                                                                         #
+                                #                         ) {                                                                                                                                                                                         #
+                                #                                                                                                                                                                                                                     #
+                                #                                 my $bnd = '--'.( defined $1 ? do { my $x = $1; $x =~ s{\\(.)}{$1}gs; $x } : $2 );                                                                                                   #
+                                #                                 my $body = '';                                                                                                                                                                      #
+                                #                                 #warn "reading multipart with boundary '$bnd'";                                                                                                                                     #
+                                #                                 #warn "set on_body";                                                                                                                                                                #
+                                #                                 my $cb = $rv[0]{multipart};                                                                                                                                                         #
+                                #                                 $r->[uSAC::HTTP::Server::Session::on_body_] = sub {                                                                                                                                 #
+                                #                                         my ($last,$part) = @_;                                                                                                                                                      #
+                                #                                         if ( length($body) + length($$part) > $self->{max_body_size} ) {                                                                                                            #
+                                #                                                 # TODO;                                                                                                                                                             #
+                                #                                         }                                                                                                                                                                           #
+                                #                                         $body .= $$part;                                                                                                                                                            #
+                                #                                         #warn "Checking body '".$body."'";                                                                                                                                          #
+                                #                                         my $idx = index( $body, $bnd );                                                                                                                                             #
+                                #                                         while ( $idx > -1 and (                                                                                                                                                     #
+                                #                                                         ( $idx + length($bnd) + 1 <= length($body) and substr($body,$idx+length($bnd),1) eq "\012" )                                                                #
+                                #                                                                 or                                                                                                                                                  #
+                                #                                                         ( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\015\012" )                                                            #
+                                #                                                                 or                                                                                                                                                  #
+                                #                                                         ( $idx + length($bnd) + 2 <= length($body) and substr($body,$idx+length($bnd),2) eq "\055\055" )                                                            #
+                                #                                                 ) ) {                                                                                                                                                               #
+                                #                                                 #warn "have part";                                                                                                                                                  #
+                                #                                                 my $part = substr($body,$idx-2,1) eq "\015" ? substr($body,0,$idx-2) : substr($body,0,$idx-1);                                                                      #
+                                #                                                 #warn Dumper $part;                                                                                                                                                 #
+                                #                                                 #substr($part, 0, ( substr($part,0,1) eq "\015" ) ? 2 : 1,'');                                                                                                      #
+                                #                                                 #warn "captured $idx: '$part'";                                                                                                                                     #
+                                #                                                 $body = substr($body,$idx + length $bnd);                                                                                                                           #
+                                #                                                 substr($body,0, ( substr($body,0,1) eq "\015" ) ? 2 : 1 ,'');                                                                                                       #
+                                #                                                 #warn "body = '$body'";                                                                                                                                             #
+                                #                                                 $idx = index( $body, $bnd );                                                                                                                                        #
+                                #                                                 #warn "next part idx: $idx";                                                                                                                                        #
+                                #                                                 length $part or next;                                                                                                                                               #
+                                #                                                 #warn "Process part '$part'";                                                                                                                                       #
+                                #                                                                                                                                                                                                                     #
+                                #                                                 my %hd;                                                                                                                                                             #
+                                #                                                 my $lk;                                                                                                                                                             #
+                                #                                                 while() {                                                                                                                                                           #
+                                #                                                         if( $part =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]++(;)?[^\012\015]*+) \015?\012/sxogc ){                                        #
+                                #                                                                 $lk = lc $1;                                                                                                                                        #
+                                #                                                                 $hd{ $lk } = exists $hd{ $lk } ? $hd{ $lk }.','.$2 : $2;                                                                                            #
+                                #                                                                 if ( defined $3 ) {                                                                                                                                 #
+                                #                                                                         pos(my $v = $2) = $-[3] - $-[2];                                                                                                            #
+                                #                                                                         # TODO: testme                                                                                                                              #
+                                #                                                                         $hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )                                               #
+                                #                                                                         while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "                                #
+                                #                                                                 }                                                                                                                                                   #
+                                #                                                         }                                                                                                                                                           #
+                                #                                                         elsif ($part =~ /\G[\011\040]+/sxogc and length $lk) { # continuation                                                                                       #
+                                #                                                                 $part =~ /\G([^\015\012]+)\015?\012/sxogc or next;                                                                                                  #
+                                #                                                                 $hd{ $lk } .= ' '.$1;                                                                                                                               #
+                                #                                                                 if ( ( my $ext = index( $hd{ $lk }, ';', rindex( $hd{ $lk }, ',' ) + 1) ) > -1 ) {                                                                  #
+                                #                                                                         # Composite field. Need to reparse last field value (from ; after last ,)                                                                   #
+                                #                                                                         pos($hd{ $lk }) = $ext;                                                                                                                     #
+                                #                                                                         $hd{ $lk . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )                                               #
+                                #                                                                         while ( $hd{ $lk } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # "                        #
+                                #                                                                 }                                                                                                                                                   #
+                                #                                                         }                                                                                                                                                           #
+                                #                                                         elsif ($part =~ /\G\015?\012/sxogc) {                                                                                                                       #
+                                #                                                                 last;                                                                                                                                               #
+                                #                                                         }                                                                                                                                                           #
+                                #                                                         elsif($part =~ /\G [^\012]* \Z/sxogc) {                                                                                                                     #
+                                #                                                                 # Truncated part???                                                                                                                                 #
+                                #                                                                 last;                                                                                                                                               #
+                                #                                                         }                                                                                                                                                           #
+                                #                                                         else {                                                                                                                                                      #
+                                #                                                                 pos($part) = 0;                                                                                                                                     #
+                                #                                                                 last;                                                                                                                                               #
+                                #                                                         }                                                                                                                                                           #
+                                #                                                 }                                                                                                                                                                   #
+                                #                                                 substr($part, 0,pos($part),'');                                                                                                                                     #
+                                #                                                 my $enc = lc $hd{'content-transfer-encoding'};                                                                                                                      #
+                                #                                                 if ( $enc eq 'quoted-printable' ) {                                                                                                                                 #
+                                #                                                         require Encode;                                                                                                                                             #
+                                #                                                         $MIME = Encode::find_encoding('MIME-Header');                                                                                                               #
+                                #                                                         $part = $MIME->decode( $part );                                                                                                                             #
+                                #                                                 }                                                                                                                                                                   #
+                                #                                                                                                                                                                                                                     #
+                                #                                                 elsif ( $enc eq 'base64' ) {                                                                                                                                        #
+                                #                                                         require MIME::Base64;                                                                                                                                       #
+                                #                                                         $part = MIME::Base64::decode_base64( $part );                                                                                                               #
+                                #                                                 }                                                                                                                                                                   #
+                                #                                                 $hd{filename} = $hd{'content-disposition+filename'} if exists $hd{'content-disposition+filename'};                                                                  #
+                                #                                                 $hd{name}     = $hd{'content-disposition+name'}     if exists $hd{'content-disposition+name'};                                                                      #
+                                #                                                 #warn "call for part $hd{name} ($last)";                                                                                                                            #
+                                #                                                 $cb->( $last && $idx == -1 ? 1 : 0,$part,\%hd );                                                                                                                    #
+                                #                                         }                                                                                                                                                                           #
+                                #                                         #warn "just return";                                                                                                                                                        #
+                                #                                         #if ($last) {                                                                                                                                                               #
+                                #                                         #warn "leave with $body";                                                                                                                                                   #
+                                #                                         #}                                                                                                                                                                          #
+                                #                                 };                                                                                                                                                                                  #
+                                #                         }                                                                                                                                                                                           #
+                                #                         #                                                                               elsif ( $h{'content-type'} =~ m{^application/x-www-form-urlencoded(?:\Z|\s*;)}i and exists $rv[0]{form} ) { #
+                                #                                                                                                                                                                                                                     #
+                                #                         elsif (  exists $rv[0]{form} ) {                                                                                                                                                            #
+                                #                                 my $body = '';                                                                                                                                                                      #
+                                #                                 $r->[uSAC::HTTP::Server::Session::on_body_] = sub {                                                                                                                                 #
+                                #                                         my ($last,$part) = @_;                                                                                                                                                      #
+                                #                                         if ( length($body) + length($$part) > $self->{max_body_size} ) {                                                                                                            #
+                                #                                                 # TODO;                                                                                                                                                             #
+                                #                                         }                                                                                                                                                                           #
+                                #                                         $body .= $$part;                                                                                                                                                            #
+                                #                                         if ($last) {                                                                                                                                                                #
+                                #                                                 $rv[0]{form}( $req->form($body), $body );                                                                                                                           #
+                                #                                                 delete $r->[uSAC::HTTP::Server::Session::on_body_];                                                                                                                 #
+                                #                                         }                                                                                                                                                                           #
+                                #                                 };                                                                                                                                                                                  #
+                                #                         }                                                                                                                                                                                           #
+                                #                         elsif( exists $rv[0]{raw} ) {                                                                                                                                                               #
+                                #                                 $r->[uSAC::HTTP::Server::Session::on_body_] = $rv[0]{raw};                                                                                                                          #
+                                #                         }                                                                                                                                                                                           #
+                                #                         else {                                                                                                                                                                                      #
+                                #                                 die "XXX";                                                                                                                                                                          #
+                                #                         }                                                                                                                                                                                           #
+                                #                 }                                                                                                                                                                                                   #
+                                #                 #TODO: Convert this to system send file                                                                                                                                                             #
+                                #                 when('HANDLE') {                                                                                                                                                                                    #
+                                #                         delete $r->[uSAC::HTTP::Server::Session::rw_];                                                                                                                                              #
+                                #                         my $h = AnyEvent::Handle->new(                                                                                                                                                              #
+                                #                                 fh => $fh,                                                                                                                                                                          #
+                                #                         );                                                                                                                                                                                          #
+                                #                         $h->{rbuf} = substr($buf,$pos);                                                                                                                                                             #
+                                #                         #warn "creating handle ".Dumper $h->{rbuf};                                                                                                                                                 #
+                                #                         $req->[3] = sub {                                                                                                                                                                           #
+                                #                                 my $rbuf = shift;                                                                                                                                                                   #
+                                #                                 if (defined $$rbuf) {                                                                                                                                                               #
+                                #                                         if ($h) {                                                                                                                                                                   #
+                                #                                                 $h->push_write( $$rbuf );                                                                                                                                           #
+                                #                                         }                                                                                                                                                                           #
+                                #                                         else {                                                                                                                                                                      #
+                                #                                                 warn "Requested write '$$rbuf' on destroyed handle";                                                                                                                #
+                                #                                         }                                                                                                                                                                           #
+                                #                                 } else {                                                                                                                                                                            #
+                                #                                         if ($h) {                                                                                                                                                                   #
+                                #                                                 $h->push_shutdown;                                                                                                                                                  #
+                                #                                                 $h->on_drain(sub {                                                                                                                                                  #
+                                #                                                                 $h->destroy;                                                                                                                                        #
+                                #                                                                 undef $h;                                                                                                                                           #
+                                #                                                                 $r->drop() if $self;                                                                                                                                #
+                                #                                                         });                                                                                                                                                         #
+                                #                                                 undef $h;                                                                                                                                                           #
+                                #                                         }                                                                                                                                                                           #
+                                #                                         else {                                                                                                                                                                      #
+                                #                                                 $r->drop() if $self;                                                                                                                                                #
+                                #                                         }                                                                                                                                                                           #
+                                #                                 }                                                                                                                                                                                   #
+                                #                         };                                                                                                                                                                                          #
+                                #                         weaken($req->[11] = $h);                                                                                                                                                                    #
+                                #                         $rv[1]->($h);                                                                                                                                                                               #
+                                #                         weaken($req);                                                                                                                                                                               #
+                                #                         @$r = ( );                                                                                                                                                                                  #
+                                #                         return;                                                                                                                                                                                     #
+                                #                 }                                                                                                                                                                                                   #
+                                #                 default{                                                                                                                                                                                            #
+                                #                         #warn "Other rv";                                                                                                                                                                           #
+                                #                 }                                                                                                                                                                                                   #
+                                #         }                                                                                                                                                                                                           #
+                                # }                                                                                                                                                                                                                   #
+                                # weaken($req);                                                                                                                                                                                                       #
+                                #                                                                                                                                                                                                                     #
+                                #                                                                                                                                                                                                                     #
+                                # if( $len = $h{'content-length'} ) {                                                                                                                                                                                 #
+                                #         #warn "have clen";                                                                                                                                                                                          #
+                                #         if ( length($buf) - $pos == $len ) {                                                                                                                                                                        #
+                                #                 #warn "Equally";                                                                                                                                                                                    #
+                                #                 $r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos)) );                                                                   #
+                                #                 $buf = '';$state = $ixx = 0;                                                                                                                                                                        #
+                                #                 #TEST && test_visited("finish:complete content length")                                                                                                                                             #
+                                #                 # FINISHED                                                                                                                                                                                          #
+                                #                 #warn "1. finished request" . Dumper $req;                                                                                                                                                          #
+                                #                 return;                                                                                                                                                                                             #
+                                #         }                                                                                                                                                                                                           #
+                                #         elsif ( length($buf) - $pos > $len ) {                                                                                                                                                                      #
+                                #                 #warn "Complete body + trailing (".( length($buf) - $pos - $len )." bytes: ".substr( $buf,$pos + $len ).")";                                                                                        #
+                                #                 $r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$pos,$pos+$len)) );                                                         #
+                                #                 $ixx = $pos + $len;                                                                                                                                                                                 #
+                                #                 $state = 0;                                                                                                                                                                                         #
+                                #                 # FINISHED                                                                                                                                                                                          #
+                                #                 #warn "2. finished request" . Dumper $req;                                                                                                                                                          #
+                                #                 redo;                                                                                                                                                                                               #
+                                #         }                                                                                                                                                                                                           #
+                                #         else {                                                                                                                                                                                                      #
+                                #                 #warn "Not enough body";                                                                                                                                                                            #
+                                #                 $r->[uSAC::HTTP::Server::Session::left_] = $len - ( length($buf) - $pos );                                                                                                                          #
+                                #                 if ($r->[uSAC::HTTP::Server::Session::on_body_]) {                                                                                                                                                  #
+                                #                         $r->[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$pos)) ) if $pos < length $buf;                                                                                               #
+                                #                         $state = 2;                                                                                                                                                                                 #
+                                #                 } else {                                                                                                                                                                                            #
+                                #                         $state = 2;                                                                                                                                                                                 #
+                                #                 }                                                                                                                                                                                                   #
+                                #                 $buf = ''; $ixx = 0;                                                                                                                                                                                #
+                                #                 return;                                                                                                                                                                                             #
+                                #         }                                                                                                                                                                                                           #
+                                # }                                                                                                                                                                                                                   #
+                                # #elsif (chunked) { TODO }                                                                                                                                                                                           #
+                                # else {                                                                                                                                                                                                              #
+                                #         #warn "No clen";                                                                                                                                                                                            #
+                                #         $r->[uSAC::HTTP::Server::Session::on_body_](1,\('')) if $r->[uSAC::HTTP::Server::Session::on_body_];                                                                                                        #
+                                #         # FINISHED                                                                                                                                                                                                  #
+                                #         #warn "3. finished request" . Dumper($req);                                                                                                                                                                 #
+                                #         #warn "pos = $pos, lbuf=".length $buf;                                                                                                                                                                      #
+                                #         #return %r=() if $req->connection eq 'close';                                                                                                                                                               #
+                                #         $state = 0;                                                                                                                                                                                                 #
+                                #         if ($pos < length $buf) {                                                                                                                                                                                   #
+                                #                 $ixx = $pos;                                                                                                                                                                                        #
+                                #                 redo;                                                                                                                                                                                               #
+                                #         } else {                                                                                                                                                                                                    #
+                                #                 $buf = '';$state = $ixx = 0;                                                                                                                                                                        #
+                                #                 return;                                                                                                                                                                                             #
+                                #         }                                                                                                                                                                                                           #
+                                # }                                                                                                                                                                                                                   #
+                                #######################################################################################################################################################################################################################
 			} # state 1
 			elsif ($state == 2 ) {
 				#warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );
@@ -516,6 +510,7 @@ sub make_plain_text_reader {
 #Content-Type: application/x-www-form-urlencoded
 #
 sub make_form_urlencoded_reader {
+	use integer;
 	my $session=shift;
 	my $maker_sub=shift;
 	my $rex=shift;
@@ -525,7 +520,7 @@ sub make_form_urlencoded_reader {
 	my $processed=0;
 
 	my $len = $h{'content-length'}//0; #number of bytes to read, or 0 if undefined
-	print "MAKING URLencoded reader\n";
+	#print "MAKING URLencoded reader\n";
 
 	#$cb->(undef) and return unless $len; #Return
 	sub {
@@ -533,7 +528,7 @@ sub make_form_urlencoded_reader {
 
 
 
-		print "INPUT BUFF TO POST READER: $buf\n";
+		#print "INPUT BUFF TO POST READER: $buf\n";
 		my $new=length($buf)-$processed;	#length of read buffer
 
 		$new=$new>$len?$len:$new;		#clamp to content length

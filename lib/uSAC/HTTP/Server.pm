@@ -13,6 +13,9 @@ use feature "refaliasing";
 #use Exporter;
 #our @ISA = qw(Exporter);
 #our @EXPORT_OK = our @EXPORT = qw(http_server);
+#
+use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+
 
 use AnyEvent;
 use AnyEvent::Socket;
@@ -160,14 +163,32 @@ sub listen {
 }
 
 sub prepare {}
-sub incoming;
+#sub incoming;
 sub accept {
+	state $seq=0;
 	weaken( my $self = shift );
 	for my $fl ( values %{ $self->[fhs_] }) {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
-			while ($fl and (my $peer = accept my $fh, $fl)) {
-				AnyEvent::Util::fh_nonblocking $fh, 1; # POSIX requires inheritance, the outside world does not
-				incoming $self,$fh;
+			my $peer;
+			while ($fl and ($peer = accept my $fh, $fl)) {
+
+				#AnyEvent::Util::fh_nonblocking $fh, 1; # POSIX requires inheritance, the outside world does not
+				fcntl $fh, F_SETFL, O_NONBLOCK;	#this nukes other flags... read first?
+
+				#TODO: setup timeout for bad clients/connections
+
+				my $id = ++$seq;
+
+				my $session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);#makes network reader/writer
+				$self->[sessions_]{ $id } = $session;
+				$self->[active_connections_]++;
+				$self->[total_connections_]++;
+
+
+
+				#my $write= uSAC::HTTP::v1_1::make_writer $r, ;	#$self->[sessions_]{$id};
+				#my $write;#= uSAC::HTTP::Server::Session::push_writer $r, \&uSAC::HTTP::v1_1::make_writer;
+				uSAC::HTTP::Server::Session::push_reader $session, \&uSAC::HTTP::v1_1_Reader::make_reader;	#push protocol for reader
 
 			}
 		};
@@ -206,32 +227,28 @@ sub badconn {
 	warn "$msg from $remote (fd:$fileno) <$outbuf>\n";
 }
 
-sub incoming {
-	state $seq=0;
-	weaken( my $self = shift );
-	# warn "incoming @_";
-	$self->[total_connections_]++;
-	my ($fh,$rhost,$rport) = @_;
-	my $id = ++$seq;#++$self->{seq}; #refaddr $fh;
-
-	#my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};
-	#weaken $timeout;
-	my $r=uSAC::HTTP::Server::Session->new($fh);;
-	#$r->[uSAC::HTTP::Server::Session::fh_]= $fh;
-	$r->[uSAC::HTTP::Server::Session::id_]= $id;#, timeout=>$timeout);
-	$r->[uSAC::HTTP::Server::Session::server_]= $self;
-	#$r->[uSAC::HTTP::Server::Session::wbuf_]="";
-	#$r->[uSAC::HTTP::Server::Session::write_stack_]=[];
-	my $buf;
-
-	$self->[sessions_]{ $id } = $r;#bless $r, "uSAC::HTTP::Server::Session";
-	$self->[active_connections_]++;
-
-	#my $write= uSAC::HTTP::v1_1::make_writer $r, ;	#$self->[sessions_]{$id};
-	my $write;#= uSAC::HTTP::Server::Session::push_writer $r, \&uSAC::HTTP::v1_1::make_writer;
-	my $reader= uSAC::HTTP::Server::Session::push_reader $r, \&uSAC::HTTP::v1_1_Reader::make_reader;
-
-}
+#############################################################################################################################
+# sub incoming {                                                                                                            #
+#         state $seq=0;                                                                                                     #
+#         weaken( my $self = shift );                                                                                       #
+#         # warn "incoming @_";                                                                                             #
+#         $self->[total_connections_]++;                                                                                    #
+#         my ($fh,$rhost,$rport) = @_;                                                                                      #
+#         my $id = ++$seq;#++$self->{seq}; #refaddr $fh;                                                                    #
+#                                                                                                                           #
+#         #my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};                      #
+#         #weaken $timeout;                                                                                                 #
+#         my $r=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);#makes network reader/writer                          #
+#                                                                                                                           #
+#         $self->[sessions_]{ $id } = $r;#bless $r, "uSAC::HTTP::Server::Session";                                          #
+#         $self->[active_connections_]++;                                                                                   #
+#                                                                                                                           #
+#         #my $write= uSAC::HTTP::v1_1::make_writer $r, ; #$self->[sessions_]{$id};                                         #
+#         #my $write;#= uSAC::HTTP::Server::Session::push_writer $r, \&uSAC::HTTP::v1_1::make_writer;                       #
+#         uSAC::HTTP::Server::Session::push_reader $r, \&uSAC::HTTP::v1_1_Reader::make_reader;    #push protocol for reader #
+#                                                                                                                           #
+# }                                                                                                                         #
+#############################################################################################################################
 
 sub ws_close {
 	my $self = shift;
