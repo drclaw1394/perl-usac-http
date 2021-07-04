@@ -36,7 +36,7 @@ use constant MAX_READ_SIZE => 128 * 1024;
 
 #Class attribute keys
 use enum (
-	"host_=0",qw<port_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ max_header_size_ sessions_ active_connections_ total_connections_ active_requests_ total_requests_>
+	"host_=0",qw<port_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ max_header_size_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ total_requests_>
 );
 
 use uSAC::HTTP::Rex;
@@ -59,7 +59,7 @@ sub new {
 	$self->[host_]=$options{host}//"0.0.0.0";
 	$self->[port_]=$options{iport}//8080;
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
-
+	$self->[zombies_]=[];
 	$self->[backlog_]=1024;
 	$self->[read_size_]=4096;
 	$self->[max_header_size_]=MAX_READ_SIZE;
@@ -180,7 +180,15 @@ sub accept {
 
 				my $id = ++$seq;
 
-				my $session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);#makes network reader/writer
+				my $session;
+
+				$session=pop @{$self->[zombies_]};
+				if(0 and defined $session){
+					uSAC::HTTP::Server::Session::revive $session, $id, $fh, $self;
+				}
+				else {
+					$session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self) unless $session;#makes network reader/writeri
+				}
 				$self->[sessions_]{ $id } = $session;
 				$self->[active_connections_]++;
 				$self->[total_connections_]++;

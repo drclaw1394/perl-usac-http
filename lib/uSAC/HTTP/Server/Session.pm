@@ -50,6 +50,54 @@ sub new {
 	$self;
 }
 
+#take a zombie session and revive it
+sub revive {
+	print "REVIVING ZOMBIE\n";
+	my $self=shift;
+	$self->[id_]=$_[0];	
+	$self->[fh_]=$_[1];	
+	$self->[server_]=$_[2];	
+
+	$self->[wbuf_]="";
+	$self->[rbuf_]="";
+	$self->[read_stack_]=[];
+	$self->[write_stack_]=[];
+
+	$self->_make_reader;
+	$self->push_writer(\&make_writer);	
+	$self;
+
+	return;
+	$self->[id_]=$_[0];	
+	$self->[fh_]=$_[1];	
+	#$self->[server_]=$_[2];	
+	
+        $self->_make_reader;                                  #
+
+	my $wr=make_writer($self, 0);
+	$self->[write_stack_][0]=$wr;
+
+	#$self->push_writer(\&make_writer);                    #
+	
+	$self;
+        #########################################################
+        #                                                       #
+        # $self->[wbuf_]="";                                    #
+        # $self->[rbuf_]="";                                    #
+        # $self->[read_stack_]=[];                              #
+        # $self->[write_stack_]=[];                             #
+        #                                                       #
+        # $$self[on_body_]=undef; #allocate all the storage now #
+        #                                                       #
+        # bless $self,$package;                                 #
+        # #make entry on the write stack                        #
+        # $self->_make_reader;                                  #
+        # $self->push_writer(\&make_writer);                    #
+        # $self;                                                #
+        #########################################################
+
+}
+
 sub _make_reader {
 	my $self=shift;
 	weaken $self;
@@ -152,7 +200,8 @@ sub drop {
 	$self->[write_stack_]=undef;
         my $r = delete $self->[server_][uSAC::HTTP::Server::sessions_]{$self->[id_]}; #remove from server
         $self->[server_][uSAC::HTTP::Server::active_connections_]--;
-        @{ $r } = () if $r;
+	push @{$self->[server_][uSAC::HTTP::Server::zombies_]}, $self;
+	#@{ $r } = () if $r;
 
         ( delete $self->[server_][uSAC::HTTP::Server::graceful_] )->()
                 if $self->[server_][uSAC::HTTP::Server::graceful_] and $self->[server_][uSAC::HTTP::Server::active_requests_] == 0;
