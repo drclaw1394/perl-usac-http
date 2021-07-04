@@ -23,7 +23,7 @@ use AnyEvent::Handle;
 use Scalar::Util 'refaddr', 'weaken';
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
-use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR IPPROTO_TCP TCP_NODELAY);
+use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR IPPROTO_TCP TCP_NOPUSH TCP_NODELAY);
 
 #use Encode ();
 #use Compress::Zlib ();
@@ -174,6 +174,7 @@ sub accept {
 
 				#AnyEvent::Util::fh_nonblocking $fh, 1; # POSIX requires inheritance, the outside world does not
 				fcntl $fh, F_SETFL, O_NONBLOCK;	#this nukes other flags... read first?
+				#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1;
 
 				#TODO: setup timeout for bad clients/connections
 

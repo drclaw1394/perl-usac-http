@@ -78,6 +78,7 @@ sub _make_reader {
 			when(undef){
 				#potential error
 				say "Error maybe?";
+				drop $self;
 				return if $! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK;
 			}
 			default {

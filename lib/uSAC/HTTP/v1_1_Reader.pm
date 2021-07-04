@@ -38,7 +38,6 @@ our $LF = "\015\012";
 sub make_reader{
 	#take a session and alias the variables to lexicals
 	my $r=shift;
-	my $stackPos=shift;
 	my $self=$r->[uSAC::HTTP::Server::Session::server_];
 	#\my $buf=\$r->[uSAC::HTTP::Server::Session::rbuf_];
 	\my $fh=\$r->[uSAC::HTTP::Server::Session::fh_];
