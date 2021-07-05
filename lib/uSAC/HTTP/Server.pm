@@ -186,7 +186,7 @@ sub accept {
 				$session=pop @{$self->[zombies_]};
 				#say "post popped: ",Dumper $self->[zombies_];
 				if(defined $session){
-					uSAC::HTTP::Server::Session::revive $session, $id, $fh, $self;
+					uSAC::HTTP::Server::Session::revive $session, $id, $fh;
 				}
 				else {
 					$session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);

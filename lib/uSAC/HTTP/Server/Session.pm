@@ -55,7 +55,7 @@ sub revive {
 	my $self=shift;
 	$self->[id_]=$_[0];	
 	$self->[fh_]=$_[1];	
-	$self->[server_]=$_[2];	
+	#$self->[server_]=$_[2];	
 
         ######################################
         # #$self->[wbuf_]="";                #
@@ -73,31 +73,14 @@ sub revive {
         # #$self->[server_]=$_[2];           #
         ######################################
 	
-        $self->_make_reader;                                  #
+        $self->_make_reader;
 
 	my $wr=make_writer($self, 0);
 	$self->[write_stack_][0]=$wr;
 	$self->[write_]=$wr;
 
-	#$self->push_writer(\&make_writer);                    #
 	
 	return $self;
-        #########################################################
-        #                                                       #
-        # $self->[wbuf_]="";                                    #
-        # $self->[rbuf_]="";                                    #
-        # $self->[read_stack_]=[];                              #
-        # $self->[write_stack_]=[];                             #
-        #                                                       #
-        # $$self[on_body_]=undef; #allocate all the storage now #
-        #                                                       #
-        # bless $self,$package;                                 #
-        # #make entry on the write stack                        #
-        # $self->_make_reader;                                  #
-        # $self->push_writer(\&make_writer);                    #
-        # $self;                                                #
-        #########################################################
-
 }
 
 sub _make_reader {
@@ -197,8 +180,6 @@ sub drop {
 	#print  Dumper [caller];
         my ($self,$err) = @_;
         $err =~ s/\015//sg if defined $err;
-	$self->[rw_]=undef;
-	$self->[ww_]=undef;
 
 	#$self->[read_stack_]=undef;
 	#$self->[write_stack_]=undef;
@@ -206,11 +187,16 @@ sub drop {
         $self->[server_][uSAC::HTTP::Server::active_connections_]--;
 	#@{ $r } = () if $r;
 	#@{$self}=();
-	$self->[write_]=undef;
-	$self->[read_]=undef;
-	$self->[fh_]=undef;
-	$self->[id_]=undef;
-	$self->[closeme_]=undef;
+	$self->@[(rw_,ww_,write_,read_,fh_,id_,closeme_)]=(undef) x 7;
+        ############################
+        # $self->[rw_]=undef;      #
+        # $self->[ww_]=undef;      #
+        # $self->[write_]=undef;   #
+        # $self->[read_]=undef;    #
+        # $self->[fh_]=undef;      #
+        # $self->[id_]=undef;      #
+        # $self->[closeme_]=undef; #
+        ############################
 	unshift @{$self->[server_][uSAC::HTTP::Server::zombies_]}, $self;
 	#say "after drop: ",Dumper $self->[server_][uSAC::HTTP::Server::zombies_];
 	#say "Zombie count: ",scalar @{$self->[server_][uSAC::HTTP::Server::zombies_]};
@@ -233,6 +219,7 @@ sub push_writer {
 	$self->[write_]=$self->[write_stack_][@{$self->[write_stack_]}-1];
 	#retusn the writer created
 }
+
 sub pop_writer {
 	my ($self)=@_;
 	pop @{$self->[write_stack_]};
