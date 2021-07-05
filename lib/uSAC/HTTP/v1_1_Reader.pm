@@ -42,6 +42,7 @@ sub make_reader{
 	#\my $buf=\$r->[uSAC::HTTP::Server::Session::rbuf_];
 	\my $fh=\$r->[uSAC::HTTP::Server::Session::fh_];
 	\my $write=\$r->[uSAC::HTTP::Server::Session::write_];
+	weaken $write;
 
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
@@ -190,6 +191,7 @@ sub make_reader{
 				$self->[uSAC::HTTP::Server::cb_]($uri,$req);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
+				weaken( $req->[5] );
 				return;
 
 

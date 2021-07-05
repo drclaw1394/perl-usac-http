@@ -182,12 +182,15 @@ sub accept {
 
 				my $session;
 
+				#say "pre popped: ",Dumper $self->[zombies_];
 				$session=pop @{$self->[zombies_]};
-				if(0 and defined $session){
+				#say "post popped: ",Dumper $self->[zombies_];
+				if(defined $session){
 					uSAC::HTTP::Server::Session::revive $session, $id, $fh, $self;
 				}
 				else {
-					$session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self) unless $session;#makes network reader/writeri
+					$session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);
+					uSAC::HTTP::Server::Session::push_reader $session, \&uSAC::HTTP::v1_1_Reader::make_reader;	#push protocol for reader
 				}
 				$self->[sessions_]{ $id } = $session;
 				$self->[active_connections_]++;
@@ -197,7 +200,6 @@ sub accept {
 
 				#my $write= uSAC::HTTP::v1_1::make_writer $r, ;	#$self->[sessions_]{$id};
 				#my $write;#= uSAC::HTTP::Server::Session::push_writer $r, \&uSAC::HTTP::v1_1::make_writer;
-				uSAC::HTTP::Server::Session::push_reader $session, \&uSAC::HTTP::v1_1_Reader::make_reader;	#push protocol for reader
 
 			}
 		};
