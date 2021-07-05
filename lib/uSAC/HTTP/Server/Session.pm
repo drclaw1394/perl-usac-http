@@ -89,13 +89,13 @@ sub _make_reader {
 	my $fh=$self->[fh_];
 	\my $buf=\$self->[rbuf_];
 	my $ref=\$self->[rbuf_];	
-
+	my $len;
 	#say "Make reader";
 	#create first entry into the read stack
 	$self->[rw_] = AE::io $fh, 0, sub {
 		#$self and $r or return;
 		#$self and exists $self->[sessions_]{$id} or return;
-		my $len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
+		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
 		#say "buffer length : ", length $buf, "last read len: $len";
 		#sleep 1;
 		given($len){
@@ -106,7 +106,7 @@ sub _make_reader {
 			}
 			when(0){
 				#End of file
-				drop $self;#$self->drop();	
+				drop $self;
 			}
 			when(undef){
 				#potential error
@@ -176,10 +176,10 @@ sub make_writer{
 
 
 sub drop {
-	#print "DROP\n";
+	print "DROP\n";
 	#print  Dumper [caller];
         my ($self,$err) = @_;
-        $err =~ s/\015//sg if defined $err;
+	#$err =~ s/\015//sg if defined $err;
 
 	#$self->[read_stack_]=undef;
 	#$self->[write_stack_]=undef;
