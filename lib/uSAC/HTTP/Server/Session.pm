@@ -106,13 +106,16 @@ sub _make_reader {
 			}
 			when(0){
 				#End of file
+				$self->[closeme_]=1;
 				drop $self;
 			}
 			when(undef){
 				#potential error
-				say "Error maybe?";
-				drop $self;
+				#say "Error maybe?";
 				return if $! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK;
+				#say "Yep error";
+				$self->[closeme_]=1;
+				drop $self;
 			}
 			default {
 			}
@@ -124,67 +127,113 @@ sub make_writer{
 	#take a session and alias the variables to lexicals
 	my $ido=shift;
 	weaken $ido;
-	my $stackPos=shift;
-	my $server=$ido->[uSAC::HTTP::Server::Session::server_];
+	#my $stackPos=shift;
+	#my $server=$ido->[uSAC::HTTP::Server::Session::server_];
 	\my $wbuf=\$ido->[uSAC::HTTP::Server::Session::wbuf_];
+	\my $ww=\$ido->[uSAC::HTTP::Server::Session::ww_];
 	\my $fh=\$ido->[uSAC::HTTP::Server::Session::fh_];
 	
-
+	my $w;
 	sub {
 		\my $buf=\$_[0];	#give the input a name
-		my $cb=$_[1];
+		#		my $cb=$_[1];
+		#say "WRITE DATA: $buf";
+		if(length($wbuf)== 0 ){
+			$w = syswrite( $fh, $buf );
+			given ($w){
+				when(length $buf){
+					#say "FULL WRITE NO APPEND";
+					#$wbuf="";
+					#$ww=undef;
+					$_[1]->() if defined $_[1];
+					return;
 
-		if ( $wbuf ) {
-			${ $wbuf } .= defined $buf ? $buf : return $ido->[uSAC::HTTP::Server::Session::closeme_] = 1;
-			return;
-		}
-		elsif ( !defined $buf ) { return $ido->drop(); }
+				}
+				when(length($buf)> $w){
+					say "PARITAL WRITE NO APPEND";
+					$wbuf.=substr($buf,$w);
+					return if defined $ww;
 
-		##############################################################################################
-		# $ido->[fh_] or return do {                                                                 #
-		#         warn "Lost filehandle while trying to send ".length($buf)." data for $ido->[id_]"; #
-		#         drop($ido,"No filehandle");                                                        #
-		#         ();                                                                                #
-		# };                                                                                         #
-		##############################################################################################
-
-		my $w = syswrite( $fh, $buf );
-		if ($w == length $buf) {
-			# ok;
-			#say Dumper $ido;
-			#if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop};
-				
-			#instead of canceling the watcher, run callback incase more data can be pushed
-			$cb->() if defined $cb;
-		}
-		elsif (defined $w) {
-			$wbuf = substr($buf,$w);
-			$ido->[uSAC::HTTP::Server::Session::ww_] = AE::io $fh, 1, sub {
-				$ido or return;
-				$w = syswrite( $fh, $wbuf );
-				if ($w == length $wbuf) {
-					if(defined $cb){
-						$cb->();
-					}
-					else {
-						undef $ido->[uSAC::HTTP::Server::Session::ww_];
-						if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop(); }
+				}
+				default {
+					if($! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK){
+						say "ERROR IN WRITE NO APPEND";
+						#actual error		
+						$ww=undef;
+						$wbuf="";
+						$ido->drop( "$!");
+						return;
 					}
 				}
-				elsif (defined $w) {
+			}
+
+		}
+		else {
+			$wbuf.= $buf;
+			$w = syswrite( $fh, $wbuf );
+			given($w){
+				when(length $wbuf){
+					$ww=undef;
+					$wbuf="";
+					$_[1]->() if defined $_[1];
+					return;
+				}
+				when (length($wbuf)> $w){
+					$wbuf.=substr($wbuf,$w);
+					#need to create watcher if it does
+					return if defined $ww;
+
+				}
+				default{
+					#error
+					if($! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK){
+						#actual error		
+						$ww=undef;
+						$wbuf="";
+						$ido->drop( "$!");
+						return;
+					}
+				}
+			}
+		}
+
+		$ido->[uSAC::HTTP::Server::Session::ww_] = AE::io $fh, 1, sub {
+			#say "IN WRITE WATCHER CB";
+			$ido or return;
+			$w = syswrite( $fh, $wbuf );
+			given($w){
+				when(length $wbuf) {
+					$wbuf="";
+					undef $ww;
+					if(defined $_[1]){
+						$_[1]->();
+					}
+					if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop(); }
+				}
+				when(defined $w){
 					$wbuf= substr( $wbuf, $w );
 				}
-				else { return $ido->drop( "$!"); }
-			};
-		}
-		else { return $ido->drop("$!"); }
+				default {
+					#error
+					if($! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK){
+						#actual error		
+						$ww=undef;
+						$wbuf="";
+						$ido->drop( "$!");
+						return;
+					}
+				}
+			}
+		};
+		#else { return $ido->drop("$!"); }
 	};
-
 }
 
 
 sub drop {
         my ($self,$err) = @_;
+	return unless $self->[closeme_];
+	#say "DROPPING";
         my $r = delete $self->[server_][uSAC::HTTP::Server::sessions_]{$self->[id_]}; #remove from server
         $self->[server_][uSAC::HTTP::Server::active_connections_]--;
 	#@{ $r } = () if $r;
@@ -201,8 +250,10 @@ sub drop {
         ############################
 	unshift @{$self->[server_][uSAC::HTTP::Server::zombies_]}, $self;
 
-        ( delete $self->[server_][uSAC::HTTP::Server::graceful_] )->()
-                if $self->[server_][uSAC::HTTP::Server::graceful_] and $self->[server_][uSAC::HTTP::Server::active_requests_] == 0;
+        ###############################################################################################################################
+        # ( delete $self->[server_][uSAC::HTTP::Server::graceful_] )->()                                                              #
+        #         if $self->[server_][uSAC::HTTP::Server::graceful_] and $self->[server_][uSAC::HTTP::Server::active_requests_] == 0; #
+        ###############################################################################################################################
 }
 
 sub push_writer {

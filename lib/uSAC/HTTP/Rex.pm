@@ -324,10 +324,11 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			given ($self->[write_]){
 				#if( $self->[write_] ) {
 				$_->( $reply );
-				$_->( undef ) if $self->[session_][uSAC::HTTP::Server::Session::closeme_];# or $self->[server_][graceful_];
+				#$_->( undef ) if $self->[session_][uSAC::HTTP::Server::Session::closeme_];# or $self->[server_][graceful_];
 				#delete $self->[write_];
 				$_=undef;
 				${ $self->[reqcount_] }--;
+				$self->[session_]->drop();
 			}
 
 		}
