@@ -26,6 +26,8 @@ use constant MAX_READ_SIZE => 128 * 1024;
 our $MIME;
 sub DEBUG () { 0 }
 our $LF = "\015\012";
+use constant LF=>$LF;
+use enum (qw<STATE_REQ_LINE STATE_RES_LINE STATE_HEADERS STATE_ERROR>);
 
 #read request line
 #read headers
@@ -46,6 +48,7 @@ sub make_reader{
 
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
+	my $line;
 
 	my $ixx = 0;
 	my %h;		#Define the header storage here, once per connection
@@ -53,21 +56,26 @@ sub make_reader{
 	sub {
 		use integer;
 		\my $buf=$_[0];#shift;
-		#say "IN 1.1 Reader";
 		$self and $r or return;
-		#$self and exists $self->[sessions_]{$id} or return;
-		#$len = sysread( $fh, $buf, MAX_READ_SIZE-length $buf, length $buf );
 		$len=length $buf;
-		#say "IN 1.1 Reader. Length: $len";
 		while ( $self and $len ) {
-			#say "in while";
-
-			# warn "rw.io.$id.rd $len ($state)";
+			#Dual mode variables:
+			#	server:
+			#	$method => method
+			#	$url => uri
+			#	$version => http version
+			#
+			#	client:
+			#	$method=> http version
+			#	$url=> status code
+			#	$version => comment
+			#
 			if ($state == 0) {
 				my ($pos0,$pos1,$pos2,$pos3);
 				$method=substr($buf, $ixx, ($pos1=index($buf, " ", $ixx))-$ixx);
 				$uri=substr($buf, ++$pos1, ($pos2=index($buf, " ", $pos1))-$pos1);
 				$version=substr($buf, ++$pos2, ($pos3=index($buf, "\015\012", $pos2))-$pos2);
+				$line=substr($buf,$ixx,$pos3-1);
 				if($pos3>=0){
 					#end of line found
 						$state   = 1;
@@ -77,7 +85,6 @@ sub make_reader{
 						#%h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 						++$seq;
 
-						warn "Received request N.$seq over ".fileno($fh).": $method $uri" if DEBUG;
 						$self->[uSAC::HTTP::Server::active_requests_]++;
 						$pos=$pos3+2;
 						redo;
@@ -92,7 +99,6 @@ sub make_reader{
 			elsif ($state == 1) {
 				# headers
 				pos($buf) = $pos;
-				warn "Parsing headers from pos $pos:".substr($buf,$pos) if DEBUG;
 				while () {	#TODO: check time out and bytes size to stop tight loop
 					#TODO:
 					# Explicit support for multiple cookies. Possibly use seperate cookies list?
@@ -188,7 +194,7 @@ sub make_reader{
 				$ixx=0;
 				$state=0;
 
-				$self->[uSAC::HTTP::Server::cb_]($uri,$req);
+				$self->[uSAC::HTTP::Server::cb_]($line,$req);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
 				weaken( $req->[5] );
@@ -431,28 +437,30 @@ sub make_reader{
                                 # }                                                                                                                                                                                                                   #
                                 #######################################################################################################################################################################################################################
 			} # state 1
-			elsif ($state == 2 ) {
-				#warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );
-				if (length($buf) - $ixx >= $r->[uSAC::HTTP::Server::Session::left_]) {
-					#warn sprintf "complete (%d of %d)", length $buf, $r{left};
-					$r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$ixx, $r->[uSAC::HTTP::Server::Session::left_])) );
-					$buf = substr($buf,$ixx + $r->[uSAC::HTTP::Server::Session::left_]);
-					$state = $ixx = 0;
-					# FINISHED
-					#warn "4. finished request" . Dumper $req;
-					#return $self->drop($id) if $req->connection eq 'close';
-					#$ixx = $pos + $r{left};
-					#$state = 0;
-					redo;
-				} else {
-					#warn sprintf "not complete (%d of %d)", length $buf, $r{left};
-					$r->[uSAC::HTTP::Server::Session::on_body_] && $r->[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$ixx)) );
-					$r->[uSAC::HTTP::Server::Session::left_] -= ( length($buf) - $ixx );
-					$buf = ''; $ixx = 0;
-					#return;
-					next;
-				}
-			}
+                        ###############################################################################################################################################################################################
+                        # elsif ($state == 2 ) {                                                                                                                                                                      #
+                        #         #warn "partial ".Dumper( $ixx, $buf, substr($buf,$ixx) );                                                                                                                           #
+                        #         if (length($buf) - $ixx >= $r->[uSAC::HTTP::Server::Session::left_]) {                                                                                                              #
+                        #                 #warn sprintf "complete (%d of %d)", length $buf, $r{left};                                                                                                                 #
+                        #                 $r->[uSAC::HTTP::Server::Session::on_body_] && (delete $r->[uSAC::HTTP::Server::Session::on_body_])->( 1, \(substr($buf,$ixx, $r->[uSAC::HTTP::Server::Session::left_])) ); #
+                        #                 $buf = substr($buf,$ixx + $r->[uSAC::HTTP::Server::Session::left_]);                                                                                                        #
+                        #                 $state = $ixx = 0;                                                                                                                                                          #
+                        #                 # FINISHED                                                                                                                                                                  #
+                        #                 #warn "4. finished request" . Dumper $req;                                                                                                                                  #
+                        #                 #return $self->drop($id) if $req->connection eq 'close';                                                                                                                    #
+                        #                 #$ixx = $pos + $r{left};                                                                                                                                                    #
+                        #                 #$state = 0;                                                                                                                                                                #
+                        #                 redo;                                                                                                                                                                       #
+                        #         } else {                                                                                                                                                                            #
+                        #                 #warn sprintf "not complete (%d of %d)", length $buf, $r{left};                                                                                                             #
+                        #                 $r->[uSAC::HTTP::Server::Session::on_body_] && $r->[uSAC::HTTP::Server::Session::on_body_]( 0, \(substr($buf,$ixx)) );                                                      #
+                        #                 $r->[uSAC::HTTP::Server::Session::left_] -= ( length($buf) - $ixx );                                                                                                        #
+                        #                 $buf = ''; $ixx = 0;                                                                                                                                                        #
+                        #                 #return;                                                                                                                                                                    #
+                        #                 next;                                                                                                                                                                       #
+                        #         }                                                                                                                                                                                   #
+                        # }                                                                                                                                                                                           #
+                        ###############################################################################################################################################################################################
 			else {
 			}
 			#state 3: discard body

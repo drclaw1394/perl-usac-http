@@ -132,9 +132,9 @@ sub make_writer{
 
 	sub {
 		\my $buf=\$_[0];	#give the input a name
+		my $cb=$_[1];
 
 		if ( $wbuf ) {
-			#$ido->[closeme_] and return warn "Write ($buf) called while connection close was enqueued at @{[ (caller)[1,2] ]}";
 			${ $wbuf } .= defined $buf ? $buf : return $ido->[uSAC::HTTP::Server::Session::closeme_] = 1;
 			return;
 		}
@@ -153,6 +153,9 @@ sub make_writer{
 			# ok;
 			#say Dumper $ido;
 			#if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop};
+				
+			#instead of canceling the watcher, run callback incase more data can be pushed
+			$cb->() if defined $cb;
 		}
 		elsif (defined $w) {
 			$wbuf = substr($buf,$w);
@@ -160,8 +163,13 @@ sub make_writer{
 				$ido or return;
 				$w = syswrite( $fh, $wbuf );
 				if ($w == length $wbuf) {
-					undef $ido->[uSAC::HTTP::Server::Session::ww_];
-					if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop(); }
+					if(defined $cb){
+						$cb->();
+					}
+					else {
+						undef $ido->[uSAC::HTTP::Server::Session::ww_];
+						if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop(); }
+					}
 				}
 				elsif (defined $w) {
 					$wbuf= substr( $wbuf, $w );
@@ -176,13 +184,7 @@ sub make_writer{
 
 
 sub drop {
-	print "DROP\n";
-	#print  Dumper [caller];
         my ($self,$err) = @_;
-	#$err =~ s/\015//sg if defined $err;
-
-	#$self->[read_stack_]=undef;
-	#$self->[write_stack_]=undef;
         my $r = delete $self->[server_][uSAC::HTTP::Server::sessions_]{$self->[id_]}; #remove from server
         $self->[server_][uSAC::HTTP::Server::active_connections_]--;
 	#@{ $r } = () if $r;
@@ -198,8 +200,6 @@ sub drop {
         # $self->[closeme_]=undef; #
         ############################
 	unshift @{$self->[server_][uSAC::HTTP::Server::zombies_]}, $self;
-	#say "after drop: ",Dumper $self->[server_][uSAC::HTTP::Server::zombies_];
-	#say "Zombie count: ",scalar @{$self->[server_][uSAC::HTTP::Server::zombies_]};
 
         ( delete $self->[server_][uSAC::HTTP::Server::graceful_] )->()
                 if $self->[server_][uSAC::HTTP::Server::graceful_] and $self->[server_][uSAC::HTTP::Server::active_requests_] == 0;
@@ -250,24 +250,6 @@ sub pop_reader {
 	$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
 }
 
-#raw writer. 
 
-#http1.1 reader
-sub make_reader {
-	my $ido=shift;
-	my $server=$ido->[server_];
-	\my $rbuf=\$ido->[rbuf_];
-	\my $fh=\$ido->[fh_];
-	sub {
-
-	}
-}
-
-#cancel existing read watcher
-# create a new watcher with the passed sub (created beforehand)
-# push to the reader_stack
-
-#readers need to be created previously, capturing the session and optionally making aliases
-#to session variables for better performance
 
 1;

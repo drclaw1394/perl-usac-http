@@ -2,97 +2,138 @@
 use common::sense;
 
 use FindBin;use lib "$FindBin::Bin/../blib/lib";
-
 use EV;
 use AnyEvent;
 
+BEGIN {
+	@uSAC::HTTP::Server::Subproducts=("testing/1.2");
+}
+my @sys_roots=qw<data>;
 use uSAC::HTTP::Server;
+
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::v1_1_Reader;
+use uSAC::HTTP::Static;
 use Hustle::Table;
 
+use constant {
+	HTTP_1_0=>"HTTP/1.0",
+	HTTP_1_1=>"HTTP/1.1",
+};
+
+our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE) /;
+our $ANY_URL=qr/.*+ /;
+our $ANY_VERS=qr/HTTP.*$/;
+
+sub begins_with {
+	my $test=$_[0];
+	sub{0 <= index $_[0], $test},
+
+}
+
+sub matches_with {
+	return qr{$_[0]}oa;
+}
+
+sub ends_with {
+	my $test=reverse $_[0];
+	sub {0 <= index reverse($_[0]), $test}
+}
+
+
 my $table=Hustle::Table->new;
+
 $table->set_default(sub {
-		my ($uri,$rex)=@_;
+		my ($line,$rex)=@_;
 		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_NOT_FOUND,"Go away");
 });
+
 $table->add(
 	{
-		#matcher=>qr|^(?<root>/)$|,
-		matcher=>"/",
-		sub=>sub{
-			my ($uri, $rex)=@_;
-			given($rex->[uSAC::HTTP::Rex::method_]){
-				when(HTTP_GET){
-					#response is imidiate
-					#process and reply
-					#no need to swap out reader
-					#say  "GET METHOD";
-					#my $session=$rex->[uSAC::HTTP::Rex::session_];
-					#$rex->reply_simple(HTTP_OK,"GOODasdf"); 
-					uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"GOODasdf");
-				}
-				when(HTTP_POST){
-					my $session=$rex->[uSAC::HTTP::Rex::session_];
-					#say "IN POST HANDLER";
-					#test the headers:
-					#	content-length regular post
-					#	transfer-encoding=> posibly chunked
-					#	content-type => different types of form data
-					#Make a reader based on these headers
-					#
-					$session->push_reader(
-						\&make_form_urlencoded_reader, #how to make it
-						#\&uSAC::HTTP::v1_1_Reader::make_form_urlencoded_reader, #how to make it
-						$rex,	#the rex object
-						sub {
-							if(defined $_[0]){
-								#say "GOT POST DATA $_[0]";
-							}
-							else{
-								#say "END OF POST PROCESSING";
-								#$rex->reply_simple(HTTP_OK,"finished post"); 
-								uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"finished post");
-							}
-							#the callback to handle the posted data
-						},
-						#remaining options ref for the reader? eg write to file?
-					);
-					$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_]);
-
-					#Validate headers: do we want to service this method on this uri?
-					#request has body.
-					#@$ref=(HTTP_METHOD_NOT_ALLOWED, "No way man..");
-					#$rex->[uSAC::HTTP::Rex::session_]->drop();
-
-					#push reader sessions stack
-
-					#process request body
-					#Renstate older reader
-					#Send reply
-					#
-					#When 
-				}
-				when("UPDATE"){
-				}
-				when("DELETE"){
-				}
-				when("PUT"){
-				}
-				when("HEAD"){
-				}
-				default {
-					#unkown method
-					#respond as such.
-				}
-
-			}
-			1;
+		matcher=>qr{GET /data/(.*) .*}ao,
+		sub=>sub {
+			my ($line, $rex)=@_;
+			my @headers;
+			#say "STATIC FILE server";
+			#look for static files in nominated static directories	
+			send_file_uri $rex, $1, "data";
+			return;		
 		}
 	},
+
+	{
+		#matcher=>"GET / HTTP/1.0",
+		matcher=>matches_with("GET /"),
+		sub=>sub{
+			my ($line, $rex)=@_;
+			uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"GOODasdf");
+			return;	#enable caching for this match
+		}
+	},
+	{
+		matcher=>qr|POST /|ao,
+		sub=>sub {
+			my ($line, $rex)=@_;
+			my $session=$rex->[uSAC::HTTP::Rex::session_];
+			#say "IN POST HANDLER";
+			#test the headers:
+			#	content-length regular post
+			#	transfer-encoding=> posibly chunked
+			#	content-type => different types of form data
+			#Make a reader based on these headers
+			#
+			$session->push_reader(
+				\&make_form_urlencoded_reader, #how to make it
+				#\&uSAC::HTTP::v1_1_Reader::make_form_urlencoded_reader, #how to make it
+				$rex,	#the rex object
+				sub {
+					if(defined $_[0]){
+						#say "GOT POST DATA $_[0]";
+					}
+					else{
+						#say "END OF POST PROCESSING";
+						#$rex->reply_simple(HTTP_OK,"finished post"); 
+						uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"finished post");
+					}
+					#the callback to handle the posted data
+				},
+				#remaining options ref for the reader? eg write to file?
+			);
+			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_]);
+
+			#Validate headers: do we want to service this method on this uri?
+			#request has body.
+			#@$ref=(HTTP_METHOD_NOT_ALLOWED, "No way man..");
+			#$rex->[uSAC::HTTP::Rex::session_]->drop();
+
+			#push reader sessions stack
+
+			#process request body
+			#Renstate older reader
+			#Send reply
+			#
+			#When 
+			return;
+		}
+	},
+	#############################
+	# when("UPDATE"){           #
+	# }                         #
+	# when("DELETE"){           #
+	# }                         #
+	# when("PUT"){              #
+	# }                         #
+	# when("HEAD"){             #
+	# }                         #
+	# default {                 #
+	#         #unkown method    #
+	#         #respond as such. #
+	# }                         #
+	#############################
+
 	{
 		matcher=>"/test",
 		sub=>sub{

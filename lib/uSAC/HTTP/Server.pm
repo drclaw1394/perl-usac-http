@@ -1,8 +1,10 @@
 package uSAC::HTTP::Server; 
-use constant NAME=>"uSAC";
-use constant VERSION=>"0.1";
 use common::sense;
 use Data::Dumper;
+
+use constant NAME=>"uSAC";
+use constant VERSION=>"0.1";
+#our @Subproducts=();		#Global to be provided by applcation
 
 use version;our $VERSION = version->declare('v0.1');
 use feature "refaliasing";
@@ -23,7 +25,7 @@ use AnyEvent::Handle;
 use Scalar::Util 'refaddr', 'weaken';
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
-use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR IPPROTO_TCP TCP_NOPUSH TCP_NODELAY);
+use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN);
 
 #use Encode ();
 #use Compress::Zlib ();
@@ -36,7 +38,7 @@ use constant MAX_READ_SIZE => 128 * 1024;
 
 #Class attribute keys
 use enum (
-	"host_=0",qw<port_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ max_header_size_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ total_requests_>
+	"host_=0",qw<port_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ max_header_size_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ seconds_timer_ www_roots_ total_requests_>
 );
 
 use uSAC::HTTP::Rex;
@@ -51,6 +53,9 @@ use constant KEY_COUNT=>total_requests_-host_+1;
 
 use constant LF => "\015\012";
 
+#Server Global values
+#
+our $Date;	#For date header
 
 sub new {
 	my $pkg = shift;
@@ -162,7 +167,21 @@ sub listen {
 	} : ();
 }
 
-sub prepare {}
+sub prepare {
+	#setup timer for constructing date header once a second
+	my ($self)=shift;
+
+	state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+	state @days= qw(Sun Mon Tue Wed Thu Fri Sat);
+
+	$self->[seconds_timer_]=AE::timer 0,1, sub {
+		my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime;
+		#export to globally available time?
+		#
+		#Format Tue, 15 Nov 1994 08:12:31 GMT
+		$Date="$days[$wday], $mday $months[$mon] $year $hour:$min:$sec GMT";
+	};
+}
 #sub incoming;
 sub accept {
 	state $seq=0;

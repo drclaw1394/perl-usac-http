@@ -11,7 +11,7 @@ BEGIN {
 use constant LF => "\015\012";
 
 use constant STATIC_HEADERS=>
-HTTP_SERVER.": ".uSAC::HTTP::Server::NAME." ".uSAC::HTTP::Server::VERSION.LF
+HTTP_SERVER.": ".uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", @uSAC::HTTP::Server::Subproducts).LF
 ;
 
 use uSAC::HTTP::Server::Session;
@@ -290,6 +290,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#$reply.=HTTP_SERVER.": ".uSAC::HTTP::Server::NAME." ".uSAC::HTTP::Server::VERSION.LF;	#Set server
 			$reply.=
 				STATIC_HEADERS
+				.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
 				.HTTP_CONTENT_LENGTH.": ".(length($_[1])+0).LF	#this always render content length
 				;#if defined $_[1];	#Set server
 
