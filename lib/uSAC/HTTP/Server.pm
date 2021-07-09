@@ -180,6 +180,9 @@ sub prepare {
 		#
 		#Format Tue, 15 Nov 1994 08:12:31 GMT
 		$Date="$days[$wday], $mday $months[$mon] $year $hour:$min:$sec GMT";
+	
+		say scalar $self->[zombies_]->@*;
+		say "Session count : ",scalar keys $self->[sessions_]->%*;
 	};
 }
 #sub incoming;

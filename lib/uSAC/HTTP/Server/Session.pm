@@ -17,7 +17,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ left_ read_ write_ request_count_ server_ read_stack_ write_stack_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ read_stack_ write_stack_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -41,7 +41,7 @@ sub new {
 	$self->[read_stack_]=[];
 	$self->[write_stack_]=[];
 
-	$$self[on_body_]=undef;	#allocate all the storage now
+	$self->[on_body_]=undef;	#allocate all the storage now
 	
 	bless $self,$package;
 	#make entry on the write stack
@@ -55,23 +55,10 @@ sub revive {
 	my $self=shift;
 	$self->[id_]=$_[0];	
 	$self->[fh_]=$_[1];	
+	$self->[wbuf_]="";
+	$self->[rbuf_]="";
 	#$self->[server_]=$_[2];	
 
-        ######################################
-        # #$self->[wbuf_]="";                #
-        # #$self->[rbuf_]="";                #
-        # $self->[read_stack_]=[];           #
-        # $self->[write_stack_]=[];          #
-        #                                    #
-        # $self->_make_reader;               #
-        # $self->push_writer(\&make_writer); #
-        # $self;                             #
-        #                                    #
-        # return $self;                      #
-        # $self->[id_]=$_[0];                #
-        # $self->[fh_]=$_[1];                #
-        # #$self->[server_]=$_[2];           #
-        ######################################
 	
         $self->_make_reader;
 
@@ -93,11 +80,7 @@ sub _make_reader {
 	#say "Make reader";
 	#create first entry into the read stack
 	$self->[rw_] = AE::io $fh, 0, sub {
-		#$self and $r or return;
-		#$self and exists $self->[sessions_]{$id} or return;
 		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
-		#say "buffer length : ", length $buf, "last read len: $len";
-		#sleep 1;
 		given($len){
 			when($_>0){
 				#run through protostack
@@ -112,8 +95,7 @@ sub _make_reader {
 			when(undef){
 				#potential error
 				#say "Error maybe?";
-				return if $! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK;
-				#say "Yep error";
+				return if $! == EAGAIN or $! == EINTR; #or $! == WSAEWOULDBLOCK;
 				$self->[closeme_]=1;
 				drop $self;
 			}
@@ -136,16 +118,17 @@ sub make_writer{
 	my $w;
 	sub {
 		\my $buf=\$_[0];	#give the input a name
-		#		my $cb=$_[1];
+		$ido->[wcb_]=$_[1] if defined $_[1];
+		my $cb=$ido->[wcb_];
 		#say "WRITE DATA: $buf";
-		if(length($wbuf)== 0 ){
+		if(length($wbuf) == 0 ){
 			$w = syswrite( $fh, $buf );
 			given ($w){
 				when(length $buf){
 					#say "FULL WRITE NO APPEND";
-					#$wbuf="";
+					$wbuf="";
 					#$ww=undef;
-					$_[1]->() if defined $_[1];
+					$cb->() if defined $cb;
 					return;
 
 				}
@@ -156,11 +139,11 @@ sub make_writer{
 
 				}
 				default {
-					if($! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK){
+					unless( $! == EAGAIN or $! == EINTR){
 						say "ERROR IN WRITE NO APPEND";
 						#actual error		
 						$ww=undef;
-						$wbuf="";
+						#$wbuf="";
 						$ido->drop( "$!");
 						return;
 					}
@@ -175,7 +158,7 @@ sub make_writer{
 				when(length $wbuf){
 					$ww=undef;
 					$wbuf="";
-					$_[1]->() if defined $_[1];
+					$cb->() if defined $cb;
 					return;
 				}
 				when (length($wbuf)> $w){
@@ -186,18 +169,20 @@ sub make_writer{
 				}
 				default{
 					#error
-					if($! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK){
+					unless( $! == EAGAIN or $! == EINTR){
 						#actual error		
 						$ww=undef;
-						$wbuf="";
+						#$wbuf="";
 						$ido->drop( "$!");
 						return;
 					}
+					return if defined $ww;
 				}
 			}
 		}
 
-		$ido->[uSAC::HTTP::Server::Session::ww_] = AE::io $fh, 1, sub {
+		say "making watcher";
+		$ww = AE::io $fh, 1, sub {
 			#say "IN WRITE WATCHER CB";
 			$ido or return;
 			$w = syswrite( $fh, $wbuf );
@@ -205,23 +190,20 @@ sub make_writer{
 				when(length $wbuf) {
 					$wbuf="";
 					undef $ww;
-					if(defined $_[1]){
-						$_[1]->();
-					}
-					if( $ido->[uSAC::HTTP::Server::Session::closeme_] ) { $ido->drop(); }
+					$ido->[wcb_]->() if defined $ido->[wcb_];
+					#if( $ido->[closeme_] ) { $ido->drop(); }
 				}
 				when(defined $w){
 					$wbuf= substr( $wbuf, $w );
 				}
 				default {
 					#error
-					if($! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK){
-						#actual error		
-						$ww=undef;
-						$wbuf="";
-						$ido->drop( "$!");
-						return;
-					}
+					return if $! == EAGAIN or $! == EINTR;#or $! == WSAEWOULDBLOCK){
+					#actual error		
+					$ww=undef;
+					$wbuf="";
+					$ido->drop( "$!");
+					return;
 				}
 			}
 		};
@@ -233,21 +215,18 @@ sub make_writer{
 sub drop {
         my ($self,$err) = @_;
 	return unless $self->[closeme_];
-	#say "DROPPING";
         my $r = delete $self->[server_][uSAC::HTTP::Server::sessions_]{$self->[id_]}; #remove from server
         $self->[server_][uSAC::HTTP::Server::active_connections_]--;
-	#@{ $r } = () if $r;
-	#@{$self}=();
-	$self->@[(rw_,ww_,write_,read_,fh_,id_,closeme_)]=(undef) x 7;
-        ############################
-        # $self->[rw_]=undef;      #
-        # $self->[ww_]=undef;      #
-        # $self->[write_]=undef;   #
-        # $self->[read_]=undef;    #
-        # $self->[fh_]=undef;      #
-        # $self->[id_]=undef;      #
-        # $self->[closeme_]=undef; #
-        ############################
+
+	close $self->[fh_];
+	
+	$self->@[(rw_,ww_,write_,read_,fh_,id_,closeme_)]=(undef) x 8;
+
+	$self->[write_stack_][0]=undef;
+	$self->[write_]=undef;
+	$self->[wbuf_]=undef;
+	$self->[rbuf_]=undef;
+
 	unshift @{$self->[server_][uSAC::HTTP::Server::zombies_]}, $self;
 
         ###############################################################################################################################

@@ -69,7 +69,7 @@ $table->add(
 		matcher=>matches_with("GET /"),
 		sub=>sub{
 			my ($line, $rex)=@_;
-			uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"GOODasdf");
+			uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"a" x 1024);
 			return;	#enable caching for this match
 		}
 	},

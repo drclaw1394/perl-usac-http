@@ -282,12 +282,9 @@ use constant KEY_COUNT=>attrs_-method_+1;
 		sub reply_simple{
 			use integer;
 			my $self=shift;
-			#my $version=$self->[version_];#"HTTP/1.0";
-			#my ($code,$content,$headers)=@_;
 
-			my $reply="$self->[version_] $_[0]".LF;# $uSAC::HTTP::Code::names[$_[0]]$LF";
+			my $reply="$self->[version_] $_[0]".LF;
 
-			#$reply.=HTTP_SERVER.": ".uSAC::HTTP::Server::NAME." ".uSAC::HTTP::Server::VERSION.LF;	#Set server
 			$reply.=
 				STATIC_HEADERS
 				.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
@@ -311,7 +308,6 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			}
 
 
-			#say $reply;
 			#User requested headers. 
 			my $i=0;
 			$reply.=$_[2][$i++].": $_[2][$i++]$LF" for(0..@$_[2]/2-1);
@@ -324,11 +320,9 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			given ($self->[write_]){
 				#if( $self->[write_] ) {
 				$_->( $reply );
-				#$_->( undef ) if $self->[session_][uSAC::HTTP::Server::Session::closeme_];# or $self->[server_][graceful_];
-				#delete $self->[write_];
 				$_=undef;
-				${ $self->[reqcount_] }--;
-				$self->[session_]->drop();
+				#${ $self->[reqcount_] }--;
+				uSAC::HTTP::Server::Session::drop $self->[session_];
 			}
 
 		}
