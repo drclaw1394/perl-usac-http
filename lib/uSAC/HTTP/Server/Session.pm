@@ -17,7 +17,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ read_stack_ write_stack_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ read_stack_ write_stack_ current_reader_ reader_cache_ rex_ reader_cb_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -27,6 +27,9 @@ use constant MAX_READ_SIZE => 128 * 1024;
 #session represents the stack of protocols used by an application to ultimately write out
 #to the filehandle
 #
+
+our %make_reader_reg;	#hash of sub references which will make a reader ref of a particular name
+
 sub new {
 	my $package=shift//__PACKAGE__;
 	
@@ -45,8 +48,9 @@ sub new {
 	
 	bless $self,$package;
 	#make entry on the write stack
+	$self->[write_]=$self->_make_writer($self,0);
 	$self->_make_reader;
-	$self->push_writer(\&make_writer);	
+	
 	$self;
 }
 
@@ -57,16 +61,13 @@ sub revive {
 	$self->[fh_]=$_[1];	
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
+	$self->[rex_]=undef;
 	#$self->[server_]=$_[2];	
 
 	
+	$self->[write_]=$self->_make_writer($self, 0);
         $self->_make_reader;
 
-	my $wr=make_writer($self, 0);
-	$self->[write_stack_][0]=$wr;
-	$self->[write_]=$wr;
-
-	
 	return $self;
 }
 
@@ -83,9 +84,7 @@ sub _make_reader {
 		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
 		given($len){
 			when($_>0){
-				#run through protostack
-				#say "read $buf and calling stack";
-				$self->[read_stack_][0]->($ref);#\$buf);
+				$self->[read_]($ref,$self->[rex_],$self->[reader_cb_]);
 			}
 			when(0){
 				#End of file
@@ -105,7 +104,7 @@ sub _make_reader {
 	};
 }
 
-sub make_writer{
+sub _make_writer{
 	#take a session and alias the variables to lexicals
 	my $ido=shift;
 	weaken $ido;
@@ -220,10 +219,10 @@ sub drop {
 
 	close $self->[fh_];
 	
-	$self->@[(rw_,ww_,write_,read_,fh_,id_,closeme_)]=(undef) x 8;
+	$self->@[(rw_,ww_,,fh_,id_,closeme_)]=(undef) x 7;
 
 	$self->[write_stack_][0]=undef;
-	$self->[write_]=undef;
+	$self->[read_stack_]=[];
 	$self->[wbuf_]=undef;
 	$self->[rbuf_]=undef;
 
@@ -235,49 +234,27 @@ sub drop {
         ###############################################################################################################################
 }
 
-sub push_writer {
-	my ($self,$maker_sub,@args)=@_;	#pass the sub which will make the writer sub,
-	given($self->[write_stack_]){
-                ######################################
-                # say  "Self: ",Dumper $self;        #
-                # say  "Write stack: ",Dumper $_;    #
-                # say  "maker: ", Dumper $maker_sub; #
-                ######################################
-		push @{$_},$maker_sub->($self,@{$_},@args); #session, index of new writer, args to maker
-	}
-
-	$self->[write_]=$self->[write_stack_][@{$self->[write_stack_]}-1];
-	#retusn the writer created
-}
-
-sub pop_writer {
-	my ($self)=@_;
-	pop @{$self->[write_stack_]};
-
-	$self->[write_]=$self->[write_stack_][@{$self->[write_stack_]}-1];
-}
+#pluggable interface
+#=====================
+#
 
 sub push_reader {
-	my ($self,$maker_sub, @args)=@_;
-	given($self->[read_stack_]){
-                ##################################
-                # say  "Self: ",Dumper $self;    #
-                # say  "Read stack: ",Dumper $_; #
-                ##################################
-		push @{$_},$maker_sub->($self,@{$_},@args); #session, index of new reader, args to maker
-	}
-	$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
-	#now force execution of reader 
-	#$self->[read_]->(\$self->[rbuf_]);
+	my ($self,$name,$cb)=@_;
+	$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args));
+	push $self->[read_stack_]->@*, $name;
+	$self->[reader_cb_]=$cb;
 }
-# cancel existing read watcher
-# create new watcher from top of stack
-# pop the stack
+
+#Reuse the previous reader in the stack
+#Does not attempt to remake it...
 sub pop_reader {
 	my ($self)=@_;
-	pop @{$self->[read_stack_]};
-
-	$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
+	pop @{$self->[read_stack_]};			#remove the previous
+	my $name=$self->[read_stack_]->@[$self->[read_stack_]->@*-1];;		#
+	$self->[read_]=$self->[reader_cache_]{$name};
+	say "Read stack after pop: ",$self->[read_stack_]->@*;
+	#//=$make_reader_reg{$name}($self,@args));
+	#$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
 }
 
 

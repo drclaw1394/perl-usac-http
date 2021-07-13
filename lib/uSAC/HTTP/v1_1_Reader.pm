@@ -1,6 +1,5 @@
 package uSAC::HTTP::v1_1_Reader;
 use common::sense;
-
 use feature "refaliasing";
 no warnings "experimental";
 
@@ -21,12 +20,15 @@ use Time::HiRes qw/gettimeofday/;
 use Scalar::Util 'refaddr', 'weaken';
 
 use uSAC::HTTP::Server;
+use uSAC::HTTP::Server::Session;
 use constant MAX_READ_SIZE => 128 * 1024;
 
 our $MIME;
 sub DEBUG () { 0 }
 our $LF = "\015\012";
-use constant LF=>$LF;
+
+#my $HEADER_QR=> qr/\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca;
+use constant LF=>"\015\012";
 use enum (qw<STATE_REQ_LINE STATE_RES_LINE STATE_HEADERS STATE_ERROR>);
 
 #read request line
@@ -38,13 +40,16 @@ use enum (qw<STATE_REQ_LINE STATE_RES_LINE STATE_HEADERS STATE_ERROR>);
 #
 
 sub make_reader{
+	say "MAKING BASE HTTP1.1 reader";
 	#take a session and alias the variables to lexicals
 	my $r=shift;
+	my $previous=shift;	#this should be undef for this reader?
+
 	my $self=$r->[uSAC::HTTP::Server::Session::server_];
 	#\my $buf=\$r->[uSAC::HTTP::Server::Session::rbuf_];
 	\my $fh=\$r->[uSAC::HTTP::Server::Session::fh_];
 	\my $write=\$r->[uSAC::HTTP::Server::Session::write_];
-	weaken $write;
+	#weaken $write;
 	weaken $r;
 
 	my ($state,$seq) = (0,0);
@@ -175,7 +180,6 @@ sub make_reader{
 						return;
 					}
 				}
-				#say Dumper \%h;
 				#Done with headers. 
 				#
 				$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' ;
@@ -186,7 +190,7 @@ sub make_reader{
 				$pos = pos($buf);
 
 				$self->[uSAC::HTTP::Server::total_requests_]++;
-
+				$r->[uSAC::HTTP::Server::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Server::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{connection} =~/^Keep-Alive/ );
 
 				#shift buffer
@@ -194,7 +198,6 @@ sub make_reader{
 				$pos=0;
 				$ixx=0;
 				$state=0;
-
 				$self->[uSAC::HTTP::Server::cb_]($line,$req);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
@@ -505,7 +508,179 @@ sub make_reader{
 #Content-Type: multipart/form-data;boundary="boundary"
 #NO Content-Length
 
+# multipart/form-data; boundary=------border
+# Basically scan through the entire contents of the body and locate the border stirng 
 sub make_form_data_reader {
+	say "aasdfasdf";;
+	use integer;
+	my $session=shift;
+	#my $maker_sub=shift;
+
+
+	my $state=0;
+	my $first=1;
+	my %h;
+	sub {
+		say "IN FORM PARSER";
+		\my $buf=shift;#buffer from io loop
+		my $rex=shift;
+		my $cb=$session->[uSAC::HTTP::Server::Session::reader_cb_];
+		my $processed=0;
+
+		\my %h=$rex->[uSAC::HTTP::Rex::headers_];
+		my $type = $h{'content-type'};
+		say "content type: $type";
+		#TODO: check for content-disposition and filename if only a single part.
+		my $boundary="--".(split("=", $type))[1];
+		say  "boundary:",$boundary;
+		my $b_len=length $boundary;
+		say "buffer len:", length $buf;
+		say "buffer:", $buf;
+		while($processed < length $buf){
+			given($state){
+				when(0){
+					%h=();
+					#Attempt to match boundary
+					my $index=index($buf,$boundary,$processed);
+					if($index>=0){
+
+						say "FOUND boundary and index: $index";
+						#send partial data to callback
+						my $len=($index-2)-$processed;	#-2 for LF
+
+
+						$cb->(substr($buf,$processed,$len),\%h) unless $first;
+						$first=0;
+
+						#move past data and boundary
+						$processed+=$index+$b_len;
+
+						#end search
+						say "buffer:",substr $buf, $processed;
+
+
+						#test if this is the last boundary
+						if(substr($buf,$processed,4) eq "--".LF){
+							#END OF MULTIPART FORM
+							#Remove from io stack
+							#callback with undef?
+							say "END OF MULTIPART";
+							$processed+=4;
+
+							#update buffer for readstack
+							$buf=substr $buf,$processed;
+							say $buf;
+							$cb->();
+							$session->pop_reader;
+							return;
+						}
+						elsif(substr($buf,$processed,2) eq LF){
+							#it wasn't last part, so move to next state
+							say "moving to next state";
+							$processed+=2;
+							$state=1;
+							redo;
+						}
+					}
+
+					else {
+						say "NOT FOUND boundary and index: $index";
+						# Full boundary not found, send partial, upto boundary length
+						my $len=length($buf)-$b_len;		#don't send boundary
+						$cb->(substr($buf, $processed, $len),\%h);
+						$processed+=$len;
+						#wait for next read now
+						return;
+					}
+
+					#attempt to match extra hyphons
+					#next line after boundary is content disposition
+
+				}
+
+				when(1){
+					#read any headers
+					say "READING HEADERS";
+					pos($buf)=$processed;
+
+					while (){
+						if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
+							\my $e=\$h{lc $1};
+							$e = defined $e ? $e.','.$2: $2;
+							say "Got header: $e";
+
+							#need to split to isolate name and filename
+							redo;
+						}
+						elsif ($buf =~ /\G\015\012/sxogca) {
+							say "HEADERS DONE";
+							$processed=pos($buf);
+
+							#readjust the buffer no
+							$buf=substr $buf,$processed;
+							$processed=0;
+
+							say "Buffer:",$buf;
+							#headers done. setup
+
+							#go back to state 0 and look for boundary
+							$state=0;
+							last;
+							#process disposition
+							given($h{'content-disposition'}){
+								when(undef){
+									#this is an error
+								}
+								default {
+									#parse fields, and filenames
+									#Content-Disposition: form-data; name="image"; filename="mybook.png"
+									my @params=split /; +/; 
+									$params[0] eq "form-data";
+									my @form=split "=", $params[1];
+									#quoted?		
+									my @filename=split "=". $params[2];
+
+								}
+							}
+
+							#process content-type
+							given($h{'content-type'}){
+								when(undef){
+									#not set
+								}
+								default {
+								}
+							}
+
+							#process content type
+							$h{'content-type'};
+
+
+							#if headers are ok then look for boundary
+							#
+							$state=0;
+							last;
+						}
+						else {
+
+						}
+					}
+
+					#update the offset
+					$processed=pos $buf;
+
+				}
+
+				default {
+					say "DEFAULT";
+
+				}
+			}
+			say "End of while";
+		}
+		say "End of form reader";
+	}
+
 
 }
 
@@ -520,21 +695,24 @@ sub make_plain_text_reader {
 #Content-Type: application/x-www-form-urlencoded
 #
 sub make_form_urlencoded_reader {
+	say "MAKING URL ENCODED READER";
 	use integer;
 	my $session=shift;
-	my $maker_sub=shift;
-	my $rex=shift;
-	my $cb=shift;
+	#my $maker_sub=shift;
 
-	\my %h=$rex->[uSAC::HTTP::Rex::headers_];
 	my $processed=0;
 
-	my $len = $h{'content-length'}//0; #number of bytes to read, or 0 if undefined
 	#print "MAKING URLencoded reader\n";
 
 	#$cb->(undef) and return unless $len; #Return
 	sub {
 		\my $buf=shift;#buffer from io loop
+		my $rex=shift;
+		#my $cb=shift;
+	my $cb=$session->[uSAC::HTTP::Server::Session::reader_cb_];
+		say "REX IN URL READER";
+		\my %h=$rex->[uSAC::HTTP::Rex::headers_];
+		my $len = $h{'content-length'}//0; #number of bytes to read, or 0 if undefined
 
 
 
@@ -548,6 +726,8 @@ sub make_form_urlencoded_reader {
 		#when the remaining length is 0, pop this sub from the stack
 		if($processed==$len){
 			$cb->(undef);
+			#return to the previous 
+			say "ABOUT TO POP READER";
 			$session->pop_reader;	#This assumes that the normal 1.1 reader previous in the stack
 		}
 		else {

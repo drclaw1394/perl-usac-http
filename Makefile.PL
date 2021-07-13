@@ -5,13 +5,15 @@ WriteMakefile(
 	NAME              => 'uSAC::HTTP::Server',
 	VERSION_FROM      => 'lib/uSAC/HTTP/Server.pm',
 	PREREQ_PM         => {
-		AnyEvent => 5,
-		'Digest::SHA1' => 2,
-		'JSON::XS'     => 3,
+		EV		=> 0,
+		AnyEvent 	=> 0,
+		'Digest::SHA1' 	=> 0,
+		'JSON::XS'     	=> 0,
+		enum	    	=> 0,
+		"Hustle::Table" => 0,
+		"common::sense" => 0
 	},
 	ABSTRACT_FROM     => 'lib/uSAC/HTTP/Server.pm', # retrieve abstract from module
 	AUTHOR            => 'Ruben Westerberg',
-	LICENSE           => 'perl',
-	PL_FILES          => {},
-	clean             => {},
+	LICENSE           => 'mit',
 );

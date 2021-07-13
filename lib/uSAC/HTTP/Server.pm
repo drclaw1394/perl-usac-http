@@ -46,6 +46,12 @@ use uSAC::HTTP::Server::WS;
 use uSAC::HTTP::Server::Session;
 use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
+
+given(\%uSAC::HTTP::Server::Session::make_reader_reg){
+	$_->{http1_1_base}=\&make_reader;
+	$_->{http1_1_form_data}=\&make_form_data_reader;
+	$_->{http1_1_urlencoded}=\&make_form_urlencoded_reader;
+}
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>total_requests_-host_+1;
@@ -181,8 +187,8 @@ sub prepare {
 		#Format Tue, 15 Nov 1994 08:12:31 GMT
 		$Date="$days[$wday], $mday $months[$mon] $year $hour:$min:$sec GMT";
 	
-		say scalar $self->[zombies_]->@*;
-		say "Session count : ",scalar keys $self->[sessions_]->%*;
+		#say scalar $self->[zombies_]->@*;
+		#say "Session count : ",scalar keys $self->[sessions_]->%*;
 	};
 }
 #sub incoming;
@@ -212,8 +218,10 @@ sub accept {
 				}
 				else {
 					$session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);
-					uSAC::HTTP::Server::Session::push_reader $session, \&uSAC::HTTP::v1_1_Reader::make_reader;	#push protocol for reader
+					#uSAC::HTTP::Server::Session::push_reader $session, \&uSAC::HTTP::v1_1_Reader::make_reader;	#push protocol for reader
+
 				}
+				uSAC::HTTP::Server::Session::push_reader $session,"http1_1_base",undef; 
 				$self->[sessions_]{ $id } = $session;
 				$self->[active_connections_]++;
 				$self->[total_connections_]++;

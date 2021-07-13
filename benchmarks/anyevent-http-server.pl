@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 use common::sense;
 
-use FindBin;use lib "$FindBin::Bin/../blib/lib";
+use FindBin;use lib "$FindBin::Bin/../lib";
 use EV;
 use AnyEvent;
 
@@ -48,12 +48,12 @@ my $table=Hustle::Table->new;
 
 $table->set_default(sub {
 		my ($line,$rex)=@_;
-		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_NOT_FOUND,"Go away");
+		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_NOT_FOUND,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
 });
 
 $table->add(
 	{
-		matcher=>qr{GET /data/(.*) .*}ao,
+		matcher=>qr{GET /data/(.*) }ao,
 		sub=>sub {
 			my ($line, $rex)=@_;
 			my @headers;
@@ -73,22 +73,15 @@ $table->add(
 			return;	#enable caching for this match
 		}
 	},
+
 	{
-		matcher=>qr|POST /|ao,
+		matcher=>qr|POST /urlencoded|ao,
 		sub=>sub {
 			my ($line, $rex)=@_;
 			my $session=$rex->[uSAC::HTTP::Rex::session_];
-			#say "IN POST HANDLER";
-			#test the headers:
-			#	content-length regular post
-			#	transfer-encoding=> posibly chunked
-			#	content-type => different types of form data
-			#Make a reader based on these headers
-			#
+			say "POST ENDPOINT";
 			$session->push_reader(
-				\&make_form_urlencoded_reader, #how to make it
-				#\&uSAC::HTTP::v1_1_Reader::make_form_urlencoded_reader, #how to make it
-				$rex,	#the rex object
+				"http1_1_urlencoded",
 				sub {
 					if(defined $_[0]){
 						#say "GOT POST DATA $_[0]";
@@ -102,20 +95,35 @@ $table->add(
 				},
 				#remaining options ref for the reader? eg write to file?
 			);
-			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_]);
+			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex,
+			);
+			return;
+		}
+	},
+	{
+		matcher=>begins_with("POST /formdata"),
+		sub=>sub {
+			say "FORM DATA ENDPOINT";
+			my ($line,$rex)=@_;
+			my $session=$rex->[uSAC::HTTP::Rex::session_];
+			$session->push_reader(
+				#\&make_form_data_reader,
+				"http1_1_form_data",
+				sub {
 
-			#Validate headers: do we want to service this method on this uri?
-			#request has body.
-			#@$ref=(HTTP_METHOD_NOT_ALLOWED, "No way man..");
-			#$rex->[uSAC::HTTP::Rex::session_]->drop();
-
-			#push reader sessions stack
-
-			#process request body
-			#Renstate older reader
-			#Send reply
-			#
-			#When 
+					say "+_+_+_+FORM CALLBACK";
+					say "DATA:", $_[0];
+					#need to encode the state? diff parts
+					#	ie with undef data and just headers => new part
+					#	with undef headers and data	=> part continues
+					#	with undef header and undef data => form end
+					#Parts are in sequence
+					unless (defined $_[0] and defined $_[1]){
+						uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"finished multipart form");
+					}
+				}
+			);
+			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex);
 			return;
 		}
 	},
