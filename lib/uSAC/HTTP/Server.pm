@@ -71,7 +71,7 @@ sub new {
 	$self->[port_]=$options{iport}//8080;
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
-	$self->[backlog_]=1024;
+	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
@@ -195,6 +195,12 @@ sub prepare {
 sub accept {
 	state $seq=0;
 	weaken( my $self = shift );
+	\my @zombies=$self->[zombies_];
+	\my %sessions=$self->[sessions_];
+	\my $active_connections=\$self->[active_connections_];
+	\my $total_connections=\$self->[total_connections_];
+	my $session;
+	my $id;
 	for my $fl ( values %{ $self->[fhs_] }) {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
@@ -206,31 +212,24 @@ sub accept {
 
 				#TODO: setup timeout for bad clients/connections
 
-				my $id = ++$seq;
+				$id = ++$seq;
 
-				my $session;
 
 				#say "pre popped: ",Dumper $self->[zombies_];
-				$session=pop @{$self->[zombies_]};
+				$session=pop @zombies;#@{$self->[zombies_]};
+				#$session=pop @{$self->[zombies_]};
 				#say "post popped: ",Dumper $self->[zombies_];
 				if(defined $session){
 					uSAC::HTTP::Server::Session::revive $session, $id, $fh;
 				}
 				else {
 					$session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);
-					#uSAC::HTTP::Server::Session::push_reader $session, \&uSAC::HTTP::v1_1_Reader::make_reader;	#push protocol for reader
 
 				}
 				uSAC::HTTP::Server::Session::push_reader $session,"http1_1_base",undef; 
-				$self->[sessions_]{ $id } = $session;
-				$self->[active_connections_]++;
-				$self->[total_connections_]++;
-
-
-
-				#my $write= uSAC::HTTP::v1_1::make_writer $r, ;	#$self->[sessions_]{$id};
-				#my $write;#= uSAC::HTTP::Server::Session::push_writer $r, \&uSAC::HTTP::v1_1::make_writer;
-
+				$sessions{ $id } = $session;
+				$active_connections++;
+				$total_connections++;
 			}
 		};
 	}

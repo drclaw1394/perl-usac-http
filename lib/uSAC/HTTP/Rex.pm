@@ -331,6 +331,8 @@ use constant KEY_COUNT=>attrs_-method_+1;
 		sub reply {
 			my $self = shift;
 			#return $self->headers(@_) if @_ % 2;
+			say "in REPLY:";
+			say caller;
 			my ($code,$content,%args) = @_;
 			$code ||=200;
 			#if (ref $content) {
@@ -610,38 +612,40 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			}
 		}
 		
-		sub DESTROY {
-			my $self = shift;
-			my $caller = "@{[ (caller)[1,2] ]}";
-			#warn "Destroy req $self->[0] $self->[1] by $caller";
-			if( $self->[write_] ) {
-				local $@;
-				eval {
-					if ($self->[chunked_]) {
-						$self->abort();
-					} else {
-						if( $self->[8] && $self->[8]->{on_not_handled} ) {
-							$self->[8]->{on_not_handled}->($self, $caller);
-						}
-						if ($self->[write_]) {
-							$self->reply( 500, "Request not handled\n$self->[method_] $self->[uri_]\n", headers => { 'content-type' => 'text/plain', NotHandled => 1 } );
-						}
-					}
-				1} or do {
-					if ($EV::DIED) {
-						@_ = ();
-						goto &$EV::DIED;
-					} else {
-						warn "[E] Died in request DESTROY: $@ from $caller\n";
-					}
-				};
-			}
-			elsif (defined $self->[chunked_]) {
-				warn "[E] finish or abort was not called for ".( $self->[chunked_] ? "chunked" : "partial" )." response";
-				$self->abort;
-			}
-			@$self = ();
-		}
+                #########################################################################################################################################################################################
+                # sub DESTROY {                                                                                                                                                                         #
+                #         my $self = shift;                                                                                                                                                             #
+                #         my $caller = "@{[ (caller)[1,2] ]}";                                                                                                                                          #
+                #         #warn "Destroy req $self->[0] $self->[1] by $caller";                                                                                                                         #
+                #         if( $self->[write_] ) {                                                                                                                                                       #
+                #                 local $@;                                                                                                                                                             #
+                #                 eval {                                                                                                                                                                #
+                #                         if ($self->[chunked_]) {                                                                                                                                      #
+                #                                 $self->abort();                                                                                                                                       #
+                #                         } else {                                                                                                                                                      #
+                #                                 if( $self->[8] && $self->[8]->{on_not_handled} ) {                                                                                                    #
+                #                                         $self->[8]->{on_not_handled}->($self, $caller);                                                                                               #
+                #                                 }                                                                                                                                                     #
+                #                                 if ($self->[write_]) {                                                                                                                                #
+                #                                         $self->reply( 500, "Request not handled\n$self->[method_] $self->[uri_]\n", headers => { 'content-type' => 'text/plain', NotHandled => 1 } ); #
+                #                                 }                                                                                                                                                     #
+                #                         }                                                                                                                                                             #
+                #                 1} or do {                                                                                                                                                            #
+                #                         if ($EV::DIED) {                                                                                                                                              #
+                #                                 @_ = ();                                                                                                                                              #
+                #                                 goto &$EV::DIED;                                                                                                                                      #
+                #                         } else {                                                                                                                                                      #
+                #                                 warn "[E] Died in request DESTROY: $@ from $caller\n";                                                                                                #
+                #                         }                                                                                                                                                             #
+                #                 };                                                                                                                                                                    #
+                #         }                                                                                                                                                                             #
+                #         elsif (defined $self->[chunked_]) {                                                                                                                                           #
+                #                 warn "[E] finish or abort was not called for ".( $self->[chunked_] ? "chunked" : "partial" )." response";                                                             #
+                #                 $self->abort;                                                                                                                                                         #
+                #         }                                                                                                                                                                             #
+                #         @$self = ();                                                                                                                                                                  #
+                # }                                                                                                                                                                                     #
+                #########################################################################################################################################################################################
 
 
 

@@ -56,6 +56,17 @@ $table->set_default(sub {
 $table->add(
 
 	{
+		matcher=>qr{GET /data/(.*) }ao,
+		sub=>sub {
+			my ($line, $rex)=@_;
+			my @headers;
+			#say "STATIC FILE server";
+			#look for static files in nominated static directories	
+			send_file_uri_sys $rex, $1, "data";
+			return;		
+		}
+	},
+	{
 		#matcher=>"GET / HTTP/1.0",
 		matcher=>matches_with("GET /"),
 		#matcher=>begins_with("GET /"),
@@ -63,17 +74,6 @@ $table->add(
 			my ($line, $rex)=@_;
 			uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"a" x 1024);
 			return;	#enable caching for this match
-		}
-	},
-	{
-		matcher=>qr{GET /data/(.*) }ao,
-		sub=>sub {
-			my ($line, $rex)=@_;
-			my @headers;
-			#say "STATIC FILE server";
-			#look for static files in nominated static directories	
-			send_file_uri $rex, $1, "data";
-			return;		
 		}
 	},
 

@@ -2,20 +2,119 @@ package uSAC::HTTP::Static;
 
 use common::sense;
 use File::Spec;
-#use IO::AIO;
-#use AnyEvent::AIO;
+use IO::AIO;
+use AnyEvent::AIO;
+
+use Sys::Sendfile;
 
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri>;
+our @EXPORT_OK =qw<send_file_uri send_file_uri_aio send_file_uri_sys>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
 #TODO:
 #add directory listing option?
+sub send_file_uri_sys {
+	my ($rex,$uri,$sys_root)=@_;
+	state @stat;
+	state $reply;
+
+	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
+		.uSAC::HTTP::Rex::STATIC_HEADERS
+		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
+
+        #close connection after if marked
+        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
+                $reply.=HTTP_CONNECTION.": close".LF;
+
+        }
+	#or send explicit keep alive?
+	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
+	else{
+		$reply.=
+			HTTP_CONNECTION.": Keep-Alive".LF
+			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
+		;
+	}
+
+	my $abs_path;
+	$abs_path=$sys_root."/".$uri;
+	my $offset=0;
+	my $length=0;
+	open(my $in_fh,"<",$abs_path) or say  "OPen error";
+	my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+	$length=(stat($in_fh))[7];
+	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
+	say "REPLY: $reply";
+	$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
+			say "DOING CALLBACK";
+			my $res=sendfile $out_fh,$in_fh,$offset,$length;
+			say "after callback: $res";
+			say $! unless $res>0;
+			$rex->[uSAC::HTTP::Rex::session_]->drop;
+	});
+
+}
+
+sub send_file_uri_aio {
+	my ($rex,$uri,$sys_root)=@_;
+	state @stat;
+	state $reply;
+
+	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
+		.uSAC::HTTP::Rex::STATIC_HEADERS
+		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
+
+        #close connection after if marked
+        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
+                $reply.=HTTP_CONNECTION.": close".LF;
+
+        }
+	#or send explicit keep alive?
+	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
+	else{
+		$reply.=
+			HTTP_CONNECTION.": Keep-Alive".LF
+			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
+		;
+	}
+
+	my $abs_path;
+	$abs_path=$sys_root."/".$uri;
+	my $offset=0;
+	my $length=0;
+        aio_open($abs_path, IO::AIO::O_RDONLY,0, sub {
+			my $in_fh=$_[0];
+			#say "Open ERROR $!" unless $_[0];
+			#say "In fh: ",$in_fh;
+			$length=(stat $in_fh)[7];
+			#say "Length: $length";
+			$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
+			#say $reply;
+			$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
+					#say "write callback";
+					my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+					#say "out fh: ",$out_fh;
+                                        ############################################################
+                                        # $rex->[uSAC::HTTP::Rex::write_]->("b" x $length, sub{    #
+                                        #                 $rex->[uSAC::HTTP::Rex::session_]->drop; #
+                                        #         });                                              #
+                                        # return;                                                  #
+                                        ############################################################
+					aio_sendfile($out_fh,$in_fh, $offset, $length, sub {
+							say "Send file error: $!" unless $_[0];
+							close $in_fh;
+							$rex->[uSAC::HTTP::Rex::session_]->drop;
+						});
+				})
+		
+	});
+
+}
 
 sub send_file_uri {
 	my ($rex,$uri,$sys_root)=@_;
@@ -45,14 +144,14 @@ sub send_file_uri {
 	#open my $fh,"<",
 	my $abs_path;
 	$abs_path=$sys_root."/".$uri;
-	@stat=stat $abs_path;
 
-	#TODO: do non found if no stat
+	#TODO: add error checking.
 	my $in_fh;	
 	unless (open $in_fh, "<", $abs_path){
 		#error and return;
 		say $!;
 	}
+	@stat=stat $in_fh;#$abs_path;
 
 	#continue
 	
