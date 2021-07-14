@@ -310,7 +310,9 @@ use constant KEY_COUNT=>attrs_-method_+1;
 
 			#User requested headers. 
 			my $i=0;
-			$reply.=$_[2][$i++].": $_[2][$i++]$LF" for(0..@$_[2]/2-1);
+			given($_[2]){
+				$reply.=$_->[$i++].": $_->[$i++]$LF" for(0..@$_/2-1);
+			}
 
 
 			#Append body
