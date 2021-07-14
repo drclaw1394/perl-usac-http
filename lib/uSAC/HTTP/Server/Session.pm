@@ -78,13 +78,16 @@ sub _make_reader {
 	\my $buf=\$self->[rbuf_];
 	my $ref=\$self->[rbuf_];	
 	my $len;
+	\my $reader=\$self->[read_];
+
 	#say "Make reader";
 	#create first entry into the read stack
 	$self->[rw_] = AE::io $fh, 0, sub {
 		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
 		given($len){
 			when($_>0){
-				$self->[read_]($ref,$self->[rex_],$self->[reader_cb_]);
+				#$self->[read_]();
+				$reader->();
 			}
 			when(0){
 				#End of file

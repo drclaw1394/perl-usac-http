@@ -8,6 +8,7 @@ use AnyEvent;
 BEGIN {
 	@uSAC::HTTP::Server::Subproducts=("testing/1.2");
 }
+my $fork=0;
 my @sys_roots=qw<data>;
 use uSAC::HTTP::Server;
 
@@ -24,6 +25,8 @@ use constant {
 	HTTP_1_1=>"HTTP/1.1",
 };
 
+use constant LF=>"\015\012";
+
 our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
@@ -31,7 +34,6 @@ our $ANY_VERS=qr/HTTP.*$/;
 sub begins_with {
 	my $test=$_[0];
 	sub{0 <= index $_[0], $test},
-
 }
 
 sub matches_with {
@@ -75,11 +77,14 @@ $table->add(
 	},
 
 	{
-		matcher=>qr|POST /urlencoded|ao,
+			   #POST /urlencoded HTTP/1.1
+		matcher=>qr{POST /urlencoded HTTP/1[.]1}ao,
 		sub=>sub {
 			my ($line, $rex)=@_;
 			my $session=$rex->[uSAC::HTTP::Rex::session_];
 			say "POST ENDPOINT";
+
+
 			$session->push_reader(
 				"http1_1_urlencoded",
 				sub {
@@ -95,6 +100,14 @@ $table->add(
 				},
 				#remaining options ref for the reader? eg write to file?
 			);
+			#check for expects header and send 100 before trying to read
+			given($rex->[uSAC::HTTP::Rex::headers_]){
+				if(defined($_->{expects})){
+					#issue a continue response	
+					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
+					$rex->[uSAC::HTTP::Rex::write_]->($reply);
+				}
+			}
 			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex,
 			);
 			return;
@@ -159,45 +172,17 @@ my $server = uSAC::HTTP::Server->new(
 	port=>8080,
 	cb=>$dispatcher
 );
-#for normal get/head
-# read all the headers
-# test/build response
-# #read remaining data on connection* (should be none)
-# Send rely
-#
-#
-# for post
-# need to check if url exists
-# if so read body
-# then proces and generate reponse
-# if uri not accessable need reply 404 and then close connection instaed of reading 
 
-#####################################################################################################################################################
-#                 my $req=$_[0];                                                                                                                    #
-#                 given ($req->[0]){                                                                                                                #
-#                         when ("GET"){                                                                                                             #
-#                                 return (200,"GOOD");                                                                                              #
-#                                                                                                                                                   #
-#                         when ("POST"){                                                                                                            #
-#                                 return (sub { print $_[1]->$*;print "Method $req->[0]"; $req->[3]->("HTTP/1.1 200 OK\nContent-Length: 0\n\n");}); #
-#                         }                                                                                                                         #
-#                                                                                                                                                   #
-#                         when ("PUT"){                                                                                                             #
-#                                                                                                                                                   #
-#                         }                                                                                                                         #
-#                                                                                                                                                   #
-#                         default {                                                                                                                 #
-#                         	#dynamic matching here
-#                                 #pass through?                                                                                                    #
-#                         }                                                                                                                         #
-#                 }                                                                                                                                 #
-#         }                                                                                                                                         #
-# }                                                                                                                                                 #
-#                                                                                                                                                   #
-#                                                                                                                                                   #
-# );                                                                                                                                                #
-#                                                                                                                                                   #
-#####################################################################################################################################################
 $server->listen;
+if($fork){
+	for (1..3) {
+		my $pid = fork();
+		if ($pid) {
+			next;
+		} else {
+			last;
+		}
+	}
+}
 $server->accept;
 EV::loop();

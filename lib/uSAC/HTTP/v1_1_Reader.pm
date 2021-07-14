@@ -40,13 +40,12 @@ use enum (qw<STATE_REQ_LINE STATE_RES_LINE STATE_HEADERS STATE_ERROR>);
 #
 
 sub make_reader{
-	say "MAKING BASE HTTP1.1 reader";
+	#say "MAKING BASE HTTP1.1 reader";
 	#take a session and alias the variables to lexicals
 	my $r=shift;
-	my $previous=shift;	#this should be undef for this reader?
 
 	my $self=$r->[uSAC::HTTP::Server::Session::server_];
-	#\my $buf=\$r->[uSAC::HTTP::Server::Session::rbuf_];
+	\my $buf=\$r->[uSAC::HTTP::Server::Session::rbuf_];
 	\my $fh=\$r->[uSAC::HTTP::Server::Session::fh_];
 	\my $write=\$r->[uSAC::HTTP::Server::Session::write_];
 	#weaken $write;
@@ -61,8 +60,7 @@ sub make_reader{
 	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 	sub {
 		use integer;
-		\my $buf=$_[0];#shift;
-		$self and $r or return;
+		#$self and $r or return;
 		$len=length $buf;
 		while ( $self and $len ) {
 			#Dual mode variables:
@@ -81,7 +79,7 @@ sub make_reader{
 				$method=substr($buf, $ixx, ($pos1=index($buf, " ", $ixx))-$ixx);
 				$uri=substr($buf, ++$pos1, ($pos2=index($buf, " ", $pos1))-$pos1);
 				$version=substr($buf, ++$pos2, ($pos3=index($buf, "\015\012", $pos2))-$pos2);
-				$line=substr($buf,$ixx,$pos3-1);
+				$line=substr($buf,$ixx,$pos3);
 				if($pos3>=0){
 					#end of line found
 						$state   = 1;
@@ -514,7 +512,9 @@ sub make_form_data_reader {
 	say "aasdfasdf";;
 	use integer;
 	my $session=shift;
-	#my $maker_sub=shift;
+	\my $buf=\$session->[uSAC::HTTP::Server::Session::rbuf_];
+	\my $cb=\$session->[uSAC::HTTP::Server::Session::reader_cb_];
+	\my $rex=\$session->[uSAC::HTTP::Server::Session::rex_];
 
 
 	my $state=0;
@@ -522,9 +522,9 @@ sub make_form_data_reader {
 	my %h;
 	sub {
 		say "IN FORM PARSER";
-		\my $buf=shift;#buffer from io loop
-		my $rex=shift;
-		my $cb=$session->[uSAC::HTTP::Server::Session::reader_cb_];
+		#\my $buf=shift;#buffer from io loop
+		#my $rex=shift;
+		#my $cb=$session->[uSAC::HTTP::Server::Session::reader_cb_];
 		my $processed=0;
 
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];
@@ -698,6 +698,9 @@ sub make_form_urlencoded_reader {
 	say "MAKING URL ENCODED READER";
 	use integer;
 	my $session=shift;
+	\my $buf=\$session->[uSAC::HTTP::Server::Session::rbuf_];
+	\my $cb=\$session->[uSAC::HTTP::Server::Session::reader_cb_];
+	\my $rex=\$session->[uSAC::HTTP::Server::Session::rex_];
 	#my $maker_sub=shift;
 
 	my $processed=0;
@@ -706,10 +709,12 @@ sub make_form_urlencoded_reader {
 
 	#$cb->(undef) and return unless $len; #Return
 	sub {
-		\my $buf=shift;#buffer from io loop
-		my $rex=shift;
-		#my $cb=shift;
-	my $cb=$session->[uSAC::HTTP::Server::Session::reader_cb_];
+        ###############################################################
+        #         \my $buf=shift;#buffer from io loop                 #
+        #         my $rex=shift;                                      #
+        #         #my $cb=shift;                                      #
+        # my $cb=$session->[uSAC::HTTP::Server::Session::reader_cb_]; #
+        ###############################################################
 		say "REX IN URL READER";
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];
 		my $len = $h{'content-length'}//0; #number of bytes to read, or 0 if undefined
