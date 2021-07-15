@@ -62,7 +62,7 @@ $table->add(
 			my @headers;
 			#say "STATIC FILE server";
 			#look for static files in nominated static directories	
-			send_file_uri_aio2 $rex, $1, "data";
+			send_file_uri2 $rex, $1, "data";
 			return;		
 		}
 	},

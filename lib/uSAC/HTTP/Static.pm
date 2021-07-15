@@ -1,8 +1,12 @@
 package uSAC::HTTP::Static;
 
 use common::sense;
+use feature "refaliasing";
+no warnings "experimental";
+
 use File::Spec;
 use IO::AIO;
+use AnyEvent;
 use AnyEvent::AIO;
 IO::AIO::max_parallel 1;
 #$IO::AIO::lkjasdf=1;
@@ -13,8 +17,9 @@ use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 
+use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri send_file_uri_aio send_file_uri_sys send_file_uri_aio2 >;
+our @EXPORT_OK =qw<send_file_uri send_file_uri2  send_file_uri_aio send_file_uri_sys send_file_uri_aio2 >;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -93,40 +98,45 @@ sub send_file_uri_aio2 {
 	$length=(stat($in_fh))[7];
 	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
 	my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
-	my $sender;
-	$sender=sub {
+	my $watcher;
+	$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
+			#create a write watcher to trigger send file.
+			$watcher=AE::io  $out_fh,1, sub {
 		return unless defined $out_fh and defined $in_fh;
 		aio_sendfile($out_fh,$in_fh, $offset, $length, sub {
-				say "IN CALLBACK";
+				say "IN write watcher CALLBACK: $_[0]";
+				say "EAGAIN" if $! == EAGAIN;
 				say $! unless $_[0]>0;
 				return if $_[0]<0;
 				given($_[0]){
 					when($_>0){
 						#say $_[0];
 						$offset+=$_;
-						if($offset< $length){
-							#say "More to send";
-							$sender->();
-						}
-						else {
+						if($offset==$length){
 							#say "All sent";
 							close $in_fh;
-							$sender=undef;
+							$watcher=undef;
 							$rex->[uSAC::HTTP::Rex::session_]->drop;
 						}
+						#else watcher will notifiy
 					}
 					default{
+						#check if an actual error
+						return if $! == EAGAIN or $! == EINTR;
 						#say "Send file Error: $_[0]";
+						#actual error		
+						say "sendfile WRITER ERROR: ", $!;
+						$watcher=undef;
 						close $in_fh;
-						$sender=undef;
 						#say "Send file error: $!" unless $_[0];
 					}
 				}
 			});
-	};
-	$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
-			$sender->();
-				});
+
+
+
+			};
+	});
 		
 
 }
@@ -186,6 +196,130 @@ sub send_file_uri_aio {
 	});
 
 }
+sub send_file_uri2 {
+	my ($rex,$uri,$sys_root)=@_;
+	my @stat;
+	my $reply;
+
+	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
+		.uSAC::HTTP::Rex::STATIC_HEADERS
+		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
+
+        #close connection after if marked
+        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
+                $reply.=HTTP_CONNECTION.": close".LF;
+
+        }
+	#or send explicit keep alive?
+	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
+	else{
+		$reply.=
+			HTTP_CONNECTION.": Keep-Alive".LF
+			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
+		;
+	}
+
+
+	#open my $fh,"<",
+	my $abs_path;
+	$abs_path=$sys_root."/".$uri;
+
+	#TODO: add error checking.
+	my $in_fh;	
+	unless (open $in_fh, "<", $abs_path){
+		#error and return;
+		say $!;
+	}
+	my $length=(stat $in_fh)[7];#$abs_path;
+
+	#continue
+	
+
+
+
+	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;
+
+	my $read_size=4096*32;
+	#prime the buffer by doing a read first
+	my $read_total=0;
+	my $write_total=0;
+
+
+	$length+=length $reply;	#total length	
+
+	#setup write watcher
+	my $ww;
+	\my $out_fh=\$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+	$ww = AE::io $out_fh, 1, sub {
+
+		if(length($reply)< $read_size and $read_total<$length){
+			given(sysread $in_fh, $reply,$read_size, length $reply){
+				when($_>0){
+					#write to socket
+					$read_total+=$_;
+				}
+				when(0){
+					#end of file. should not get here
+				}
+				when (undef){
+					#error
+					#drop
+					$ww=undef;
+					close $in_fh;
+					$rex->[uSAC::HTTP::Rex::session_]->drop;
+				}
+			}
+		}
+		given(syswrite $out_fh,$reply){
+			when($_>0){
+				$write_total+=$_;
+				$reply=substr $reply, $_;
+				if($write_total==$length){
+					#finished
+					#drop
+					$ww=undef;
+					close $in_fh;
+					#$rex->[uSAC::HTTP::Rex::session_]->drop;
+				}
+			}
+			when(0){
+				say "EOF WRITE";
+				#end of file
+				#drop
+				$ww=undef;
+				close $in_fh;
+				$rex->[uSAC::HTTP::Rex::session_]->drop;
+			}
+			when(undef){
+				#error
+				#say "WRITE ERROR: ", $!;
+				unless( $! == EAGAIN or $! == EINTR){
+					#say $!;
+					$ww=undef;
+					close $in_fh;
+					$rex->[uSAC::HTTP::Rex::session_]->drop;
+					return;
+				}
+			}
+		}
+	};
+}
+
+
+
+##############################################################################################################
+#         #say $reply;                                                                                       #
+#         local $/=undef;                                                                                    #
+#         given($rex->[uSAC::HTTP::Rex::write_]){                                                            #
+#                 $_->( $reply.<$in_fh>);                                                                    #
+#                 $_->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]; #
+#                 $_=undef;                                                                                  #
+#                 ${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;                                                 #
+#         }                                                                                                  #
+#         close $in_fh;                                                                                      #
+#                                                                                                            #
+# }                                                                                                          #
+##############################################################################################################
 
 sub send_file_uri {
 	my ($rex,$uri,$sys_root)=@_;
