@@ -98,7 +98,6 @@ sub _make_reader {
 			when(undef){
 				#potential error
 				return if $! == EAGAIN or $! == EINTR; #or $! == WSAEWOULDBLOCK;
-				say "Error read:";
 				#say $!;
 				$self->[closeme_]=1;
 				drop $self;

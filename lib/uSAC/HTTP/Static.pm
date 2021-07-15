@@ -283,7 +283,7 @@ sub send_file_uri2 {
 				}
 			}
 			when(0){
-				say "EOF WRITE";
+				#say "EOF WRITE";
 				#end of file
 				#drop
 				$ww=undef;
