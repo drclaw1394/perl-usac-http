@@ -4,7 +4,8 @@ use common::sense;
 use File::Spec;
 use IO::AIO;
 use AnyEvent::AIO;
-$IO::AIO::max_parallel=1;
+IO::AIO::max_parallel 1;
+#$IO::AIO::lkjasdf=1;
 
 use Sys::Sendfile;
 
@@ -96,8 +97,9 @@ sub send_file_uri_aio2 {
 	$sender=sub {
 		return unless defined $out_fh and defined $in_fh;
 		aio_sendfile($out_fh,$in_fh, $offset, $length, sub {
-				return unless defined $out_fh;
-				return unless defined $in_fh;
+				say "IN CALLBACK";
+				say $! unless $_[0]>0;
+				return if $_[0]<0;
 				given($_[0]){
 					when($_>0){
 						#say $_[0];
@@ -115,7 +117,7 @@ sub send_file_uri_aio2 {
 					}
 					default{
 						#say "Send file Error: $_[0]";
-						#close $in_fh;
+						close $in_fh;
 						$sender=undef;
 						#say "Send file error: $!" unless $_[0];
 					}
