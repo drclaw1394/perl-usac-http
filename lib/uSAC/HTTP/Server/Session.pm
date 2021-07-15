@@ -97,8 +97,9 @@ sub _make_reader {
 			}
 			when(undef){
 				#potential error
-				#say "Error maybe?";
 				return if $! == EAGAIN or $! == EINTR; #or $! == WSAEWOULDBLOCK;
+				#say "Error read:";
+				#say $!;
 				$self->[closeme_]=1;
 				drop $self;
 			}
@@ -115,7 +116,6 @@ sub _make_writer{
 	\my $wbuf=\$ido->[uSAC::HTTP::Server::Session::wbuf_];
 	\my $ww=\$ido->[uSAC::HTTP::Server::Session::ww_];
 	\my $fh=\$ido->[uSAC::HTTP::Server::Session::fh_];
-	say "make writer : $fh";	
 	my $w;
 	my $cb;
 	sub {
@@ -228,7 +228,6 @@ sub _make_writer{
 sub drop {
         my ($self,$err) = @_;
 	return unless $self->[closeme_];
-	say "dropping";
         my $r = delete $self->[server_][uSAC::HTTP::Server::sessions_]{$self->[id_]}; #remove from server
         $self->[server_][uSAC::HTTP::Server::active_connections_]--;
 
@@ -240,7 +239,7 @@ sub drop {
 	$self->[wbuf_]=undef;
 	$self->[rbuf_]=undef;
 
-	#unshift @{$self->[server_][uSAC::HTTP::Server::zombies_]}, $self;
+	unshift @{$self->[server_][uSAC::HTTP::Server::zombies_]}, $self;
 
         ###############################################################################################################################
         # ( delete $self->[server_][uSAC::HTTP::Server::graceful_] )->()                                                              #

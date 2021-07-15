@@ -4,6 +4,7 @@ use common::sense;
 use File::Spec;
 use IO::AIO;
 use AnyEvent::AIO;
+$IO::AIO::max_parallel=1;
 
 use Sys::Sendfile;
 
@@ -12,7 +13,7 @@ use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri send_file_uri_aio send_file_uri_sys>;
+our @EXPORT_OK =qw<send_file_uri send_file_uri_aio send_file_uri_sys send_file_uri_aio2 >;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -51,12 +52,80 @@ sub send_file_uri_sys {
 	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
 	say "REPLY: $reply";
 	$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
-			say "DOING CALLBACK";
+			say "DOING CALLBACK: offset: $offset, length: $length";
 			my $res=sendfile $out_fh,$in_fh,$offset,$length;
 			say "after callback: $res";
-			say $! unless $res>0;
-			$rex->[uSAC::HTTP::Rex::session_]->drop;
+			say $! unless defined $res;
+			#$rex->[uSAC::HTTP::Rex::session_]->drop;
 	});
+
+}
+sub send_file_uri_aio2 {
+	my ($rex,$uri,$sys_root)=@_;
+	state @stat;
+	state $reply;
+
+	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
+		.uSAC::HTTP::Rex::STATIC_HEADERS
+		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
+
+        #close connection after if marked
+        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
+                $reply.=HTTP_CONNECTION.": close".LF;
+
+        }
+	#or send explicit keep alive?
+	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
+	else{
+		$reply.=
+			HTTP_CONNECTION.": Keep-Alive".LF
+			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
+		;
+	}
+
+	my $abs_path;
+	$abs_path=$sys_root."/".$uri;
+	my $offset=0;
+	my $length=0;
+	open(my $in_fh,"<",$abs_path) or say  "OPen error";
+	my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+	$length=(stat($in_fh))[7];
+	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
+	my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+	my $sender;
+	$sender=sub {
+		return unless defined $out_fh and defined $in_fh;
+		aio_sendfile($out_fh,$in_fh, $offset, $length, sub {
+				return unless defined $out_fh;
+				return unless defined $in_fh;
+				given($_[0]){
+					when($_>0){
+						#say $_[0];
+						$offset+=$_;
+						if($offset< $length){
+							#say "More to send";
+							$sender->();
+						}
+						else {
+							#say "All sent";
+							close $in_fh;
+							$sender=undef;
+							$rex->[uSAC::HTTP::Rex::session_]->drop;
+						}
+					}
+					default{
+						#say "Send file Error: $_[0]";
+						#close $in_fh;
+						$sender=undef;
+						#say "Send file error: $!" unless $_[0];
+					}
+				}
+			});
+	};
+	$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
+			$sender->();
+				});
+		
 
 }
 
