@@ -4,6 +4,7 @@ use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
 
+use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use File::Spec;
 use IO::AIO;
 use AnyEvent;
@@ -23,6 +24,20 @@ our @EXPORT_OK =qw<send_file_uri send_file_uri2  send_file_uri_aio send_file_uri
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
+
+
+################################################
+# Server: nginx/1.21.0                         #
+# Date: Thu, 15 Jul 2021 22:55:42 GMT          #
+# Content-Type: text/html                      #
+# Content-Length: 612                          #
+# Last-Modified: Thu, 15 Jul 2021 06:55:37 GMT #
+# Connection: keep-alive                       #
+# ETag: "60efdbe9-264"                         #
+# Accept-Ranges: bytes                         #
+################################################
+
+
 #TODO:
 #add directory listing option?
 sub send_file_uri_sys {
@@ -53,7 +68,8 @@ sub send_file_uri_sys {
 	my $offset=0;
 	my $length=0;
 	open(my $in_fh,"<",$abs_path) or say  "OPen error";
-	my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+	\my $out_fh=\$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+	fcntl $out_fh, F_SETFL, 0;#O_NONBLOCK;	#this nukes other flags... read first?
 	$length=(stat($in_fh))[7];
 	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
 	say "REPLY: $reply";
@@ -218,6 +234,10 @@ sub send_file_uri2 {
 			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
 		;
 	}
+	#break the path
+	#
+	#set content type
+	#$reply.=HTTP_CONTENT_TYPE.": ".$uSAC::HTTP::Server::MIME{
 
 
 	#open my $fh,"<",
@@ -238,7 +258,6 @@ sub send_file_uri2 {
 
 
 	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;
-
 	my $read_size=4096*32;
 	#prime the buffer by doing a read first
 	my $read_total=0;
@@ -279,7 +298,8 @@ sub send_file_uri2 {
 					#drop
 					$ww=undef;
 					close $in_fh;
-					#$rex->[uSAC::HTTP::Rex::session_]->drop;
+
+					$rex->[uSAC::HTTP::Rex::session_]->drop;
 				}
 			}
 			when(0){

@@ -75,11 +75,16 @@ sub make_reader{
 			#	$version => comment
 			#
 			if ($state == 0) {
-				my ($pos0,$pos1,$pos2,$pos3);
-				$method=substr($buf, $ixx, ($pos1=index($buf, " ", $ixx))-$ixx);
-				$uri=substr($buf, ++$pos1, ($pos2=index($buf, " ", $pos1))-$pos1);
-				$version=substr($buf, ++$pos2, ($pos3=index($buf, "\015\012", $pos2))-$pos2);
-				$line=substr($buf,$ixx,$pos3);
+                                #################################################################################
+                                # my ($pos0,$pos1,$pos2,$pos3);                                                 #
+                                # $method=substr($buf, $ixx, ($pos1=index($buf, " ", $ixx))-$ixx);              #
+                                # $uri=substr($buf, ++$pos1, ($pos2=index($buf, " ", $pos1))-$pos1);            #
+                                # $version=substr($buf, ++$pos2, ($pos3=index($buf, "\015\012", $pos2))-$pos2); #
+                                # $line=substr($buf,$ixx,$pos3);                                                #
+                                #################################################################################
+				my $pos3=index $buf, LF, $ixx;
+                                $line=substr($buf,$ixx,$pos3);                                                #
+				$version=substr($line,-1,1)eq "1"?"HTTP/1.1":"HTTP/1.0";
 				if($pos3>=0){
 					#end of line found
 						$state   = 1;
@@ -96,6 +101,7 @@ sub make_reader{
 				else {
 					#need more. wait for event
 					#Don't update $pos
+					# could also be an error... need time out
 				}
 			}
 

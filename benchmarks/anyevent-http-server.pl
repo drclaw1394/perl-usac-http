@@ -31,6 +31,12 @@ our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
 
+my $any_method=		qr{^([^ ]+)}a;
+my $path=		qr{([^? ]+)}a;
+my $comp=		qr{([^/ ]+)}a;
+my $query=		qr{(?:[?]([^# ]+)?)?}a;
+my $fragment=		qr{(?:[#]([^ ]+)?)?}a;
+
 sub begins_with {
 	my $test=$_[0];
 	sub{0 <= index $_[0], $test},
@@ -50,25 +56,27 @@ my $table=Hustle::Table->new;
 
 $table->set_default(sub {
 		my ($line,$rex)=@_;
+		say "DEFAULT";
 		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_NOT_FOUND,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
 });
 
 $table->add(
 
 	{
-		matcher=>qr{GET /data/(.*) }ao,
+		matcher=>qr{GET \s /$comp/$path}xa,
 		sub=>sub {
 			my ($line, $rex)=@_;
 			my @headers;
-			#say "STATIC FILE server";
+			#split uri more
+			#$1=~/([^?]);
 			#look for static files in nominated static directories	
-			send_file_uri2 $rex, $1, "data";
+			send_file_uri2 $rex, $2, "data";
 			return;		
 		}
 	},
 	{
 		#matcher=>"GET / HTTP/1.0",
-		matcher=>matches_with("GET /"),
+		matcher=>qr{GET $path},#matches_with("GET /"),
 		#matcher=>begins_with("GET /"),
 		sub=>sub{
 			my ($line, $rex)=@_;

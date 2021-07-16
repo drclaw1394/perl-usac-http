@@ -33,6 +33,7 @@ use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR IPP
 use Time::HiRes qw/gettimeofday/;
 
 use Carp 'croak';
+\our %MIME=do "./mime.pl";
 
 use constant MAX_READ_SIZE => 128 * 1024;
 

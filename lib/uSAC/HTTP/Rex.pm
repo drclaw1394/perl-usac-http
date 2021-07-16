@@ -283,7 +283,8 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			use integer;
 			my $self=shift;
 
-			my $reply="$self->[version_] $_[0]".LF;
+			my $reply="HTTP/1.1 $_[0]".LF;
+			#my $reply="$self->[version_] $_[0]".LF;
 
 			$reply.=
 				STATIC_HEADERS
