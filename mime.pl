@@ -1,4 +1,4 @@
-return {
+my $mime_to_extension ={
     "text/html"=>"html htm shtml",
     "text/css"=>"css",
     "text/xml"=>"xml",
@@ -89,3 +89,14 @@ return {
     "video/x-ms-wmv"=>"wmv",
     "video/x-msvideo"=>"avi",
 };
+
+my $ext_to_mime;
+my @tmp;
+for my $mime (keys $mime_to_extension->%*){
+	for($mime_to_extension->{$mime}){
+		push @tmp, map {$_,$mime} split " ";
+	}
+}
+my %ext_to_mime=@tmp;
+print "mime test .txt => $ext_to_mime{txt}\n";
+\%ext_to_mime;

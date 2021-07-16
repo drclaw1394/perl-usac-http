@@ -24,7 +24,10 @@ our @EXPORT_OK =qw<send_file_uri send_file_uri2  send_file_uri_aio send_file_uri
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
+my $path_ext=	qr{\.([^.]*)$}a;
 
+my $read_size=4096*16;
+my %stat_cache;
 
 ################################################
 # Server: nginx/1.21.0                         #
@@ -214,30 +217,7 @@ sub send_file_uri_aio {
 }
 sub send_file_uri2 {
 	my ($rex,$uri,$sys_root)=@_;
-	my @stat;
 	my $reply;
-
-	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
-
-        #close connection after if marked
-        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
-                $reply.=HTTP_CONNECTION.": close".LF;
-
-        }
-	#or send explicit keep alive?
-	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
-	else{
-		$reply.=
-			HTTP_CONNECTION.": Keep-Alive".LF
-			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
-		;
-	}
-	#break the path
-	#
-	#set content type
-	#$reply.=HTTP_CONTENT_TYPE.": ".$uSAC::HTTP::Server::MIME{
 
 
 	#open my $fh,"<",
@@ -250,15 +230,24 @@ sub send_file_uri2 {
 		#error and return;
 		say $!;
 	}
-	my $length=(stat $in_fh)[7];#$abs_path;
+	#my $stat=($stat_cache{$abs_path}//=
+	my $stat=[stat $in_fh];
+	my $length=$stat->[7];#(stat $in_fh)[7];#$abs_path;
 
-	#continue
-	
+	$uri=~$path_ext;
 
+	$reply=
+		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
+		.uSAC::HTTP::Rex::STATIC_HEADERS
+		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
+        	.($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]?
+			HTTP_CONNECTION.": close".LF
+			:HTTP_CONNECTION.": Keep-Alive".LF
+		)
+		.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$1}//"application/octet-stream").LF
+		.HTTP_CONTENT_LENGTH.": ".$length.LF
+		.LF;
 
-
-	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;
-	my $read_size=4096*32;
 	#prime the buffer by doing a read first
 	my $read_total=0;
 	my $write_total=0;
@@ -327,19 +316,6 @@ sub send_file_uri2 {
 
 
 
-##############################################################################################################
-#         #say $reply;                                                                                       #
-#         local $/=undef;                                                                                    #
-#         given($rex->[uSAC::HTTP::Rex::write_]){                                                            #
-#                 $_->( $reply.<$in_fh>);                                                                    #
-#                 $_->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]; #
-#                 $_=undef;                                                                                  #
-#                 ${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;                                                 #
-#         }                                                                                                  #
-#         close $in_fh;                                                                                      #
-#                                                                                                            #
-# }                                                                                                          #
-##############################################################################################################
 
 sub send_file_uri {
 	my ($rex,$uri,$sys_root)=@_;
