@@ -51,6 +51,7 @@ sub make_reader{
 	#weaken $write;
 	weaken $r;
 
+	my $cb=$self->[uSAC::HTTP::Server::cb_];
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
 	my $line;
@@ -202,7 +203,8 @@ sub make_reader{
 				$pos=0;
 				$ixx=0;
 				$state=0;
-				$self->[uSAC::HTTP::Server::cb_]($line,$req);
+				#$self->[uSAC::HTTP::Server::cb_]($line,$req);
+				$cb->($line,$req);
 				weaken ($req->[1]);
 				weaken( $req->[8] );
 				weaken( $req->[5] );

@@ -1,14 +1,17 @@
 #!/usr/bin/env perl
 use common::sense;
-
-use FindBin;use lib "$FindBin::Bin/../lib";
-use EV;
-use AnyEvent;
-
+use feature "refaliasing";
+no warnings "experimental";
+	my $fork=$ARGV[0]//0;
 BEGIN {
 	@uSAC::HTTP::Server::Subproducts=("testing/1.2");
 }
-my $fork=0;
+
+use FindBin;use lib "$FindBin::Bin/../lib";
+use EV;
+say EV::backend;
+use AnyEvent;
+
 my @sys_roots=qw<data>;
 use uSAC::HTTP::Server;
 
@@ -31,11 +34,11 @@ our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
 
-my $any_method=		qr{^([^ ]+)}a;
-my $path=		qr{([^? ]+)}a;
-my $comp=		qr{([^/ ]+)}a;
-my $query=		qr{(?:[?]([^# ]+)?)?}a;
-my $fragment=		qr{(?:[#]([^ ]+)?)?}a;
+my $any_method=		qr{^([^ ]+)}ao;
+my $path=		qr{([^? ]+)}ao;
+my $comp=		qr{([^/ ]+)}ao;
+my $query=		qr{(?:[?]([^# ]+)?)?}ao;
+my $fragment=		qr{(?:[#]([^ ]+)?)?}ao;
 
 sub begins_with {
 	my $test=$_[0];
@@ -60,31 +63,24 @@ $table->set_default(sub {
 		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_NOT_FOUND,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
 });
 
+$table->add(qr{GET \s /$comp/$path}xa=> sub {
+		\my $line=\$_[0];
+		\my $rex=\$_[1];
+		send_file_uri2 $rex, $2, "data";
+		return;		
+	}
+);
+
+my $data="a" x 1024;
+$table->add(qr{GET $path}=>sub{
+		#my ($line, $rex)=@_;
+		\my $line=\$_[0];
+		\my $rex=\$_[1];
+		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,$data);
+		return;	#enable caching for this match
+	}
+);
 $table->add(
-
-	{
-		matcher=>qr{GET \s /$comp/$path}xa,
-		sub=>sub {
-			my ($line, $rex)=@_;
-			my @headers;
-			#split uri more
-			#$1=~/([^?]);
-			#look for static files in nominated static directories	
-			send_file_uri2 $rex, $2, "data";
-			return;		
-		}
-	},
-	{
-		#matcher=>"GET / HTTP/1.0",
-		matcher=>qr{GET $path},#matches_with("GET /"),
-		#matcher=>begins_with("GET /"),
-		sub=>sub{
-			my ($line, $rex)=@_;
-			uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"a" x 1024);
-			return;	#enable caching for this match
-		}
-	},
-
 	{
 			   #POST /urlencoded HTTP/1.1
 		matcher=>qr{POST /urlencoded HTTP/1[.]1}ao,
@@ -182,9 +178,9 @@ my $server = uSAC::HTTP::Server->new(
 	cb=>$dispatcher
 );
 
+
 $server->listen;
-if($fork){
-	for (1..3) {
+	for (1..$fork-1) {
 		my $pid = fork();
 		if ($pid) {
 			next;
@@ -192,6 +188,5 @@ if($fork){
 			last;
 		}
 	}
-}
 $server->accept;
 EV::loop();

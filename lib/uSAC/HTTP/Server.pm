@@ -25,7 +25,7 @@ use AnyEvent::Handle;
 use Scalar::Util 'refaddr', 'weaken';
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
-use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN);
+use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN);
 
 #use Encode ();
 #use Compress::Zlib ();
@@ -137,6 +137,10 @@ sub listen {
 			setsockopt $fh, SOL_SOCKET, SO_REUSEADDR, 1
 				or Carp::croak "listen/so_reuseaddr: $!"
 					unless AnyEvent::WIN32; # work around windows bug
+
+			setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, 1
+				or Carp::croak "listen/so_reuseport: $!"
+					unless AnyEvent::WIN32; # work around windows bug
 			
 			unless ($service =~ /^\d*$/) {
 				$service = (getservbyname $service, "tcp")[2]
@@ -205,7 +209,8 @@ sub accept {
 	for my $fl ( values %{ $self->[fhs_] }) {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
-			while ($fl and ($peer = accept my $fh, $fl)) {
+			$peer = accept my $fh, $fl;
+				#while ($fl and ($peer = accept my $fh, $fl)) {
 
 				#AnyEvent::Util::fh_nonblocking $fh, 1; # POSIX requires inheritance, the outside world does not
 				fcntl $fh, F_SETFL, O_NONBLOCK;	#this nukes other flags... read first?
@@ -231,7 +236,6 @@ sub accept {
 				$sessions{ $id } = $session;
 				$active_connections++;
 				$total_connections++;
-			}
 		};
 	}
 	return;

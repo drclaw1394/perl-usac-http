@@ -88,6 +88,7 @@ sub _make_reader {
 		given($len){
 			when($_>0){
 				#$self->[read_]();
+				#say "calling reader";
 				$reader->();
 			}
 			when(0){
@@ -98,7 +99,6 @@ sub _make_reader {
 			when(undef){
 				#potential error
 				return if $! == EAGAIN or $! == EINTR; #or $! == WSAEWOULDBLOCK;
-				#say $!;
 				$self->[closeme_]=1;
 				drop $self;
 			}
