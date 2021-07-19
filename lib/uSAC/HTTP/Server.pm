@@ -51,11 +51,14 @@ given(\%uSAC::HTTP::Server::Session::make_reader_reg){
 	$_->{http1_1_base}=\&make_reader;
 	$_->{http1_1_form_data}=\&make_form_data_reader;
 	$_->{http1_1_urlencoded}=\&make_form_urlencoded_reader;
-	$_->{http1_1_default_writer}=\&make_default_writer;
+	#$_->{http1_1_default_writer}=\&make_default_writer;
+	$_->{websocket}=\&make_websocket_reader;
 }
 given(\%uSAC::HTTP::Server::Session::make_writer_reg){
 	$_->{http1_1_default_writer}=\&make_default_writer;
+	$_->{websocket}=\&make_websocket_writer;
 }
+
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>total_requests_-host_+1;

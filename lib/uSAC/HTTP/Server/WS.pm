@@ -1,6 +1,10 @@
 package uSAC::HTTP::Server::WS;
 use common::sense;
-
+use Exporter 'import';
+use MIME::Base64;		
+use Digest::SHA1;
+our @EXPORT_OK=qw<make_websocket_reader make_websocket_writer upgrade_to_websocket>;
+our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
 use Config;
@@ -14,6 +18,7 @@ use uSAC::HTTP::Code qw<:constants>;
 
 my $LF=$uSAC::HTTP::Rex::LF;
 
+use constant LF=>"\015\012";
 
 our $JSON = JSON::XS->new->utf8->convert_blessed;
 
@@ -75,16 +80,20 @@ sub make_writer {
 
 #take http1.1 connection and make it websocket
 #does the handshake
-sub upgrader {
+sub upgrade_to_websocket{
 	DEBUG && say  "Testing for websocket";
+	my $line=shift;
 	my $rex=shift;
+	my $uri=shift;
+	my $cb=shift;
+	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	#attempt to do the match
 	given ($rex->[uSAC::HTTP::Rex::headers_]){
 		DEBUG && say Dumper $_;
 		DEBUG && say Dumper $rex;
+		say %$_;
 		when (
-			$rex->[uSAC::HTTP::Rex::uri_] =~ m|/ws| 			#uri match
-				and  $_->{connection} =~ /upgrade/i	#required
+				$_->{connection} =~ /upgrade/i	#required
 				and  $_->{upgrade} =~ /websocket/i	#required
 				and  $_->{'sec-websocket-version'} ==13	#required
 				and  exists $_->{'sec-websocket-key'}	#required
@@ -93,55 +102,68 @@ sub upgrader {
 			#TODO:  origin testing, externsions,
 			DEBUG && say " Websocket upgrade";
 			# mangle the key
-			require MIME::Base64;		
-			require Digest::SHA1;
 			my $key=MIME::Base64::encode_base64 
-			Digest::SHA1::sha1 
-			$_->{'sec-websocket-key'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+				Digest::SHA1::sha1 
+				$_->{'sec-websocket-key'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 			#
 			#reply
-			my $reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS."$LF";
+			my $reply=
+				"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS.LF
+				.HTTP_CONNECTION.": Upgrade".LF
+				.HTTP_UPGRADE.": websocket".LF
+				.HTTP_SEC_WEBSOCKET_ACCEPT.": $key".LF
+				;
 
-			$reply.=HTTP_CONNECTION.": Upgrade.$LF";
-			$reply.=HTTP_UPGRADE.": websocket$LF";
-			$reply.=HTTP_SEC_WEBSOCKET_KEY.": $key$LF";	#Set server
-			$reply.=$LF;
 			#write reply	
-			if( $rex->[uSAC::HTTP::Rex::write_] ) {
-				$rex->[uSAC::HTTP::Rex::write_]->( $reply );
-				$rex->[uSAC::HTTP::Rex::write_]->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_] or $rex->[uSAC::HTTP::Rex::server_]{graceful};
-				#delete $self->[write_];
-				$rex->[uSAC::HTTP::Rex::write_]=undef;
-				${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;
-			}
+			say $reply;
+			uSAC::HTTP::Server::Session::push_writer 
+			#$session->push_writer(
+				$session,
+				"http1_1_default_writer",
+				undef;
+				#);
+			given($session->[uSAC::HTTP::Server::Session::write_]){
+				say "Writer is: ", $_;
+				$_->( $reply , sub {
+						say "handshake written out";
+						#create the new read and writer pair based on protocol
+						$session->push_reader(
+							"websocket",
+							$cb
 
-			#Destroy the read watcher and create a new one 
-			given ($rex->[uSAC::HTTP::Rex::session_]){
-				$_[uSAC::HTTP::Server::Session::rw_] =undef;
-				$_->[uSAC::HTTP::Server::Session::rw_]=AE::io  $_->[uSAC::HTTP::Server::Session::fh_], 0, sub {
-					#read frames
+						);
+						$session->push_writer(
+							"websocket",
+							undef
+						);
 
-				};
+						#read and write setup create a new ws with just the session
+						uSAC::HTTP::Server::WS->new($_);
 
-				#make anew writer
 
-				$_[uSAC::HTTP::Server::Session::ww_] =undef;
-				$_[uSAC::HTTP::Server::Session::write_] =undef;
-				$_->[uSAC::HTTP::Server::Session::ww_]=AE::io  $_->[uSAC::HTTP::Server::Session::fh_], 1, sub {
-					#
-
-				};
-
-				#read and write setup create a new ws with just the session
-				uSAC::HTTP::Server::WS->new($_);
+						$_=undef;
+					});
 			}
 
 		}
+
 		default {
 			DEBUG && say "Websocket did not match";
+			#reply
+			say "NO WEBSOCKET ALLOWED";
+			$session->[uSAC::HTTP::Server::Session::closeme_]=1;
+			uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_FORBIDDEN, undef,"";
 			return;
 		}
 	}
+}
+
+sub make_websocket_reader {
+
+}
+
+sub make_websocket_writer {
+
 }
 
 sub new {

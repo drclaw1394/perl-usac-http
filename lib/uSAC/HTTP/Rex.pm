@@ -370,11 +370,9 @@ use constant KEY_COUNT=>attrs_-method_+1;
 
 			#Write the headers
 			given ($self->[write_]){
-				#if( $self->[write_] ) {
 				$_->( $reply );
 				$_=undef;
-				#${ $self->[reqcount_] }--;
-				uSAC::HTTP::Server::Session::drop $self->[session_];
+				uSAC::HTTP::Server::Session::drop $session;
 			}
 
 		}

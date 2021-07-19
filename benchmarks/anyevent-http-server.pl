@@ -21,6 +21,7 @@ use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Static;
+use uSAC::HTTP::Server::WS;
 use Hustle::Table;
 
 
@@ -66,6 +67,22 @@ $table->add(qr{^GET /data/$path}ao=> sub {
 		push @_,$1,"data";
 		&send_file_uri2;
 		return;		
+	}
+);
+$table->add(qr<GET /ws>=>sub {
+		#create a web socket here
+		#once created, the callback is called with the ws object	
+
+		#check the headers if this is allowed
+		#
+
+		#Then do the handshake or error otherwise
+		#
+		push @_, "/ws", sub {
+			#reader callback
+		};
+		&upgrade_to_websocket;
+
 	}
 );
 
@@ -117,6 +134,7 @@ $table->add( begins_with("POST /formdata")=>sub {
 			return;
 		}
 );
+
 
 my $dispatcher=$table->prepare_dispatcher;
 
