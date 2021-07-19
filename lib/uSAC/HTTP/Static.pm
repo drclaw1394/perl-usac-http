@@ -216,7 +216,7 @@ sub send_file_uri_aio {
 
 }
 sub send_file_uri2 {
-	my ($rex,$uri,$sys_root)=@_;
+	my ($line,$rex,$uri,$sys_root)=@_;
 	my $reply;
 
 
@@ -225,6 +225,7 @@ sub send_file_uri2 {
 	$abs_path=$sys_root."/".$uri;
 
 	#TODO: add error checking.
+	#	Add etag => modification time and content length (size) (ie like nginx)
 	my $in_fh;	
 	unless (open $in_fh, "<", $abs_path){
 		#error and return;
@@ -244,8 +245,9 @@ sub send_file_uri2 {
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
 		)
-		.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$1}//"application/octet-stream").LF
+		.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$1}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
 		.HTTP_CONTENT_LENGTH.": ".$length.LF
+		.HTTP_ETAG.": ".$stat->[9]."-".$length.LF
 		.LF;
 
 	#prime the buffer by doing a read first
@@ -257,7 +259,8 @@ sub send_file_uri2 {
 
 	#setup write watcher
 	my $ww;
-	\my $out_fh=\$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
 	$ww = AE::io $out_fh, 1, sub {
 
 		if(length($reply)< $read_size and $read_total<$length){
@@ -274,7 +277,8 @@ sub send_file_uri2 {
 					#drop
 					$ww=undef;
 					close $in_fh;
-					$rex->[uSAC::HTTP::Rex::session_]->drop;
+					uSAC::HTTP::Server::Session::drop $session;
+					$session=undef;
 				}
 			}
 		}
@@ -288,7 +292,8 @@ sub send_file_uri2 {
 					$ww=undef;
 					close $in_fh;
 
-					$rex->[uSAC::HTTP::Rex::session_]->drop;
+					uSAC::HTTP::Server::Session::drop $session;
+					$session=undef;
 				}
 			}
 			when(0){
@@ -297,7 +302,9 @@ sub send_file_uri2 {
 				#drop
 				$ww=undef;
 				close $in_fh;
-				$rex->[uSAC::HTTP::Rex::session_]->drop;
+				uSAC::HTTP::Server::Session::drop $session;
+					$session=undef;
+
 			}
 			when(undef){
 				#error
@@ -306,7 +313,8 @@ sub send_file_uri2 {
 					#say $!;
 					$ww=undef;
 					close $in_fh;
-					$rex->[uSAC::HTTP::Rex::session_]->drop;
+					uSAC::HTTP::Server::Session::drop $session;
+					$session=undef;
 					return;
 				}
 			}

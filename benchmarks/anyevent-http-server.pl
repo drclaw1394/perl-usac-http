@@ -23,10 +23,6 @@ use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Static;
 use Hustle::Table;
 
-use constant {
-	HTTP_1_0=>"HTTP/1.0",
-	HTTP_1_1=>"HTTP/1.1",
-};
 
 use constant LF=>"\015\012";
 
@@ -59,118 +55,70 @@ my $table=Hustle::Table->new;
 
 $table->set_default(sub {
 		my ($line,$rex)=@_;
-		say "DEFAULT";
-		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_NOT_FOUND,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
+		say "DEFAULT: $line";
+		push @_, (HTTP_NOT_FOUND,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
+		&uSAC::HTTP::Rex::reply_simple;#h $rex, ;
 });
 
-$table->add(qr{GET \s /$comp/$path}xa=> sub {
-		\my $line=\$_[0];
-		\my $rex=\$_[1];
-		send_file_uri2 $rex, $2, "data";
+$table->add(qr{^GET /data/$path}ao=> sub {
+		#\my $line=\$_[0];
+		#\my $rex=\$_[1];
+		push @_,$1,"data";
+		&send_file_uri2;
 		return;		
 	}
 );
 
 my $data="a" x 1024;
-$table->add(qr{GET $path}=>sub{
+$table->add(qr{^GET $path}ao => sub{
 		#my ($line, $rex)=@_;
-		\my $line=\$_[0];
-		\my $rex=\$_[1];
-		uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,$data);
-		return;	#enable caching for this match
+		#\my $line=\$_[0];
+		#\my $rex=\$_[1];
+		#headers todo:
+		push @_, HTTP_OK, undef, $data;
+		&uSAC::HTTP::Rex::reply_simple;
+		return;	
 	}
 );
-$table->add(
-	{
-			   #POST /urlencoded HTTP/1.1
-		matcher=>qr{POST /urlencoded HTTP/1[.]1}ao,
-		sub=>sub {
-			my ($line, $rex)=@_;
-			my $session=$rex->[uSAC::HTTP::Rex::session_];
-			say "POST ENDPOINT";
 
+$table->add(qr{^POST /urlencoded}ao=>sub {
+		my ($line,$rex)=@_;
+		#my $rex=$_[1];
+		#Check permissions, sizes etc?
+		push @_, sub {
+			uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_OK,undef,"finished post" unless defined $_[0];
+		};
 
-			$session->push_reader(
-				"http1_1_urlencoded",
-				sub {
-					if(defined $_[0]){
-						#say "GOT POST DATA $_[0]";
-					}
-					else{
-						#say "END OF POST PROCESSING";
-						#$rex->reply_simple(HTTP_OK,"finished post"); 
-						uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"finished post");
-					}
-					#the callback to handle the posted data
-				},
-				#remaining options ref for the reader? eg write to file?
-			);
-			#check for expects header and send 100 before trying to read
-			given($rex->[uSAC::HTTP::Rex::headers_]){
-				if(defined($_->{expects})){
-					#issue a continue response	
-					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
-					$rex->[uSAC::HTTP::Rex::write_]->($reply);
-				}
-			}
-			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex,
-			);
-			return;
-		}
-	},
-	{
-		matcher=>begins_with("POST /formdata"),
-		sub=>sub {
+		&uSAC::HTTP::Rex::handle_upload;
+		return;
+	}
+);
+
+$table->add( begins_with("POST /formdata")=>sub {
 			say "FORM DATA ENDPOINT";
 			my ($line,$rex)=@_;
-			my $session=$rex->[uSAC::HTTP::Rex::session_];
-			$session->push_reader(
-				#\&make_form_data_reader,
-				"http1_1_form_data",
-				sub {
-
-					say "+_+_+_+FORM CALLBACK";
-					say "DATA:", $_[0];
-					#need to encode the state? diff parts
-					#	ie with undef data and just headers => new part
-					#	with undef headers and data	=> part continues
-					#	with undef header and undef data => form end
-					#Parts are in sequence
-					unless (defined $_[0] and defined $_[1]){
-						uSAC::HTTP::Rex::reply_simple $rex, (HTTP_OK,"finished multipart form");
-					}
+			push @_, sub {
+				say "+_+_+_+FORM CALLBACK";
+				say "DATA:", $_[0], " ";
+				say $_[1]->%*;
+				#need to encode the state? diff parts
+				#	ie with undef data and just headers => new part
+				#	with undef headers and data	=> part continues
+				#	with undef header and undef data => form end
+				#Parts are in sequence
+				#
+				#When no data or headers, we reached the end
+				unless (defined $_[0] and defined $_[1]){
+					uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_OK,"finished multipart form";
 				}
-			);
-			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex);
+			};
+
+			&uSAC::HTTP::Rex::handle_form_upload;
 			return;
 		}
-	},
-	#############################
-	# when("UPDATE"){           #
-	# }                         #
-	# when("DELETE"){           #
-	# }                         #
-	# when("PUT"){              #
-	# }                         #
-	# when("HEAD"){             #
-	# }                         #
-	# default {                 #
-	#         #unkown method    #
-	#         #respond as such. #
-	# }                         #
-	#############################
-
-	{
-		matcher=>"/test",
-		sub=>sub{
-			say " THIS IS A  TEST\n";
-		}
-	},
-
 );
-my $dispatcher=$table->prepare_dispatcher;
 
-$dispatcher->("/test");
+my $dispatcher=$table->prepare_dispatcher;
 
 my $server = uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",

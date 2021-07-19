@@ -278,24 +278,73 @@ use constant KEY_COUNT=>attrs_-method_+1;
 		sub reply_DEFLATE {
 			#call replySimple with extra headers
 		}
+
+		#line,rex, cb
+		#	cb args:
+		#		data, headers
+		#
+		sub handle_form_upload {
+			my $line=shift;
+			my $rex=shift;
+			my $cb=shift;
+			my $session=$rex->[uSAC::HTTP::Rex::session_];
+			$session->push_reader(
+				"http1_1_form_data",
+				$cb
+			);
+			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex);
+
+		}
+		sub handle_upload {
+			my $line=shift;
+			my $rex=shift;	#rex object
+			my $cb=shift;	#cb for parts
+			my $session=$rex->[session_];
+			$session->push_reader(
+				"http1_1_urlencoded",
+				$cb
+			);
+
+			#check for expects header and send 100 before trying to read
+			given($rex->[uSAC::HTTP::Rex::headers_]){
+				if(defined($_->{expects})){
+					#issue a continue response	
+					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
+					$rex->[uSAC::HTTP::Rex::write_]->($reply);
+				}
+			}
+			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex);
+
+		}
+
 		#Reply the body and code specified. Adds Server and Content-Length headers
+		#Line, Rex, code, header_ref, content
 		sub reply_simple{
 			use integer;
-			my $self=shift;
+			my ($line, $self)=@_;
+			#create a writer for the session
+			my $session=$self->[session_];
+			uSAC::HTTP::Server::Session::push_writer 
+			#$session->push_writer(
+				$session,
+				"http1_1_default_writer",
+				undef;
+				#);
+			$self->[write_]=$session->[uSAC::HTTP::Server::Session::write_];
 
-			my $reply="HTTP/1.1 $_[0]".LF;
+			my $reply="HTTP/1.1 $_[2]".LF;
 			#my $reply="$self->[version_] $_[0]".LF;
 
 			$reply.=
 				STATIC_HEADERS
 				.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
-				.HTTP_CONTENT_LENGTH.": ".(length($_[1])+0).LF	#this always render content length
+				.HTTP_CONTENT_LENGTH.": ".(length($_[4])+0).LF	#this always render content length
 				;#if defined $_[1];	#Set server
 
 				#TODO: benchmark length(undef)+0;
 			
 			#close connection after if marked
-			if($self->[session_][uSAC::HTTP::Server::Session::closeme_]){
+			if($session->[uSAC::HTTP::Server::Session::closeme_]){
 				$reply.=HTTP_CONNECTION.": close".LF;
 
 			}
@@ -311,13 +360,13 @@ use constant KEY_COUNT=>attrs_-method_+1;
 
 			#User requested headers. 
 			my $i=0;
-			given($_[2]){
+			given($_[3]){
 				$reply.=$_->[$i++].": $_->[$i++]$LF" for(0..@$_/2-1);
 			}
 
 
 			#Append body
-			$reply.=LF.$_[1];
+			$reply.=LF.$_[4];
 
 			#Write the headers
 			given ($self->[write_]){
@@ -329,6 +378,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			}
 
 		}
+		
 		sub reply {
 			my $self = shift;
 			#return $self->headers(@_) if @_ % 2;

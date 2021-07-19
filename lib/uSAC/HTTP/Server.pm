@@ -33,7 +33,6 @@ use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_
 use Time::HiRes qw/gettimeofday/;
 
 use Carp 'croak';
-\our %MIME=do "./mime.pl";
 
 use constant MAX_READ_SIZE => 128 * 1024;
 
@@ -52,6 +51,10 @@ given(\%uSAC::HTTP::Server::Session::make_reader_reg){
 	$_->{http1_1_base}=\&make_reader;
 	$_->{http1_1_form_data}=\&make_form_data_reader;
 	$_->{http1_1_urlencoded}=\&make_form_urlencoded_reader;
+	$_->{http1_1_default_writer}=\&make_default_writer;
+}
+given(\%uSAC::HTTP::Server::Session::make_writer_reg){
+	$_->{http1_1_default_writer}=\&make_default_writer;
 }
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -61,8 +64,11 @@ use constant KEY_COUNT=>total_requests_-host_+1;
 use constant LF => "\015\012";
 
 #Server Global values
-#
 our $Date;	#For date header
+our $DEFAULT_MIME=>"application/octet-stream";
+
+#our $ERROR_PAGE=>
+\our %MIME=do "./mime.pl";
 
 sub new {
 	my $pkg = shift;
@@ -133,6 +139,7 @@ sub listen {
 		
 		socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";
 		
+		say "FILENO ",fileno $fh;
 		if ($af == AF_INET || $af == AF_INET6) {
 			setsockopt $fh, SOL_SOCKET, SO_REUSEADDR, 1
 				or Carp::croak "listen/so_reuseaddr: $!"
@@ -212,19 +219,15 @@ sub accept {
 			$peer = accept my $fh, $fl;
 				#while ($fl and ($peer = accept my $fh, $fl)) {
 
-				#AnyEvent::Util::fh_nonblocking $fh, 1; # POSIX requires inheritance, the outside world does not
 				fcntl $fh, F_SETFL, O_NONBLOCK;	#this nukes other flags... read first?
-				#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1;
+				#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
 
 				#TODO: setup timeout for bad clients/connections
 
 				$id = ++$seq;
 
 
-				#say "pre popped: ",Dumper $self->[zombies_];
 				$session=pop @zombies;#@{$self->[zombies_]};
-				#$session=pop @{$self->[zombies_]};
-				#say "post popped: ",Dumper $self->[zombies_];
 				if(defined $session){
 					uSAC::HTTP::Server::Session::revive $session, $id, $fh;
 				}
