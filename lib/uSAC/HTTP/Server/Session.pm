@@ -17,7 +17,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -246,13 +246,16 @@ sub drop {
 
 sub push_reader {
 	my ($self,$name,$cb)=@_;
+
+	$self->[reader_cb_]=$cb;	#set the reader callback
 	$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args));
 	push $self->[read_stack_]->@*, $name;
-	$self->[reader_cb_]=$cb;
+	say "reader cb: ", $cb;
 }
 
 sub push_writer {
 	my ($self,$name,$cb)=@_;
+	$self->[writer_cb_]=$cb;	#cb to call when write needs more data/is complete
 	$self->[write_]=($self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self));#,@args));
 	push $self->[write_stack_]->@*, $name;
 	#$self->[reader_cb_]=$cb;

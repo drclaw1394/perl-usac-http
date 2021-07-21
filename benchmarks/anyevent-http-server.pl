@@ -74,12 +74,15 @@ $table->add(qr<GET /ws>=>sub {
 		#once created, the callback is called with the ws object	
 
 		#check the headers if this is allowed
+		#$_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
 		#
 
 		#Then do the handshake or error otherwise
 		#
-		push @_, "/ws", sub {
-			#reader callback
+		push @_,"/ws", sub {
+			my $ws=shift;
+			say "Got websocket";
+
 		};
 		&upgrade_to_websocket;
 

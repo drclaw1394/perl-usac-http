@@ -1,8 +1,12 @@
 package uSAC::HTTP::Server::WS;
 use common::sense;
+use feature "refaliasing";
+no warnings "experimental";
+
 use Exporter 'import';
 use MIME::Base64;		
 use Digest::SHA1;
+use Encode qw<decode encode>;
 our @EXPORT_OK=qw<make_websocket_reader make_websocket_writer upgrade_to_websocket>;
 our @EXPORT=@EXPORT_OK;
 
@@ -27,6 +31,12 @@ sub time64 () {
 }
 
 sub DEBUG () { 0 }
+
+use enum ( "writer_=0" ,qw<session_>);
+
+#Add a mechanism for sub classing
+use constant KEY_OFFSET=>0;
+use constant KEY_COUNT=>session_-writer_+1;
 
 use constant {
 	CONTINUATION => 0,
@@ -71,12 +81,6 @@ sub send_utf8{
 	$self->send_frame(1, 0, 0, 0, TEXT, $data);
 }
 
-#return a sub to format into frames and write when available
-#does framing and then calls the session writer
-sub make_writer {
-
-
-}
 
 #take http1.1 connection and make it websocket
 #does the handshake
@@ -89,9 +93,6 @@ sub upgrade_to_websocket{
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	#attempt to do the match
 	given ($rex->[uSAC::HTTP::Rex::headers_]){
-		DEBUG && say Dumper $_;
-		DEBUG && say Dumper $rex;
-		say %$_;
 		when (
 				$_->{connection} =~ /upgrade/i	#required
 				and  $_->{upgrade} =~ /websocket/i	#required
@@ -100,7 +101,6 @@ sub upgrade_to_websocket{
 				and  $_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
 		){
 			#TODO:  origin testing, externsions,
-			DEBUG && say " Websocket upgrade";
 			# mangle the key
 			my $key=MIME::Base64::encode_base64 
 				Digest::SHA1::sha1 
@@ -117,28 +117,19 @@ sub upgrade_to_websocket{
 			#write reply	
 			say $reply;
 			uSAC::HTTP::Server::Session::push_writer 
-			#$session->push_writer(
 				$session,
 				"http1_1_default_writer",
 				undef;
-				#);
+
 			given($session->[uSAC::HTTP::Server::Session::write_]){
 				say "Writer is: ", $_;
 				$_->( $reply , sub {
 						say "handshake written out";
-						#create the new read and writer pair based on protocol
-						$session->push_reader(
-							"websocket",
-							$cb
-
-						);
-						$session->push_writer(
-							"websocket",
-							undef
-						);
+						my $ws=uSAC::HTTP::Server::WS->new($rex->[uSAC::HTTP::Rex::session_]);
+						$cb->($ws);
 
 						#read and write setup create a new ws with just the session
-						uSAC::HTTP::Server::WS->new($_);
+						#uSAC::HTTP::Server::WS->new($_);
 
 
 						$_=undef;
@@ -158,27 +149,346 @@ sub upgrade_to_websocket{
 	}
 }
 
+
+#This is called by the session reader. Data is in the scalar ref $buf
 sub make_websocket_reader {
+
+	my $session=shift;	#session
+	#my $ws=shift;		#websocket
+
+	\my $buf=\$session->[uSAC::HTTP::Server::Session::rbuf_];
+	\my $fh=$session->[uSAC::HTTP::Server::Session::fh_];
+	my $rex=$session->[uSAC::HTTP::Server::Session::rex_];
+	my $writer=$rex->{writer};
+
+	my ($fin, $rsv1, $rsv2, $rsv3,$op, $mask, $len);
+	my $head;
+	my $masked;
+	my $payload="";
+	my $hlen;
+	my $mode;
+	my $on_fragment=$session->[uSAC::HTTP::Server::Session::reader_cb_];
+	say "ON FRAGMENT: ", $on_fragment;
+	sub {
+		#do the frame parsing here
+		say $buf;
+		while( length $buf> 2){
+			#return if length $buf < 2;	#do
+			my $head = substr $buf, 0, 2;
+			$fin  = (vec($head, 0, 8) & 0b10000000) == 0b10000000 ? 1 : 0;
+			$rsv1 = (vec($head, 0, 8) & 0b01000000) == 0b01000000 ? 1 : 0;
+			#warn "RSV1: $rsv1\n" if DEBUG;
+			$rsv2 = (vec($head, 0, 8) & 0b00100000) == 0b00100000 ? 1 : 0;
+			#warn "RSV2: $rsv2\n" if DEBUG;
+			$rsv3 = (vec($head, 0, 8) & 0b00010000) == 0b00010000 ? 1 : 0;
+			#warn "RSV3: $rsv3\n" if DEBUG;
+
+			# Opcode
+			$op = vec($head, 0, 8) & 0b00001111;
+			warn "OPCODE: $op ($OP{$op})\n" if DEBUG;
+
+			# Length
+			my $len = vec($head, 1, 8) & 0b01111111;
+			warn "LENGTH: $len\n" if DEBUG;
+
+			# No payload
+			given($len){
+				when (0) {
+					$hlen = 2;
+					warn "NOTHING\n" if DEBUG;
+				}
+				when($_< 126){
+					$hlen = 2;
+					warn "SMALL\n" if DEBUG;
+				}
+				when(126){
+					# 16 bit extended payload length
+					return unless length $buf > 4;
+					$hlen = 4;
+					my $ext = substr $buf, 2, 2;
+					$len = unpack 'n', $ext;
+					warn "EXTENDED (16bit): $len\n" if DEBUG;
+				}
+				when(127){
+
+					# Extended payload (64bit)
+					return unless length $buf > 10;
+					$hlen = 10;
+					my $ext = substr $buf, 2, 8;
+					$len =
+					$Config{ivsize} > 4
+					? unpack('Q>', $ext)
+					: unpack('N', substr($ext, 4, 4));
+					warn "EXTENDED (64bit): $len\n" if DEBUG;
+				}
+				default {
+					#error if here
+				}
+			}
+
+
+
+			# Check if whole packet has arrived
+			#
+			$masked = vec($head, 1, 8) & 0b10000000;
+			return if length $buf < ($len + $hlen + ($masked ? 4 : 0));
+
+			#substr $buf, 0, $hlen, '';	#clear the header
+			
+
+
+			$len += 4 if $masked;
+			return if length $buf < $len;
+			#$payload = $len ? substr($buf, 0, $len, '') : '';
+
+			#$payload="" if $op == TEXT or $op == BINARY;
+
+			given($op){
+				when(TEXT){
+					#check payload can be decoded
+					$mode=TEXT;
+					$payload="";
+					if ($masked) {
+						warn "UNMASKING PAYLOAD\n" if DEBUG;
+						my $mask = substr($buf, $hlen, 4);
+						$payload = _xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask);
+						#say xd $payload;
+					}
+
+					else {
+						$payload=$len ? substr($buf, $hlen, $len, '') : '';
+					}
+					substr $buf,0, $hlen+$len,'';
+					if($fin){
+						#decode
+						#do callback
+						$on_fragment->(decode("UTF-8",$payload ));
+						$on_fragment->(undef);
+
+						next;
+					}
+
+
+				}
+				when(BINARY){
+					$mode=BINARY;
+					if ($masked) {
+						warn "UNMASKING PAYLOAD\n" if DEBUG;
+						my $mask = substr($buf, $hlen, 4);
+						$on_fragment->(xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask));
+						#say xd $payload;
+					}
+
+					else {
+						$on_fragment->($len ? substr($buf, $hlen, $len, '') : '');
+					}
+					substr $buf,0, $hlen+$len,'';
+					if($fin){
+						$on_fragment->(undef);
+					}
+						next;
+
+
+				}
+				when(CONTINUATION){
+
+					if ($masked) {
+						warn "UNMASKING PAYLOAD\n" if DEBUG;
+						my $mask = substr($payload, $hlen, 4, '');
+
+						if($mode==TEXT){
+							$payload .= _xor_mask(($len ? substr($buf, $hlen, $len, '') : ''), $mask);
+						}
+						else {
+							$on_fragment->($len ? substr($buf, $hlen, $len, '') : '');
+						}
+					}
+
+					substr $buf,0, $hlen+$len,'';
+					if($fin){
+						#decode text
+						$on_fragment->( utf8::decode( $payload )) if $mode== TEXT;
+						$on_fragment->(undef);
+					}
+					next;
+
+				}
+				when(PING){
+					#do not change accumulating payload
+					#reply directly with PONG
+					if ($masked) {
+						warn "UNMASKING PAYLOAD\n" if DEBUG;
+						my $mask = substr($buf, $hlen, 4);
+						$writer->(1,0,0,0,xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask));
+						#say xd $payload;
+					}
+
+					else {
+						$writer->(1,0,0,0,$len ? substr($buf, $hlen, $len, '') : '');
+					}
+					substr $buf,0, $hlen+$len,'';
+					next;
+
+				}
+				when(PONG){
+					#do not change accumulating payload
+					say "GOT PONG";
+					substr $buf,0, $hlen+$len,'';
+					next;
+				}
+				when(PING){
+					say "GOT PING";
+
+					substr $buf,0, $hlen+$len,'';
+					next;
+				}
+				when(CLOSE){
+					say "GOT CLOSE";
+					substr $buf,0, $hlen+$len,'';
+					#TODO: drop the session, undef any read/write subs
+
+				}
+				default{
+				}
+			}
+
+			#do on message if fin is set
+
+			#say "FIN $fin RSV1 $rsv1 RSV2 $rsv2 RSV3 $rsv3 op $op, $payload";
+			#return [$fin, $rsv1, $rsv2, $rsv3, $op, $payload];
+
+			#Frame is parsed. So now what do we do?
+
+
+
+		}
+	}
 
 }
 
-sub make_websocket_writer {
+#possibly not required.. default writer should work
+#server writer does not mask data
+sub make_websocket_server_writer {
+	my $session=shift;	#session
+	#my $ws=shift;		#websocket
+
+	\my $buf=\$session->[uSAC::HTTP::Server::Session::rbuf_];
+
+	sub {
+		#take input data, convert to frame and use normal writer?
+		my ($fin, $rsv1, $rsv2, $rsv3, $op, $payload) = @_;
+		warn "BUILDING FRAME\n" if DEBUG;
+
+		# Head
+		my $frame = 0b00000000;
+		vec($frame, 0, 8) = $op | 0b10000000 if $fin;
+		vec($frame, 0, 8) |= 0b01000000 if $rsv1;
+		vec($frame, 0, 8) |= 0b00100000 if $rsv2;
+		vec($frame, 0, 8) |= 0b00010000 if $rsv3;
+		printf "Frame: %X\n",$frame;
+		my $len = length $payload;
+		# Mask payload
+		warn "PAYLOAD: $payload\n" if DEBUG;
+		my $masked =0;	
+		if ($masked) {
+			warn "MASKING PAYLOAD\n" if DEBUG;
+			my $mask = pack 'N', int(rand( 2**32 ));
+			$payload = $mask . _xor_mask($payload, $mask);
+		}
+
+		# Length
+		#my $len = length $payload;
+		#$len -= 4 if $self->{masked};
+
+		# Empty prefix
+		my $prefix = 0;
+
+		# Small payload
+		if ($len < 126) {
+			vec($prefix, 0, 8) = $masked ? ($len | 0b10000000) : $len;
+			$frame .= $prefix;
+		}
+
+		# Extended payload (16bit)
+		elsif ($len < 65536) {
+			vec($prefix, 0, 8) = $masked ? (126 | 0b10000000) : 126;
+			$frame .= $prefix;
+			$frame .= pack 'n', $len;
+		}
+
+		# Extended payload (64bit)
+		else {
+			vec($prefix, 0, 8) = $masked ? (127 | 0b10000000) : 127;
+			$frame .= $prefix;
+			$frame .=
+			$Config{ivsize} > 4
+			? pack('Q>', $len)
+			: pack('NN', $len >> 32, $len & 0xFFFFFFFF);
+		}
+
+		if (DEBUG) {
+			warn 'HEAD: ', unpack('B*', $frame), "\n";
+			warn "OPCODE: $op\n";
+		}
+
+		# Payload
+		$frame .= $payload;
+		print "Built frame = \n".xd( "$frame" ) if DEBUG;
+
+		say "FRAME TO SEND ",$frame;
+		$session->[uSAC::HTTP::Server::Session::write_]->($frame);
+		return;
+	}
 
 }
 
 sub new {
 	my $pkg = shift;
+	my $session=shift;
+	#my $on_fragment=shift;
+	
 	my %args = @_;
 	my $h = $args{h};
 	my $self = bless {
+		#on_fragment=>$on_fragment,
+		session=>$session,
 		maxframe      => 1024*1024,
 		mask          => 0,
 		ping_interval => 5,
 		state         => OPEN,
 		%args,
 	}, $pkg;
-	
-	$self->setup;
+	#create the new read and writer pair based on protocol
+        ##########################
+        # $session->push_writer( #
+        #         "websocket",   #
+        #         $self,         #
+        #                        #
+        #                        #
+        # );                     #
+        ##########################
+	#
+	$session->[uSAC::HTTP::Server::Session::rex_]=$self;	#update rex to refer to the websocket
+	$self->{writer_}=make_websocket_server_writer $session;	#create a writer and store in ws
+	say "Created writer: ",$self->{writer_};
+
+	#the pushed reader now has access to the writer via the session->rex
+	$session->push_reader(
+		"websocket",
+		sub {
+			say "ws reader cb: $_[0]";
+			return unless defined $_[0];
+			$self->{writer_}->(1,0,0,0,TEXT,"HELLO BACK")
+		}
+	);
+	#setup ping
+	$self->{pinger} = AE::timer 0,$self->{ping_interval}, sub {
+		say "Sending ping";
+		$self->{ping_id} = time64();
+		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id});
+	} if $self->{ping_interval} > 0;
+
+	#$self->setup;
 	return $self;
 }
 

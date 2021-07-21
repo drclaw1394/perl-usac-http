@@ -56,7 +56,7 @@ given(\%uSAC::HTTP::Server::Session::make_reader_reg){
 }
 given(\%uSAC::HTTP::Server::Session::make_writer_reg){
 	$_->{http1_1_default_writer}=\&make_default_writer;
-	$_->{websocket}=\&make_websocket_writer;
+	$_->{websocket}=\&make_websocket_server_writer;
 }
 
 #Add a mechanism for sub classing
