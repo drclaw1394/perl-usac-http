@@ -226,7 +226,8 @@ sub accept {
 			$peer = accept my $fh, $fl;
 				#while ($fl and ($peer = accept my $fh, $fl)) {
 
-				fcntl $fh, F_SETFL, O_NONBLOCK;	#this nukes other flags... read first?
+				
+				fcntl $fh, F_SETFL, fcntl($fh, F_GETFL,0)|O_NONBLOCK;
 
 				setsockopt $fh, 6, TCP_NODELAY, 1
 					or Carp::croak "listen/so_nodelay $!"

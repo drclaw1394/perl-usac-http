@@ -26,7 +26,7 @@ our @EXPORT=@EXPORT_OK;
 use constant LF => "\015\012";
 my $path_ext=	qr{\.([^.]*)$}a;
 
-my $read_size=4096*16;
+my $read_size=4096*64;
 my %stat_cache;
 
 ################################################
@@ -311,14 +311,53 @@ sub send_file_uri_norange {
 	$length+=length $reply;	#total length	
 
 	#setup write watcher
-	my $ww;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
 	#this is single part response
+	given(sysread $in_fh, $reply, $read_size, length($reply)){
+		when($_>0){
+			$read_total+=$_;
+			#say $read_total;
+			given(syswrite $out_fh, $reply){
+				when($_>0){
+					$write_total+=$_;
+					if(length($reply)==$length){
+						close $in_fh;
+						uSAC::HTTP::Server::Session::drop $session;
+						$session=undef;
+						return;
+					}
+				}
+				when(0){
+
+				}
+				when(undef){
+					#error
+					close $in_fh;
+					uSAC::HTTP::Server::Session::drop $session;
+					$session=undef;
+					return;
+					
+				}
+			}
+		}
+		when(0){
+
+		}
+		when(undef){
+			#error
+			close $in_fh;
+			uSAC::HTTP::Server::Session::drop $session;
+			$session=undef;
+			return;
+		}
+	}
+
+	my $ww;
 	$ww = AE::io $out_fh, 1, sub {
 
 		if(length($reply)< $read_size and $read_total<$length){
-			given(sysread $in_fh, $reply,$read_size, length $reply){
+			given(sysread $in_fh, $reply, $read_size, length $reply){
 				when($_>0){
 					#write to socket
 					$read_total+=$_;
@@ -339,15 +378,15 @@ sub send_file_uri_norange {
 		given(syswrite $out_fh,$reply){
 			when($_>0){
 				$write_total+=$_;
-				$reply=substr $reply, $_;
 				if($write_total==$length){
-					#finished
-					#drop
 					$ww=undef;
 					close $in_fh;
 
 					uSAC::HTTP::Server::Session::drop $session;
 					$session=undef;
+				}
+				else{
+					$reply=substr $reply, $_;
 				}
 			}
 			when(0){
