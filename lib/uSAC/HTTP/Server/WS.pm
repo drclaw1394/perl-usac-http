@@ -7,6 +7,8 @@ use Exporter 'import';
 use MIME::Base64;		
 use Digest::SHA1;
 use Encode qw<decode encode>;
+use Compress::Raw::Zlib qw(Z_SYNC_FLUSH);
+
 our @EXPORT_OK=qw<make_websocket_reader make_websocket_writer upgrade_to_websocket>;
 our @EXPORT=@EXPORT_OK;
 
@@ -100,11 +102,12 @@ sub upgrade_to_websocket{
 				and  exists $_->{'sec-websocket-key'}	#required
 				and  $_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
 		){
+
 			#TODO:  origin testing, externsions,
 			# mangle the key
 			my $key=MIME::Base64::encode_base64 
-				Digest::SHA1::sha1 
-				$_->{'sec-websocket-key'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+				Digest::SHA1::sha1( $_->{'sec-websocket-key'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
+				"";
 			#
 			#reply
 			my $reply=
@@ -113,6 +116,17 @@ sub upgrade_to_websocket{
 				.HTTP_UPGRADE.": websocket".LF
 				.HTTP_SEC_WEBSOCKET_ACCEPT.": $key".LF
 				;
+			#support the permessage deflate
+			my $deflate_flag;
+			given($_->{'sec-websocket-extensions'}){
+				when(/permessage-deflate/){
+					say "Permessage deflate";
+					$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
+					$deflate_flag=1;
+				}
+				default {
+				}
+			}
 
 			#write reply	
 			say $reply;
@@ -123,7 +137,7 @@ sub upgrade_to_websocket{
 
 			given($session->[uSAC::HTTP::Server::Session::write_]){
 				say "Writer is: ", $_;
-				$_->( $reply , sub {
+				$_->( $reply.LF , sub {
 						say "handshake written out";
 						my $ws=uSAC::HTTP::Server::WS->new($rex->[uSAC::HTTP::Rex::session_]);
 						$cb->($ws);

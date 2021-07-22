@@ -65,7 +65,7 @@ $table->add(qr{^GET /data/$path}ao=> sub {
 		#\my $line=\$_[0];
 		#\my $rex=\$_[1];
 		push @_,$1,"data";
-		&send_file_uri2;
+		&send_file_uri_norange;
 		return;		
 	}
 );

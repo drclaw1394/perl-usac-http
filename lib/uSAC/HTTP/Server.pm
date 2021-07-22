@@ -25,7 +25,7 @@ use AnyEvent::Handle;
 use Scalar::Util 'refaddr', 'weaken';
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
-use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN);
+use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN);
 
 #use Encode ();
 #use Compress::Zlib ();
@@ -151,6 +151,10 @@ sub listen {
 			setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, 1
 				or Carp::croak "listen/so_reuseport: $!"
 					unless AnyEvent::WIN32; # work around windows bug
+
+			setsockopt $fh, 6, TCP_NODELAY, 1
+				or Carp::croak "listen/so_nodelay $!"
+					unless AnyEvent::WIN32; # work around windows bug
 			
 			unless ($service =~ /^\d*$/) {
 				$service = (getservbyname $service, "tcp")[2]
@@ -223,6 +227,10 @@ sub accept {
 				#while ($fl and ($peer = accept my $fh, $fl)) {
 
 				fcntl $fh, F_SETFL, O_NONBLOCK;	#this nukes other flags... read first?
+
+				setsockopt $fh, 6, TCP_NODELAY, 1
+					or Carp::croak "listen/so_nodelay $!"
+						unless AnyEvent::WIN32; # work around windows bug
 				#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
 
 				#TODO: setup timeout for bad clients/connections

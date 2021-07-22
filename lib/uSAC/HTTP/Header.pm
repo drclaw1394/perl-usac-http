@@ -43,8 +43,11 @@ BEGIN {
 		Proxy-Authenticate
 		Proxy-Authorization
 
+		Range
+
 		Referer
 		Retry-After
+
 		Server
 		TE
 		Trailer
@@ -62,6 +65,7 @@ BEGIN {
 		Sec-WebSocket-Key
 		Sec-WebSocket-Accept
 		Sec-WebSocket-Protocol
+		Sec-WebSocket-Extensions
 		DataServiceVersion
 	);
 	our @const_names=map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names;

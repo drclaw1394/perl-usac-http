@@ -20,7 +20,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri send_file_uri2  send_file_uri_aio send_file_uri_sys send_file_uri_aio2 >;
+our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_aio send_file_uri_sys send_file_uri_aio2 >;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -215,27 +215,80 @@ sub send_file_uri_aio {
 	});
 
 }
-sub send_file_uri2 {
+
+sub _check_ranges{
+	my ($rex, $stat)=@_;
+	#check for ranges in the header
+	my @ranges;
+	given($rex->[uSAC::HTTP::Rex::headers_]{range}){
+		when(undef){
+			#no ranges specified but create default
+			@ranges=([0,$stat->[7]-1]);
+		}
+		default {
+			#check the If-Range
+			my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"if-range"};
+
+			#check rnage is present
+			#response code is then 206 partial
+			#
+			#Multiple ranges, we then return multipart doc
+			my $unit;
+			my $i=0;
+			my $pos;	
+			my $size=$stat->[7];
+			given(tr/ //dr){				#Remove whitespace
+				#exract unit
+				$pos=index $_, "=";
+				$unit= substr $_, 0, $pos++;
+				for(split(",",substr($_, $pos))){
+
+					my ($start,$end)=split "-"; #, substr($_, $pos, $pos2-$pos);
+					$end||=$size-1;	#No end specified. use entire length
+					unless($start){
+						#no start specified. This a count, not index
+						$start=$size-$end;
+						$end=$size-1;
+					}
+
+					#validate range
+					if(
+						(0<=$start<$size) and
+						(0<=$end<$size) and
+						($start<=$end)
+					){
+						push @ranges, [$start,$end];
+					}
+					else {
+						#416 Range Not Satisfiable
+						@ranges=();
+					}
+
+				}
+
+			}
+		}
+	}
+	@ranges;
+}
+
+#process without considering ranges
+#This is useful for constantly chaning files and remove overhead of rendering byte range headers
+sub send_file_uri_norange {
 	my ($line,$rex,$uri,$sys_root)=@_;
-	my $reply;
-
-
-	#open my $fh,"<",
-	my $abs_path;
-	$abs_path=$sys_root."/".$uri;
-
-	#TODO: add error checking.
-	#	Add etag => modification time and content length (size) (ie like nginx)
+	my $abs_path=$sys_root."/".$uri;
 	my $in_fh;	
-	unless (open $in_fh, "<", $abs_path){
-		#error and return;
+
+	unless (open $in_fh, "<:raw", $abs_path){
+		#TODO: Generate error response
 		say $!;
 	}
-	#my $stat=($stat_cache{$abs_path}//=
 	my $stat=[stat $in_fh];
-	my $length=$stat->[7];#(stat $in_fh)[7];#$abs_path;
 
-	$uri=~$path_ext;
+	my $reply;
+	my $length=$stat->[7];
+
+	$uri=~$path_ext;	#match results in $1;
 
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
@@ -246,7 +299,7 @@ sub send_file_uri2 {
 			:HTTP_CONNECTION.": Keep-Alive".LF
 		)
 		.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$1}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
-		.HTTP_CONTENT_LENGTH.": ".$length.LF
+		.HTTP_CONTENT_LENGTH.": ".$length.LF			#need to be length of multipart
 		.HTTP_ETAG.": ".$stat->[9]."-".$length.LF
 		.LF;
 
@@ -261,6 +314,7 @@ sub send_file_uri2 {
 	my $ww;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
+	#this is single part response
 	$ww = AE::io $out_fh, 1, sub {
 
 		if(length($reply)< $read_size and $read_total<$length){
@@ -320,8 +374,163 @@ sub send_file_uri2 {
 			}
 		}
 	};
+
 }
 
+sub send_file_uri_range {
+        my ($line,$rex,$uri,$sys_root)=@_;
+        my $abs_path=$sys_root."/".$uri;
+        my $in_fh;
+	my $session=$rex->[uSAC::HTTP::Rex::session_];
+        my $response= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF; #response line
+
+        my ($start,$end);
+        my $reply= uSAC::HTTP::Rex::STATIC_HEADERS
+                .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
+		;
+
+        unless (open $in_fh, "<", $abs_path){
+                #TODO: Generate error response
+                # forbidden? not found?
+                $response=
+                        "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_FORBIDDEN.LF
+                        .$reply
+			.HTTP_CONNECTION.": close".LF
+			.LF;
+
+			uSAC::HTTP::Server::Session::push_writer 
+				$session,
+				"http1_1_default_writer",
+				undef;
+			$session->[uSAC::HTTP::Server::Session::closeme_]=1;
+			$session->[uSAC::HTTP::Server::Session::write_]->($response);
+			uSAC::HTTP::Server::Session::drop $session;
+                return;
+
+        }
+        my $stat=[stat $in_fh];
+
+	my $total=$stat->[7];
+
+        my @ranges=_check_ranges $rex, $stat;
+        if(@ranges==0){
+                $response=
+                        "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_RANGE_NOT_SATISFIABLE.LF
+                        .$reply
+                	.HTTP_CONTENT_RANGE.": */$total".LF           #TODO: Multipart had this in each part, not main header
+			.HTTP_CONNECTION.": close".LF
+			.LF;
+
+			uSAC::HTTP::Server::Session::push_writer 
+				$session,
+				"http1_1_default_writer",
+				undef;
+			$session->[uSAC::HTTP::Server::Session::closeme_]=1;
+			$session->[uSAC::HTTP::Server::Session::write_]->($response);
+			uSAC::HTTP::Server::Session::drop $session;
+                return;
+        }
+
+
+	#calculate total length from ranges
+	my $content_length=0;
+	$content_length+=($_[1]-$_[0]+1) for @ranges;
+
+        #The following only returns the whole file in the reply;
+        $start=$ranges[0][0];
+        $end=$ranges[0][1];
+        $total=$stat->[7];
+        my $length=$end-$start+1;#$stat->[7];#(stat $in_fh)[7];#$abs_path;
+        seek $in_fh,$start,0;
+
+        $uri=~$path_ext;        #match results in $1;
+
+	my $boundary="THIS_IS THE BOUNDARY";
+        $reply=
+                HTTP_CONTENT_TYPE.": multipart/byteranges; boundary=$boundary".LF
+                .HTTP_CONTENT_LENGTH.": ".$content_length.LF                    #need to be length of multipart
+                .HTTP_ACCEPT_RANGES.": bytes".LF
+                .HTTP_ETAG.": ".$stat->[9]."-".$length.LF
+                .LF
+		.$boundary.LF
+		.LF;
+
+		#.HTTP_CONTENT_RANGE.": $start-$end/$total".LF           #TODO: Multipart had this in each part, not main header
+		#HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$1}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
+        #prime the buffer by doing a read first
+        my $read_total=0;
+        my $write_total=0;
+
+
+	my $index=0;#index of current range
+
+        $length+=length $reply; #total length
+
+        #setup write watcher
+        my $ww;
+        my $session=$rex->[uSAC::HTTP::Rex::session_];
+        \my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
+        #this is single part response
+        $ww = AE::io $out_fh, 1, sub {
+
+                if(length($reply)< $read_size and $read_total<$length){
+                        given(sysread $in_fh, $reply,$read_size, length $reply){
+                                when($_>0){
+                                        #write to socket
+                                        $read_total+=$_;
+                                }
+                                when(0){
+                                        #end of file. should not get here
+                                }
+                                when (undef){
+                                        #error
+                                        #drop
+                                        $ww=undef;
+                                        close $in_fh;
+                                        uSAC::HTTP::Server::Session::drop $session;
+                                        $session=undef;
+                                }
+                        }
+                }
+                given(syswrite $out_fh,$reply){
+                        when($_>0){
+                                $write_total+=$_;
+                                $reply=substr $reply, $_;
+                                if($write_total==$length){
+                                        #finished
+                                        #drop
+                                        $ww=undef;
+                                        close $in_fh;
+
+                                        uSAC::HTTP::Server::Session::drop $session;
+                                        $session=undef;
+                                }
+                        }
+                        when(0){
+                                #say "EOF WRITE";
+                                #end of file
+                                #drop
+                                $ww=undef;
+                                close $in_fh;
+                                uSAC::HTTP::Server::Session::drop $session;
+                                        $session=undef;
+
+                        }
+                        when(undef){
+                                #error
+                                #say "WRITE ERROR: ", $!;
+                                unless( $! == EAGAIN or $! == EINTR){
+                                        #say $!;
+                                        $ww=undef;
+                                        close $in_fh;
+                                        uSAC::HTTP::Server::Session::drop $session;
+                                        $session=undef;
+                                        return;
+                                }
+                        }
+                }
+        };
+}
 
 
 

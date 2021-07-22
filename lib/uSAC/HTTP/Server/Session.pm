@@ -250,7 +250,7 @@ sub push_reader {
 	$self->[reader_cb_]=$cb;	#set the reader callback
 	$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args));
 	push $self->[read_stack_]->@*, $name;
-	say "reader cb: ", $cb;
+	#say "reader cb: ", $cb;
 }
 
 sub push_writer {
