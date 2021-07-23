@@ -226,10 +226,10 @@ sub accept {
 			$peer = accept my $fh, $fl;
 				#while ($fl and ($peer = accept my $fh, $fl)) {
 
-				
+				binmode	$fh;
 				fcntl $fh, F_SETFL, fcntl($fh, F_GETFL,0)|O_NONBLOCK;
-
-				setsockopt $fh, 6, TCP_NODELAY, 1
+				my $tcp_proto=getprotobyname("tcp");
+				setsockopt $fh, $tcp_proto, TCP_NODELAY, 1
 					or Carp::croak "listen/so_nodelay $!"
 						unless AnyEvent::WIN32; # work around windows bug
 				#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";

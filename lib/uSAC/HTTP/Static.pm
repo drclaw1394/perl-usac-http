@@ -4,7 +4,8 @@ use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
 
-use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+use Errno qw<:POSIX EACCES ENOENT>;
+use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK O_RDONLY);
 use File::Spec;
 use IO::AIO;
 use AnyEvent;
@@ -24,7 +25,7 @@ our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
-my $path_ext=	qr{\.([^.]*)$}a;
+my $path_ext=	qr{\.([^.]*)$}ao;
 
 my $read_size=4096*64;
 my %stat_cache;
@@ -272,35 +273,64 @@ sub _check_ranges{
 	@ranges;
 }
 
+#returns stat array if valid
+#otherwise responds with error
+sub _check_access {
+	my($line, $rex,$uri,$sys_root)=@_;
+
+	my $abs_path=$sys_root."/".$uri;
+	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	my $in_fh;	
+
+	my $response;
+
+
+	unless(stat $abs_path){
+		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
+		return
+	}
+
+	if ( ! -r _ or -d _){
+		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_FORBIDDEN;
+		return;
+
+	}
+	unless (open $in_fh, "<:raw", $abs_path){
+	#unless (sysopen $in_fh,$abs_path,O_RDONLY){
+		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR;
+		return;
+	}
+	else {
+		return $in_fh;
+	}
+}
+
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
+	use  integer;
 	my ($line,$rex,$uri,$sys_root)=@_;
-	my $abs_path=$sys_root."/".$uri;
-	my $in_fh;	
+	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	#
+	my $in_fh=&_check_access;
+	return unless defined $in_fh;
 
-	unless (open $in_fh, "<:raw", $abs_path){
-		#TODO: Generate error response
-		say $!;
-	}
-	my $stat=[stat $in_fh];
-
-	my $reply;
-	my $length=$stat->[7];
+        my @stat=stat _;      #reuse the stat info                                                           #
+	my $length=$stat[7];
 
 	$uri=~$path_ext;	#match results in $1;
 
-	$reply=
+	my $reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
-        	.($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]?
+        	.($session->[uSAC::HTTP::Server::Session::closeme_]?
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
 		)
 		.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$1}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
 		.HTTP_CONTENT_LENGTH.": ".$length.LF			#need to be length of multipart
-		.HTTP_ETAG.": ".$stat->[9]."-".$length.LF
+		.HTTP_ETAG.": ".$stat[9]."-".$length.LF
 		.LF;
 
 	#prime the buffer by doing a read first
@@ -311,7 +341,6 @@ sub send_file_uri_norange {
 	$length+=length $reply;	#total length	
 
 	#setup write watcher
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
 	#this is single part response
 	given(sysread $in_fh, $reply, $read_size, length($reply)){
@@ -321,8 +350,8 @@ sub send_file_uri_norange {
 			given(syswrite $out_fh, $reply){
 				when($_>0){
 					$write_total+=$_;
-					if(length($reply)==$length){
-						close $in_fh;
+					if($write_total==$length){
+						#close $in_fh;
 						uSAC::HTTP::Server::Session::drop $session;
 						$session=undef;
 						return;
@@ -333,11 +362,12 @@ sub send_file_uri_norange {
 				}
 				when(undef){
 					#error
-					close $in_fh;
-					uSAC::HTTP::Server::Session::drop $session;
-					$session=undef;
-					return;
-					
+					unless( $! == EAGAIN or $! == EINTR){
+						close $in_fh;
+						uSAC::HTTP::Server::Session::drop $session;
+						$session=undef;
+						return;
+					}
 				}
 			}
 		}
@@ -352,7 +382,6 @@ sub send_file_uri_norange {
 			return;
 		}
 	}
-
 	my $ww;
 	$ww = AE::io $out_fh, 1, sub {
 

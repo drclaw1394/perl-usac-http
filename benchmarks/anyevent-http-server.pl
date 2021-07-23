@@ -69,6 +69,7 @@ $table->add(qr{^GET /data/$path}ao=> sub {
 		return;		
 	}
 );
+
 $table->add(qr<GET /ws>=>sub {
 		#create a web socket here
 		#once created, the callback is called with the ws object	
@@ -90,7 +91,7 @@ $table->add(qr<GET /ws>=>sub {
 );
 
 my $data="a" x 1024;
-$table->add(qr{^GET $path}ao => sub{
+$table->add(qr{^GET /}ao => sub{
 		#my ($line, $rex)=@_;
 		#\my $line=\$_[0];
 		#\my $rex=\$_[1];
