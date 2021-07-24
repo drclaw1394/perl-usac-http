@@ -279,6 +279,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#call replySimple with extra headers
 		}
 
+
 		#line,rex, cb
 		#	cb args:
 		#		data, headers
@@ -295,6 +296,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex);
 
 		}
+
 		sub handle_upload {
 			my $line=shift;
 			my $rex=shift;	#rex object
@@ -362,7 +364,9 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			#User requested headers. 
 			my $i=0;
 			given($_[3]){
-				$reply.=$_->[$i++].": $_->[$i++]$LF" for(0..@$_/2-1);
+				for my  $d (0..@$_/2-1){
+					$reply.=$_->[$i++].": ".$_->[$i++].LF 
+				}
 			}
 
 
@@ -378,108 +382,110 @@ use constant KEY_COUNT=>attrs_-method_+1;
 
 		}
 		
-		sub reply {
-			my $self = shift;
-			#return $self->headers(@_) if @_ % 2;
-			say "in REPLY:";
-			say caller;
-			my ($code,$content,%args) = @_;
-			$code ||=200;
-			#if (ref $content) {
-			#	if (ref $content eq 'HASH' and $content->{sendfile}) {
-			#		$content->{size} = -s $content->{sendfile};
-			#	}
-			#	else {
-			#		croak "Unknown type of content: $content";
-			#	}
-			#	
-			#} else {
-			#utf8::encode $content if utf8::is_utf8 $content;
-			#}
-			my $reply = "HTTP/1.0 $code $http{$code}$LF";
-			my @good;my @bad;
-			my $h = {
-				server           => 'aehts-'.$uSAC::HTTP::Server::VERSION,
-				#'content-type+charset' => 'UTF-8';
-				%{ $args{headers} || {} },
-				#'connection' => 'close',
-				'connection' => ( $args{headers} && $args{headers}{connection} ) ? $args{headers}{connection} : $self->connection,
-			};
-			if ($self->method ne 'HEAD') {
-				if ( exists $h->{'content-length'} ) {
-					if ($h->{'content-length'} != length($content)) {
-						warn "Content-Length mismatch: replied: $h->{'content-length'}, expected: ".length($content);
-						$h->{'content-length'} = length($content);
-					}
-				} else {
-					$h->{'content-length'} = length($content);
-				}
-			} else {
-				if ( exists $h->{'content-length'} ) {
-					# keep it
-				}
-				elsif(length $content) {
-					$h->{'content-length'} = length $content;
-				}
-				else {
-					$h->{'transfer-encoding'} = 'chunked';
-				}
-				$content = '';
-			}
-			if (exists $h->{'content-type'}) {
-				if( $h->{'content-type'} !~ m{[^;]+;\s*charset\s*=}
-				and $h->{'content-type'} =~ m{(?:^(?:text/|application/(?:json|(?:x-)?javascript))|\+(?:json|xml)\b)}i) {
-					$h->{'content-type'} .= '; charset=utf-8';
-				}
-			} else {
-				$h->{'content-type'} = 'text/html; charset=utf-8';
-			}
-			my $nh = delete $h->{NotHandled};
-			for (keys %$h) {
-				if (exists $hdr{lc $_}) { $good[ $hdri{lc $_} ] = $hdr{ lc $_ }.": ".$h->{$_}.$LF; }
-				else { push @bad, "\u\L$_\E: ".$h->{$_}.$LF; }
-			}
-			defined() and $reply .= $_ for @good,@bad;
-			# 2 is size of LF
-			$self->attrs->{head_size} = length($reply) + 2;
-			$self->attrs->{body_size} = length $content;
-			$reply .= $LF.$content;
-			#if (!ref $content) { $reply .= $content }
-			if( $self->[write_] ) {
-				$self->[write_]->( $reply );
-				$self->[write_]->( undef ) if $h->{connection} eq 'close';# or $self->[server_][graceful_];
-				delete $self->[write_];
-				${ $self->[reqcount_] }--;
-			}
-			if( $self->[server_] && $self->[server_]->{on_reply} ) {
-				$h->{ResponseTime} = gettimeofday() - $self->[time_];
-				$h->{Status} = $code;
-				$h->{NotHandled} = $nh if $nh;
-				#eval {
-					$self->[server_]->{on_reply}->(
-						$self,
-						$h,
-					);
-				#1} or do {
-				#	warn "on_reply died with $@";
-				#};
-			};
-
-			if ($self->replied) {
-				warn "Double reply $code from ".join(":", (caller $CALLDEPTH)[1,2])." prev was from ".$self->replied."\n";
-				exit 255 if $self->server->{exit_on_double_reply};
-				return;
-			}
-			$self->replied(join ":", (caller $CALLDEPTH)[1,2]);
-
-			if( $self->[server_] && $self->[server_]->{stat_cb} ) {
-				eval {
-					$self->[server_]->{stat_cb}->($self->path, $self->method, gettimeofday() - $self->[time_]);
-				1} or do {
-					warn "stat_cb died with $@";
-				}
-			};
-		}
+                ######################################################################################################################################
+                # sub reply {                                                                                                                        #
+                #         my $self = shift;                                                                                                          #
+                #         #return $self->headers(@_) if @_ % 2;                                                                                      #
+                #         say "in REPLY:";                                                                                                           #
+                #         say caller;                                                                                                                #
+                #         my ($code,$content,%args) = @_;                                                                                            #
+                #         $code ||=200;                                                                                                              #
+                #         #if (ref $content) {                                                                                                       #
+                #         #       if (ref $content eq 'HASH' and $content->{sendfile}) {                                                             #
+                #         #               $content->{size} = -s $content->{sendfile};                                                                #
+                #         #       }                                                                                                                  #
+                #         #       else {                                                                                                             #
+                #         #               croak "Unknown type of content: $content";                                                                 #
+                #         #       }                                                                                                                  #
+                #         #                                                                                                                          #
+                #         #} else {                                                                                                                  #
+                #         #utf8::encode $content if utf8::is_utf8 $content;                                                                          #
+                #         #}                                                                                                                         #
+                #         my $reply = "HTTP/1.0 $code $http{$code}$LF";                                                                              #
+                #         my @good;my @bad;                                                                                                          #
+                #         my $h = {                                                                                                                  #
+                #                 server           => 'aehts-'.$uSAC::HTTP::Server::VERSION,                                                         #
+                #                 #'content-type+charset' => 'UTF-8';                                                                                #
+                #                 %{ $args{headers} || {} },                                                                                         #
+                #                 #'connection' => 'close',                                                                                          #
+                #                 'connection' => ( $args{headers} && $args{headers}{connection} ) ? $args{headers}{connection} : $self->connection, #
+                #         };                                                                                                                         #
+                #         if ($self->method ne 'HEAD') {                                                                                             #
+                #                 if ( exists $h->{'content-length'} ) {                                                                             #
+                #                         if ($h->{'content-length'} != length($content)) {                                                          #
+                #                                 warn "Content-Length mismatch: replied: $h->{'content-length'}, expected: ".length($content);      #
+                #                                 $h->{'content-length'} = length($content);                                                         #
+                #                         }                                                                                                          #
+                #                 } else {                                                                                                           #
+                #                         $h->{'content-length'} = length($content);                                                                 #
+                #                 }                                                                                                                  #
+                #         } else {                                                                                                                   #
+                #                 if ( exists $h->{'content-length'} ) {                                                                             #
+                #                         # keep it                                                                                                  #
+                #                 }                                                                                                                  #
+                #                 elsif(length $content) {                                                                                           #
+                #                         $h->{'content-length'} = length $content;                                                                  #
+                #                 }                                                                                                                  #
+                #                 else {                                                                                                             #
+                #                         $h->{'transfer-encoding'} = 'chunked';                                                                     #
+                #                 }                                                                                                                  #
+                #                 $content = '';                                                                                                     #
+                #         }                                                                                                                          #
+                #         if (exists $h->{'content-type'}) {                                                                                         #
+                #                 if( $h->{'content-type'} !~ m{[^;]+;\s*charset\s*=}                                                                #
+                #                 and $h->{'content-type'} =~ m{(?:^(?:text/|application/(?:json|(?:x-)?javascript))|\+(?:json|xml)\b)}i) {          #
+                #                         $h->{'content-type'} .= '; charset=utf-8';                                                                 #
+                #                 }                                                                                                                  #
+                #         } else {                                                                                                                   #
+                #                 $h->{'content-type'} = 'text/html; charset=utf-8';                                                                 #
+                #         }                                                                                                                          #
+                #         my $nh = delete $h->{NotHandled};                                                                                          #
+                #         for (keys %$h) {                                                                                                           #
+                #                 if (exists $hdr{lc $_}) { $good[ $hdri{lc $_} ] = $hdr{ lc $_ }.": ".$h->{$_}.$LF; }                               #
+                #                 else { push @bad, "\u\L$_\E: ".$h->{$_}.$LF; }                                                                     #
+                #         }                                                                                                                          #
+                #         defined() and $reply .= $_ for @good,@bad;                                                                                 #
+                #         # 2 is size of LF                                                                                                          #
+                #         $self->attrs->{head_size} = length($reply) + 2;                                                                            #
+                #         $self->attrs->{body_size} = length $content;                                                                               #
+                #         $reply .= $LF.$content;                                                                                                    #
+                #         #if (!ref $content) { $reply .= $content }                                                                                 #
+                #         if( $self->[write_] ) {                                                                                                    #
+                #                 $self->[write_]->( $reply );                                                                                       #
+                #                 $self->[write_]->( undef ) if $h->{connection} eq 'close';# or $self->[server_][graceful_];                        #
+                #                 delete $self->[write_];                                                                                            #
+                #                 ${ $self->[reqcount_] }--;                                                                                         #
+                #         }                                                                                                                          #
+                #         if( $self->[server_] && $self->[server_]->{on_reply} ) {                                                                   #
+                #                 $h->{ResponseTime} = gettimeofday() - $self->[time_];                                                              #
+                #                 $h->{Status} = $code;                                                                                              #
+                #                 $h->{NotHandled} = $nh if $nh;                                                                                     #
+                #                 #eval {                                                                                                            #
+                #                         $self->[server_]->{on_reply}->(                                                                            #
+                #                                 $self,                                                                                             #
+                #                                 $h,                                                                                                #
+                #                         );                                                                                                         #
+                #                 #1} or do {                                                                                                        #
+                #                 #       warn "on_reply died with $@";                                                                              #
+                #                 #};                                                                                                                #
+                #         };                                                                                                                         #
+                #                                                                                                                                    #
+                #         if ($self->replied) {                                                                                                      #
+                #                 warn "Double reply $code from ".join(":", (caller $CALLDEPTH)[1,2])." prev was from ".$self->replied."\n";         #
+                #                 exit 255 if $self->server->{exit_on_double_reply};                                                                 #
+                #                 return;                                                                                                            #
+                #         }                                                                                                                          #
+                #         $self->replied(join ":", (caller $CALLDEPTH)[1,2]);                                                                        #
+                #                                                                                                                                    #
+                #         if( $self->[server_] && $self->[server_]->{stat_cb} ) {                                                                    #
+                #                 eval {                                                                                                             #
+                #                         $self->[server_]->{stat_cb}->($self->path, $self->method, gettimeofday() - $self->[time_]);                #
+                #                 1} or do {                                                                                                         #
+                #                         warn "stat_cb died with $@";                                                                               #
+                #                 }                                                                                                                  #
+                #         };                                                                                                                         #
+                # }                                                                                                                                  #
+                ######################################################################################################################################
 	 
 
                 #########################################################################################################################################################

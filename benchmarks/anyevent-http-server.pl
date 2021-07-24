@@ -19,6 +19,7 @@ use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Cookie qw<:constants>;
 use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Static;
 use uSAC::HTTP::Server::WS;
@@ -57,9 +58,21 @@ my $table=Hustle::Table->new;
 $table->set_default(sub {
 		my ($line,$rex)=@_;
 		say "DEFAULT: $line";
-		push @_, (HTTP_NOT_FOUND,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
+		push @_, (HTTP_NOT_FOUND,undef,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
 		&uSAC::HTTP::Rex::reply_simple;#h $rex, ;
 });
+
+$table->add(qr{^GET /login}ao => sub {
+		#set a cookie
+		my $cookie=uSAC::HTTP::Cookie->new(test=>"value");
+		$cookie->[COOKIE_MAX_AGE]=1000;
+
+		#$cookie->[COOKIE_EXPIRES]=time -1000;
+
+		push @_, (HTTP_OK, [HTTP_SET_COOKIE, $cookie->serialize], "HELLO");
+		&uSAC::HTTP::Rex::reply_simple;
+	}
+);
 
 $table->add(qr{^GET /data/$path}ao=> sub {
 		#\my $line=\$_[0];

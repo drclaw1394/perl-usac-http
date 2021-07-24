@@ -77,13 +77,13 @@ BEGIN {
 	);
 	our @names= map {$lookup[$_*2]} 0..@lookup/2-1; 
 	our @values= map {$lookup[1+$_*2]} 0..@lookup/2-1; 
-	our @const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr, "$values[$_] $names[$_]")} 0..@names-1;
+	our %const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr, "$values[$_] $names[$_]")} 0..@names-1;
 }
 use enum (map s/ |-|'/_/gr, @names);
 
-use constant {@const_names}; #Direct constants to use
-our @EXPORT_OK=@const_names;
+use constant \%const_names; #Direct constants to use
+our @EXPORT_OK=keys %const_names;
 our %EXPORT_TAGS=(
-	constants=>\@const_names
+	constants=>[keys %const_names]
 );
 1;

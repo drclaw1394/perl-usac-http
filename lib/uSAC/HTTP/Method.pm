@@ -14,7 +14,7 @@ BEGIN {
 		TRACE
 		PATCH
 		>;
-	our @const_names=map {("HTTP_".uc $names[$_], $names[$_])} 0..@names-1;
+	our %const_names=map {("HTTP_".uc $names[$_], $names[$_])} 0..@names-1;
 }
 
 #Create Enumerations 
@@ -22,10 +22,11 @@ BEGIN {
 
 #Create constant strings of the form:
 #HTTP_GET=>"GET"
-use constant {@const_names}; 
-our @EXPORT_OK=@const_names;
+use constant \%const_names;
+
+our @EXPORT_OK= keys %const_names;
 our %EXPORT_TAGS=(
-		constants=>\@const_names
+		constants=>[keys %const_names]
 
 );
 1;

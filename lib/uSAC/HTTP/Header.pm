@@ -49,6 +49,7 @@ BEGIN {
 		Retry-After
 
 		Server
+		Set-Cookie
 		TE
 		Trailer
 		Transfer-Encoding
@@ -68,14 +69,12 @@ BEGIN {
 		Sec-WebSocket-Extensions
 		DataServiceVersion
 	);
-	our @const_names=map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names;
+	our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names;
 };
-#use enum (@const_names); 		#Make indexes, with underscores
-#our %hash=map {$names[$_]=>$_} 0..@names-1;	#Map actual names to indexes, for parsing
 
-use constant {@const_names}; #Direct constants to use
-our @EXPORT_OK=@const_names;
+use constant \%const_names; #Direct constants to use
+our @EXPORT_OK=keys %const_names;
 our %EXPORT_TAGS=(
-	constants=>\@const_names
+	constants=>[keys %const_names]
 );
 1;
