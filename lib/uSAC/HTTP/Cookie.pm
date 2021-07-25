@@ -32,6 +32,8 @@ our @EXPORT_OK= keys %const_names;
 our %EXPORT_TAGS=(
 	constants=> [keys %const_names]
 );
+my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
 
 #cookie 
 sub new {
@@ -41,26 +43,40 @@ sub new {
 
 	$self->[COOKIE_NAME]=shift;
 	$self->[COOKIE_VALUE]=shift;
+
+	#remainder of values are key value pairs
+	my $i=0;
+	for(0..@_/2-1){
+		$self->[$_[$i]]=$_[$i+1]; $i+=2;
+	}
+
 	$self;
 }
 
-#Attribues can be set direclty
+#Parse cookie string from client into key value pairs.
 sub parse {
-	my $input=shift;
+	my %values;
+	for(split ";", $_[0]=~tr/ //dr){
+		($key,$value)= split "=";
+		$values{$key}=$value;
+	}
+	\%values;
+}
+
+#Parse the key value and attributes from a servers set-cookie header
+sub parse_set {
 	my $key;
 	my $value;
 	my @values;
 	my $first=1;
 
-	for(split ";", $input){
+	for(split ";", $_[0]=~ tr/ //dr){
 		($key,$value)=split "=";
 		if($first){
 			$first=0;
 			($values[1],$values[2])= split "=";
 		}
 		else {
-			tr/ //d;
-			say ;
 			($key,$value)= split "=";
 			say "key $key, value $value";
 			$values[$reverse{$key}]=$value//1;
@@ -70,19 +86,25 @@ sub parse {
 	bless \@values, __PACKAGE__;
 }
 
-sub serialize {
+sub serialize_set{
 	my $self=shift;
 	my $cookie= "$self->[COOKIE_NAME]=$self->[COOKIE_VALUE]";			#Do value
-	for my $index (COOKIE_EXPIRES, COOKIE_MAX_AGE, COOKIE_DOMAIN, COOKIE_PATH){	#Do Attributes
+	for my $index (COOKIE_MAX_AGE, COOKIE_DOMAIN, COOKIE_PATH){	#Do Attributes
 		given($self->[$index]){
 			$cookie.="; $names[$index]=$_" when defined;			#Only defined attribues are added
 		}
 	}
-
+	
+	given($self->[COOKIE_EXPIRES]){
+		when(defined){
+			my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime $self->[COOKIE_EXPIRES];
+			say "time ",$self->[COOKIE_EXPIRES];
+			$cookie.="; Expires=$days[$wday], $mday $months[$mon] ".($year+1900) ." $hour:$min:$sec GMT";
+		}
+	}
 	$cookie.="; Secure" if defined $self->[COOKIE_SECURE];				#Do flag attributes
 	$cookie.="; HTTPOnly" if defined $self->[COOKIE_HTTPONLY];
 
 	$cookie;
 }
-
 1;

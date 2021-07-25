@@ -2,6 +2,7 @@
 use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
+use Data::Dumper;
 	my $fork=$ARGV[0]//0;
 BEGIN {
 	@uSAC::HTTP::Server::Subproducts=("testing/1.2");
@@ -64,19 +65,33 @@ $table->set_default(sub {
 
 $table->add(qr{^GET /login}ao => sub {
 		#set a cookie
-		my $cookie=uSAC::HTTP::Cookie->new(test=>"value");
-		$cookie->[COOKIE_MAX_AGE]=1000;
+		my @cookies=(
+			uSAC::HTTP::Cookie->new(
+				test=>"value",
+				COOKIE_EXPIRES, time+60
+			),
+			uSAC::HTTP::Cookie->new(
+				another=>"valucawljksdfe",
+				COOKIE_MAX_AGE,1000
+			),
+		);
 
-		#$cookie->[COOKIE_EXPIRES]=time -1000;
 
-		push @_, (HTTP_OK, [HTTP_SET_COOKIE, $cookie->serialize], "HELLO");
+		push @_, (HTTP_OK,
+			[map {(HTTP_SET_COOKIE,$_->serialize_set)} @cookies],
+			"HELLO");
+
 		&uSAC::HTTP::Rex::reply_simple;
 	}
 );
 
 $table->add(qr{^GET /data/$path}ao=> sub {
 		#\my $line=\$_[0];
-		#\my $rex=\$_[1];
+		\my $rex=\$_[1];
+		#parse cookie
+		#
+		my $cookies=uSAC::HTTP::Cookie::parse $rex->[uSAC::HTTP::Rex::headers_]{cookie};
+		say Dumper $cookies;
 		push @_,$1,"data";
 		&send_file_uri_norange;
 		return;		
@@ -109,6 +124,8 @@ $table->add(qr{^GET /}ao => sub{
 		#\my $line=\$_[0];
 		#\my $rex=\$_[1];
 		#headers todo:
+		#
+		#parse cookies?
 		push @_, HTTP_OK, undef, $data;
 		&uSAC::HTTP::Rex::reply_simple;
 		return;	
