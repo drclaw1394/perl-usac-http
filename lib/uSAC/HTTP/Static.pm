@@ -276,14 +276,13 @@ sub _check_ranges{
 #returns stat array if valid
 #otherwise responds with error
 sub _check_access {
-	my($line, $rex,$uri,$sys_root)=@_;
+	my ($line, $rex,$uri,$sys_root)=@_;
 
 	my $abs_path=$sys_root."/".$uri;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
+
 	my $in_fh;	
-
 	my $response;
-
 
 	unless(stat $abs_path){
 		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
@@ -295,8 +294,10 @@ sub _check_access {
 		return;
 
 	}
-	unless (open $in_fh, "<:raw", $abs_path){
-	#unless (sysopen $in_fh,$abs_path,O_RDONLY){
+	#TODO: 
+	#	Check the Accept header for valid mime type before we open the file
+	unless (open $in_fh, "<:unix", $abs_path){
+		#unless (sysopen $in_fh,$abs_path,O_RDONLY){
 		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR;
 		return;
 	}
@@ -309,18 +310,29 @@ sub _check_access {
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
 	use  integer;
+
 	my ($line,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
 	#
-	my $in_fh=&_check_access;
-	return unless defined $in_fh;
+	my $in_fh=&_check_access//return;
+	#my $reply;
+	my $ext;
+	#return unless $in_fh;
 
-        my @stat=stat _;      #reuse the stat info                                                           #
-	my $length=$stat[7];
+	my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
 
-	$uri=~$path_ext;	#match results in $1;
+	$ext=substr $uri, index($uri, ".")+1;
 
-	my $reply=
+	#my $ext=substr $uri, -index(reverse($uri),".");
+	#$uri=~$path_ext;	#match results in $1;
+	
+	my $read_total=0;
+	my $write_total=0;
+	my $size_total;
+	my $rc;
+	my $wc;
+	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
@@ -328,120 +340,90 @@ sub send_file_uri_norange {
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
 		)
-		.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$1}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
-		.HTTP_CONTENT_LENGTH.": ".$length.LF			#need to be length of multipart
-		.HTTP_ETAG.": ".$stat[9]."-".$length.LF
+		.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
+		.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
+		.HTTP_ETAG.": ".$mod_time."-".$content_length.LF
 		.LF;
 
 	#prime the buffer by doing a read first
-	my $read_total=0;
-	my $write_total=0;
 
+	$size_total=length($reply)+$content_length;
+	$read_total=length $reply;	#total length	
+	$write_total=0;
 
-	$length+=length $reply;	#total length	
-
-	#setup write watcher
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
-	#this is single part response
-	given(sysread $in_fh, $reply, $read_size, length($reply)){
-		when($_>0){
-			$read_total+=$_;
-			#say $read_total;
-			given(syswrite $out_fh, $reply){
-				when($_>0){
-					$write_total+=$_;
-					if($write_total==$length){
-						#close $in_fh;
-						uSAC::HTTP::Server::Session::drop $session;
-						$session=undef;
-						return;
-					}
-				}
-				when(0){
+	$rc=sysread $in_fh, $reply, $read_size, length($reply);
 
-				}
-				when(undef){
-					#error
-					unless( $! == EAGAIN or $! == EINTR){
-						close $in_fh;
-						uSAC::HTTP::Server::Session::drop $session;
-						$session=undef;
-						return;
-					}
-				}
-			}
-		}
-		when(0){
-
-		}
-		when(undef){
-			#error
-			close $in_fh;
-			uSAC::HTTP::Server::Session::drop $session;
-			$session=undef;
-			return;
-		}
+	$read_total+=$rc;	#undef evaluates to 0 in numeric context
+	unless($rc or $! == EAGAIN or $! == EINTR){
+		say "READ ERROR";
+		close $in_fh;
+		uSAC::HTTP::Server::Session::drop $session;
+		return;
 	}
-	my $ww;
-	$ww = AE::io $out_fh, 1, sub {
 
-		if(length($reply)< $read_size and $read_total<$length){
-			given(sysread $in_fh, $reply, $read_size, length $reply){
-				when($_>0){
-					#write to socket
-					$read_total+=$_;
-				}
-				when(0){
-					#end of file. should not get here
-				}
-				when (undef){
-					#error
-					#drop
-					$ww=undef;
+	$wc=syswrite $out_fh, $reply;
+	$write_total+=$wc;
+	if($write_total==$size_total){
+		close $in_fh;
+		uSAC::HTTP::Server::Session::drop $session;
+		return;
+	}
+	else {
+		#only shift if any left
+		$reply=substr $reply,$wc;
+	}
+	#error
+	unless( $wc  or $! == EAGAIN or $! == EINTR){
+		close $in_fh;
+		uSAC::HTTP::Server::Session::drop $session;
+		return;
+	}
+
+	#Need to copy all needed vars here to capture in sub
+	my $do_it;
+	$do_it=sub {
+		my ($in_fh,$out_fhr,$wbuf,$read_total,$write_total,$size_total)=@_;
+		\my $reply=$wbuf;
+		\my $out_fh=$out_fhr;
+		my $ww;
+		my $rc,$wc;
+		$ww = AE::io $out_fh, 1, sub {
+
+			#print "$out_fh, $in_fh, $content_length\n";
+			if($read_total != $size_total){
+				$rc=sysread $in_fh, $reply, $read_size, length $reply;
+				$read_total+=$rc;
+				unless( $rc or $! == EAGAIN or $! == EINTR){
+					#print "ERROR IN READ\n";
 					close $in_fh;
-					uSAC::HTTP::Server::Session::drop $session;
-					$session=undef;
-				}
-			}
-		}
-		given(syswrite $out_fh,$reply){
-			when($_>0){
-				$write_total+=$_;
-				if($write_total==$length){
 					$ww=undef;
-					close $in_fh;
-
 					uSAC::HTTP::Server::Session::drop $session;
-					$session=undef;
-				}
-				else{
-					$reply=substr $reply, $_;
 				}
 			}
-			when(0){
-				#say "EOF WRITE";
-				#end of file
-				#drop
-				$ww=undef;
-				close $in_fh;
-				uSAC::HTTP::Server::Session::drop $session;
-					$session=undef;
-
-			}
-			when(undef){
-				#error
-				#say "WRITE ERROR: ", $!;
-				unless( $! == EAGAIN or $! == EINTR){
+			
+			#print "Write total $write_total/$size_total\n";
+			if($out_fh and $write_total!=$size_total){
+				$wc=syswrite $out_fh,$reply;
+				$write_total+=$wc;
+				$reply=substr $reply, $wc;
+				unless( $wc or $! == EAGAIN or $! == EINTR){
 					#say $!;
 					$ww=undef;
 					close $in_fh;
 					uSAC::HTTP::Server::Session::drop $session;
-					$session=undef;
-					return;
 				}
 			}
-		}
+			else {
+				#we are done
+				$ww=undef;
+				close $in_fh;
+				uSAC::HTTP::Server::Session::drop $session;
+				$do_it=undef;
+			}
+		};
 	};
+	$do_it->($in_fh,\$out_fh,\$reply,$read_total,$write_total,$size_total);	
 
 }
 

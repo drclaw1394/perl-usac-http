@@ -1,6 +1,8 @@
 package uSAC::HTTP::Cookie;
 use Exporter 'import';
 
+#Please refer to rfc6265 HTTP State Management Mechanism
+#
 BEGIN {
 	our @names=qw<
 		Undef

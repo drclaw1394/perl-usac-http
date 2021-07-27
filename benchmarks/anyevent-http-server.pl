@@ -78,20 +78,44 @@ $table->add(qr{^GET /login}ao => sub {
 
 
 		push @_, (HTTP_OK,
-			[map {(HTTP_SET_COOKIE,$_->serialize_set)} @cookies],
+			[map {(HTTP_SET_COOKIE,$_->serialize_set)} @cookies #cookies
+			],
 			"HELLO");
 
 		&uSAC::HTTP::Rex::reply_simple;
 	}
 );
 
+##################################################################################################
+# $table->add("GET /data/index.html HTTP/1.1"=> sub {                                            #
+#                 #\my $line=\$_[0];                                                             #
+#                 #\my $rex=\$_[1];                                                              #
+#                 #parse cookie                                                                  #
+#                 #                                                                              #
+#                 #my $cookies;                                                                  #
+#                                                                                                #
+#                 #$cookies=uSAC::HTTP::Cookie::parse $rex->[uSAC::HTTP::Rex::headers_]{cookie}; #
+#                                                                                                #
+#                                                                                                #
+#                 #say Dumper $cookies;                                                          #
+#                 push @_,"index.html","data";                                                   #
+#                 &send_file_uri_norange;                                                        #
+#                 return;                                                                        #
+#         }                                                                                      #
+# );                                                                                             #
+##################################################################################################
+#
 $table->add(qr{^GET /data/$path}ao=> sub {
 		#\my $line=\$_[0];
-		\my $rex=\$_[1];
+		#\my $rex=\$_[1];
 		#parse cookie
 		#
-		my $cookies=uSAC::HTTP::Cookie::parse $rex->[uSAC::HTTP::Rex::headers_]{cookie};
-		say Dumper $cookies;
+		#my $cookies;
+
+		#$cookies=uSAC::HTTP::Cookie::parse $rex->[uSAC::HTTP::Rex::headers_]{cookie};
+
+
+		#say Dumper $cookies;
 		push @_,$1,"data";
 		&send_file_uri_norange;
 		return;		
@@ -118,7 +142,6 @@ $table->add(qr<GET /ws>=>sub {
 	}
 );
 
-my $data="a" x 1024;
 $table->add(qr{^GET /}ao => sub{
 		#my ($line, $rex)=@_;
 		#\my $line=\$_[0];
@@ -126,7 +149,8 @@ $table->add(qr{^GET /}ao => sub{
 		#headers todo:
 		#
 		#parse cookies?
-		push @_, HTTP_OK, undef, $data;
+		my $data="a" x 1024;
+		push @_, HTTP_OK,undef, $data;
 		&uSAC::HTTP::Rex::reply_simple;
 		return;	
 	}
@@ -170,7 +194,7 @@ $table->add( begins_with("POST /formdata")=>sub {
 );
 
 
-my $dispatcher=$table->prepare_dispatcher;
+my $dispatcher=$table->prepare_dispatcher(type=>"online",cache=>{});
 
 my $server = uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",

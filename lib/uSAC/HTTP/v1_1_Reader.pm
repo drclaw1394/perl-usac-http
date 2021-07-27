@@ -85,8 +85,10 @@ sub make_reader{
                                 # $line=substr($buf,$ixx,$pos3);                                                #
                                 #################################################################################
 				my $pos3=index $buf, LF, $ixx;
-                                $line=substr($buf,$ixx,$pos3);                                                #
+                                $line=substr($buf,$ixx,$pos3);
 				$version=substr($line,-1,1)eq "1"?"HTTP/1.1":"HTTP/1.0";
+
+                                $line=substr($buf,$ixx,$pos3-length($version));
 				if($pos3>=0){
 					#end of line found
 						$state   = 1;

@@ -73,7 +73,7 @@ sub revive {
 sub _make_reader {
 	my $self=shift;
 	weaken $self;
-	my $fh=$self->[fh_];
+	\my $fh=\$self->[fh_];
 	\my $buf=\$self->[rbuf_];
 	my $ref=\$self->[rbuf_];	
 	my $len;
@@ -90,14 +90,19 @@ sub _make_reader {
 			}
 			when(0){
 				#End of file
+				#say "END OF  READER";
 				$self->[closeme_]=1;
 				drop $self;
+				$self->[rw_]=undef;
 			}
 			when(undef){
 				#potential error
+
 				return if $! == EAGAIN or $! == EINTR; #or $! == WSAEWOULDBLOCK;
+				#say "ERROR IN READER";
 				$self->[closeme_]=1;
 				drop $self;
+				$self->[rw_]=undef;
 			}
 			default {
 			}
@@ -230,6 +235,7 @@ sub drop {
         $self->[server_][uSAC::HTTP::Server::active_connections_]--;
 
 	close $self->[fh_];
+	$self->[fh_]=undef;
 	$self->@[(rw_,ww_,fh_,id_,closeme_)]=(undef) x 5;
 
 	$self->[write_stack_]=[];#[0]=undef;
