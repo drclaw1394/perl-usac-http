@@ -27,7 +27,7 @@ our @EXPORT=@EXPORT_OK;
 use constant LF => "\015\012";
 my $path_ext=	qr{\.([^.]*)$}ao;
 
-my $read_size=4096*64;
+my $read_size=4096*16;
 my %stat_cache;
 
 ################################################
@@ -280,9 +280,10 @@ sub _check_access {
 
 	my $abs_path=$sys_root."/".$uri;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	weaken $session;
+	weaken $rex;
 
 	my $in_fh;	
-	my $response;
 
 	unless(stat $abs_path){
 		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
@@ -313,6 +314,8 @@ sub send_file_uri_norange {
 
 	my ($line,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	weaken $session;
+	weaken $rex;
 	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
 	#
 	my $in_fh=&_check_access//return;
@@ -329,9 +332,7 @@ sub send_file_uri_norange {
 	
 	my $read_total=0;
 	my $write_total=0;
-	my $size_total;
-	my $rc;
-	my $wc;
+	my ($size_total, $rc, $wc);
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		.uSAC::HTTP::Rex::STATIC_HEADERS
@@ -398,7 +399,9 @@ sub send_file_uri_norange {
 					#print "ERROR IN READ\n";
 					close $in_fh;
 					$ww=undef;
+					$do_it=undef;
 					uSAC::HTTP::Server::Session::drop $session;
+					return;
 				}
 			}
 			
@@ -411,7 +414,9 @@ sub send_file_uri_norange {
 					#say $!;
 					$ww=undef;
 					close $in_fh;
+					$do_it=undef;
 					uSAC::HTTP::Server::Session::drop $session;
+					return;
 				}
 			}
 			else {
