@@ -272,6 +272,8 @@ sub _check_ranges{
 	}
 	@ranges;
 }
+#a map between uris and filehandles
+my $open_cache ={};
 
 #returns stat array if valid
 #otherwise responds with error
@@ -287,24 +289,36 @@ sub _check_access {
 
 	unless(stat $abs_path){
 		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
+		#remove from cache
+		undef $open_cache->{$uri};
 		return
 	}
 
 	if ( ! -r _ or -d _){
 		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_FORBIDDEN;
+		#remove from cache
+		undef $open_cache->{$uri};
 		return;
 
 	}
 	#TODO: 
 	#	Check the Accept header for valid mime type before we open the file
-	unless (open $in_fh, "<:unix", $abs_path){
-		#unless (sysopen $in_fh,$abs_path,O_RDONLY){
-		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR;
-		return;
-	}
-	else {
-		return $in_fh;
-	}
+	#
+	
+	#check the cache
+	$in_fh=$open_cache->{$uri}//do {
+		unless (open $in_fh, "<:unix", $abs_path){
+			#unless (sysopen $in_fh,$abs_path,O_RDONLY){
+			uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR;
+			undef $open_cache->{$uri};
+			undef;
+		}
+		else {
+			#add fh to cache
+			\($open_cache->{$uri}=$in_fh);
+		}
+	};
+	return $in_fh;
 }
 
 #process without considering ranges
@@ -318,7 +332,7 @@ sub send_file_uri_norange {
 	weaken $rex;
 	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
 	#
-	my $in_fh=&_check_access//return;
+	\my $in_fh=&_check_access//return;
 	#my $reply;
 	my $ext;
 	#return unless $in_fh;
@@ -347,14 +361,15 @@ sub send_file_uri_norange {
 	#prime the buffer by doing a read first
 
 	my $size_total=length($reply)+$content_length;
-	my $read_total=length $reply;
+	my $reply_size=length $reply;
 	my $write_total=0;
 
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
 	$rc=sysread $in_fh, $reply, $read_size, length($reply);
 
-	unless($rc or $! == EAGAIN or $! == EINTR){
+	unless(defined($rc) or $! == EAGAIN or $! == EINTR){
 		say "READ ERROR";
+		undef $open_cache->{$uri};
 		close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
 		return;
@@ -363,29 +378,31 @@ sub send_file_uri_norange {
 	$wc=syswrite $out_fh, $reply;
 	
 	if(($write_total+=$wc)==$size_total){
-		close $in_fh;
+		seek $in_fh,0,0;
+		#close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
 		return;
 	}
 	else {
 		#only shift if any left
-		$reply=substr $reply,$wc;
 	}
 	#error
-	unless( $wc  or $! == EAGAIN or $! == EINTR){
+	unless( defined($wc)  or $! == EAGAIN or $! == EINTR){
+		undef $open_cache->{$uri};
 		close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
 		return;
 	}
 
-	$read_total+=$rc;
+	$wc-=$reply_size;
 
-	say "read total $read_total, $write_total";	
+	#say "read total $read_total, $write_total";	
 	uSAC::HTTP::Server::Session::push_writer 
 		$session, "http1_1_static_writer",
 		undef;
+		$reply=substr $reply,$wc;
 
-	$session->[uSAC::HTTP::Server::Session::write_]->($in_fh, sub { }, $read_total,$write_total,$size_total);
+	$session->[uSAC::HTTP::Server::Session::write_]->(\$open_cache->{$uri}, $uri, $rc,$wc, $content_length);
 }
 
 sub make_static_file_writer {
@@ -395,42 +412,50 @@ sub make_static_file_writer {
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
 
 	sub {
-		say "asdf";
-		my ($in_fh, $cb, $read_total,$write_total,$size_total)=@_;
+		\my $in_fh=$_[0];
+		my (undef, $uri, $pos,$wpos,$content_length)=@_;
 		my $ww;
 		my ($rc,$wc);
 		$ww = AE::io $out_fh, 1, sub {
-
-			#print "$out_fh, $in_fh, $content_length\n";
-			if($read_total != $size_total){
+			#print "$out_fh, $in_fh, read pos $pos/ $content_length\n";
+			if($pos<$content_length){
+				seek $in_fh,$pos,0;
 				$rc=sysread $in_fh, $reply, $read_size, length $reply;
-				$read_total+=$rc;
-				unless( $rc or $! == EAGAIN or $! == EINTR){
-					#print "ERROR IN READ\n";
+				$pos+=$rc;
+				unless( defined($rc) or $! == EAGAIN or $! == EINTR){
+					print "ERROR IN READ\n";
+					print $!;
+					undef $open_cache->{$uri};
 					close $in_fh;
 					$ww=undef;
 					uSAC::HTTP::Server::Session::drop $session;
 					return;
 				}
 			}
+			else {
+				#say "Read is done";
+			}
 			
-			#print "Write total $write_total/$size_total\n";
-			if($out_fh and $write_total!=$size_total){
+			#say "Write total $wpos /$content_length\n";
+			if($out_fh and $wpos!=$content_length){
 				$wc=syswrite $out_fh,$reply;
-				$write_total+=$wc;
+				$wpos+=$wc;
 				$reply=substr $reply, $wc;
-				unless( $wc or $! == EAGAIN or $! == EINTR){
-					#say $!;
+				unless( defined($wc) or $! == EAGAIN or $! == EINTR){
+					say "write error";
+					say $!;
 					$ww=undef;
+					undef $open_cache->{$uri};
 					close $in_fh;
 					uSAC::HTTP::Server::Session::drop $session;
 					return;
 				}
 			}
 			else {
-				#we are done
+				#we are done. $reset the file
 				$ww=undef;
-				close $in_fh;
+				seek $in_fh,0,0;
+				#close $in_fh;
 				uSAC::HTTP::Server::Session::drop $session;
 			}
 		};
