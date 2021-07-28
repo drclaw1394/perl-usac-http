@@ -43,7 +43,10 @@ sub new {
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
 	$self->[read_stack_]=[];
+	$self->[reader_cache_]={};
+
 	$self->[write_stack_]=[];
+	$self->[writer_cache_]={};
 
 	$self->[on_body_]=undef;	#allocate all the storage now
 	

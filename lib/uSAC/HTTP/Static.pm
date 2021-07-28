@@ -21,7 +21,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_aio send_file_uri_sys send_file_uri_aio2 >;
+our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_aio send_file_uri_sys send_file_uri_aio2  make_static_file_writer>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -330,9 +330,7 @@ sub send_file_uri_norange {
 	#my $ext=substr $uri, -index(reverse($uri),".");
 	#$uri=~$path_ext;	#match results in $1;
 	
-	my $read_total=0;
-	my $write_total=0;
-	my ($size_total, $rc, $wc);
+	my ( $rc, $wc);
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		.uSAC::HTTP::Rex::STATIC_HEADERS
@@ -348,14 +346,13 @@ sub send_file_uri_norange {
 
 	#prime the buffer by doing a read first
 
-	$size_total=length($reply)+$content_length;
-	$read_total=length $reply;	#total length	
-	$write_total=0;
+	my $size_total=length($reply)+$content_length;
+	my $read_total=length $reply;
+	my $write_total=0;
 
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
 	$rc=sysread $in_fh, $reply, $read_size, length($reply);
 
-	$read_total+=$rc;	#undef evaluates to 0 in numeric context
 	unless($rc or $! == EAGAIN or $! == EINTR){
 		say "READ ERROR";
 		close $in_fh;
@@ -364,8 +361,8 @@ sub send_file_uri_norange {
 	}
 
 	$wc=syswrite $out_fh, $reply;
-	$write_total+=$wc;
-	if($write_total==$size_total){
+	
+	if(($write_total+=$wc)==$size_total){
 		close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
 		return;
@@ -381,14 +378,27 @@ sub send_file_uri_norange {
 		return;
 	}
 
-	#Need to copy all needed vars here to capture in sub
-	my $do_it;
-	$do_it=sub {
-		my ($in_fh,$out_fhr,$wbuf,$read_total,$write_total,$size_total)=@_;
-		\my $reply=$wbuf;
-		\my $out_fh=$out_fhr;
+	$read_total+=$rc;
+
+	say "read total $read_total, $write_total";	
+	uSAC::HTTP::Server::Session::push_writer 
+		$session, "http1_1_static_writer",
+		undef;
+
+	$session->[uSAC::HTTP::Server::Session::write_]->($in_fh, sub { }, $read_total,$write_total,$size_total);
+}
+
+sub make_static_file_writer {
+	my $session=shift;
+	weaken $session;
+	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
+	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
+
+	sub {
+		say "asdf";
+		my ($in_fh, $cb, $read_total,$write_total,$size_total)=@_;
 		my $ww;
-		my $rc,$wc;
+		my ($rc,$wc);
 		$ww = AE::io $out_fh, 1, sub {
 
 			#print "$out_fh, $in_fh, $content_length\n";
@@ -399,7 +409,6 @@ sub send_file_uri_norange {
 					#print "ERROR IN READ\n";
 					close $in_fh;
 					$ww=undef;
-					$do_it=undef;
 					uSAC::HTTP::Server::Session::drop $session;
 					return;
 				}
@@ -414,7 +423,6 @@ sub send_file_uri_norange {
 					#say $!;
 					$ww=undef;
 					close $in_fh;
-					$do_it=undef;
 					uSAC::HTTP::Server::Session::drop $session;
 					return;
 				}
@@ -424,11 +432,9 @@ sub send_file_uri_norange {
 				$ww=undef;
 				close $in_fh;
 				uSAC::HTTP::Server::Session::drop $session;
-				$do_it=undef;
 			}
 		};
 	};
-	$do_it->($in_fh,\$out_fh,\$reply,$read_total,$write_total,$size_total);	
 
 }
 

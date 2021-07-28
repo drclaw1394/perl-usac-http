@@ -29,6 +29,10 @@ use Hustle::Table;
 
 use constant LF=>"\015\012";
 
+given(\%uSAC::HTTP::Server::Session::make_writer_reg){
+	$_->{http1_1_static_writer}=\&make_static_file_writer;
+}
+
 our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
