@@ -4,6 +4,8 @@ use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
 
+use Scalar::Util qw<weaken>;
+use Devel::Peek qw<SvREFCNT>;
 use Errno qw<:POSIX EACCES ENOENT>;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK O_RDONLY);
 use File::Spec;
@@ -272,20 +274,94 @@ sub _check_ranges{
 	}
 	@ranges;
 }
-#a map between uris and filehandles
-my $open_cache ={};
 
-#returns stat array if valid
-#otherwise responds with error
+
+## Performance enhancement for slow opens
+# Keeps the file handle open for other connections.
+# The timer checks the ref count. When the ref count is 1, the hash is the
+# only structure referencing the fileglob. Larger then 1, other sub references are 
+# using it (ie reading from disk, and writing to socket)
+#
+# The entry is deleted if the ref count is 1. Meaning subsequent requests will cause a cache miss
+# and reopen the file.
+#
+# Pros:
+# Saves on file handles
+# Improves static file delevery ALOT (around 1.5x as fast)
+# Not complicated tracking of open files. Perl does it for you with ref counting
+#
+# Cons
+# Reading from file needs to seek, as each write updates the file position
+# Timer has small overhead.
+#
+# Random nature of hash keys means the whole set of file handles are tested, not just the first in the list.
+#
+# Optional sweep size to limit the time the function need to execute
+#
+# Gotchas:
+# 	unlinking a file on disk while the filehandle is open will not prevent read/write to the file
+# 	in this case when the file is close from it will finally be unlinked
+#
+# 	Moving a file ?
+# 	
+# 	Replacing a file?
+#
+
+my $open_cache ={};
+my $cache_timer;
+my $sweep_size=100;
+
+sub disable_cache {
+	#delete all keys
+	for (keys %$open_cache){
+		delete $open_cache->{$_};
+	}
+	$cache_timer=undef;
+	
+}
+
+sub enable_cache {
+	unless ($cache_timer){
+		$cache_timer=AE::timer 0,1,sub {
+			my $i;
+			for(keys %$open_cache){
+				delete $open_cache->{$_} if SvREFCNT $open_cache->{$_}==1;
+				last if ++$i >= $sweep_size;
+
+			}
+		};
+
+	}
+
+}
+
+sub open_cache {
+	my $abs_path=shift;
+	my $in_fh;
+	$open_cache->{$abs_path}//do {
+		unless (open $in_fh, "<:unix", $abs_path){
+			#unless (sysopen $in_fh,$abs_path,O_RDONLY){
+			undef $open_cache->{$abs_path};
+			undef;
+		}
+		else {
+			#add fh to cache
+			$open_cache->{$abs_path}=$in_fh;
+		}
+	};
+}
+
 sub _check_access {
+
 	my ($line, $rex,$uri,$sys_root)=@_;
+	enable_cache;
 
 	my $abs_path=$sys_root."/".$uri;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	weaken $session;
 	weaken $rex;
 
-	my $in_fh;	
+	#my $in_fh;	
 
 	unless(stat $abs_path){
 		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
@@ -306,18 +382,8 @@ sub _check_access {
 	#
 	
 	#check the cache
-	$in_fh=$open_cache->{$uri}//do {
-		unless (open $in_fh, "<:unix", $abs_path){
-			#unless (sysopen $in_fh,$abs_path,O_RDONLY){
-			uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR;
-			undef $open_cache->{$uri};
-			undef;
-		}
-		else {
-			#add fh to cache
-			\($open_cache->{$uri}=$in_fh);
-		}
-	};
+	my $in_fh=open_cache $abs_path;	
+	uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR unless $in_fh;
 	return $in_fh;
 }
 
@@ -332,7 +398,7 @@ sub send_file_uri_norange {
 	weaken $rex;
 	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
 	#
-	\my $in_fh=&_check_access//return;
+	my $in_fh=&_check_access//return;
 	#my $reply;
 	my $ext;
 	#return unless $in_fh;
@@ -368,7 +434,7 @@ sub send_file_uri_norange {
 	$rc=sysread $in_fh, $reply, $read_size, length($reply);
 
 	unless(defined($rc) or $! == EAGAIN or $! == EINTR){
-		say "READ ERROR";
+		say "READ ERROR from file";
 		undef $open_cache->{$uri};
 		close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
@@ -402,7 +468,8 @@ sub send_file_uri_norange {
 		undef;
 		$reply=substr $reply,$wc;
 
-	$session->[uSAC::HTTP::Server::Session::write_]->(\$open_cache->{$uri}, $uri, $rc,$wc, $content_length);
+	$session->[uSAC::HTTP::Server::Session::write_]->($in_fh, $uri, $rc,$wc, $content_length);
+	#my $tmp=$in_fh;
 }
 
 sub make_static_file_writer {
@@ -423,7 +490,8 @@ sub make_static_file_writer {
 				$rc=sysread $in_fh, $reply, $read_size, length $reply;
 				$pos+=$rc;
 				unless( defined($rc) or $! == EAGAIN or $! == EINTR){
-					print "ERROR IN READ\n";
+					print "ERROR IN READ from file\n";
+					say "RC, $rc,fh $in_fh";
 					print $!;
 					undef $open_cache->{$uri};
 					close $in_fh;
@@ -442,8 +510,8 @@ sub make_static_file_writer {
 				$wpos+=$wc;
 				$reply=substr $reply, $wc;
 				unless( defined($wc) or $! == EAGAIN or $! == EINTR){
-					say "write error";
-					say $!;
+					#say "write error";
+					#say $!;
 					$ww=undef;
 					undef $open_cache->{$uri};
 					close $in_fh;
@@ -461,6 +529,12 @@ sub make_static_file_writer {
 		};
 	};
 
+}
+
+#List the contents of the dir
+#optionally in recursive manner?
+sub dir_list {
+	
 }
 
 sub send_file_uri_range {

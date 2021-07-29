@@ -42,11 +42,11 @@ sub new {
 
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
-	$self->[read_stack_]=[];
-	$self->[reader_cache_]={};
+	#$self->[read_stack_]=[];
+	#$self->[reader_cache_]={};
 
-	$self->[write_stack_]=[];
-	$self->[writer_cache_]={};
+	#$self->[write_stack_]=[];
+	#$self->[writer_cache_]={};
 
 	$self->[on_body_]=undef;	#allocate all the storage now
 	
@@ -78,7 +78,7 @@ sub _make_reader {
 	weaken $self;
 	\my $fh=\$self->[fh_];
 	\my $buf=\$self->[rbuf_];
-	my $ref=\$self->[rbuf_];	
+	#my $ref=\$self->[rbuf_];	
 	my $len;
 	\my $reader=\$self->[read_];
 
@@ -113,123 +113,6 @@ sub _make_reader {
 	};
 }
 
-############################################################################################################
-# sub _make_writer{                                                                                        #
-#         #take a session and alias the variables to lexicals                                              #
-#         my $ido=shift;                                                                                   #
-#         weaken $ido;                                                                                     #
-#         \my $wbuf=\$ido->[uSAC::HTTP::Server::Session::wbuf_];                                           #
-#         \my $ww=\$ido->[uSAC::HTTP::Server::Session::ww_];                                               #
-#         \my $fh=\$ido->[uSAC::HTTP::Server::Session::fh_];                                               #
-#         my $w;                                                                                           #
-#         my $cb;                                                                                          #
-#         sub {                                                                                            #
-#                 \my $buf=\$_[0];        #give the input a name                                           #
-#                 #local $\=", ";                                                                          #
-#                 #say "Calling write: $buf";                                                              #
-#                 #say caller;                                                                             #
-#                 if(length($wbuf) == 0 ){                                                                 #
-#                         $w = syswrite( $fh, $buf );                                                      #
-#                         given ($w){                                                                      #
-#                                 when(length $buf){                                                       #
-#                                         #say "FULL WRITE NO APPEND";                                     #
-#                                         $wbuf="";                                                        #
-#                                         #$ww=undef;                                                      #
-#                                         given($_[1]){                                                    #
-#                                                 $_->() if defined;                                       #
-#                                         }                                                                #
-#                                         return;                                                          #
-#                                                                                                          #
-#                                 }                                                                        #
-#                                 when(defined $w and length($buf)> $w){                                   #
-#                                         say "PARITAL WRITE NO APPEND: wanted". length($buf). "got $w";   #
-#                                         $wbuf.=substr($buf,$w);                                          #
-#                                         return if defined $ww;                                           #
-#                                                                                                          #
-#                                 }                                                                        #
-#                                 default {                                                                #
-#                                         unless( $! == EAGAIN or $! == EINTR){                            #
-#                                                 say "ERROR IN WRITE NO APPEND";                          #
-#                                                 say $!;                                                  #
-#                                                 #actual error                                            #
-#                                                 $ww=undef;                                               #
-#                                                 #$wbuf="";                                               #
-#                                                 $ido->drop( "$!");                                       #
-#                                                 return;                                                  #
-#                                         }                                                                #
-#                                 }                                                                        #
-#                         }                                                                                #
-#                                                                                                          #
-#                 }                                                                                        #
-#                 else {                                                                                   #
-#                         $wbuf.= $buf;                                                                    #
-#                         $w = syswrite( $fh, $wbuf );                                                     #
-#                         given($w){                                                                       #
-#                                 when(length $wbuf){                                                      #
-#                                         say "Full write from appended";                                  #
-#                                         $ww=undef;                                                       #
-#                                         $wbuf="";                                                        #
-#                                         given($_[1]){                                                    #
-#                                                 $_->() if defined;                                       #
-#                                         }                                                                #
-#                                         return;                                                          #
-#                                 }                                                                        #
-#                                 when (length($wbuf)> $w){                                                #
-#                                         say "partial write from appended";                               #
-#                                         $wbuf.=substr($wbuf,$w);                                         #
-#                                         #need to create watcher if it does                               #
-#                                         return if defined $ww;                                           #
-#                                                                                                          #
-#                                 }                                                                        #
-#                                 default{                                                                 #
-#                                         #error                                                           #
-#                                         unless( $! == EAGAIN or $! == EINTR){                            #
-#                                                 #actual error                                            #
-#                                                 $ww=undef;                                               #
-#                                                 #$wbuf="";                                               #
-#                                                 $ido->drop( "$!");                                       #
-#                                                 return;                                                  #
-#                                         }                                                                #
-#                                         return if defined $ww;                                           #
-#                                 }                                                                        #
-#                         }                                                                                #
-#                 }                                                                                        #
-#                                                                                                          #
-#                 $cb=$_[1];      #save callback here for io callback                                      #
-#                 say "making watcher";                                                                    #
-#                 $ww = AE::io $fh, 1, sub {                                                               #
-#                         say "IN WRITE WATCHER CB";                                                       #
-#                         $ido or return;                                                                  #
-#                         $w = syswrite( $fh, $wbuf );                                                     #
-#                         given($w){                                                                       #
-#                                 when(length $wbuf) {                                                     #
-#                                         say "FULL async write";                                          #
-#                                         $wbuf="";                                                        #
-#                                         undef $ww;                                                       #
-#                                         $cb->() if defined $cb;                                          #
-#                                         #if( $ido->[closeme_] ) { $ido->drop(); }                        #
-#                                 }                                                                        #
-#                                 when(defined $w){                                                        #
-#                                         say "partial async write";                                       #
-#                                         $wbuf= substr( $wbuf, $w );                                      #
-#                                 }                                                                        #
-#                                 default {                                                                #
-#                                         #error                                                           #
-#                                         return if $! == EAGAIN or $! == EINTR;#or $! == WSAEWOULDBLOCK){ #
-#                                         #actual error                                                    #
-#                                         say "WRITER ERROR: ", $!;                                        #
-#                                         $ww=undef;                                                       #
-#                                         $wbuf="";                                                        #
-#                                         $ido->drop( "$!");                                               #
-#                                         return;                                                          #
-#                                 }                                                                        #
-#                         }                                                                                #
-#                 };                                                                                       #
-#                 #else { return $ido->drop("$!"); }                                                       #
-#         };                                                                                               #
-# }                                                                                                        #
-#                                                                                                          #
-############################################################################################################
 
 sub drop {
         my ($self,$err) = @_;

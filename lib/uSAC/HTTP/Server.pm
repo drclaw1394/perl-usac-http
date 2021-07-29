@@ -219,18 +219,17 @@ sub accept {
 	\my $total_connections=\$self->[total_connections_];
 	my $session;
 	my $id;
+	my $tcp_proto=getprotobyname("tcp");
 	for my $fl ( values %{ $self->[fhs_] }) {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
 			$peer = accept my $fh, $fl;
 				#while ($fl and ($peer = accept my $fh, $fl)) {
 
-				binmode	$fh;
-				fcntl $fh, F_SETFL, fcntl($fh, F_GETFL,0)|O_NONBLOCK;
-				my $tcp_proto=getprotobyname("tcp");
-				setsockopt $fh, $tcp_proto, TCP_NODELAY, 1
-					or Carp::croak "listen/so_nodelay $!"
-						unless AnyEvent::WIN32; # work around windows bug
+				#binmode	$fh;
+				#fcntl $fh, F_SETFL, fcntl($fh, F_GETFL,0)|O_NONBLOCK;
+				fcntl $fh, F_SETFL,O_NONBLOCK;
+				#setsockopt $fh, $tcp_proto, TCP_NODELAY, 1 or Carp::croak "listen/so_nodelay $!";
 				#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
 
 				#TODO: setup timeout for bad clients/connections
@@ -238,8 +237,8 @@ sub accept {
 				$id = ++$seq;
 
 
-				$session=pop @zombies;#@{$self->[zombies_]};
-				if(defined $session){
+				$session=pop @zombies;
+				if($session){
 					uSAC::HTTP::Server::Session::revive $session, $id, $fh;
 				}
 				else {
