@@ -223,13 +223,16 @@ sub accept {
 	for my $fl ( values %{ $self->[fhs_] }) {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
-			$peer = accept my $fh, $fl;
+			while(($peer = accept my $fh, $fl)){
 				#while ($fl and ($peer = accept my $fh, $fl)) {
 
-				#binmode	$fh;
+				binmode	$fh, ":raw";
 				#fcntl $fh, F_SETFL, fcntl($fh, F_GETFL,0)|O_NONBLOCK;
 				fcntl $fh, F_SETFL,O_NONBLOCK;
-				#setsockopt $fh, $tcp_proto, TCP_NODELAY, 1 or Carp::croak "listen/so_nodelay $!";
+
+				#TODO:
+				# Need to do OS check here
+				setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1 or Carp::croak "listen/so_nodelay $!";
 				#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
 
 				#TODO: setup timeout for bad clients/connections
@@ -249,6 +252,7 @@ sub accept {
 				$sessions{ $id } = $session;
 				$active_connections++;
 				$total_connections++;
+			}
 		};
 	}
 	return;
