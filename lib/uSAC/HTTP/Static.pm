@@ -326,7 +326,7 @@ sub disable_cache {
 
 sub enable_cache {
 	unless ($cache_timer){
-		$cache_timer=AE::timer 0,1,sub {
+		$cache_timer=AE::timer 0,10,sub {
 			my $i;
 			for(keys %$open_cache){
 				delete $open_cache->{$_} if SvREFCNT $open_cache->{$_}==1;

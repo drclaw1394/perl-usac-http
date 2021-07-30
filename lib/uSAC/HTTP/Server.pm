@@ -116,11 +116,6 @@ sub new {
 	return $self;
 }
 
-sub uSAC::HTTP::Server::destroyed::AUTOLOAD {}
-sub destroy { %{ bless $_[0], 'uSAC::HTTP::Server::destroyed' } = (); }
-sub DESTROY { $_[0]->destroy };
-
-
 
 sub listen {
 	my $self = shift;
@@ -209,7 +204,7 @@ sub prepare {
 		#say "Session count : ",scalar keys $self->[sessions_]->%*;
 	};
 }
-#sub incoming;
+
 sub accept {
 	state $seq=0;
 	weaken( my $self = shift );
@@ -258,10 +253,6 @@ sub accept {
 	return;
 }
 
-sub noaccept {
-	my $self = shift;
-	delete $self->[aws_];
-}
 
 sub peer_info {
 	my $fh = shift;
@@ -289,28 +280,6 @@ sub badconn {
 	warn "$msg from $remote (fd:$fileno) <$outbuf>\n";
 }
 
-#############################################################################################################################
-# sub incoming {                                                                                                            #
-#         state $seq=0;                                                                                                     #
-#         weaken( my $self = shift );                                                                                       #
-#         # warn "incoming @_";                                                                                             #
-#         $self->[total_connections_]++;                                                                                    #
-#         my ($fh,$rhost,$rport) = @_;                                                                                      #
-#         my $id = ++$seq;#++$self->{seq}; #refaddr $fh;                                                                    #
-#                                                                                                                           #
-#         #my $timeout; $timeout=AE::timer 10,0, sub {say "TIMEOUT";$timeout=>undef;$self->drop($id)};                      #
-#         #weaken $timeout;                                                                                                 #
-#         my $r=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);#makes network reader/writer                          #
-#                                                                                                                           #
-#         $self->[sessions_]{ $id } = $r;#bless $r, "uSAC::HTTP::Server::Session";                                          #
-#         $self->[active_connections_]++;                                                                                   #
-#                                                                                                                           #
-#         #my $write= uSAC::HTTP::v1_1::make_writer $r, ; #$self->[sessions_]{$id};                                         #
-#         #my $write;#= uSAC::HTTP::Server::Session::push_writer $r, \&uSAC::HTTP::v1_1::make_writer;                       #
-#         uSAC::HTTP::Server::Session::push_reader $r, \&uSAC::HTTP::v1_1_Reader::make_reader;    #push protocol for reader #
-#                                                                                                                           #
-# }                                                                                                                         #
-#############################################################################################################################
 
 sub ws_close {
 	my $self = shift;
@@ -337,196 +306,3 @@ sub graceful {
 1; # End of uSAC::HTTP::Server
 __END__
 
-=head1 SYNOPSIS
-
-    use uSAC::HTTP::Server;
-    my $s = uSAC::HTTP::Server->new(
-        host => '0.0.0.0',
-        port => 80,
-        cb => sub {
-          my $request = shift;
-          my $status  = 200;
-          my $content = "<h1>Reply message</h1>";
-          my $headers = { 'content-type' => 'text/html' };
-          $request->reply($status, $content, headers => $headers);
-        }
-    );
-    $s->listen;
-    
-    ## you may also prefork on N cores:
-    
-    # fork() ? next : last for (1..$N-1);
-    
-    ## Of course this is very simple example
-    ## don't use such prefork in production
-    
-    $s->accept;
-    
-    my $sig = AE::signal INT => sub {
-        warn "Stopping server";
-        $s->graceful(sub {
-            warn "Server stopped";
-            EV::unloop;
-        });
-    };
-    
-    EV::loop;
-
-=head1 DESCRIPTION
-
-uSAC::HTTP::Server is a very fast asynchronous HTTP server written in perl. 
-It has been tested in high load production environments and may be considered both fast and stable.
-
-One can easily implement own HTTP daemon with uSAC::HTTP::Server and Daemond::Lite module,
-both found at L<https://github.com/Mons>
-
-This is a second verson available as AnyEvent-HTTP-Server-II. The first version is now obsolette.
-
-=head1 HANDLING REQUEST
-
-You can handle HTTP request by passing cb parameter to uSAC::HTTP::Server->new() like this:
-
-
-  my $dispatcher = sub {
-    my $request = shift;
-    #... Request processing code goes here ...
-    1;
-  };
-
-  my $s = uSAC::HTTP::Server->new( host => '0.0.0.0', port => 80, cb => $dispatcher,);
-
-$dispatcher coderef will be called in a list context and it's return value should resolve 
-to true, or request processing will be aborted by AnyEvent:HTTP::Server.
-
-One able to process POST requests by returning specially crafted  hash reference from cb 
-parameter coderef ($dispatcher in out example). This hash must contain the B<form> key, 
-holding a code reference. If B<conetnt-encoding> header is 
-B<application/x-www-form-urlencoded>, form callback will be called.
-
-  my $post_action = sub {
-    my ( $request, $form ) = @_;
-    $request->reply(
-      200, # HTTP Status
-      "You just send long_data_param_name value of $form->{long_data_param_name}",  # Content
-      headers=> { 'content-type' =< 'text/plain'}, # Response headers
-    );
-  }
-
-  my $dispatcher = sub {
-    my $request = shift;
-
-    if ( $request->headers->{'content-type'} =~ m{^application/x-www-form-urlencoded\s*$} ) {
-      return {
-        form => sub {
-          $cb->( $request, $post_action);
-        },
-      };
-    } else {
-      # GET request processing
-    } 
-
-  };
-
-  my $s = uSAC::HTTP::Server->new( host => '0.0.0.0', port => 80, cb => $dispatcher,);
-
-=head1 EXPORT
-
-  Does not export anything
-
-=head1 SUBROUTINES/METHODS
-
-=head2 new - create HTTP Server object
-
-  Arguments to constractor should be passed as a key=>value list, for example
-
-    my $s = uSAC::HTTP::Server->new(
-        host => '0.0.0.0',
-        port => 80,
-        cb   => sub {
-            my $req = shift;
-            return sub {
-                my ($is_last, $bodypart) = @_;
-                $r->reply(200, "<h1>Reply message</h1>", headers => { 'content-type' => 'text/html' });
-            }
-        }
-    );
-
-
-=head3 host 
-
-  Specify interfaces to bind a listening socket to
-  Example: host => '127.0.0.1'
-    
-=head3 port
-
-  Listen on this port
-  Example: port => 80
-
-=head3 cb
-
-  This coderef will be called on incoming request
-  Example: cb => sub {
-    my $request = shift;
-    my $status  = 200;
-    my $content = "<h1>Reply message</h1>";
-    my $headers = { 'content-type' => 'text/html' };
-    $request->reply($status, $content, headers => $headers);
-  }
-
-  The first argument to callback will be request object (uSAC::HTTP::Server::Req).
-
-=head2 listen - bind server socket to host and port, start listening for connections
-
-  This method has no arguments.
-
-  This method is commonly called from master process before it forks.
-
-  Errors in host and port may result in exceptions, so you probably want to eval this call.
-
-=head2 accept - start accepting connections
-
-  This method has no arguments.
-
-  This method is commonly called in forked children, which serve incoming requests.
-
-=head2 noaccept - stop accepting connections (while still listening on a socket)
-
-  This method has no arguments.
-
-=head2 graceful - Stop accepting new connections and gracefully shut down the server
-
-  Wait until all connections will be handled and execute supplied coderef after that.
-  This method can be useful in signal handlers.
-
-
-=head1 RESOURCES
-
-=over 4
-
-=item * GitHub repository
-
-L<http://github.com/Mons/AnyEvent-HTTP-Server-II>
-
-=back
-
-=head1 ACKNOWLEDGEMENTS
-
-=over 4
-
-=item * Thanks to B<Marc Lehmann> for L<AnyEvent>
-
-=item * Thanks to B<Robin Redeker> for L<uSAC::HTTPD>
-
-=back
-
-=head1 AUTHOR
-
-Mons Anderson, <mons@cpan.org>
-
-=head1 LICENSE
-
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
-
-=cut
