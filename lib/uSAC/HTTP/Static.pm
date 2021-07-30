@@ -9,13 +9,13 @@ use Devel::Peek qw<SvREFCNT>;
 use Errno qw<:POSIX EACCES ENOENT>;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK O_RDONLY);
 use File::Spec;
-use IO::AIO;
+#use IO::AIO;
 use AnyEvent;
-use AnyEvent::AIO;
-IO::AIO::max_parallel 1;
+#use AnyEvent::AIO;
+#IO::AIO::max_parallel 1;
 #$IO::AIO::lkjasdf=1;
 
-use Sys::Sendfile;
+#use Sys::Sendfile;
 
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
@@ -46,178 +46,182 @@ my %stat_cache;
 
 #TODO:
 #add directory listing option?
-sub send_file_uri_sys {
-	my ($rex,$uri,$sys_root)=@_;
-	state @stat;
-	state $reply;
-
-	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
-
-        #close connection after if marked
-        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
-                $reply.=HTTP_CONNECTION.": close".LF;
-
-        }
-	#or send explicit keep alive?
-	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
-	else{
-		$reply.=
-			HTTP_CONNECTION.": Keep-Alive".LF
-			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
-		;
-	}
-
-	my $abs_path;
-	$abs_path=$sys_root."/".$uri;
-	my $offset=0;
-	my $length=0;
-	open(my $in_fh,"<",$abs_path) or say  "OPen error";
-	\my $out_fh=\$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
-	fcntl $out_fh, F_SETFL, 0;#O_NONBLOCK;	#this nukes other flags... read first?
-	$length=(stat($in_fh))[7];
-	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
-	say "REPLY: $reply";
-	$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
-			say "DOING CALLBACK: offset: $offset, length: $length";
-			my $res=sendfile $out_fh,$in_fh,$offset,$length;
-			say "after callback: $res";
-			say $! unless defined $res;
-			#$rex->[uSAC::HTTP::Rex::session_]->drop;
-	});
-
-}
-sub send_file_uri_aio2 {
-	my ($rex,$uri,$sys_root)=@_;
-	state @stat;
-	state $reply;
-
-	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
-
-        #close connection after if marked
-        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
-                $reply.=HTTP_CONNECTION.": close".LF;
-
-        }
-	#or send explicit keep alive?
-	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
-	else{
-		$reply.=
-			HTTP_CONNECTION.": Keep-Alive".LF
-			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
-		;
-	}
-
-	my $abs_path;
-	$abs_path=$sys_root."/".$uri;
-	my $offset=0;
-	my $length=0;
-	open(my $in_fh,"<",$abs_path) or say  "OPen error";
-	my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
-	$length=(stat($in_fh))[7];
-	$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
-	my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
-	my $watcher;
-	$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
-			#create a write watcher to trigger send file.
-			$watcher=AE::io  $out_fh,1, sub {
-		return unless defined $out_fh and defined $in_fh;
-		aio_sendfile($out_fh,$in_fh, $offset, $length, sub {
-				say "IN write watcher CALLBACK: $_[0]";
-				say "EAGAIN" if $! == EAGAIN;
-				say $! unless $_[0]>0;
-				return if $_[0]<0;
-				given($_[0]){
-					when($_>0){
-						#say $_[0];
-						$offset+=$_;
-						if($offset==$length){
-							#say "All sent";
-							close $in_fh;
-							$watcher=undef;
-							$rex->[uSAC::HTTP::Rex::session_]->drop;
-						}
-						#else watcher will notifiy
-					}
-					default{
-						#check if an actual error
-						return if $! == EAGAIN or $! == EINTR;
-						#say "Send file Error: $_[0]";
-						#actual error		
-						say "sendfile WRITER ERROR: ", $!;
-						$watcher=undef;
-						close $in_fh;
-						#say "Send file error: $!" unless $_[0];
-					}
-				}
-			});
-
-
-
-			};
-	});
-		
-
-}
-
-sub send_file_uri_aio {
-	my ($rex,$uri,$sys_root)=@_;
-	state @stat;
-	state $reply;
-
-	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
-
-        #close connection after if marked
-        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
-                $reply.=HTTP_CONNECTION.": close".LF;
-
-        }
-	#or send explicit keep alive?
-	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
-	else{
-		$reply.=
-			HTTP_CONNECTION.": Keep-Alive".LF
-			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
-		;
-	}
-
-	my $abs_path;
-	$abs_path=$sys_root."/".$uri;
-	my $offset=0;
-	my $length=0;
-        aio_open($abs_path, IO::AIO::O_RDONLY,0, sub {
-			my $in_fh=$_[0];
-			#say "Open ERROR $!" unless $_[0];
-			#say "In fh: ",$in_fh;
-			$length=(stat $in_fh)[7];
-			#say "Length: $length";
-			$reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;	 		
-			#say $reply;
-			$rex->[uSAC::HTTP::Rex::write_]->($reply,sub {
-					#say "write callback";
-					my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
-					#say "out fh: ",$out_fh;
-                                        ############################################################
-                                        # $rex->[uSAC::HTTP::Rex::write_]->("b" x $length, sub{    #
-                                        #                 $rex->[uSAC::HTTP::Rex::session_]->drop; #
-                                        #         });                                              #
-                                        # return;                                                  #
-                                        ############################################################
-					aio_sendfile($out_fh,$in_fh, $offset, $length, sub {
-							say "Send file error: $!" unless $_[0];
-							close $in_fh;
-							$rex->[uSAC::HTTP::Rex::session_]->drop;
-						});
-				})
-		
-	});
-
-}
+#############################################################################################
+# sub send_file_uri_sys {                                                                   #
+#         my ($rex,$uri,$sys_root)=@_;                                                      #
+#         state @stat;                                                                      #
+#         state $reply;                                                                     #
+#                                                                                           #
+#         $reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF                            #
+#                 .uSAC::HTTP::Rex::STATIC_HEADERS                                          #
+#                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                             #
+#                                                                                           #
+#         #close connection after if marked                                                 #
+#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){     #
+#                 $reply.=HTTP_CONNECTION.": close".LF;                                     #
+#                                                                                           #
+#         }                                                                                 #
+#         #or send explicit keep alive?                                                     #
+#         #if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {                            #
+#         else{                                                                             #
+#                 $reply.=                                                                  #
+#                         HTTP_CONNECTION.": Keep-Alive".LF                                 #
+#                         #.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF                      #
+#                 ;                                                                         #
+#         }                                                                                 #
+#                                                                                           #
+#         my $abs_path;                                                                     #
+#         $abs_path=$sys_root."/".$uri;                                                     #
+#         my $offset=0;                                                                     #
+#         my $length=0;                                                                     #
+#         open(my $in_fh,"<",$abs_path) or say  "OPen error";                               #
+#         \my $out_fh=\$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_]; #
+#         fcntl $out_fh, F_SETFL, 0;#O_NONBLOCK;  #this nukes other flags... read first?    #
+#         $length=(stat($in_fh))[7];                                                        #
+#         $reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;                                   #
+#         say "REPLY: $reply";                                                              #
+#         $rex->[uSAC::HTTP::Rex::write_]->($reply,sub {                                    #
+#                         say "DOING CALLBACK: offset: $offset, length: $length";           #
+#                         my $res=sendfile $out_fh,$in_fh,$offset,$length;                  #
+#                         say "after callback: $res";                                       #
+#                         say $! unless defined $res;                                       #
+#                         #$rex->[uSAC::HTTP::Rex::session_]->drop;                         #
+#         });                                                                               #
+#                                                                                           #
+# }                                                                                         #
+#############################################################################################
+###########################################################################################################################
+# sub send_file_uri_aio2 {                                                                                                #
+#         my ($rex,$uri,$sys_root)=@_;                                                                                    #
+#         state @stat;                                                                                                    #
+#         state $reply;                                                                                                   #
+#                                                                                                                         #
+#         $reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF                                                          #
+#                 .uSAC::HTTP::Rex::STATIC_HEADERS                                                                        #
+#                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                                                           #
+#                                                                                                                         #
+#         #close connection after if marked                                                                               #
+#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){                                   #
+#                 $reply.=HTTP_CONNECTION.": close".LF;                                                                   #
+#                                                                                                                         #
+#         }                                                                                                               #
+#         #or send explicit keep alive?                                                                                   #
+#         #if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {                                                          #
+#         else{                                                                                                           #
+#                 $reply.=                                                                                                #
+#                         HTTP_CONNECTION.": Keep-Alive".LF                                                               #
+#                         #.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF                                                    #
+#                 ;                                                                                                       #
+#         }                                                                                                               #
+#                                                                                                                         #
+#         my $abs_path;                                                                                                   #
+#         $abs_path=$sys_root."/".$uri;                                                                                   #
+#         my $offset=0;                                                                                                   #
+#         my $length=0;                                                                                                   #
+#         open(my $in_fh,"<",$abs_path) or say  "OPen error";                                                             #
+#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];                                 #
+#         $length=(stat($in_fh))[7];                                                                                      #
+#         $reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;                                                                 #
+#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];                                 #
+#         my $watcher;                                                                                                    #
+#         $rex->[uSAC::HTTP::Rex::write_]->($reply,sub {                                                                  #
+#                         #create a write watcher to trigger send file.                                                   #
+#                         $watcher=AE::io  $out_fh,1, sub {                                                               #
+#                 return unless defined $out_fh and defined $in_fh;                                                       #
+#                 aio_sendfile($out_fh,$in_fh, $offset, $length, sub {                                                    #
+#                                 say "IN write watcher CALLBACK: $_[0]";                                                 #
+#                                 say "EAGAIN" if $! == EAGAIN;                                                           #
+#                                 say $! unless $_[0]>0;                                                                  #
+#                                 return if $_[0]<0;                                                                      #
+#                                 given($_[0]){                                                                           #
+#                                         when($_>0){                                                                     #
+#                                                 #say $_[0];                                                             #
+#                                                 $offset+=$_;                                                            #
+#                                                 if($offset==$length){                                                   #
+#                                                         #say "All sent";                                                #
+#                                                         close $in_fh;                                                   #
+#                                                         $watcher=undef;                                                 #
+#                                                         $rex->[uSAC::HTTP::Rex::session_]->drop;                        #
+#                                                 }                                                                       #
+#                                                 #else watcher will notifiy                                              #
+#                                         }                                                                               #
+#                                         default{                                                                        #
+#                                                 #check if an actual error                                               #
+#                                                 return if $! == EAGAIN or $! == EINTR;                                  #
+#                                                 #say "Send file Error: $_[0]";                                          #
+#                                                 #actual error                                                           #
+#                                                 say "sendfile WRITER ERROR: ", $!;                                      #
+#                                                 $watcher=undef;                                                         #
+#                                                 close $in_fh;                                                           #
+#                                                 #say "Send file error: $!" unless $_[0];                                #
+#                                         }                                                                               #
+#                                 }                                                                                       #
+#                         });                                                                                             #
+#                                                                                                                         #
+#                                                                                                                         #
+#                                                                                                                         #
+#                         };                                                                                              #
+#         });                                                                                                             #
+#                                                                                                                         #
+#                                                                                                                         #
+# }                                                                                                                       #
+#                                                                                                                         #
+# sub send_file_uri_aio {                                                                                                 #
+#         my ($rex,$uri,$sys_root)=@_;                                                                                    #
+#         state @stat;                                                                                                    #
+#         state $reply;                                                                                                   #
+#                                                                                                                         #
+#         $reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF                                                          #
+#                 .uSAC::HTTP::Rex::STATIC_HEADERS                                                                        #
+#                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                                                           #
+#                                                                                                                         #
+#         #close connection after if marked                                                                               #
+#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){                                   #
+#                 $reply.=HTTP_CONNECTION.": close".LF;                                                                   #
+#                                                                                                                         #
+#         }                                                                                                               #
+#         #or send explicit keep alive?                                                                                   #
+#         #if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {                                                          #
+#         else{                                                                                                           #
+#                 $reply.=                                                                                                #
+#                         HTTP_CONNECTION.": Keep-Alive".LF                                                               #
+#                         #.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF                                                    #
+#                 ;                                                                                                       #
+#         }                                                                                                               #
+#                                                                                                                         #
+#         my $abs_path;                                                                                                   #
+#         $abs_path=$sys_root."/".$uri;                                                                                   #
+#         my $offset=0;                                                                                                   #
+#         my $length=0;                                                                                                   #
+#         aio_open($abs_path, IO::AIO::O_RDONLY,0, sub {                                                                  #
+#                         my $in_fh=$_[0];                                                                                #
+#                         #say "Open ERROR $!" unless $_[0];                                                              #
+#                         #say "In fh: ",$in_fh;                                                                          #
+#                         $length=(stat $in_fh)[7];                                                                       #
+#                         #say "Length: $length";                                                                         #
+#                         $reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;                                                 #
+#                         #say $reply;                                                                                    #
+#                         $rex->[uSAC::HTTP::Rex::write_]->($reply,sub {                                                  #
+#                                         #say "write callback";                                                          #
+#                                         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_]; #
+#                                         #say "out fh: ",$out_fh;                                                        #
+#                                         ############################################################                    #
+#                                         # $rex->[uSAC::HTTP::Rex::write_]->("b" x $length, sub{    #                    #
+#                                         #                 $rex->[uSAC::HTTP::Rex::session_]->drop; #                    #
+#                                         #         });                                              #                    #
+#                                         # return;                                                  #                    #
+#                                         ############################################################                    #
+#                                         aio_sendfile($out_fh,$in_fh, $offset, $length, sub {                            #
+#                                                         say "Send file error: $!" unless $_[0];                         #
+#                                                         close $in_fh;                                                   #
+#                                                         $rex->[uSAC::HTTP::Rex::session_]->drop;                        #
+#                                                 });                                                                     #
+#                                 })                                                                                      #
+#                                                                                                                         #
+#         });                                                                                                             #
+#                                                                                                                         #
+# }                                                                                                                       #
+###########################################################################################################################
 
 sub _check_ranges{
 	my ($rex, $stat)=@_;
