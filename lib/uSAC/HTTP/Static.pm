@@ -351,6 +351,7 @@ sub open_cache {
 		else {
 			#add fh to cache
 			$open_cache->{$abs_path}=$in_fh;
+			#$in_fh;
 		}
 	};
 }
@@ -430,14 +431,14 @@ sub send_file_uri_norange {
 
 	#prime the buffer by doing a read first
 
-	my $size_total=length($reply)+$content_length;
-	my $reply_size=length $reply;
+	my $size_total=(my $reply_size=length($reply))+$content_length;
+	#my $reply_size=length $reply;
 	my $write_total=0;
 
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
-	$rc=sysread $in_fh, $reply, $read_size, length($reply);
+	$rc=sysread $in_fh, $reply, $read_size, $reply_size;
 
-	unless(defined($rc) or $! == EAGAIN or $! == EINTR){
+	unless($rc//0 or $! == EAGAIN or $! == EINTR){
 		say "READ ERROR from file";
 		undef $open_cache->{$uri};
 		close $in_fh;
@@ -456,8 +457,9 @@ sub send_file_uri_norange {
 	else {
 		#only shift if any left
 	}
+
 	#error
-	unless( defined($wc)  or $! == EAGAIN or $! == EINTR){
+	unless( $wc//0  or $! == EAGAIN or $! == EINTR){
 		undef $open_cache->{$uri};
 		close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
@@ -472,7 +474,7 @@ sub send_file_uri_norange {
 		undef;
 		$reply=substr $reply,$wc;
 
-	$session->[uSAC::HTTP::Server::Session::write_]->($in_fh, $uri, $rc,$wc, $content_length);
+	$session->[uSAC::HTTP::Server::Session::write_]->($in_fh, $uri, $rc, $wc, $content_length);
 	#my $tmp=$in_fh;
 }
 
@@ -493,7 +495,7 @@ sub make_static_file_writer {
 				seek $in_fh,$pos,0;
 				$rc=sysread $in_fh, $reply, $read_size, length $reply;
 				$pos+=$rc;
-				unless( defined($rc) or $! == EAGAIN or $! == EINTR){
+				unless($rc//0 or $! == EAGAIN or $! == EINTR){
 					print "ERROR IN READ from file\n";
 					say "RC, $rc,fh $in_fh";
 					print $!;
@@ -513,7 +515,7 @@ sub make_static_file_writer {
 				$wc=syswrite $out_fh,$reply;
 				$wpos+=$wc;
 				$reply=substr $reply, $wc;
-				unless( defined($wc) or $! == EAGAIN or $! == EINTR){
+				unless($wc//0 or $! == EAGAIN or $! == EINTR){
 					#say "write error";
 					#say $!;
 					$ww=undef;
@@ -526,8 +528,8 @@ sub make_static_file_writer {
 			else {
 				#we are done. $reset the file
 				$ww=undef;
-				seek $in_fh,0,0;
-				#close $in_fh;
+				#seek $in_fh,0,0;
+				#close $in_fh;	 #do not close .. let the cache do it
 				uSAC::HTTP::Server::Session::drop $session;
 			}
 		};

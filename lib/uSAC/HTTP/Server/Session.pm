@@ -115,21 +115,22 @@ sub _make_reader {
 
 
 sub drop {
-        my ($self,$err) = @_;
-	return unless $self->[closeme_];
-        my $r = delete $self->[server_][uSAC::HTTP::Server::sessions_]{$self->[id_]}; #remove from server
-        $self->[server_][uSAC::HTTP::Server::active_connections_]--;
+	#my ($self,$err) = @_;
+	return unless $_[0]->[closeme_];
+        my $r = delete $_[0]->[server_][uSAC::HTTP::Server::sessions_]{$_[0]->[id_]}; #remove from server
+        $_[0]->[server_][uSAC::HTTP::Server::active_connections_]--;
 
-	close $self->[fh_];
-	$self->[fh_]=undef;
-	$self->@[(rw_,ww_,fh_,id_,closeme_)]=(undef) x 5;
+	close $_[0]->[fh_];
 
-	$self->[write_stack_]=[];#[0]=undef;
-	$self->[read_stack_]=[];
-	$self->[wbuf_]=undef;
-	$self->[rbuf_]=undef;
+	$_[0]->[fh_]=undef;
+	$_[0]->@[(rw_,ww_,fh_,id_,closeme_)]=(undef,undef,undef,undef,undef);#(undef) x 5;
 
-	unshift @{$self->[server_][uSAC::HTTP::Server::zombies_]}, $self;
+	$_[0]->[write_stack_]=undef;	#[];#[0]=undef;
+	$_[0]->[read_stack_]=undef;	#[];
+	#$_[0]->[wbuf_]=undef;
+	#$_[0]->[rbuf_]=undef;
+
+	unshift @{$_[0]->[server_][uSAC::HTTP::Server::zombies_]}, $_[0];
 }
 
 #pluggable interface
