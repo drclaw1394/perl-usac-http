@@ -31,6 +31,9 @@ use constant MAX_READ_SIZE => 128 * 1024;
 our %make_reader_reg;	#hash of sub references which will make a reader ref of a particular name
 our %make_writer_reg;	#hash of sub references which will make a writer ref of a particular name
 
+sub _make_reader;
+sub drop;
+
 sub new {
 	my $package=shift//__PACKAGE__;
 	
@@ -50,10 +53,10 @@ sub new {
 
 	$self->[on_body_]=undef;	#allocate all the storage now
 	
-	bless $self,$package;
+	#bless $self,$package
 	#make entry on the write stack
-	$self->_make_reader;
-	
+	#$self->_make_reader;
+	#_make_reader $self;	
 	$self;
 }
 
@@ -68,7 +71,8 @@ sub revive {
 	#$self->[server_]=$_[2];	
 
 	
-        $self->_make_reader;
+	#$self->_make_reader;
+	#_make_reader $self;
 
 	return $self;
 }
@@ -82,33 +86,29 @@ sub _make_reader {
 	my $len;
 	\my $reader=\$self->[read_];
 
-	#say "Make reader";
-	#create first entry into the read stack
 	$self->[rw_] = AE::io $fh, 0, sub {
 		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
-		#say "READ BUFFER: ",$buf;
-		given($len){
-			when($_>0){
-				$reader->();
-			}
-			when(0){
-				#End of file
-				#say "END OF  READER";
-				$self->[closeme_]=1;
-				drop $self;
-				$self->[rw_]=undef;
-			}
-			when(undef){
-				#potential error
+		if($len>0){
+			$reader->();
+		}
+		#when(0){
+		elsif($len==0){
 
-				return if $! == EAGAIN or $! == EINTR; #or $! == WSAEWOULDBLOCK;
-				#say "ERROR IN READER";
-				$self->[closeme_]=1;
-				drop $self;
-				$self->[rw_]=undef;
-			}
-			default {
-			}
+			#End of file
+			#say "END OF  READER";
+			$self->[closeme_]=1;
+			drop $self;
+			$self->[rw_]=undef;
+		}
+		#when(undef){
+		else {
+			#potential error
+			#say "ERROR";
+			return if $! == EAGAIN or $! == EINTR;
+			#say "ERROR IN READER";
+			$self->[closeme_]=1;
+			drop $self;
+			$self->[rw_]=undef;
 		}
 	};
 }

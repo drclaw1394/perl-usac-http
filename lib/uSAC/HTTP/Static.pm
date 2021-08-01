@@ -359,12 +359,11 @@ sub open_cache {
 sub _check_access {
 
 	my ($line, $rex,$uri,$sys_root)=@_;
-	enable_cache;
 
 	my $abs_path=$sys_root."/".$uri;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	weaken $session;
-	weaken $rex;
+	#weaken $session;
+	#weaken $rex;
 
 	#my $in_fh;	
 
@@ -399,8 +398,8 @@ sub send_file_uri_norange {
 
 	my ($line,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	weaken $session;
-	weaken $rex;
+	#weaken $session;
+	#weaken $rex;
 	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
 	#
 	my $in_fh=&_check_access//return;

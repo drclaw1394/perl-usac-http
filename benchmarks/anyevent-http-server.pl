@@ -57,7 +57,7 @@ sub ends_with {
 	sub {0 <= index reverse($_[0]), $test}
 }
 
-
+uSAC::HTTP::Static::enable_cache;
 my $table=Hustle::Table->new;
 
 $table->set_default(sub {

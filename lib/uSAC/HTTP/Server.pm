@@ -214,7 +214,6 @@ sub accept {
 	\my $total_connections=\$self->[total_connections_];
 	my $session;
 	my $id;
-	my $tcp_proto=getprotobyname("tcp");
 	for my $fl ( values %{ $self->[fhs_] }) {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
@@ -244,6 +243,8 @@ sub accept {
 
 				}
 				uSAC::HTTP::Server::Session::push_reader $session,"http1_1_base",undef; 
+				#initiate read
+				uSAC::HTTP::Server::Session::_make_reader $session;
 				$sessions{ $id } = $session;
 				$active_connections++;
 				$total_connections++;
@@ -254,54 +255,56 @@ sub accept {
 }
 
 
-sub peer_info {
-	my $fh = shift;
-	#my ($port, $host) = AnyEvent::Socket::unpack_sockaddr getpeername($fh);
-	#return AnyEvent::Socket::format_address($host).':'.$port;
-}
-
-
-sub req_wbuf_len {
-	my $self = shift;
-	my $req = shift;
-	return undef unless exists $self->{ $req->headers->{INTERNAL_REQUEST_ID} };
-	return 0 unless exists $self->{ $req->headers->{INTERNAL_REQUEST_ID} }{wbuf};
-	return length ${ $self->{ $req->headers->{INTERNAL_REQUEST_ID} }{wbuf} };
-}
-
-sub badconn {
-	my ($self,$fh,$rbuf,$msg) = @_;
-	my $outbuf = (length $$rbuf > 2048) ?
-		substr($$rbuf,0,2045).'...' :
-		"$$rbuf";
-	$outbuf =~ s{(\p{C}|\\)}{ sprintf "\\%03o", ord $1 }sge;
-	my $remote = peer_info($fh);
-	my $fileno = fileno $fh;
-	warn "$msg from $remote (fd:$fileno) <$outbuf>\n";
-}
-
-
-sub ws_close {
-	my $self = shift;
-	for (values %{ $self->{wss} }) {
-		$_ && $_->close();
-	}
-	warn "$self->[active_requests_] / $self->[active_connections_]";
-}
-
-sub graceful {
-	my $self = shift;
-	my $cb = pop;
-	delete $self->[aws_];
-	close $_ for values %{ $self->[fhs_] };
-	if ($self->[active_requests_] == 0 or $self->[active_connections_] == 0) {
-		$cb->();
-	} else {
-		$self->[graceful_] = $cb;
-		$self->ws_close();
-	}
-}
-
+#########################################################################################
+# sub peer_info {                                                                       #
+#         my $fh = shift;                                                               #
+#         #my ($port, $host) = AnyEvent::Socket::unpack_sockaddr getpeername($fh);      #
+#         #return AnyEvent::Socket::format_address($host).':'.$port;                    #
+# }                                                                                     #
+#                                                                                       #
+#                                                                                       #
+# sub req_wbuf_len {                                                                    #
+#         my $self = shift;                                                             #
+#         my $req = shift;                                                              #
+#         return undef unless exists $self->{ $req->headers->{INTERNAL_REQUEST_ID} };   #
+#         return 0 unless exists $self->{ $req->headers->{INTERNAL_REQUEST_ID} }{wbuf}; #
+#         return length ${ $self->{ $req->headers->{INTERNAL_REQUEST_ID} }{wbuf} };     #
+# }                                                                                     #
+#                                                                                       #
+# sub badconn {                                                                         #
+#         my ($self,$fh,$rbuf,$msg) = @_;                                               #
+#         my $outbuf = (length $$rbuf > 2048) ?                                         #
+#                 substr($$rbuf,0,2045).'...' :                                         #
+#                 "$$rbuf";                                                             #
+#         $outbuf =~ s{(\p{C}|\\)}{ sprintf "\\%03o", ord $1 }sge;                      #
+#         my $remote = peer_info($fh);                                                  #
+#         my $fileno = fileno $fh;                                                      #
+#         warn "$msg from $remote (fd:$fileno) <$outbuf>\n";                            #
+# }                                                                                     #
+#                                                                                       #
+#                                                                                       #
+# sub ws_close {                                                                        #
+#         my $self = shift;                                                             #
+#         for (values %{ $self->{wss} }) {                                              #
+#                 $_ && $_->close();                                                    #
+#         }                                                                             #
+#         warn "$self->[active_requests_] / $self->[active_connections_]";              #
+# }                                                                                     #
+#                                                                                       #
+# sub graceful {                                                                        #
+#         my $self = shift;                                                             #
+#         my $cb = pop;                                                                 #
+#         delete $self->[aws_];                                                         #
+#         close $_ for values %{ $self->[fhs_] };                                       #
+#         if ($self->[active_requests_] == 0 or $self->[active_connections_] == 0) {    #
+#                 $cb->();                                                              #
+#         } else {                                                                      #
+#                 $self->[graceful_] = $cb;                                             #
+#                 $self->ws_close();                                                    #
+#         }                                                                             #
+# }                                                                                     #
+#                                                                                       #
+#########################################################################################
 
 1; # End of uSAC::HTTP::Server
 __END__
