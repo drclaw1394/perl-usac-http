@@ -21,7 +21,7 @@ use Time::HiRes qw/gettimeofday/;
 use Scalar::Util 'refaddr', 'weaken';
 
 use uSAC::HTTP::Server;
-use uSAC::HTTP::Server::Session;
+use uSAC::HTTP::Session;
 use constant MAX_READ_SIZE => 128 * 1024;
 
 our $MIME;
@@ -45,10 +45,10 @@ sub make_reader{
 	#take a session and alias the variables to lexicals
 	my $r=shift;
 
-	my $self=$r->[uSAC::HTTP::Server::Session::server_];
-	\my $buf=\$r->[uSAC::HTTP::Server::Session::rbuf_];
-	\my $fh=\$r->[uSAC::HTTP::Server::Session::fh_];
-	\my $write=\$r->[uSAC::HTTP::Server::Session::write_];
+	my $self=$r->[uSAC::HTTP::Session::server_];
+	\my $buf=\$r->[uSAC::HTTP::Session::rbuf_];
+	\my $fh=\$r->[uSAC::HTTP::Session::fh_];
+	\my $write=\$r->[uSAC::HTTP::Session::write_];
 	#weaken $write;
 	weaken $r;
 
@@ -199,8 +199,8 @@ sub make_reader{
 				$pos = pos($buf);
 
 				$self->[uSAC::HTTP::Server::total_requests_]++;
-				$r->[uSAC::HTTP::Server::Session::rex_]=$req;
-				$r->[uSAC::HTTP::Server::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{connection} =~/^Keep-Alive/ );
+				$r->[uSAC::HTTP::Session::rex_]=$req;
+				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{connection} =~/^Keep-Alive/ );
 
 				#shift buffer
 				$buf=substr $buf,$pos;
@@ -262,9 +262,9 @@ sub make_reader{
 sub make_form_data_reader {
 	use integer;
 	my $session=shift;
-	\my $buf=\$session->[uSAC::HTTP::Server::Session::rbuf_];
-	\my $cb=\$session->[uSAC::HTTP::Server::Session::reader_cb_];
-	\my $rex=\$session->[uSAC::HTTP::Server::Session::rex_];
+	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
+	\my $cb=\$session->[uSAC::HTTP::Session::reader_cb_];
+	\my $rex=\$session->[uSAC::HTTP::Session::rex_];
 
 
 	my $state=0;
@@ -275,7 +275,7 @@ sub make_form_data_reader {
 		say "IN FORM PARSER";
 		#\my $buf=shift;#buffer from io loop
 		#my $rex=shift;
-		#my $cb=$session->[uSAC::HTTP::Server::Session::reader_cb_];
+		#my $cb=$session->[uSAC::HTTP::Session::reader_cb_];
 		my $processed=0;
 
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];
@@ -449,9 +449,9 @@ sub make_form_urlencoded_reader {
 	say "MAKING URL ENCODED READER";
 	use integer;
 	my $session=shift;
-	\my $buf=\$session->[uSAC::HTTP::Server::Session::rbuf_];
-	\my $cb=\$session->[uSAC::HTTP::Server::Session::reader_cb_];
-	\my $rex=\$session->[uSAC::HTTP::Server::Session::rex_];
+	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
+	\my $cb=\$session->[uSAC::HTTP::Session::reader_cb_];
+	\my $rex=\$session->[uSAC::HTTP::Session::rex_];
 	#my $maker_sub=shift;
 
 	my $processed=0;
@@ -464,7 +464,7 @@ sub make_form_urlencoded_reader {
         #         \my $buf=shift;#buffer from io loop                 #
         #         my $rex=shift;                                      #
         #         #my $cb=shift;                                      #
-        # my $cb=$session->[uSAC::HTTP::Server::Session::reader_cb_]; #
+        # my $cb=$session->[uSAC::HTTP::Session::reader_cb_]; #
         ###############################################################
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];
 		my $len = $h{'content-length'}//0; #number of bytes to read, or 0 if undefined
@@ -485,7 +485,7 @@ sub make_form_urlencoded_reader {
 			$processed=0;
 			$session->pop_reader;	#This assumes that the normal 1.1 reader previous in the stack
 			#issue a read since reader has changed
-			#$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex);
+			#$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 		}
 		else {
 			#keep on stack until done
@@ -497,9 +497,9 @@ sub make_default_writer{
 	#take a session and alias the variables to lexicals
 	my $ido=shift;
 	weaken $ido;
-	\my $wbuf=\$ido->[uSAC::HTTP::Server::Session::wbuf_];
-	\my $ww=\$ido->[uSAC::HTTP::Server::Session::ww_];
-	\my $fh=\$ido->[uSAC::HTTP::Server::Session::fh_];
+	\my $wbuf=\$ido->[uSAC::HTTP::Session::wbuf_];
+	\my $ww=\$ido->[uSAC::HTTP::Session::ww_];
+	\my $fh=\$ido->[uSAC::HTTP::Session::fh_];
 	my $w;
 	my $cb;
 	sub {

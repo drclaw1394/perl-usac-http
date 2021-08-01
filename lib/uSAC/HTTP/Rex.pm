@@ -16,7 +16,7 @@ use constant STATIC_HEADERS=>
 HTTP_SERVER.": ".uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", @uSAC::HTTP::Server::Subproducts).LF
 ;
 
-use uSAC::HTTP::Server::Session;
+use uSAC::HTTP::Session;
 use uSAC::HTTP::Server;
 use AnyEvent;
 
@@ -295,7 +295,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 				"http1_1_form_data",
 				$cb
 			);
-			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex);
+			$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 
 		}
 
@@ -317,7 +317,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 					$rex->[uSAC::HTTP::Rex::write_]->($reply);
 				}
 			}
-			$session->[uSAC::HTTP::Server::Session::read_]->(\$session->[uSAC::HTTP::Server::Session::rbuf_],$rex);
+			$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 
 		}
 
@@ -329,13 +329,13 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			my ($line, $self)=@_;
 			#create a writer for the session
 			my $session=$self->[session_];
-			uSAC::HTTP::Server::Session::push_writer 
+			uSAC::HTTP::Session::push_writer 
 			#$session->push_writer(
 				$session,
 				"http1_1_default_writer",
 				undef;
 				#);
-			#$self->[write_]=$session->[uSAC::HTTP::Server::Session::write_];
+			#$self->[write_]=$session->[uSAC::HTTP::Session::write_];
 
 			my $reply="HTTP/1.1 $_[2]".LF;
 			#my $reply="$self->[version_] $_[0]".LF;
@@ -349,7 +349,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 				#TODO: benchmark length(undef)+0;
 			
 			#close connection after if marked
-			if($session->[uSAC::HTTP::Server::Session::closeme_]){
+			if($session->[uSAC::HTTP::Session::closeme_]){
 				$reply.=HTTP_CONNECTION.": close".LF;
 
 			}
@@ -376,11 +376,11 @@ use constant KEY_COUNT=>attrs_-method_+1;
 
 			#Write the headers
 			#given ($self->[write_]){
-			$session->[uSAC::HTTP::Server::Session::write_]($reply);
-			#$session->[uSAC::HTTP::Server::Session::write_](
+			$session->[uSAC::HTTP::Session::write_]($reply);
+			#$session->[uSAC::HTTP::Session::write_](
 			#$self->[write_]( $reply );
 			#$self->[write_]=undef;
-				uSAC::HTTP::Server::Session::drop $session;
+				uSAC::HTTP::Session::drop $session;
 				#}
 
 		}

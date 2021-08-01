@@ -57,7 +57,7 @@ my %stat_cache;
 #                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                             #
 #                                                                                           #
 #         #close connection after if marked                                                 #
-#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){     #
+#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){     #
 #                 $reply.=HTTP_CONNECTION.": close".LF;                                     #
 #                                                                                           #
 #         }                                                                                 #
@@ -75,7 +75,7 @@ my %stat_cache;
 #         my $offset=0;                                                                     #
 #         my $length=0;                                                                     #
 #         open(my $in_fh,"<",$abs_path) or say  "OPen error";                               #
-#         \my $out_fh=\$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_]; #
+#         \my $out_fh=\$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_]; #
 #         fcntl $out_fh, F_SETFL, 0;#O_NONBLOCK;  #this nukes other flags... read first?    #
 #         $length=(stat($in_fh))[7];                                                        #
 #         $reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;                                   #
@@ -101,7 +101,7 @@ my %stat_cache;
 #                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                                                           #
 #                                                                                                                         #
 #         #close connection after if marked                                                                               #
-#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){                                   #
+#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){                                   #
 #                 $reply.=HTTP_CONNECTION.": close".LF;                                                                   #
 #                                                                                                                         #
 #         }                                                                                                               #
@@ -119,10 +119,10 @@ my %stat_cache;
 #         my $offset=0;                                                                                                   #
 #         my $length=0;                                                                                                   #
 #         open(my $in_fh,"<",$abs_path) or say  "OPen error";                                                             #
-#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];                                 #
+#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_];                                 #
 #         $length=(stat($in_fh))[7];                                                                                      #
 #         $reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;                                                                 #
-#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];                                 #
+#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_];                                 #
 #         my $watcher;                                                                                                    #
 #         $rex->[uSAC::HTTP::Rex::write_]->($reply,sub {                                                                  #
 #                         #create a write watcher to trigger send file.                                                   #
@@ -176,7 +176,7 @@ my %stat_cache;
 #                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                                                           #
 #                                                                                                                         #
 #         #close connection after if marked                                                                               #
-#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){                                   #
+#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){                                   #
 #                 $reply.=HTTP_CONNECTION.": close".LF;                                                                   #
 #                                                                                                                         #
 #         }                                                                                                               #
@@ -203,7 +203,7 @@ my %stat_cache;
 #                         #say $reply;                                                                                    #
 #                         $rex->[uSAC::HTTP::Rex::write_]->($reply,sub {                                                  #
 #                                         #say "write callback";                                                          #
-#                                         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_]; #
+#                                         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_]; #
 #                                         #say "out fh: ",$out_fh;                                                        #
 #                                         ############################################################                    #
 #                                         # $rex->[uSAC::HTTP::Rex::write_]->("b" x $length, sub{    #                    #
@@ -403,7 +403,7 @@ sub send_file_uri_norange {
 
 	my ($line,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
+	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	my $abs_path=$sys_root."/".$uri;
 	my $in_fh;	
@@ -436,7 +436,7 @@ sub send_file_uri_norange {
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
-        	.($session->[uSAC::HTTP::Server::Session::closeme_]?
+        	.($session->[uSAC::HTTP::Session::closeme_]?
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
 		)
@@ -452,7 +452,7 @@ sub send_file_uri_norange {
 	#my $reply_size=length $reply;
 	my $write_total=0;
 
-	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
+	\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
 	#say $in_fh;
 	seek $in_fh,0,0;
 	$rc=sysread $in_fh, $reply, $read_size, $reply_size;
@@ -461,14 +461,14 @@ sub send_file_uri_norange {
 		say "READ ERROR from file";
 		delete $open_cache->{$uri};
 		close $in_fh;
-		uSAC::HTTP::Server::Session::drop $session;
+		uSAC::HTTP::Session::drop $session;
 		return;
 	}
 
 	$wc=syswrite $out_fh, $reply;
 	
 	if(($write_total+=$wc)==$size_total){
-		uSAC::HTTP::Server::Session::drop $session;
+		uSAC::HTTP::Session::drop $session;
 		return;
 	}
 	else {
@@ -479,28 +479,28 @@ sub send_file_uri_norange {
 	unless( $wc//0  or $! == EAGAIN or $! == EINTR){
 		delete $open_cache->{$uri};
 		close $in_fh;
-		uSAC::HTTP::Server::Session::drop $session;
+		uSAC::HTTP::Session::drop $session;
 		return;
 	}
 
 	$wc-=$reply_size;
 
 	#say "read total $read_total, $write_total";	
-	uSAC::HTTP::Server::Session::push_writer 
+	uSAC::HTTP::Session::push_writer 
 		$session, "http1_1_static_writer",
 		undef;
 
 		#$reply=substr $reply, $wc;
 	substr $reply, 0, $wc, "";
 
-	$session->[uSAC::HTTP::Server::Session::write_]->($in_fh, $uri, $rc, $wc, $content_length);
+	$session->[uSAC::HTTP::Session::write_]->($in_fh, $uri, $rc, $wc, $content_length);
 }
 
 sub make_static_file_writer {
 	my $session=shift;
 	weaken $session;
-	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
-	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
+	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
+	\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
 
 	sub {
 		\my $in_fh=$_[0];
@@ -520,7 +520,7 @@ sub make_static_file_writer {
 					undef $open_cache->{$uri};
 					close $in_fh;
 					$ww=undef;
-					uSAC::HTTP::Server::Session::drop $session;
+					uSAC::HTTP::Session::drop $session;
 					return;
 				}
 			}
@@ -540,7 +540,7 @@ sub make_static_file_writer {
 					$ww=undef;
 					undef $open_cache->{$uri};
 					close $in_fh;
-					uSAC::HTTP::Server::Session::drop $session;
+					uSAC::HTTP::Session::drop $session;
 					return;
 				}
 			}
@@ -549,7 +549,7 @@ sub make_static_file_writer {
 				$ww=undef;
 				#seek $in_fh,0,0;
 				#close $in_fh;	 #do not close .. let the cache do it
-				uSAC::HTTP::Server::Session::drop $session;
+				uSAC::HTTP::Session::drop $session;
 			}
 		};
 	};
@@ -583,13 +583,13 @@ sub send_file_uri_range {
 			.HTTP_CONNECTION.": close".LF
 			.LF;
 
-			uSAC::HTTP::Server::Session::push_writer 
+			uSAC::HTTP::Session::push_writer 
 				$session,
 				"http1_1_default_writer",
 				undef;
-			$session->[uSAC::HTTP::Server::Session::closeme_]=1;
-			$session->[uSAC::HTTP::Server::Session::write_]->($response);
-			uSAC::HTTP::Server::Session::drop $session;
+			$session->[uSAC::HTTP::Session::closeme_]=1;
+			$session->[uSAC::HTTP::Session::write_]->($response);
+			uSAC::HTTP::Session::drop $session;
                 return;
 
         }
@@ -606,13 +606,13 @@ sub send_file_uri_range {
 			.HTTP_CONNECTION.": close".LF
 			.LF;
 
-			uSAC::HTTP::Server::Session::push_writer 
+			uSAC::HTTP::Session::push_writer 
 				$session,
 				"http1_1_default_writer",
 				undef;
-			$session->[uSAC::HTTP::Server::Session::closeme_]=1;
-			$session->[uSAC::HTTP::Server::Session::write_]->($response);
-			uSAC::HTTP::Server::Session::drop $session;
+			$session->[uSAC::HTTP::Session::closeme_]=1;
+			$session->[uSAC::HTTP::Session::write_]->($response);
+			uSAC::HTTP::Session::drop $session;
                 return;
         }
 
@@ -654,7 +654,7 @@ sub send_file_uri_range {
         #setup write watcher
         my $ww;
         my $session=$rex->[uSAC::HTTP::Rex::session_];
-        \my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
+        \my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
         #this is single part response
         $ww = AE::io $out_fh, 1, sub {
 
@@ -672,7 +672,7 @@ sub send_file_uri_range {
                                         #drop
                                         $ww=undef;
                                         close $in_fh;
-                                        uSAC::HTTP::Server::Session::drop $session;
+                                        uSAC::HTTP::Session::drop $session;
                                         $session=undef;
                                 }
                         }
@@ -687,7 +687,7 @@ sub send_file_uri_range {
                                         $ww=undef;
                                         close $in_fh;
 
-                                        uSAC::HTTP::Server::Session::drop $session;
+                                        uSAC::HTTP::Session::drop $session;
                                         $session=undef;
                                 }
                         }
@@ -697,7 +697,7 @@ sub send_file_uri_range {
                                 #drop
                                 $ww=undef;
                                 close $in_fh;
-                                uSAC::HTTP::Server::Session::drop $session;
+                                uSAC::HTTP::Session::drop $session;
                                         $session=undef;
 
                         }
@@ -708,7 +708,7 @@ sub send_file_uri_range {
                                         #say $!;
                                         $ww=undef;
                                         close $in_fh;
-                                        uSAC::HTTP::Server::Session::drop $session;
+                                        uSAC::HTTP::Session::drop $session;
                                         $session=undef;
                                         return;
                                 }
@@ -721,7 +721,7 @@ sub send_file_uri_range {
 
 sub send_file_uri {
 	my ($rex,$uri,$sys_root)=@_;
-	#my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];
+	#my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_];
 	state @stat;
 	state $reply;
 
@@ -730,7 +730,7 @@ sub send_file_uri {
 		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
 
         #close connection after if marked
-        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){
+        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){
                 $reply.=HTTP_CONNECTION.": close".LF;
 
         }
@@ -768,7 +768,7 @@ sub send_file_uri {
 	local $/=undef;	
 	given($rex->[uSAC::HTTP::Rex::write_]){
 		$_->( $reply.<$in_fh>);
-		$_->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_];
+		$_->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_];
 		$_=undef;
 		${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;
 	}
@@ -817,7 +817,7 @@ sub send_file_uri {
 #                                                                                                                                                                         #
 # sub send_file_uri_sendfile{                                                                                                                                             #
 #         my ($rex,$uri,$offset,$length,$cb,@sys_roots)=@_;                                                                                                               #
-#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];                                                                                 #
+#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_];                                                                                 #
 #         my @stat;                                                                                                                                                       #
 #         my $reply;                                                                                                                                                      #
 #                                                                                                                                                                         #
@@ -826,7 +826,7 @@ sub send_file_uri {
 #                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                                                                                                           #
 #                                                                                                                                                                         #
 #         #close connection after if marked                                                                                                                               #
-#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){                                                                                   #
+#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){                                                                                   #
 #                 $reply.=HTTP_CONNECTION.": close".LF;                                                                                                                   #
 #                                                                                                                                                                         #
 #         }                                                                                                                                                               #
@@ -864,14 +864,14 @@ sub send_file_uri {
 #                                                                                                                                                                         #
 #         $rex->[uSAC::HTTP::Rex::write_]->( $reply, sub {                                                                                                                #
 #                         aio_sendfile $out_fh,$in_fh,$offset, $length, sub {                                                                                             #
-#                                 $rex->[uSAC::HTTP::Rex::write_]->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_];                 #
+#                                 $rex->[uSAC::HTTP::Rex::write_]->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_];                 #
 #                         };                                                                                                                                              #
 #                 });                                                                                                                                                     #
 #                                                                                                                                                                         #
 # }                                                                                                                                                                       #
 # sub send_file_uri_aio {                                                                                                                                                 #
 #         my ($rex,$uri,$offset,$length,$cb,@sys_roots)=@_;                                                                                                               #
-#         my $fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::fh_];                                                                                     #
+#         my $fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_];                                                                                     #
 #         my $_cb ;                                                                                                                                                       #
 #         my @stat;                                                                                                                                                       #
 #                                                                                                                                                                         #
@@ -881,7 +881,7 @@ sub send_file_uri {
 #                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                                                                                                           #
 #                                                                                                                                                                         #
 #         #close connection after if marked                                                                                                                               #
-#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]){                                                                                   #
+#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){                                                                                   #
 #                 $reply.=HTTP_CONNECTION.": close".LF;                                                                                                                   #
 #                                                                                                                                                                         #
 #         }                                                                                                                                                               #
@@ -928,7 +928,7 @@ sub send_file_uri {
 #                                                 #say "Send file success";                                                                                               #
 #                                                 #send stats of file to originating caller                                                                               #
 #                                                 #$cb->(@stat);                                                                                                          #
-#                                                 $rex->[uSAC::HTTP::Rex::write_]->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Server::Session::closeme_]; #
+#                                                 $rex->[uSAC::HTTP::Rex::write_]->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]; #
 #                                                 #delete $self->[write_];                                                                                                #
 #                                                                                                                                                                         #
 #                                                 #                               $_=undef;                                                                               #

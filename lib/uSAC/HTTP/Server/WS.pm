@@ -130,12 +130,12 @@ sub upgrade_to_websocket{
 
 			#write reply	
 			say $reply;
-			uSAC::HTTP::Server::Session::push_writer 
+			uSAC::HTTP::Session::push_writer 
 				$session,
 				"http1_1_default_writer",
 				undef;
 
-			given($session->[uSAC::HTTP::Server::Session::write_]){
+			given($session->[uSAC::HTTP::Session::write_]){
 				say "Writer is: ", $_;
 				$_->( $reply.LF , sub {
 						say "handshake written out";
@@ -156,7 +156,7 @@ sub upgrade_to_websocket{
 			DEBUG && say "Websocket did not match";
 			#reply
 			say "NO WEBSOCKET ALLOWED";
-			$session->[uSAC::HTTP::Server::Session::closeme_]=1;
+			$session->[uSAC::HTTP::Session::closeme_]=1;
 			uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_FORBIDDEN, undef,"";
 			return;
 		}
@@ -170,9 +170,9 @@ sub make_websocket_reader {
 	my $session=shift;	#session
 	#my $ws=shift;		#websocket
 
-	\my $buf=\$session->[uSAC::HTTP::Server::Session::rbuf_];
-	\my $fh=$session->[uSAC::HTTP::Server::Session::fh_];
-	my $rex=$session->[uSAC::HTTP::Server::Session::rex_];
+	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
+	\my $fh=$session->[uSAC::HTTP::Session::fh_];
+	my $rex=$session->[uSAC::HTTP::Session::rex_];
 	my $writer=$rex->{writer};
 
 	my ($fin, $rsv1, $rsv2, $rsv3,$op, $mask, $len);
@@ -181,7 +181,7 @@ sub make_websocket_reader {
 	my $payload="";
 	my $hlen;
 	my $mode;
-	my $on_fragment=$session->[uSAC::HTTP::Server::Session::reader_cb_];
+	my $on_fragment=$session->[uSAC::HTTP::Session::reader_cb_];
 	say "ON FRAGMENT: ", $on_fragment;
 	sub {
 		#do the frame parsing here
@@ -386,7 +386,7 @@ sub make_websocket_server_writer {
 	my $session=shift;	#session
 	#my $ws=shift;		#websocket
 
-	\my $buf=\$session->[uSAC::HTTP::Server::Session::rbuf_];
+	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
 
 	sub {
 		#take input data, convert to frame and use normal writer?
@@ -450,7 +450,7 @@ sub make_websocket_server_writer {
 		print "Built frame = \n".xd( "$frame" ) if DEBUG;
 
 		say "FRAME TO SEND ",$frame;
-		$session->[uSAC::HTTP::Server::Session::write_]->($frame);
+		$session->[uSAC::HTTP::Session::write_]->($frame);
 		return;
 	}
 
@@ -482,7 +482,7 @@ sub new {
         # );                     #
         ##########################
 	#
-	$session->[uSAC::HTTP::Server::Session::rex_]=$self;	#update rex to refer to the websocket
+	$session->[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
 	$self->{writer_}=make_websocket_server_writer $session;	#create a writer and store in ws
 	say "Created writer: ",$self->{writer_};
 

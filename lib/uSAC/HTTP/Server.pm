@@ -43,18 +43,18 @@ use enum (
 
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Server::WS;
-use uSAC::HTTP::Server::Session;
+use uSAC::HTTP::Session;
 use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
 
-given(\%uSAC::HTTP::Server::Session::make_reader_reg){
+given(\%uSAC::HTTP::Session::make_reader_reg){
 	$_->{http1_1_base}=\&make_reader;
 	$_->{http1_1_form_data}=\&make_form_data_reader;
 	$_->{http1_1_urlencoded}=\&make_form_urlencoded_reader;
 	#$_->{http1_1_default_writer}=\&make_default_writer;
 	$_->{websocket}=\&make_websocket_reader;
 }
-given(\%uSAC::HTTP::Server::Session::make_writer_reg){
+given(\%uSAC::HTTP::Session::make_writer_reg){
 	$_->{http1_1_default_writer}=\&make_default_writer;
 	$_->{websocket}=\&make_websocket_server_writer;
 }
@@ -270,15 +270,15 @@ sub accept {
 
 				$session=pop @zombies;
 				if($session){
-					uSAC::HTTP::Server::Session::revive $session, $id, $fh;
+					uSAC::HTTP::Session::revive $session, $id, $fh;
 				}
 				else {
-					$session=uSAC::HTTP::Server::Session::new(undef,$id,$fh,$self);
+					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self);
 
 				}
-				uSAC::HTTP::Server::Session::push_reader $session,"http1_1_base",undef; 
+				uSAC::HTTP::Session::push_reader $session,"http1_1_base",undef; 
 				#initiate read
-				uSAC::HTTP::Server::Session::_make_reader $session;
+				uSAC::HTTP::Session::_make_reader $session;
 				$sessions{ $id } = $session;
 				$active_connections++;
 				$total_connections++;

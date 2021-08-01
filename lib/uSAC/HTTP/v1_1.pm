@@ -5,7 +5,7 @@ no warnings "experimental";
 #each subroutine excepts a session argument
 ##make http1.1 default writer
 
-use uSAC::HTTP::Server::Session;
+use uSAC::HTTP::Session;
 use uSAC::HTTP::Server;
 
 #base level  tcp writer.

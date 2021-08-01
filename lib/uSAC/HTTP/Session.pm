@@ -1,4 +1,4 @@
-package uSAC::HTTP::Server::Session;
+package uSAC::HTTP::Session;
 use common::sense;
 use Data::Dumper;
 use feature "refaliasing";
