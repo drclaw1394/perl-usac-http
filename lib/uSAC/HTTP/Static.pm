@@ -329,7 +329,7 @@ sub enable_cache {
 		$cache_timer=AE::timer 0,10,sub {
 			my $i;
 			for(keys %$open_cache){
-				delete $open_cache->{$_} if SvREFCNT $open_cache->{$_}==1;
+				delete $open_cache->{$_} if SvREFCNT $open_cache->{$_}[0]==1;
 				last if ++$i >= $sweep_size;
 
 			}
@@ -341,55 +341,60 @@ sub enable_cache {
 
 sub open_cache {
 	my $abs_path=shift;
-	my $in_fh;
 	$open_cache->{$abs_path}//do {
+		my $in_fh;
 		unless (open $in_fh, "<:unix", $abs_path){
-			#unless (sysopen $in_fh,$abs_path,O_RDONLY){
-			undef $open_cache->{$abs_path};
+			delete $open_cache->{$abs_path};
 			undef;
 		}
 		else {
-			#add fh to cache
-			$open_cache->{$abs_path}=$in_fh;
-			#$in_fh;
+			#lookup mime type
+			#
+			my $ext=substr $abs_path, index($abs_path, ".")+1;
+			my @entry;
+			$entry[1]=HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME).LF;
+			$entry[0]=$in_fh;
+			$open_cache->{$abs_path}=\@entry;
 		}
 	};
 }
 
-sub _check_access {
 
-	my ($line, $rex,$uri,$sys_root)=@_;
 
-	my $abs_path=$sys_root."/".$uri;
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	#weaken $session;
-	#weaken $rex;
-
-	#my $in_fh;	
-
-	unless(stat $abs_path){
-		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
-		#remove from cache
-		undef $open_cache->{$uri};
-		return
-	}
-
-	if ( ! -r _ or -d _){
-		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_FORBIDDEN;
-		#remove from cache
-		undef $open_cache->{$uri};
-		return;
-
-	}
-	#TODO: 
-	#	Check the Accept header for valid mime type before we open the file
-	#
-	
-	#check the cache
-	my $in_fh=open_cache $abs_path;	
-	uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR unless $in_fh;
-	return $in_fh;
-}
+#################################################################################################
+# sub _check_access {                                                                           #
+#                                                                                               #
+#         my ($line, $rex,$uri,$sys_root)=@_;                                                   #
+#                                                                                               #
+#         my $abs_path=$sys_root."/".$uri;                                                      #
+#         my $in_fh;                                                                            #
+#                                                                                               #
+#         unless(stat $abs_path and -r _ and !-d _ and ($in_fh=open_cache $abs_path)){          #
+#                 uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;                    #
+#                 #remove from cache                                                            #
+#                 delete $open_cache->{$uri};                                                   #
+#                 return                                                                        #
+#         }                                                                                     #
+#                                                                                               #
+#         ######################################################################                #
+#         # if ( ! -r _ or -d _){                                              #                #
+#         #         uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_FORBIDDEN; #                #
+#         #         #remove from cache                                         #                #
+#         #         undef $open_cache->{$uri};                                 #                #
+#         #         return;                                                    #                #
+#         #                                                                    #                #
+#         # }                                                                  #                #
+#         ######################################################################                #
+#         #TODO:                                                                                #
+#         #       Check the Accept header for valid mime type before we open the file           #
+#         #                                                                                     #
+#                                                                                               #
+#         #check the cache                                                                      #
+#         #my $in_fh=open_cache $abs_path;                                                      #
+#         #uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR unless $in_fh; #
+#         return $in_fh;                                                                        #
+# }                                                                                             #
+#################################################################################################
 
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
@@ -398,21 +403,33 @@ sub send_file_uri_norange {
 
 	my ($line,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	#weaken $session;
-	#weaken $rex;
 	\my $reply=\$session->[uSAC::HTTP::Server::Session::wbuf_];
-	#
-	my $in_fh=&_check_access//return;
-	#my $reply;
-	my $ext;
-	#return unless $in_fh;
+
+	my $abs_path=$sys_root."/".$uri;
+	my $in_fh;	
+
+	my $entry;
+	unless(stat $abs_path and -r _ and !-d _ and ($entry=open_cache $abs_path)){
+		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
+		#remove from cache
+		delete $open_cache->{$uri};
+		return
+	}
+	$in_fh=$entry->[0];
+
+
+
 
 	my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
-
-	$ext=substr $uri, index($uri, ".")+1;
-
-	#my $ext=substr $uri, -index(reverse($uri),".");
-	#$uri=~$path_ext;	#match results in $1;
+        ####################################################
+        # #my $reply;                                      #
+        # my $ext;                                         #
+        # #return unless $in_fh;                           #
+        # $ext=substr $uri, index($uri, ".")+1;            #
+        #                                                  #
+        # #my $ext=substr $uri, -index(reverse($uri),"."); #
+        # #$uri=~$path_ext;       #match results in $1;    #
+        ####################################################
 	
 	my ( $rc, $wc);
 	$reply=
@@ -423,7 +440,8 @@ sub send_file_uri_norange {
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
 		)
-		.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
+		#.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
+		.$entry->[1]
 		.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
 		.HTTP_ETAG.": ".$mod_time."-".$content_length.LF
 		.LF;
@@ -435,11 +453,13 @@ sub send_file_uri_norange {
 	my $write_total=0;
 
 	\my $out_fh=\$session->[uSAC::HTTP::Server::Session::fh_];
+	#say $in_fh;
+	seek $in_fh,0,0;
 	$rc=sysread $in_fh, $reply, $read_size, $reply_size;
 
 	unless($rc//0 or $! == EAGAIN or $! == EINTR){
 		say "READ ERROR from file";
-		undef $open_cache->{$uri};
+		delete $open_cache->{$uri};
 		close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
 		return;
@@ -448,8 +468,6 @@ sub send_file_uri_norange {
 	$wc=syswrite $out_fh, $reply;
 	
 	if(($write_total+=$wc)==$size_total){
-		seek $in_fh,0,0;
-		#close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
 		return;
 	}
@@ -459,7 +477,7 @@ sub send_file_uri_norange {
 
 	#error
 	unless( $wc//0  or $! == EAGAIN or $! == EINTR){
-		undef $open_cache->{$uri};
+		delete $open_cache->{$uri};
 		close $in_fh;
 		uSAC::HTTP::Server::Session::drop $session;
 		return;
@@ -471,10 +489,11 @@ sub send_file_uri_norange {
 	uSAC::HTTP::Server::Session::push_writer 
 		$session, "http1_1_static_writer",
 		undef;
-		$reply=substr $reply,$wc;
+
+		#$reply=substr $reply, $wc;
+	substr $reply, 0, $wc, "";
 
 	$session->[uSAC::HTTP::Server::Session::write_]->($in_fh, $uri, $rc, $wc, $content_length);
-	#my $tmp=$in_fh;
 }
 
 sub make_static_file_writer {
@@ -513,7 +532,8 @@ sub make_static_file_writer {
 			if($out_fh and $wpos!=$content_length){
 				$wc=syswrite $out_fh,$reply;
 				$wpos+=$wc;
-				$reply=substr $reply, $wc;
+				#$reply=substr $reply, $wc;
+				substr $reply, 0, $wc, "";
 				unless($wc//0 or $! == EAGAIN or $! == EINTR){
 					#say "write error";
 					#say $!;

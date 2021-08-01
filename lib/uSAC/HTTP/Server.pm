@@ -1,7 +1,7 @@
 package uSAC::HTTP::Server; 
 use common::sense;
 use Data::Dumper;
-
+use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
 #our @Subproducts=();		#Global to be provided by applcation
@@ -205,6 +205,36 @@ sub prepare {
 	};
 }
 
+sub make_sysaccept {
+	#attempt a syscall to accept
+	#
+	my $fh=shift;
+
+	my $syscall_number =30; #macos
+	my $addr_len=length AnyEvent::Socket::pack_sockaddr( 80, parse_address("127.0.0.1"));
+	my $packed_address=" " x $addr_len;
+	my $i=pack("i*",$addr_len);
+	my $fn=fileno($fh);
+	#say length $packed_address;
+
+	#say "Listed fd ", fileno($fh);
+	sub {
+		my $handle;
+		my $result=syscall $syscall_number, $fn, $packed_address, $i;
+		if($result<0){
+			#say "Syscall error: $result: $!";
+		}
+		else {
+			#say "syscal ok";
+			#open from fd
+			$handle=IO::Handle->new_from_fd($result ,"<");
+			#open $handle, "<&=$result";
+		}
+		return $handle;
+	}
+
+}
+
 sub accept {
 	state $seq=0;
 	weaken( my $self = shift );
@@ -215,9 +245,13 @@ sub accept {
 	my $session;
 	my $id;
 	for my $fl ( values %{ $self->[fhs_] }) {
+		#my $accept=make_sysaccept $fl;
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
 			while(($peer = accept my $fh, $fl)){
+			#(while(my $fh=sysaccept($fl)){
+			#while(my $fh=$accept->()){
+				last unless $fh;
 				#while ($fl and ($peer = accept my $fh, $fl)) {
 
 				binmode	$fh, ":raw";
