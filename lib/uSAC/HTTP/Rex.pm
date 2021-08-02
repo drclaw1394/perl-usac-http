@@ -18,8 +18,13 @@ HTTP_SERVER.": ".uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".jo
 
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Server;
-use AnyEvent;
+use uSAC::HTTP::Cookie qw<:all>;
 
+use AnyEvent;
+use Exporter 'import';
+
+our @EXPORT_OK=qw<rex_headers rex_reply_simple>;
+our @EXPORT=@EXPORT_OK;
 
 
 
@@ -69,7 +74,7 @@ use Scalar::Util qw(weaken);
 
 #Class attribute keys
 use enum (
-	"version_=0" ,qw<session_ method_ uri_ headers_ write_ chunked_ parsed_uri_ query_ reqcount_ server_ time_ ctx_ handle_ attrs_>
+	"version_=0" ,qw<session_ method_ uri_ headers_ write_ chunked_ parsed_uri_ query_ reqcount_ server_ time_ cookies_ ctx_ handle_ attrs_>
 );
 
 #Add a mechanism for sub classing
@@ -706,7 +711,18 @@ use constant KEY_COUNT=>attrs_-method_+1;
                 # }                                                                                                                                                                                     #
                 #########################################################################################################################################################################################
 
-
+sub headers {
+	return $_[0]->[headers_];
+}
+*rex_headers=*headers;
+*rex_reply_simple=*reply_simple;
+#returns parsed cookies from headers
+#Only parses if the internal field is undefined
+#otherwise uses pre parsed values
+sub cookies {
+	$_[0][cookies_]=parse_cookie $_[0][headers_]{cookie} unless $_[0][cookies_]//0;
+	$_[0][cookies_];
+}
 
 1;
 

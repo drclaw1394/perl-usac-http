@@ -2,30 +2,30 @@
 use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
+no feature "indirect";
+
 use Data::Dumper;
 	my $fork=$ARGV[0]//0;
 BEGIN {
 	@uSAC::HTTP::Server::Subproducts=("testing/1.2");
 }
 
-use FindBin;use lib "$FindBin::Bin/../lib";
-use EV;
-say EV::backend;
 use AnyEvent;
 
-my @sys_roots=qw<data>;
 use uSAC::HTTP::Server;
 
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
-use uSAC::HTTP::Cookie qw<:constants>;
+use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Static;
 use uSAC::HTTP::Server::WS;
 use Hustle::Table;
+use uSAC::HTTP::Middler;
 
+my $cv=AE::cv;
 
 use constant LF=>"\015\012";
 
@@ -57,69 +57,42 @@ sub ends_with {
 	sub {0 <= index reverse($_[0]), $test}
 }
 
+my @sys_roots=qw<data>;
 uSAC::HTTP::Static::enable_cache;
-my $table=Hustle::Table->new;
 
-$table->set_default(sub {
+
+my $table=Hustle::Table->new();
+
+$table->set_default( sub {
 		my ($line,$rex)=@_;
 		say "DEFAULT: $line";
 		push @_, (HTTP_NOT_FOUND,undef,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
-		&uSAC::HTTP::Rex::reply_simple;#h $rex, ;
+		&rex_reply_simple;#h $rex, ;
 });
 
 $table->add(qr{^GET /login}ao => sub {
 		#set a cookie
 		my @cookies=(
-			uSAC::HTTP::Cookie->new(
-				test=>"value",
-				COOKIE_EXPIRES, time+60
-			),
-			uSAC::HTTP::Cookie->new(
-				another=>"valucawljksdfe",
-				COOKIE_MAX_AGE,1000
-			),
+			new_cookie( test=>"value",	 	COOKIE_EXPIRES, time+60),
+			new_cookie( another=>"valucawljksdfe",	COOKIE_MAX_AGE, 1000),
 		);
 
-
+		#add response, headers, body  and send it
 		push @_, (HTTP_OK,
-			[map {(HTTP_SET_COOKIE,$_->serialize_set)} @cookies #cookies
+			[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
 			],
 			"HELLO");
 
-		&uSAC::HTTP::Rex::reply_simple;
+		&rex_reply_simple;
 	}
 );
 
-##################################################################################################
-# $table->add("GET /data/index.html HTTP/1.1"=> sub {                                            #
-#                 #\my $line=\$_[0];                                                             #
-#                 #\my $rex=\$_[1];                                                              #
-#                 #parse cookie                                                                  #
-#                 #                                                                              #
-#                 #my $cookies;                                                                  #
-#                                                                                                #
-#                 #$cookies=uSAC::HTTP::Cookie::parse $rex->[uSAC::HTTP::Rex::headers_]{cookie}; #
-#                                                                                                #
-#                                                                                                #
-#                 #say Dumper $cookies;                                                          #
-#                 push @_,"index.html","data";                                                   #
-#                 &send_file_uri_norange;                                                        #
-#                 return;                                                                        #
-#         }                                                                                      #
-# );                                                                                             #
-##################################################################################################
-#
 $table->add(qr{^GET /data/$path}ao=> sub {
 		#\my $line=\$_[0];
-		#\my $rex=\$_[1];
-		#parse cookie
-		#
-		#my $cookies;
+		\my $rex=\$_[1];
 
-		#$cookies=uSAC::HTTP::Cookie::parse $rex->[uSAC::HTTP::Rex::headers_]{cookie};
+		my $cookies=$rex->cookies;	
 
-
-		#say Dumper $cookies;
 		push @_,$1,"data";
 		&send_file_uri_norange;
 		return;		
@@ -146,7 +119,7 @@ $table->add(qr<GET /ws>=>sub {
 	}
 );
 
-$table->add(qr{^GET /}ao => sub{
+$table->add(qr{^GET /$}ao => sub{
 		#my ($line, $rex)=@_;
 		#\my $line=\$_[0];
 		#\my $rex=\$_[1];
@@ -155,7 +128,7 @@ $table->add(qr{^GET /}ao => sub{
 		#parse cookies?
 		my $data="a" x 1024;
 		push @_, HTTP_OK,undef, $data;
-		&uSAC::HTTP::Rex::reply_simple;
+		&rex_reply_simple;
 		return;	
 	}
 );
@@ -165,7 +138,8 @@ $table->add(qr{^POST /urlencoded}ao=>sub {
 		#my $rex=$_[1];
 		#Check permissions, sizes etc?
 		push @_, sub {
-			uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_OK,undef,"finished post" unless defined $_[0];
+
+			rex_reply_simple $line, $rex, HTTP_OK,undef,"finished post" unless defined $_[0];
 		};
 
 		&uSAC::HTTP::Rex::handle_upload;
@@ -188,7 +162,7 @@ $table->add( begins_with("POST /formdata")=>sub {
 				#
 				#When no data or headers, we reached the end
 				unless (defined $_[0] and defined $_[1]){
-					uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_OK,"finished multipart form";
+					rex_reply_simple $line, $rex, HTTP_OK,"finished multipart form";
 				}
 			};
 
@@ -200,10 +174,44 @@ $table->add( begins_with("POST /formdata")=>sub {
 
 my $dispatcher=$table->prepare_dispatcher(type=>"online",cache=>{});
 
+
+#my $first;#=$dispatcher;
+say "Dispatcher target: $dispatcher";
+
+
+sub make_mw_log {
+	my $next=shift;	#This is the next mw in the chain
+	my $last=shift;	#The last/target. for bypassing
+	say "making log";
+	sub {
+		#this sub input is line, and rex
+		#
+		#say "Request for resource: $_[0] @ ", time;
+		return &$next;		#alway call next. this is just loggin
+	}
+}
+
+sub make_mw_authenticate {
+	my $next=shift;
+	my $last=shift;
+	say "making authenticate with next: ", $next; 
+	sub {
+		#this sub input is line, and rex
+		my $rex=$_[1];
+		my $cookies=parse_cookie $rex->headers->{cookie};
+		return &$next;		#alway call next. this is just loggin
+	}
+}
+
+my $middler=uSAC::HTTP::Middler->new();
+$middler->register(\&make_mw_log);
+$middler->register(\&make_mw_authenticate);
+my ($first,$stack)=$middler->link($dispatcher);	#link and set default;
+
 my $server = uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",
 	port=>8080,
-	cb=>$dispatcher
+	cb=>$first
 );
 
 
@@ -217,4 +225,5 @@ $server->listen;
 		}
 	}
 $server->accept;
-EV::loop();
+
+$cv->recv();

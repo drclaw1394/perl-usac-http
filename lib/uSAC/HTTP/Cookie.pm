@@ -30,10 +30,12 @@ our %reverse; @reverse{@names}=@values;
 $reverse{undef}=0;			#catching
 
 
-our @EXPORT_OK= keys %const_names;
+our @EXPORT_OK= (parse_cookie, new_cookie, keys %const_names);
 our %EXPORT_TAGS=(
-	constants=> [keys %const_names]
+	constants=> [keys %const_names],
+	all=>		[@EXPORT_OK]
 );
+
 my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
 
@@ -55,8 +57,26 @@ sub new {
 	$self;
 }
 
+sub new_cookie {
+	my $package=__PACKAGE__;
+	my $self=bless [], $package;
+	$self->[COOKIE_HTTPONLY]=undef;	#allocate storage
+
+	$self->[COOKIE_NAME]=shift;
+	$self->[COOKIE_VALUE]=shift;
+
+	#remainder of values are key value pairs
+	my $i=0;
+	for(0..@_/2-1){
+		$self->[$_[$i]]=$_[$i+1]; $i+=2;
+	}
+
+	$self;
+
+}
+
 #Parse cookie string from client into key value pairs.
-sub parse {
+sub parse_cookie {
 	my %values;
 	for(split ";", $_[0]=~tr/ //dr){
 		($key,$value)= split "=";
@@ -65,8 +85,10 @@ sub parse {
 	\%values;
 }
 
+
+
 #Parse the key value and attributes from a servers set-cookie header
-sub parse_set {
+sub parse_set_cookie {
 	my $key;
 	my $value;
 	my @values;
@@ -88,7 +110,7 @@ sub parse_set {
 	bless \@values, __PACKAGE__;
 }
 
-sub serialize_set{
+sub serialize_set_cookie{
 	my $self=shift;
 	my $cookie= "$self->[COOKIE_NAME]=$self->[COOKIE_VALUE]";			#Do value
 	for my $index (COOKIE_MAX_AGE, COOKIE_DOMAIN, COOKIE_PATH){	#Do Attributes
@@ -100,7 +122,6 @@ sub serialize_set{
 	given($self->[COOKIE_EXPIRES]){
 		when(defined){
 			my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime $self->[COOKIE_EXPIRES];
-			say "time ",$self->[COOKIE_EXPIRES];
 			$cookie.="; Expires=$days[$wday], $mday $months[$mon] ".($year+1900) ." $hour:$min:$sec GMT";
 		}
 	}
