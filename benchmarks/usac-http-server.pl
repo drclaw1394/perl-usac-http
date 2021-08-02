@@ -70,118 +70,131 @@ $table->set_default( sub {
 		&rex_reply_simple;#h $rex, ;
 });
 
-$table->add(qr{^GET /login}o => sub {
-		#set a cookie
-		my @cookies=(
-			new_cookie( test=>"value",	 	COOKIE_EXPIRES, time+60),
-			new_cookie( another=>"valucawljksdfe",	COOKIE_MAX_AGE, 1000),
+#restricted area. requests must be checked against session information
+{
+	my ($authorised,$stack)=do {
+		my $middler=uSAC::HTTP::Middler->new();
+		$middler->register(\&make_mw_authenticate);
+		$middler->link(sub {
+				my $rex=$_[1];
+				if($rex->cookies->{test} eq "value"){
+					return 1;
+					#push @_, HTTP_OK, undef, "premission granted";
+				}
+				else {
+					push @_, HTTP_FORBIDDEN, undef, "bzzzzzzz";
+					&rex_reply_simple;
+					
+				}
+
+			}
 		);
+	};
 
-		#add response, headers, body  and send it
-		push @_, (HTTP_OK,
-			[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
-			],
-			"HELLO");
-
-		&rex_reply_simple;
-	}
-);
-
-$table->add(qr{^GET /data/$path}o=> sub {
-		#\my $line=\$_[0];
-		\my $rex=\$_[1];
-
-		my $cookies=$rex->cookies;	
-
-		push @_,$1,"data";
-		&send_file_uri_norange;
-		return;		
-	}
-);
-
-$table->add(qr<GET /ws>o=>sub {
-		#create a web socket here
-		#once created, the callback is called with the ws object	
-
-		#check the headers if this is allowed
-		#$_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
-		#
-
-		#Then do the handshake or error otherwise
-		#
-		push @_,"/ws", sub {
-			my $ws=shift;
-			say "Got websocket";
-
-		};
-		&upgrade_to_websocket;
-
-	}
-);
-
-$table->add(qr{^GET /$}o => sub{
-		#my ($line, $rex)=@_;
-		my $data="a" x 1024;
-		push @_, HTTP_OK,undef, $data;
-		&rex_reply_simple;
-		return;	
-	}
-);
-
-
-
-my ($first,$stack)=do {
-	my $middler=uSAC::HTTP::Middler->new();
-	$middler->register(\&make_mw_authenticate);
-	$middler->link(sub {
+	$table->add(qr{GET /restricted}o => sub {
+			\my $line=\$_[0];
 			my $rex=$_[1];
-			if($rex->cookies->{test} eq "value"){
-				push @_, HTTP_OK, undef, "premission granted";
-			}
-			else {
-				push @_, HTTP_FORBIDDEN, undef, "bzzzzzzz";
-			}
+			return unless &$authorised;
+
+			push @_, HTTP_OK, undef, "premission granted";
+			&rex_reply_simple;
+
+
+		}
+	);
+	$table->add(qr{^GET /logout}o=>sub{
+			#send expiry on all known cookies of intrest
+			return unless &$authorised;
+			my @cookies=expire_cookies qw<test another>;
+
+			#add response, headers, body  and send it
+			push @_, (HTTP_OK,	#this should be a  redirect to a login/ landing page?
+				[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
+				],
+				"HELLO");
+
 			&rex_reply_simple;
 		}
 	);
-};
-$table->add(qr{GET /restricted}o => sub {
-		\my $line=\$_[0];
-		my $rex=$_[1];
-		&$first;
-
-
-	}
-);
-$table->add(qr{^GET /logout}o=>sub{
-	#send expiry on all known cookies of intrest
-	my @cookies=expire_cookies qw<test another>;
-
-	#add response, headers, body  and send it
-	push @_, (HTTP_OK,	#this should be a  redirect to a login/ landing page?
-		[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
-		],
-		"HELLO");
-
-	&rex_reply_simple;
 }
-);
 
-$table->add(qr{^POST /urlencoded}o=>sub {
-		my ($line,$rex)=@_;
-		#my $rex=$_[1];
-		#Check permissions, sizes etc?
-		push @_, sub {
+#Public 
+{
+	$table->add(qr{^GET /login}o => sub {
+			#set a cookie
+			my @cookies=(
+				new_cookie( test=>"value",	 	COOKIE_EXPIRES, time+60),
+				new_cookie( another=>"valucawljksdfe",	COOKIE_MAX_AGE, 1000),
+			);
 
-			rex_reply_simple $line, $rex, HTTP_OK,undef,"finished post" unless defined $_[0];
-		};
+			#add response, headers, body  and send it
+			push @_, (HTTP_OK,
+				[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
+				],
+				"HELLO");
 
-		&uSAC::HTTP::Rex::handle_upload;
-		return;
-	}
-);
+			&rex_reply_simple;
+		}
+	);
 
-$table->add( begins_with("POST /formdata")=>sub {
+	$table->add(qr{^GET /data/$path}o=> sub {
+			#\my $line=\$_[0];
+			\my $rex=\$_[1];
+
+			my $cookies=$rex->cookies;	
+
+			push @_,$1,"data";
+			&send_file_uri_norange;
+			return;		
+		}
+	);
+
+	$table->add(qr<GET /ws>o=>sub {
+			#create a web socket here
+			#once created, the callback is called with the ws object	
+
+			#check the headers if this is allowed
+			#$_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
+			#
+
+			#Then do the handshake or error otherwise
+			#
+			push @_,"/ws", sub {
+				my $ws=shift;
+				say "Got websocket";
+
+			};
+			&upgrade_to_websocket;
+
+		}
+	);
+
+	$table->add(qr{^GET /$}o => sub{
+			#my ($line, $rex)=@_;
+			my $data="a" x 1024;
+			push @_, HTTP_OK,undef, $data;
+			&rex_reply_simple;
+			return;	
+		}
+	);
+
+
+
+	$table->add(qr{^POST /urlencoded}o=>sub {
+			my ($line,$rex)=@_;
+			#my $rex=$_[1];
+			#Check permissions, sizes etc?
+			push @_, sub {
+
+				rex_reply_simple $line, $rex, HTTP_OK,undef,"finished post" unless defined $_[0];
+			};
+
+			&uSAC::HTTP::Rex::handle_upload;
+			return;
+		}
+	);
+
+	$table->add( begins_with("POST /formdata")=>sub {
 			say "FORM DATA ENDPOINT";
 			my ($line,$rex)=@_;
 			push @_, sub {
@@ -203,7 +216,8 @@ $table->add( begins_with("POST /formdata")=>sub {
 			&uSAC::HTTP::Rex::handle_form_upload;
 			return;
 		}
-);
+	);
+}
 
 
 my $dispatcher=$table->prepare_dispatcher(type=>"online",cache=>{});
