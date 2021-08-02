@@ -4,6 +4,7 @@ use feature "refaliasing";
 no warnings "experimental";
 
 use Exporter 'import';
+use Encode qw<decode encode decode_utf8>;
 
 our @EXPORT_OK=qw<
 		make_reader
@@ -31,6 +32,14 @@ our $LF = "\015\012";
 #my $HEADER_QR=> qr/\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca;
 use constant LF=>"\015\012";
 use enum (qw<STATE_REQ_LINE STATE_RES_LINE STATE_HEADERS STATE_ERROR>);
+
+sub uri_decode {
+	my $octets= shift;
+	$octets=~ s/\+/ /sg;
+	$octets=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
+	return decode_utf8($octets);
+	#return decode("utf8", $octets);
+}
 
 #read request line
 #read headers
@@ -88,7 +97,7 @@ sub make_reader{
                                 $line=substr($buf,$ixx,$pos3);
 				$version=substr($line,-1,1)eq "1"?"HTTP/1.1":"HTTP/1.0";
 
-                                $line=substr($buf,$ixx,$pos3-length($version));
+                                $line=uri_decode substr($buf,$ixx,$pos3-length($version)-1);
 				if($pos3>=0){
 					#end of line found
 						$state   = 1;
@@ -191,9 +200,7 @@ sub make_reader{
 				}
 				#Done with headers. 
 				#
-				$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ], 'uSAC::HTTP::Rex' ;
-
-				DEBUG && say "URI $uri";	
+				$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ,undef,undef,undef,undef], 'uSAC::HTTP::Rex' ;
 
 
 				$pos = pos($buf);

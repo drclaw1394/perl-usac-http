@@ -37,11 +37,11 @@ our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
 
-my $any_method=		qr{^([^ ]+)}ao;
-my $path=		qr{([^? ]+)}ao;
-my $comp=		qr{([^/ ]+)}ao;
-my $query=		qr{(?:[?]([^# ]+)?)?}ao;
-my $fragment=		qr{(?:[#]([^ ]+)?)?}ao;
+my $any_method=		qr{^([^ ]+)}o;
+my $path=		qr{([^? ]+)}o;
+my $comp=		qr{([^/ ]+)}o;
+my $query=		qr{(?:[?]([^# ]+)?)?}o;
+my $fragment=		qr{(?:[#]([^ ]+)?)?}o;
 
 sub begins_with {
 	my $test=$_[0];
@@ -49,7 +49,7 @@ sub begins_with {
 }
 
 sub matches_with {
-	return qr{$_[0]}oa;
+	return qr{$_[0]}o;
 }
 
 sub ends_with {
@@ -70,7 +70,7 @@ $table->set_default( sub {
 		&rex_reply_simple;#h $rex, ;
 });
 
-$table->add(qr{^GET /login}ao => sub {
+$table->add(qr{^GET /login}o => sub {
 		#set a cookie
 		my @cookies=(
 			new_cookie( test=>"value",	 	COOKIE_EXPIRES, time+60),
@@ -87,7 +87,7 @@ $table->add(qr{^GET /login}ao => sub {
 	}
 );
 
-$table->add(qr{^GET /data/$path}ao=> sub {
+$table->add(qr{^GET /data/$path}o=> sub {
 		#\my $line=\$_[0];
 		\my $rex=\$_[1];
 
@@ -99,7 +99,7 @@ $table->add(qr{^GET /data/$path}ao=> sub {
 	}
 );
 
-$table->add(qr<GET /ws>=>sub {
+$table->add(qr<GET /ws>o=>sub {
 		#create a web socket here
 		#once created, the callback is called with the ws object	
 
@@ -119,13 +119,8 @@ $table->add(qr<GET /ws>=>sub {
 	}
 );
 
-$table->add(qr{^GET /$}ao => sub{
+$table->add(qr{^GET /$}o => sub{
 		#my ($line, $rex)=@_;
-		#\my $line=\$_[0];
-		#\my $rex=\$_[1];
-		#headers todo:
-		#
-		#parse cookies?
 		my $data="a" x 1024;
 		push @_, HTTP_OK,undef, $data;
 		&rex_reply_simple;
@@ -133,7 +128,46 @@ $table->add(qr{^GET /$}ao => sub{
 	}
 );
 
-$table->add(qr{^POST /urlencoded}ao=>sub {
+
+
+my ($first,$stack)=do {
+	my $middler=uSAC::HTTP::Middler->new();
+	$middler->register(\&make_mw_authenticate);
+	$middler->link(sub {
+			my $rex=$_[1];
+			if($rex->cookies->{test} eq "value"){
+				push @_, HTTP_OK, undef, "premission granted";
+			}
+			else {
+				push @_, HTTP_FORBIDDEN, undef, "bzzzzzzz";
+			}
+			&rex_reply_simple;
+		}
+	);
+};
+$table->add(qr{GET /restricted}o => sub {
+		\my $line=\$_[0];
+		my $rex=$_[1];
+		&$first;
+
+
+	}
+);
+$table->add(qr{^GET /logout}o=>sub{
+	#send expiry on all known cookies of intrest
+	my @cookies=expire_cookies qw<test another>;
+
+	#add response, headers, body  and send it
+	push @_, (HTTP_OK,	#this should be a  redirect to a login/ landing page?
+		[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
+		],
+		"HELLO");
+
+	&rex_reply_simple;
+}
+);
+
+$table->add(qr{^POST /urlencoded}o=>sub {
 		my ($line,$rex)=@_;
 		#my $rex=$_[1];
 		#Check permissions, sizes etc?
@@ -175,9 +209,6 @@ $table->add( begins_with("POST /formdata")=>sub {
 my $dispatcher=$table->prepare_dispatcher(type=>"online",cache=>{});
 
 
-#my $first;#=$dispatcher;
-say "Dispatcher target: $dispatcher";
-
 
 sub make_mw_log {
 	my $next=shift;	#This is the next mw in the chain
@@ -186,7 +217,7 @@ sub make_mw_log {
 	sub {
 		#this sub input is line, and rex
 		#
-		#say "Request for resource: $_[0] @ ", time;
+		say "Request for resource: \"$_[0]\" @ ", time;
 		return &$next;		#alway call next. this is just loggin
 	}
 }
@@ -199,13 +230,16 @@ sub make_mw_authenticate {
 		#this sub input is line, and rex
 		my $rex=$_[1];
 		my $cookies=parse_cookie $rex->headers->{cookie};
+		#check that the current ip address of the client is the same as previously set?
+		#
 		return &$next;		#alway call next. this is just loggin
 	}
 }
 
 my $middler=uSAC::HTTP::Middler->new();
 $middler->register(\&make_mw_log);
-$middler->register(\&make_mw_authenticate);
+#$middler->register(\&make_mw_authenticate);
+
 my ($first,$stack)=$middler->link($dispatcher);	#link and set default;
 
 my $server = uSAC::HTTP::Server->new(
@@ -216,14 +250,15 @@ my $server = uSAC::HTTP::Server->new(
 
 
 $server->listen;
-	for (1..$fork-1) {
-		my $pid = fork();
-		if ($pid) {
-			next;
-		} else {
-			last;
-		}
+
+for (1..$fork-1) {
+	my $pid = fork();
+	if ($pid) {
+		next;
+	} else {
+		last;
 	}
+}
 $server->accept;
 
 $cv->recv();
