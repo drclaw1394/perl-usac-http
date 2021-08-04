@@ -4,7 +4,7 @@ package uSAC::HTTP::Rex;
 use version; our $VERSION = version->declare('v0.1');
 use common::sense;
 use feature "refaliasing";
-
+our $UPLOAD_LIMIT=10_000_000;
 
 BEGIN {
 	use uSAC::HTTP::Code qw<:constants>;
@@ -102,12 +102,14 @@ use constant KEY_COUNT=>attrs_-method_+1;
                 #################################################################################################################################################
 		
 		
+sub reply_simple;
 		
 	
 
 		sub reply_GZIP {
 
 		}
+
 		#like simple reply but does a DEFLATE on the data.
 		#Sets the headers accordingly
 		sub reply_DEFLATE {
@@ -115,44 +117,75 @@ use constant KEY_COUNT=>attrs_-method_+1;
 		}
 
 
-		#line,rex, cb
-		#	cb args:
-		#		data, headers
-		#
+		#multipart for type.
+		#Sub parts can be of different types and possible content encodings?
 		sub handle_form_upload {
 			my $line=shift;
 			my $rex=shift;
 			my $cb=shift;
 			my $session=$rex->[uSAC::HTTP::Rex::session_];
-			$session->push_reader(
+			#check if content type is correct first
+			say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'content-type'};
+			unless (index($rex->[headers_]{'content-type'},'multipart/form-data')>=0){
+				$session->[uSAC::HTTP::Session::closeme_]=1;
+				reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,undef,"multipart/formdata required";
+				return;
+			}
+			uSAC::HTTP::Session::push_reader
+				$session,
 				"http1_1_form_data",
 				$cb
-			);
+			;
 			$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 
 		}
-
-		sub handle_upload {
+		#percent/urlencoded data
+		#possible content-encoding as well?
+		sub handle_urlencode_upload {
 			my $line=shift;
 			my $rex=shift;	#rex object
+			my $mime=shift//'application/x-www-form-urlencoded';
 			my $cb=shift;	#cb for parts
 			my $session=$rex->[session_];
-			$session->push_reader(
-				"http1_1_urlencoded",
-				$cb
-			);
+			say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'content-type'};
+			my @err_res;
+			given($rex->[headers_]){
+				when(index($_->{'content-type'},$mime)<0){
+					@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, undef, "applcation/x-www-form-urlencoded required");
+				}
+				when($_->{'content-length'} > $UPLOAD_LIMIT){
+					@err_res=(HTTP_PAYLOAD_TOO_LARGE, undef, "limit: $UPLOAD_LIMIT");
+				}
+				default{
 
-			#check for expects header and send 100 before trying to read
-			given($rex->[uSAC::HTTP::Rex::headers_]){
-				if(defined($_->{expects})){
-					#issue a continue response	
-					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
-					$rex->[uSAC::HTTP::Rex::write_]->($reply);
+					uSAC::HTTP::Session::push_reader
+						$session,
+						"http1_1_urlencoded",
+						$cb
+					;
+
+					#check for expects header and send 100 before trying to read
+					#given($rex->[uSAC::HTTP::Rex::headers_]){
+					if(defined($_->{expects})){
+						#issue a continue response	
+						my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
+						$rex->[uSAC::HTTP::Rex::write_]->($reply);
+					}
+
+					$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
+					return;
 				}
 			}
-			$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 
+			$session->[uSAC::HTTP::Session::closeme_]=1;
+			reply_simple $line,$rex,@err_res; 
 		}
+
+		#binary data.
+		# might have contetn-encoding apply however ie base64, gzip
+
+		#content type text/plain with optional charset spec
+		#also setup need to decode any Content-Encoding (ie gzip)
 
 
 		#Reply the body and code specified. Adds Server and Content-Length headers
@@ -208,14 +241,8 @@ use constant KEY_COUNT=>attrs_-method_+1;
 			$reply.=LF.$_[4];
 
 			#Write the headers
-			#given ($self->[write_]){
 			$session->[uSAC::HTTP::Session::write_]($reply);
-			#$session->[uSAC::HTTP::Session::write_](
-			#$self->[write_]( $reply );
-			#$self->[write_]=undef;
-				uSAC::HTTP::Session::drop $session;
-				#}
-
+			uSAC::HTTP::Session::drop $session;
 		}
 		
 	 
@@ -223,6 +250,7 @@ use constant KEY_COUNT=>attrs_-method_+1;
 sub headers {
 	return $_[0]->[headers_];
 }
+
 *rex_headers=*headers;
 *rex_reply_simple=*reply_simple;
 #returns parsed cookies from headers

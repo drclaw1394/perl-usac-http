@@ -16,8 +16,13 @@ sub register {
 	\my @middleware=$_[0];	#self
 	my $sub=$_[1];
 	push @middleware,$sub;
+	return $_[0]; #allow chaining
 }
 
+#link the middlewares to each other (via next lexical)
+#If no middlewares are present, the dispatcher is returned directly
+#id no middleware overhead
+#
 sub link {
 	\my @middleware=$_[0];	#self;
 

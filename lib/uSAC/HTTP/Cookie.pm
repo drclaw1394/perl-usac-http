@@ -82,7 +82,7 @@ sub expire_cookies {
 		$self->[COOKIE_HTTPONLY]=undef;	#allocate storage
 
 		$self->[COOKIE_NAME]=$_;
-		$self->[COOKIE_VALUE]="\"\"";
+		$self->[COOKIE_VALUE]="ddd";
 		$self->[COOKIE_EXPIRES]=time-3600;
 		$self;
 	} @_;

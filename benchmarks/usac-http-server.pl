@@ -24,6 +24,7 @@ use uSAC::HTTP::Static;
 use uSAC::HTTP::Server::WS;
 use Hustle::Table;
 use uSAC::HTTP::Middler;
+use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
 my $cv=AE::cv;
 
@@ -61,200 +62,186 @@ my @sys_roots=qw<data>;
 uSAC::HTTP::Static::enable_cache;
 
 
-my $table=Hustle::Table->new();
 
-$table->set_default( sub {
-		my ($line,$rex)=@_;
-		say "DEFAULT: $line";
-		push @_, (HTTP_NOT_FOUND,undef,"Go away: $rex->[uSAC::HTTP::Rex::method_]");
-		&rex_reply_simple;#h $rex, ;
-});
 
 #restricted area. requests must be checked against session information
-{
-	my ($authorised,$stack)=do {
-		my $middler=uSAC::HTTP::Middler->new();
-		$middler->register(\&make_mw_authenticate);
-		$middler->link(sub {
-				my $rex=$_[1];
-				if($rex->cookies->{test} eq "value"){
-					return 1;
-					#push @_, HTTP_OK, undef, "premission granted";
-				}
-				else {
-					push @_, HTTP_FORBIDDEN, undef, "bzzzzzzz";
-					&rex_reply_simple;
-					
-				}
+my $public_table=Hustle::Table->new(\&default_handler);
+
+my $private_table=Hustle::Table->new(\&default_handler);
+
+#Restricted area (username/password required)
+$private_table->add(qr{GET /user/restricted}o => sub {
+		\my $line=\$_[0];
+		my $rex=$_[1];
+		#return unless &$authorised;
+
+		push @_, HTTP_OK, undef, "premission granted";
+		&rex_reply_simple;
+
+
+	}
+);
+$private_table->add(qr{^GET /user/logout}o=>sub{
+		#send expiry on all known cookies of intrest
+		#return unless &$authorised;
+		say "doing logout";
+		my @cookies=expire_cookies qw<test another>;
+		$_->[COOKIE_PATH]="/" for @cookies;
+
+		#add response, headers, body  and send it
+		push @_, (HTTP_OK,	#this should be a  redirect to a login/ landing page?
+			[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
+			],
+			"LOGOUT OK");
+
+		&rex_reply_simple;
+	}
+);
+
+#Public - No access restrictions
+
+#This is the post handler for a form?
+$public_table->add(qr{^GET /login}o => sub {
+		#set a cookie
+		my @cookies=(
+			new_cookie( test=>"value",	 	COOKIE_EXPIRES, time+60),
+			new_cookie( another=>"valucawljksdfe",	COOKIE_MAX_AGE, 1000),
+		);
+
+		#add response, headers, body  and send it
+		push @_, (HTTP_OK,
+			[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
+			],
+			"LOGIN OK");
+
+		&rex_reply_simple;
+	}
+);
+
+$public_table->add(qr{^GET /data/$path}o=> sub {
+		#\my $line=\$_[0];
+		\my $rex=\$_[1];
+
+		my $cookies=$rex->cookies;	
+
+		push @_,$1,"data";
+		&send_file_uri_norange;
+		return;		
+	}
+);
+
+$public_table->add(qr<GET /ws>o=>sub {
+		#create a web socket here
+		#once created, the callback is called with the ws object	
+
+		#check the headers if this is allowed
+		#$_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
+		#
+
+		#Then do the handshake or error otherwise
+		#
+		push @_,"/ws", sub {
+			my $ws=shift;
+			say "Got websocket";
+
+		};
+		&upgrade_to_websocket;
+
+	}
+);
+
+$public_table->add(qr{^GET /$}o => sub{
+		#my ($line, $rex)=@_;
+		my $data="a" x 1024;
+		push @_, HTTP_OK,undef, $data;
+		&rex_reply_simple;
+		return;	
+	}
+);
+
+
+
+$public_table->add(qr{^PUT|POST /urlencoded}o=>sub {
+		my ($line,$rex)=@_;
+		push @_,undef, sub {
+			state $previous_headers;
+			state @chunks;
+			if($_[1]!=$previous_headers){
+				say "NEW SECTION";
+				$previous_headers=$_[1];
+				#new data chunk
+				#chunk of data		
+				push @chunks, $_[0];
+			}
+			elsif($_[0]//0){
+				say "MORE DATA FOR EXisTING";
+				#data to add to existing part
+				push @chunks, $_[0];
 
 			}
-		);
-	};
+			else {
+				say "END OF DATA";
+				#end of response
+				local $,=", ";
+				say my @response=parse_form uri_decode join "", @chunks;
+				#decode 
+				rex_reply_simple $line, $rex, HTTP_OK,undef,"finished post: ".uc  join "", @response unless defined $_[0];
+			}
+		};
 
-	$table->add(qr{GET /restricted}o => sub {
-			\my $line=\$_[0];
-			my $rex=$_[1];
-			return unless &$authorised;
-
-			push @_, HTTP_OK, undef, "premission granted";
-			&rex_reply_simple;
-
-
-		}
-	);
-	$table->add(qr{^GET /logout}o=>sub{
-			#send expiry on all known cookies of intrest
-			return unless &$authorised;
-			my @cookies=expire_cookies qw<test another>;
-
-			#add response, headers, body  and send it
-			push @_, (HTTP_OK,	#this should be a  redirect to a login/ landing page?
-				[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
-				],
-				"HELLO");
-
-			&rex_reply_simple;
-		}
-	);
-}
-
-#Public 
-{
-	$table->add(qr{^GET /login}o => sub {
-			#set a cookie
-			my @cookies=(
-				new_cookie( test=>"value",	 	COOKIE_EXPIRES, time+60),
-				new_cookie( another=>"valucawljksdfe",	COOKIE_MAX_AGE, 1000),
-			);
-
-			#add response, headers, body  and send it
-			push @_, (HTTP_OK,
-				[map {(HTTP_SET_COOKIE,$_->serialize_set_cookie)} @cookies #cookies
-				],
-				"HELLO");
-
-			&rex_reply_simple;
-		}
-	);
-
-	$table->add(qr{^GET /data/$path}o=> sub {
-			#\my $line=\$_[0];
-			\my $rex=\$_[1];
-
-			my $cookies=$rex->cookies;	
-
-			push @_,$1,"data";
-			&send_file_uri_norange;
-			return;		
-		}
-	);
-
-	$table->add(qr<GET /ws>o=>sub {
-			#create a web socket here
-			#once created, the callback is called with the ws object	
-
-			#check the headers if this is allowed
-			#$_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
-			#
-
-			#Then do the handshake or error otherwise
-			#
-			push @_,"/ws", sub {
-				my $ws=shift;
-				say "Got websocket";
-
-			};
-			&upgrade_to_websocket;
-
-		}
-	);
-
-	$table->add(qr{^GET /$}o => sub{
-			#my ($line, $rex)=@_;
-			my $data="a" x 1024;
-			push @_, HTTP_OK,undef, $data;
-			&rex_reply_simple;
-			return;	
-		}
-	);
-
-
-
-	$table->add(qr{^POST /urlencoded}o=>sub {
-			my ($line,$rex)=@_;
-			#my $rex=$_[1];
-			#Check permissions, sizes etc?
-			push @_, sub {
-
-				rex_reply_simple $line, $rex, HTTP_OK,undef,"finished post" unless defined $_[0];
-			};
-
-			&uSAC::HTTP::Rex::handle_upload;
-			return;
-		}
-	);
-
-	$table->add( begins_with("POST /formdata")=>sub {
-			say "FORM DATA ENDPOINT";
-			my ($line,$rex)=@_;
-			push @_, sub {
-				say "+_+_+_+FORM CALLBACK";
-				say "DATA:", $_[0], " ";
-				say $_[1]->%*;
-				#need to encode the state? diff parts
-				#	ie with undef data and just headers => new part
-				#	with undef headers and data	=> part continues
-				#	with undef header and undef data => form end
-				#Parts are in sequence
-				#
-				#When no data or headers, we reached the end
-				unless (defined $_[0] and defined $_[1]){
-					rex_reply_simple $line, $rex, HTTP_OK,"finished multipart form";
-				}
-			};
-
-			&uSAC::HTTP::Rex::handle_form_upload;
-			return;
-		}
-	);
-}
-
-
-my $dispatcher=$table->prepare_dispatcher(type=>"online",cache=>{});
-
-
-
-sub make_mw_log {
-	my $next=shift;	#This is the next mw in the chain
-	my $last=shift;	#The last/target. for bypassing
-	say "making log";
-	sub {
-		#this sub input is line, and rex
-		#
-		say "Request for resource: \"$_[0]\" @ ", time;
-		return &$next;		#alway call next. this is just loggin
+		&uSAC::HTTP::Rex::handle_urlencode_upload;
+		return;
 	}
-}
+);
 
-sub make_mw_authenticate {
-	my $next=shift;
-	my $last=shift;
-	say "making authenticate with next: ", $next; 
-	sub {
-		#this sub input is line, and rex
-		my $rex=$_[1];
-		my $cookies=parse_cookie $rex->headers->{cookie};
-		#check that the current ip address of the client is the same as previously set?
-		#
-		return &$next;		#alway call next. this is just loggin
+$public_table->add( begins_with("POST /formdata")=>sub {
+		say "FORM DATA ENDPOINT";
+		my ($line,$rex)=@_;
+		push @_, sub {
+			state $previous_headers;
+			if($_[1] != $previous_headers){
+				say "NEW PART";
+				$previous_headers=$_[1];
+				#data here to be processed
+			}
+			elsif($_[0]//0){
+				say "MORE DATA FOR EXISTING PART";
+				#more data for existing part
+			}
+			else {
+				say "MULTIPART END";
+				#multipart complete
+				rex_reply_simple $line, $rex, HTTP_OK,undef, "finished multipart form";
+			}
+		};
+
+		&uSAC::HTTP::Rex::handle_form_upload;
+		return;
 	}
-}
+);
 
-my $middler=uSAC::HTTP::Middler->new();
-$middler->register(\&make_mw_log);
-#$middler->register(\&make_mw_authenticate);
 
-my ($first,$stack)=$middler->link($dispatcher);	#link and set default;
+
+
+
+my $private_dispatcher=$private_table->prepare_dispatcher(type=>"online", cache=>{});
+my $public_dispatcher=$public_table->prepare_dispatcher(type=>"online", cache=>{});
+
+#make private stack
+my ($authorised,$stack)= uSAC::HTTP::Middler->new()
+	->register(\&authenticate_simple)	#one or more middleware 
+	->link($private_dispatcher);		#Final dispatching
+
+my $main_table=Hustle::Table->new(\&default_handler);
+
+$main_table->add(qr{^GET /user} => $authorised);
+$main_table->add(qr{^PUT|POST|GET .*}	=> $public_dispatcher);
+
+my $dispatcher=$main_table->prepare_dispatcher(type=>"online",cache=>{});
+
+my ($first,$stack)=uSAC::HTTP::Middler->new()
+#->register(\&log_simple)
+	->link($dispatcher);	#link and set default;
 
 my $server = uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",
@@ -273,6 +260,7 @@ for (1..$fork-1) {
 		last;
 	}
 }
+
 $server->accept;
 
 $cv->recv();
