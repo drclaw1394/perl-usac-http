@@ -13,6 +13,7 @@ our @EXPORT_OK=qw<
 		make_plain_text_reader
 		make_form_urlencoded_reader
 		make_default_writer
+		make_socket_writer
 
 		uri_decode
 		parse_form
@@ -546,7 +547,8 @@ sub make_default_writer{
 						#actual error		
 						$ww=undef;
 						#$wbuf="";
-						$ido->drop( "$!");
+						#$ido->drop( "$!");
+						uSAC::HTTP::Session::drop "$!";
 						return;
 					}
 				}
@@ -579,7 +581,8 @@ sub make_default_writer{
 						#actual error		
 						$ww=undef;
 						#$wbuf="";
-						$ido->drop( "$!");
+						#$ido->drop( "$!");
+						uSAC::HTTP::Session::drop "$!";
 						return;
 					}
 					return if defined $ww;
@@ -612,7 +615,8 @@ sub make_default_writer{
 					say "WRITER ERROR: ", $!;
 					$ww=undef;
 					$wbuf="";
-					$ido->drop( "$!");
+					#$ido->drop( "$!");
+					uSAC::HTTP::Session::drop "$!";
 					return;
 				}
 			}
@@ -620,6 +624,97 @@ sub make_default_writer{
 		#else { return $ido->drop("$!"); }
 	};
 }
+
+#lowest level of the stream stack
+sub make_socket_writer{
+	#take a session and alias the variables to lexicals
+	my $ido=shift;
+	weaken $ido;
+	my $wbuf;# $$wbuf="";# buffer is for this sub only \$ido->[uSAC::HTTP::Session::wbuf_];
+	\my $ww=\$ido->[uSAC::HTTP::Session::ww_];
+	\my $fh=\$ido->[uSAC::HTTP::Session::fh_]; #reference to file handle.
+	weaken $fh;
+	my $w;
+	my $offset=0;
+	say  "++Making socket writer";
+
+
+	sub {
+		#say "calling  writer";
+		\my $buf=\$_[0];	#give the input a name
+		#\my $ffh=$fh;
+		my $cb= $_[1];
+		#say "calling socket writer ", length $buf, $cb;
+
+		if(!$ww){	#no write watcher so try synchronous write
+			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
+			$offset+=$w;
+			if($offset==length $buf){
+				#say "FULL WRITE NO APPEND";
+				$offset=0;
+				$cb=undef;
+				return 0; #remainder of 0
+
+			}
+			elsif(defined $w){# and length($buf)> $w){
+				#say "PARITAL WRITE NO APPEND: wanted". length($buf). "got $w";
+				#say "making watcher";
+				#$wbuf=\$buf;
+				$ww = AE::io $fh, 1, sub {
+					$ido or return;
+					$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
+
+					$offset+=$w;
+					if($offset==length $buf) {
+						#say "FULL async write";
+						undef $ww;
+						$offset=0;
+						$cb->(0) if defined $cb;
+						$cb=undef;
+					}
+					elsif(defined $w){
+						#say "partial async write";
+						#$$cb->((length ($buf) - $offset) ) if defined $$cb;
+					}
+					else{
+						#error
+						return if $! == EAGAIN or $! == EINTR;#or $! == WSAEWOULDBLOCK){
+						#actual error		
+						say "WRITER ERROR: ", $!;
+						$offset=0;
+						$ww=undef;
+						#$wbuf="";
+						$cb=undef;
+						uSAC::HTTP::Session::drop $ido, "$!";
+						return;
+					}
+				};
+				#return > 0... write is now event driven and will call callback
+				#return ((length ($buf)-$offset) );
+
+			}
+			else {
+				unless( $! == EAGAIN or $! == EINTR){
+					say "ERROR IN WRITE NO APPEND";
+					say $!;
+					#actual error		
+					$ww=undef;
+					$offset=0;
+					$cb=undef;
+					uSAC::HTTP::Session::drop $ido, "$!";
+					return;
+				}
+			}
+
+		}
+		else {
+			return;
+		}
+
+	};
+}
+
+
 
 
 1;

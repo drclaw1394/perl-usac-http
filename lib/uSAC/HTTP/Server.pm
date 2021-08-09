@@ -56,6 +56,7 @@ given(\%uSAC::HTTP::Session::make_reader_reg){
 }
 given(\%uSAC::HTTP::Session::make_writer_reg){
 	$_->{http1_1_default_writer}=\&make_default_writer;
+	$_->{http1_1_socket_writer}=\&make_socket_writer;
 	$_->{websocket}=\&make_websocket_server_writer;
 }
 

@@ -134,6 +134,7 @@ sub reply_simple;
 			uSAC::HTTP::Session::push_reader
 				$session,
 				"http1_1_form_data",
+
 				$cb
 			;
 			$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
@@ -198,18 +199,19 @@ sub reply_simple;
 			uSAC::HTTP::Session::push_writer 
 			#$session->push_writer(
 				$session,
-				"http1_1_default_writer",
+				"http1_1_socket_writer",
+				#"http1_1_default_writer",
 				undef;
 				#);
 			#$self->[write_]=$session->[uSAC::HTTP::Session::write_];
 
 			my $reply="HTTP/1.1 $_[2]".LF;
 			#my $reply="$self->[version_] $_[0]".LF;
-
+			my $content_length=length($_[4])+0;
 			$reply.=
 				STATIC_HEADERS
 				.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
-				.HTTP_CONTENT_LENGTH.": ".(length($_[4])+0).LF	#this always render content length
+				.HTTP_CONTENT_LENGTH.": ".$content_length.LF	#this always render content length
 				;#if defined $_[1];	#Set server
 
 				#TODO: benchmark length(undef)+0;
@@ -236,13 +238,49 @@ sub reply_simple;
 				$reply.=$headers[$i++].": ".$headers[$i++].LF 
 			}
 
-
+			my $cb; 
+			my $res;
 			#Append body
-			$reply.=LF.$_[4];
+			#say "Length: ", length($_[4])+0;
+			if($content_length< 1048576){
+				$reply.=LF.$_[4];
+                                #######################################################
+                                # $cb=sub{                                            #
+                                #         #if($_[0]==0){                              #
+                                #                 uSAC::HTTP::Session::drop $session; #
+                                #                 #}                                  #
+                                # };                                                  #
+                                #######################################################
+				#callback is only called on write complete. We are not adding any
+				#more data to the buffer to we simply drop the connection when called
+				$session->[uSAC::HTTP::Session::write_]($reply);
+			}
 
+			else{
+
+				#only send data chunks at a time
+				$reply.=LF;#.$_[4];
+				\my $body=\$_[4];
+				my $hcb=sub {
+					#say "header callback $_[0]";
+					$cb=sub{
+						#if($_[0]==0){
+							#say "Finished write";
+							uSAC::HTTP::Session::drop $session;
+							#}
+						
+					};
+					
+					#if($_[0]==0){
+						$res=$session->[uSAC::HTTP::Session::write_]($body,$cb)|| $cb->($res);
+						#}
+
+
+				};
+				$res=$session->[uSAC::HTTP::Session::write_]($reply,$hcb)||$hcb->($res);
+
+			}
 			#Write the headers
-			$session->[uSAC::HTTP::Session::write_]($reply);
-			uSAC::HTTP::Session::drop $session;
 		}
 		
 	 
