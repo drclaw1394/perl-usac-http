@@ -238,22 +238,20 @@ sub reply_simple;
 				$reply.=$headers[$i++].": ".$headers[$i++].LF 
 			}
 
-			my $cb; 
+			#my $cb; 
 			my $res;
 			#Append body
 			#say "Length: ", length($_[4])+0;
+                        #######################################################
+                        # my $cb=sub{                                         #
+                        #                 uSAC::HTTP::Session::drop $session; #
+                        #         };                                          #
+                        #######################################################
 			if($content_length< 1048576){
 				$reply.=LF.$_[4];
-                                #######################################################
-                                # $cb=sub{                                            #
-                                #         #if($_[0]==0){                              #
-                                #                 uSAC::HTTP::Session::drop $session; #
-                                #                 #}                                  #
-                                # };                                                  #
-                                #######################################################
 				#callback is only called on write complete. We are not adding any
 				#more data to the buffer to we simply drop the connection when called
-				$session->[uSAC::HTTP::Session::write_]($reply);
+				($res=$session->[uSAC::HTTP::Session::write_]($reply, \&uSAC::HTTP::Session::drop)) and uSAC::HTTP::Session::drop($res);
 			}
 
 			else{
@@ -263,21 +261,24 @@ sub reply_simple;
 				\my $body=\$_[4];
 				my $hcb=sub {
 					#say "header callback $_[0]";
-					$cb=sub{
-						#if($_[0]==0){
-							#say "Finished write";
-							uSAC::HTTP::Session::drop $session;
-							#}
-						
-					};
+                                        #######################################################
+                                        # my $cb=sub{                                         #
+                                        #         #if($_[0]==0){                              #
+                                        #                 #say "Finished write";              #
+                                        #                 uSAC::HTTP::Session::drop $session; #
+                                        #                 #}                                  #
+                                        #                                                     #
+                                        # };                                                  #
+                                        #######################################################
 					
 					#if($_[0]==0){
-						$res=$session->[uSAC::HTTP::Session::write_]($body,$cb)|| $cb->($res);
+					#	$res=$session->[uSAC::HTTP::Session::write_]($body,$cb) and $cb->($res);
+						($res=$session->[uSAC::HTTP::Session::write_]($body, \&uSAC::HTTP::Session::drop)) and uSAC::HTTP::Session::drop($res);
 						#}
 
 
 				};
-				$res=$session->[uSAC::HTTP::Session::write_]($reply,$hcb)||$hcb->($res);
+				$res=$session->[uSAC::HTTP::Session::write_]($reply,$hcb) and $hcb->($res);
 
 			}
 			#Write the headers

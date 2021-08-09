@@ -641,19 +641,27 @@ sub make_socket_writer{
 
 	sub {
 		#say "calling  writer";
-		\my $buf=\$_[0];	#give the input a name
-		#\my $ffh=$fh;
-		my $cb= $_[1];
-		#say "calling socket writer ", length $buf, $cb;
+		state $pre_buffer=$_[0];	#Read error makes it hard to reset the write stack
+						#force reset of offset when buffer address changes
+						#
+		\my $buf=\$_[0];		#give the input a name
+
+		my $cb= $_[1];			#give the callback a name
+
+		$offset=0 if $pre_buffer!=$_[0];	#do offset reset if need beo
+		$pre_buffer=$_[0];
 
 		if(!$ww){	#no write watcher so try synchronous write
-			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
+			#say "Length: ", length($buf),"offset: $offset";
+			my $len=length($buf)-$offset;
+			#say  \$buf,". ", $len if $len<=0;
+			$w = syswrite( $fh, $buf, $len, $offset);
 			$offset+=$w;
 			if($offset==length $buf){
 				#say "FULL WRITE NO APPEND";
 				$offset=0;
-				$cb=undef;
-				return 0; #remainder of 0
+				#$cb=undef;
+				return $ido;#0; #remainder of 0
 
 			}
 			elsif(defined $w){# and length($buf)> $w){
@@ -669,8 +677,8 @@ sub make_socket_writer{
 						#say "FULL async write";
 						undef $ww;
 						$offset=0;
-						$cb->(0) if defined $cb;
-						$cb=undef;
+						$cb->($ido) if defined $cb;
+						#$cb=undef;
 					}
 					elsif(defined $w){
 						#say "partial async write";
@@ -680,37 +688,35 @@ sub make_socket_writer{
 						#error
 						return if $! == EAGAIN or $! == EINTR;#or $! == WSAEWOULDBLOCK){
 						#actual error		
-						say "WRITER ERROR: ", $!;
+						#say "WRITER ERROR: ", $!;
 						$offset=0;
 						$ww=undef;
 						#$wbuf="";
-						$cb=undef;
+						#$cb=undef;
 						uSAC::HTTP::Session::drop $ido, "$!";
 						return;
 					}
 				};
 				#return > 0... write is now event driven and will call callback
 				#return ((length ($buf)-$offset) );
+				return
 
 			}
 			else {
 				unless( $! == EAGAIN or $! == EINTR){
-					say "ERROR IN WRITE NO APPEND";
-					say $!;
+					#say "ERROR IN WRITE NO APPEND";
+					#say $!;
 					#actual error		
 					$ww=undef;
 					$offset=0;
-					$cb=undef;
+					#$cb=undef;
 					uSAC::HTTP::Session::drop $ido, "$!";
 					return;
 				}
 			}
 
 		}
-		else {
-			return;
-		}
-
+		return
 	};
 }
 

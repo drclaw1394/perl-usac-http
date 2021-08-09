@@ -150,18 +150,18 @@ $public_table->add(qr<GET /ws>o=>sub {
 	}
 );
 
+		my $data="a" x 1024;#(1024*1024*4);
 $public_table->add(qr{^GET /small$}o => sub{
 		#my ($line, $rex)=@_;
-		my $data="a" x 1024;#(1024*1024*4);
 		push @_, HTTP_OK,undef, $data;
 		&rex_reply_simple;
 		return;	
 	}
 );
+		my $data2="a" x (1024*1024*4);
 $public_table->add(qr{^GET /big$}o => sub{
 		#my ($line, $rex)=@_;
-		my $data="a" x (1024*1024*4);
-		push @_, HTTP_OK,undef, $data;
+		push @_, HTTP_OK,undef, $data2;
 		&rex_reply_simple;
 		return;	
 	}
