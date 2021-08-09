@@ -242,15 +242,8 @@ sub reply_simple;
 			my $res;
 			#Append body
 			#say "Length: ", length($_[4])+0;
-                        #######################################################
-                        # my $cb=sub{                                         #
-                        #                 uSAC::HTTP::Session::drop $session; #
-                        #         };                                          #
-                        #######################################################
 			if($content_length< 1048576){
 				$reply.=LF.$_[4];
-				#callback is only called on write complete. We are not adding any
-				#more data to the buffer to we simply drop the connection when called
 				($res=$session->[uSAC::HTTP::Session::write_]($reply, \&uSAC::HTTP::Session::drop)) and uSAC::HTTP::Session::drop($res);
 			}
 
@@ -260,22 +253,7 @@ sub reply_simple;
 				$reply.=LF;#.$_[4];
 				\my $body=\$_[4];
 				my $hcb=sub {
-					#say "header callback $_[0]";
-                                        #######################################################
-                                        # my $cb=sub{                                         #
-                                        #         #if($_[0]==0){                              #
-                                        #                 #say "Finished write";              #
-                                        #                 uSAC::HTTP::Session::drop $session; #
-                                        #                 #}                                  #
-                                        #                                                     #
-                                        # };                                                  #
-                                        #######################################################
-					
-					#if($_[0]==0){
-					#	$res=$session->[uSAC::HTTP::Session::write_]($body,$cb) and $cb->($res);
-						($res=$session->[uSAC::HTTP::Session::write_]($body, \&uSAC::HTTP::Session::drop)) and uSAC::HTTP::Session::drop($res);
-						#}
-
+					($res=$session->[uSAC::HTTP::Session::write_]($body, \&uSAC::HTTP::Session::drop)) and uSAC::HTTP::Session::drop($res);
 
 				};
 				$res=$session->[uSAC::HTTP::Session::write_]($reply,$hcb) and $hcb->($res);
