@@ -406,7 +406,6 @@ sub send_file_uri_norange {
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	my $abs_path=$sys_root."/".$uri;
-	my $in_fh;	
 
 	my $entry;
 	unless(stat $abs_path and -r _ and !-d _ and ($entry=open_cache $abs_path)){
@@ -415,23 +414,11 @@ sub send_file_uri_norange {
 		delete $open_cache->{$uri};
 		return
 	}
-	$in_fh=$entry->[0];
-
-
+	my $in_fh=$entry->[0];
 
 
 	my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
-        ####################################################
-        # #my $reply;                                      #
-        # my $ext;                                         #
-        # #return unless $in_fh;                           #
-        # $ext=substr $uri, index($uri, ".")+1;            #
-        #                                                  #
-        # #my $ext=substr $uri, -index(reverse($uri),"."); #
-        # #$uri=~$path_ext;       #match results in $1;    #
-        ####################################################
 	
-	my ( $rc, $wc);
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		.uSAC::HTTP::Rex::STATIC_HEADERS
@@ -440,121 +427,57 @@ sub send_file_uri_norange {
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
 		)
-		#.HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
 		.$entry->[1]
 		.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
-		.HTTP_ETAG.": ".$mod_time."-".$content_length.LF
+		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
+		.HTTP_ACCEPT_RANGES.": bytes".LF
 		.LF;
 
 	#prime the buffer by doing a read first
 
-	my $size_total=(my $reply_size=length($reply))+$content_length;
-	#my $reply_size=length $reply;
-	my $write_total=0;
+	my $offset=length($reply);
 
-	\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
-	#say $in_fh;
+	#\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
 	seek $in_fh,0,0;
-	$rc=sysread $in_fh, $reply, $read_size, $reply_size;
-
-	unless($rc//0 or $! == EAGAIN or $! == EINTR){
-		say "READ ERROR from file";
-		delete $open_cache->{$uri};
-		close $in_fh;
-		uSAC::HTTP::Session::drop $session;
-		return;
-	}
-
-	$wc=syswrite $out_fh, $reply;
-	
-	if(($write_total+=$wc)==$size_total){
-		uSAC::HTTP::Session::drop $session;
-		return;
-	}
-	else {
-		#only shift if any left
-	}
-
-	#error
-	unless( $wc//0  or $! == EAGAIN or $! == EINTR){
-		delete $open_cache->{$uri};
-		close $in_fh;
-		uSAC::HTTP::Session::drop $session;
-		return;
-	}
-
-	$wc-=$reply_size;
-
-	#say "read total $read_total, $write_total";	
-	uSAC::HTTP::Session::push_writer 
-		$session, "http1_1_static_writer",
-		undef;
-
-		#$reply=substr $reply, $wc;
-	substr $reply, 0, $wc, "";
-
-	$session->[uSAC::HTTP::Session::write_]->($in_fh, $uri, $rc, $wc, $content_length);
-}
-
-sub make_static_file_writer {
-	my $session=shift;
-	weaken $session;
-	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
-	\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
-
-	sub {
-		\my $in_fh=$_[0];
-		my (undef, $uri, $pos,$wpos,$content_length)=@_;
-		my $ww;
-		my ($rc,$wc);
-		$ww = AE::io $out_fh, 1, sub {
-			#print "$out_fh, $in_fh, read pos $pos/ $content_length\n";
-			if($pos<$content_length){
-				seek $in_fh,$pos,0;
-				$rc=sysread $in_fh, $reply, $read_size, length $reply;
-				$pos+=$rc;
-				unless($rc//0 or $! == EAGAIN or $! == EINTR){
-					print "ERROR IN READ from file\n";
-					say "RC, $rc,fh $in_fh";
-					print $!;
-					undef $open_cache->{$uri};
-					close $in_fh;
-					$ww=undef;
-					uSAC::HTTP::Session::drop $session;
-					return;
-				}
-			}
-			else {
-				#say "Read is done";
-			}
-			
-			#say "Write total $wpos /$content_length\n";
-			if($out_fh and $wpos!=$content_length){
-				$wc=syswrite $out_fh,$reply;
-				$wpos+=$wc;
-				#$reply=substr $reply, $wc;
-				substr $reply, 0, $wc, "";
-				unless($wc//0 or $! == EAGAIN or $! == EINTR){
-					#say "write error";
-					#say $!;
-					$ww=undef;
-					undef $open_cache->{$uri};
-					close $in_fh;
-					uSAC::HTTP::Session::drop $session;
-					return;
-				}
-			}
-			else {
-				#we are done. $reset the file
-				$ww=undef;
-				#seek $in_fh,0,0;
-				#close $in_fh;	 #do not close .. let the cache do it
-				uSAC::HTTP::Session::drop $session;
-			}
-		};
+	my $res;
+	my $rc;
+	my $total=0;
+	my $reader;$reader= sub {
+		if($total==$content_length){	#end of file
+			uSAC::HTTP::Session::drop $session;
+			$reader=undef;
+			return;
+		}
+		$total+=$rc=sysread $in_fh, $reply, $read_size, $offset;
+		#$total+=$rc;	
+		
+		unless($rc//0 or $! == EAGAIN or $! == EINTR){
+			say "READ ERROR from file";
+			say $rc;
+			say $!;
+			delete $open_cache->{$uri};
+			close $in_fh;
+			$reader=undef;
+			uSAC::HTTP::Session::drop $session;
+			return;
+		}
+		$offset=0;
+		#non zero read length.. do the write	
+		($res=$session->[uSAC::HTTP::Session::write_]($reply, $reader)) and $reader->($res);
 	};
 
+
+	#Build the required stack
+	uSAC::HTTP::Session::push_writer 
+		$session,
+		"http1_1_socket_writer",
+		undef;
+
+	#start the reader
+	$reader->();
+
 }
+
 
 #List the contents of the dir
 #optionally in recursive manner?

@@ -117,7 +117,7 @@ sub _make_reader {
 sub drop {
 	#my ($self,$err) = @_;
 	return unless $_[0]->[closeme_];
-        my $r = delete $_[0]->[server_][uSAC::HTTP::Server::sessions_]{$_[0]->[id_]}; #remove from server
+	my $r = delete $_[0]->[server_][uSAC::HTTP::Server::sessions_]{$_[0]->[id_]}; #remove from server
         $_[0]->[server_][uSAC::HTTP::Server::active_connections_]--;
 
 	close $_[0]->[fh_];
@@ -148,9 +148,9 @@ sub push_reader {
 
 sub push_writer {
 	my ($self,$name,$cb)=@_;
-	$self->[writer_cb_]=$cb;	#cb to call when write needs more data/is complete
+	#$self->[writer_cb_]=$cb;	#cb to call when write needs more data/is complete
 	$self->[write_]=($self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self));#,@args));
-	push $self->[write_stack_]->@*, $name;
+	#push $self->[write_stack_]->@*, $name;
 	#$self->[reader_cb_]=$cb;
 }
 
