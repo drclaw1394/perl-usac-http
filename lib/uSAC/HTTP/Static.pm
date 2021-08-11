@@ -471,7 +471,7 @@ sub send_file_uri_norange {
 		}
 		$offset=0;
 		#non zero read length.. do the write	
-		($res=$session->[uSAC::HTTP::Session::write_]->($reply, $reader)) and $reader->($res);
+		$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
 	};
 
 
@@ -511,6 +511,7 @@ sub send_file_uri_norange_chunked {
 		.$entry->[1]
 		#.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
 		.HTTP_TRANSFER_ENCODING.": chunked".LF
+		.HTTP_CONTENT_ENCODING.": gzip".LF
 		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
 		.HTTP_ACCEPT_RANGES.": bytes".LF
 		.LF;
@@ -530,19 +531,36 @@ sub send_file_uri_norange_chunked {
 		"http1_1_socket_writer",
 		undef;
 
-	my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
+	my $chunker;
+	if($rex->headers->{"accept-encoding"}=~/gzip/){
+		#say "WILL DO GZIP";	
+		$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_gzip_writer";	
+	}
+	else{
+		$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
+	}
 	my $last=1;
+	my $timer;
 	my $reader;$reader= sub {
+
+		($_[0]//0) or $chunker->(undef,sub {});	#Execute stack reset
+
 		if($total==$content_length){	#end of file
 			if($last){
 				
 				$last=0;
-				($res=$chunker->("", $reader)) and $reader->($res);
+				#say "calling with ", $reader;
+				$chunker->("", $reader);
 				return;
 			}
 			else {
 				#say "Completely done";	
-				uSAC::HTTP::Session::drop $session;
+                                ###############################################
+                                # $chunker->("", sub {                        #
+                                #         uSAC::HTTP::Session::drop $session; #
+                                #         });                                 #
+                                ###############################################
+					uSAC::HTTP::Session::drop $session;
 				$reader=undef;
 				return;
 			}
@@ -555,18 +573,23 @@ sub send_file_uri_norange_chunked {
 			say $!;
 			delete $open_cache->{$uri};
 			close $in_fh;
-			$reader=undef;
+			#$reader=undef;
+			$chunker->("", $reader);
 			uSAC::HTTP::Session::drop $session;
 			return;
 		}
-		#non zero read length.. do the write	
-		($res=$chunker->($reply, $reader)) and $reader->($res);
+
+		#Note: GZIP take time, so much time that the when the data is compressed
+		#the socket is probably writable again. The way the writer works is it trys
+		#nonblocking write before making a event listener. Potentiall this callback 
+		#would never be executed based on an event, so we force it to be to prevent
+		#a blocking cycle which would prevent other requests from being processed at all
+		$timer=AE::timer 0.0,0, sub { $timer=undef; $chunker->($reply, $reader)};
 	};
 
 
 	#write the header
-	my $res;
-	($res=$session->[uSAC::HTTP::Session::write_]->($reply,$reader)) and $reader->($res);
+	$session->[uSAC::HTTP::Session::write_]->($reply,$reader);
 	#start the reader
 	#$reader->();
 

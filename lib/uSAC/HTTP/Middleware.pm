@@ -11,9 +11,10 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Code qw<:constants>;
 
+use IO::Compress::Gzip;
 use constant LF => "\015\012";
 
-our @EXPORT_OK=qw<log_simple authenticate_simple default_handler make_chunked_writer>;
+our @EXPORT_OK=qw<log_simple authenticate_simple default_handler make_chunked_writer make_chunked_gzip_writer>;
 our @EXPORT=();
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
@@ -70,13 +71,16 @@ sub default_handler {
 #Takes input and makes chunks and writes to next
 sub chunked {
 	my $next=shift;
-	my $cb=shift;
 	#my $last=shift;
 	say "making chunked with", $next; 
 	my $scratch="";
 
 	sub {
 		#say "Calling chunked";
+		my $cb=$_[1];
+		unless(defined $_[0]){
+			return $next->(undef,$cb);
+		}
 		\my $buf=\$_[0];	#input buffer
 		#take the length of the input buffer 
 		$scratch=sprintf("%02X".LF,length $buf);
@@ -87,10 +91,60 @@ sub chunked {
 }
 sub gzip {
 	my $next=shift;
-	my $cb=shift;
 	say "making gzip with ", $next;
+	my $scratch="";
+	my $compressor;
 	sub {
+
+		my $cb=$_[1];
+		unless(defined $_[0]){
+			#reset
+			$compressor->close if $compressor;
+			return $next->(undef,$cb);
+		}
+		\my $buf=\$_[0];
+
+		$scratch="";
+		unless($compressor){
+			#say "Creating new compressor";
+			$scratch="";
+			$compressor=IO::Compress::Gzip->new(\$scratch, "-Level"=>-1, Minimal=>1);
+		}
+		if(length $buf ==0){
+			#say "End of data received";
+			$compressor->close;
+			$compressor=undef;
+			$next->($scratch,sub {
+					#pass on done to next
+					$next->("",$cb);
+			});
+		}
+		else{
+			#say "data received";
+			$compressor->syswrite($buf);
+			if(length $scratch){
+				#say "sending scratch";
+				$next->($scratch,$cb);
+			}
+			else {
+				#say "no new  data";
+				#trigger upstream for more
+				$cb->(1);
+			}
+		}
+
 	}
+}
+#returns a stack entry point which will write set of input data as a chunk to ouput
+sub make_chunked_gzip_writer {
+	my $session=shift;
+	#create a chunked sub
+	#and link to the writer of the session
+	my ($entrypoint,$stack)=uSAC::HTTP::Middler->new()
+	->register(\&uSAC::HTTP::Middleware::gzip)
+	->register(\&uSAC::HTTP::Middleware::chunked)
+	->link($session->[uSAC::HTTP::Session::write_]);	#this could be a normal socket writer, orssl type
+	return $entrypoint;
 }
 
 #returns a stack entry point which will write set of input data as a chunk to ouput

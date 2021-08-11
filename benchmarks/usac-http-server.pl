@@ -33,8 +33,9 @@ use constant LF=>"\015\012";
 given(\%uSAC::HTTP::Session::make_writer_reg){
 	$_->{http1_1_static_writer}=\&make_static_file_writer;
 	$_->{http1_1_chunked_writer}=\&make_chunked_writer;
+	$_->{http1_1_chunked_gzip_writer}=\&make_chunked_gzip_writer;
 }
-say "Chunked writer",\&make_chunked_writer;
+#say "Chunked writer",\&make_chunked_writer;
 
 our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE) /;
 our $ANY_URL=qr/.*+ /;
@@ -127,6 +128,7 @@ $public_table->add(qr{^GET /data/$path}o=> sub {
 		my $cookies=$rex->cookies;	
 
 		push @_,$1,"data";
+		#&send_file_uri_norange;
 		&send_file_uri_norange_chunked;
 		return;		
 	}

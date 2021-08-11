@@ -640,14 +640,11 @@ sub make_socket_writer{
 
 
 	sub {
-		#say "calling  writer";
-		#state $pre_buffer=$_[0];	#Read error makes it hard to reset the write stack
-						#force reset of offset when buffer address changes
-						#
+		($_[0]//0) or return;		#undefined input. was a stack reset
+
 		\my $buf=\$_[0];		#give the input a name
 
 		my $cb= $_[1];			#give the callback a name
-
 		$offset=0;# if $pre_buffer!=$_[0];	#do offset reset if need beo
 		#$pre_buffer=$_[0];
 
@@ -661,7 +658,8 @@ sub make_socket_writer{
 				#say "FULL WRITE NO APPEND";
 				#$offset=0;
 				#$cb=undef;
-				return $ido;#0; #remainder of 0
+				$cb->($ido);
+				return;# $ido;#0; #remainder of 0
 
 			}
 			elsif(defined $w){# and length($buf)> $w){
@@ -674,14 +672,14 @@ sub make_socket_writer{
 
 					$offset+=$w;
 					if($offset==length $buf) {
-						#say "FULL async write";
+						say "FULL async write";
 						undef $ww;
 						#$offset=0;
-						$cb->($ido) if defined $cb;
+						$cb->($ido);# if defined $cb;
 						#$cb=undef;
 					}
 					elsif(defined $w){
-						#say "partial async write";
+						say "partial async write";
 						#$$cb->((length ($buf) - $offset) ) if defined $$cb;
 					}
 					else{
@@ -691,6 +689,7 @@ sub make_socket_writer{
 						#say "WRITER ERROR: ", $!;
 						#$offset=0;
 						$ww=undef;
+						$cb->();
 						#$wbuf="";
 						#$cb=undef;
 						uSAC::HTTP::Session::drop $ido, "$!";
@@ -704,10 +703,11 @@ sub make_socket_writer{
 			}
 			else {
 				unless( $! == EAGAIN or $! == EINTR){
-					#say "ERROR IN WRITE NO APPEND";
-					#say $!;
+					say "ERROR IN WRITE NO APPEND";
+					say $!;
 					#actual error		
 					$ww=undef;
+					$cb->();
 					#$offset=0;
 					#$cb=undef;
 					uSAC::HTTP::Session::drop $ido, "$!";
