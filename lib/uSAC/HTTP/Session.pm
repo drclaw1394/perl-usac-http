@@ -173,6 +173,11 @@ sub pop_writer {
 	#$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
 }
 
-
+sub select_writer{
+	my ($self,$name)=@_;
+	#	say "In select writer";
+	#say %make_writer_reg;
+	$self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self);
+}
 
 1;

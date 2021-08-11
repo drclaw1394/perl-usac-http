@@ -23,7 +23,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_aio send_file_uri_sys send_file_uri_aio2  make_static_file_writer>;
+our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2  make_static_file_writer>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -429,6 +429,7 @@ sub send_file_uri_norange {
 		)
 		.$entry->[1]
 		.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
+		#.HTTP_TRANSFER_ENCODING.": chunked".LF
 		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
 		.HTTP_ACCEPT_RANGES.": bytes".LF
 		.LF;
@@ -442,6 +443,13 @@ sub send_file_uri_norange {
 	my $res;
 	my $rc;
 	my $total=0;
+	#Build the required stack
+	uSAC::HTTP::Session::push_writer 
+		$session,
+		"http1_1_socket_writer",
+		undef;
+
+	#my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
 	my $reader;$reader= sub {
 		if($total==$content_length){	#end of file
 			uSAC::HTTP::Session::drop $session;
@@ -453,7 +461,7 @@ sub send_file_uri_norange {
 		
 		unless($rc//0 or $! == EAGAIN or $! == EINTR){
 			say "READ ERROR from file";
-			say $rc;
+			#say $rc;
 			say $!;
 			delete $open_cache->{$uri};
 			close $in_fh;
@@ -463,20 +471,107 @@ sub send_file_uri_norange {
 		}
 		$offset=0;
 		#non zero read length.. do the write	
-		($res=$session->[uSAC::HTTP::Session::write_]($reply, $reader)) and $reader->($res);
+		($res=$session->[uSAC::HTTP::Session::write_]->($reply, $reader)) and $reader->($res);
 	};
 
 
+	$reader->();
+
+}
+
+sub send_file_uri_norange_chunked {
+	use  integer;
+
+	my ($line,$rex,$uri,$sys_root)=@_;
+	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
+
+	my $abs_path=$sys_root."/".$uri;
+
+	my $entry;
+	unless(stat $abs_path and -r _ and !-d _ and ($entry=open_cache $abs_path)){
+		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
+		#remove from cache
+		delete $open_cache->{$uri};
+		return
+	}
+	my $in_fh=$entry->[0];
+
+
+	my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
+	
+	$reply=
+		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
+		.uSAC::HTTP::Rex::STATIC_HEADERS
+		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
+        	.($session->[uSAC::HTTP::Session::closeme_]?
+			HTTP_CONNECTION.": close".LF
+			:HTTP_CONNECTION.": Keep-Alive".LF
+		)
+		.$entry->[1]
+		#.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
+		.HTTP_TRANSFER_ENCODING.": chunked".LF
+		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
+		.HTTP_ACCEPT_RANGES.": bytes".LF
+		.LF;
+
+	#prime the buffer by doing a read first
+
+	#my $offset=length($reply);
+
+	#\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
+	seek $in_fh,0,0;
+	my $res;
+	my $rc;
+	my $total=0;
 	#Build the required stack
 	uSAC::HTTP::Session::push_writer 
 		$session,
 		"http1_1_socket_writer",
 		undef;
 
+	my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
+	my $last=1;
+	my $reader;$reader= sub {
+		if($total==$content_length){	#end of file
+			if($last){
+				
+				$last=0;
+				($res=$chunker->("", $reader)) and $reader->($res);
+				return;
+			}
+			else {
+				#say "Completely done";	
+				uSAC::HTTP::Session::drop $session;
+				$reader=undef;
+				return;
+			}
+		}
+		$total+=$rc=sysread $in_fh, $reply, $read_size;
+		
+		unless($rc//0 or $! == EAGAIN or $! == EINTR){
+			say "READ ERROR from file";
+			say $rc;
+			say $!;
+			delete $open_cache->{$uri};
+			close $in_fh;
+			$reader=undef;
+			uSAC::HTTP::Session::drop $session;
+			return;
+		}
+		#non zero read length.. do the write	
+		($res=$chunker->($reply, $reader)) and $reader->($res);
+	};
+
+
+	#write the header
+	my $res;
+	($res=$session->[uSAC::HTTP::Session::write_]->($reply,$reader)) and $reader->($res);
 	#start the reader
-	$reader->();
+	#$reader->();
 
 }
+
 
 
 #List the contents of the dir

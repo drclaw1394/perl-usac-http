@@ -101,7 +101,6 @@ use constant KEY_COUNT=>attrs_-method_+1;
                 # }                                                                                                                                             #
                 #################################################################################################################################################
 		
-		
 sub reply_simple;
 		
 	
@@ -115,6 +114,47 @@ sub reply_simple;
 		sub reply_DEFLATE {
 			#call replySimple with extra headers
 		}
+
+        ##############################################################################################################
+        # sub reply_headers {                                                                                        #
+        #         my ($line,$self,$code,$headers)=@_;                                                                #
+        #         my $session=$self->[session_];                                                                     #
+        #         my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_socket_writer";                  #
+        #                                                                                                            #
+        #                 my $reply="HTTP/1.1 $code".LF;                                                             #
+        #                 #my $content_length=length($_[4])+0;                                                       #
+        #                 $reply.=                                                                                   #
+        #                         STATIC_HEADERS                                                                     #
+        #                         .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF                                       #
+        #                         #.HTTP_CONTENT_LENGTH.": ".$content_length.LF   #this always render content length #
+        #                         ;#if defined $_[1];     #Set server                                                #
+        #                                                                                                            #
+        #                         #TODO: benchmark length(undef)+0;                                                  #
+        #                                                                                                            #
+        #                 #close connection after if marked                                                          #
+        #                 if($session->[uSAC::HTTP::Session::closeme_]){                                             #
+        #                         $reply.=HTTP_CONNECTION.": close".LF;                                              #
+        #                                                                                                            #
+        #                 }                                                                                          #
+        #                                                                                                            #
+        #                 #or send explicit keep alive?                                                              #
+        #                 elsif($self->[version_] ne "HTTP/1.1") {                                                   #
+        #                         $reply.=                                                                           #
+        #                                 HTTP_CONNECTION.": Keep-Alive".LF                                          #
+        #                                 .HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF                                #
+        #                         ;                                                                                  #
+        #                 }                                                                                          #
+        #                                                                                                            #
+        #                                                                                                            #
+        #                 #User requested headers.                                                                   #
+        #                 my $i=0;                                                                                   #
+        #                 \my @headers=$_[3]//[];                                                                    #
+        #                 for(0..@headers/2-1){                                                                      #
+        #                         $reply.=$headers[$i++].": ".$headers[$i++].LF                                      #
+        #                 }                                                                                          #
+        #                                                                                                            #
+        # }                                                                                                          #
+        ##############################################################################################################
 
 
 		#multipart for type.
