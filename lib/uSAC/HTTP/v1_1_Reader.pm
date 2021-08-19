@@ -21,13 +21,16 @@ our @EXPORT_OK=qw<
 
 our @EXPORT=@EXPORT_OK;
 
+use constant MAX_READ_SIZE => 128 * 1024;
+
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 use Time::HiRes qw/gettimeofday/;
 use Scalar::Util 'refaddr', 'weaken';
 
-use uSAC::HTTP::Server;
+#use uSAC::HTTP::Server;
 use uSAC::HTTP::Session;
+use uSAC::HTTP::Rex;
 use constant MAX_READ_SIZE => 128 * 1024;
 
 our $MIME;
@@ -70,7 +73,8 @@ sub make_reader{
 	#weaken $write;
 	weaken $r;
 
-	my $cb=$self->[uSAC::HTTP::Server::cb_];
+	my $cb=$self->current_cb;#$self->[uSAC::HTTP::Server::cb_];
+	my $enable_hosts=$self->enable_hosts;
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
 	my $line;
@@ -95,13 +99,6 @@ sub make_reader{
 			#	$version => comment
 			#
 			if ($state == 0) {
-                                #################################################################################
-                                # my ($pos0,$pos1,$pos2,$pos3);                                                 #
-                                # $method=substr($buf, $ixx, ($pos1=index($buf, " ", $ixx))-$ixx);              #
-                                # $uri=substr($buf, ++$pos1, ($pos2=index($buf, " ", $pos1))-$pos1);            #
-                                # $version=substr($buf, ++$pos2, ($pos3=index($buf, "\015\012", $pos2))-$pos2); #
-                                # $line=substr($buf,$ixx,$pos3);                                                #
-                                #################################################################################
 				my $pos3=index $buf, LF, $ixx;
                                 $line=substr($buf,$ixx,$pos3);
 				$version=substr($line,-1,1)eq "1"?"HTTP/1.1":"HTTP/1.0";
@@ -116,7 +113,7 @@ sub make_reader{
 						#%h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 						++$seq;
 
-						$self->[uSAC::HTTP::Server::active_requests_]++;
+						#$self->[uSAC::HTTP::Server::active_requests_]++;
 						$pos=$pos3+2;
 						redo;
 				}
@@ -141,55 +138,16 @@ sub make_reader{
 					#warn "parse line >'".substr( $buf,pos($buf),index( $buf, "\012", pos($buf) )-pos($buf) )."'";
 
 					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
-					#if( $buf =~ /\G ([^:\000-\037\040]++)[\011\040]*+:[\011\040]*+ ([^\012\015;]*+(;)?[^\012\015]*+) \015?\012/sxogc ){
-						#$lastkey = lc $1;
 						\my $e=\$h{lc $1};
-						#$h{ $lastkey } = exists $h{ $lastkey } ? $h{ $lastkey }.','.$2: $2;
-						#$e.=','.$2 if defined $e;
 						$e = defined $e ? $e.','.$2: $2;
-						#say $h{ $lastkey };
-                                                ########################################################################################################################
-                                                # #warn "Captured header $lastkey = '$2'";                                                                             #
-                                                # if ( defined $3 ) {                                                                                                  #
-                                                #         pos(my $v = $2) = $-[3] - $-[2];                                                                             #
-                                                #         #warn "scan ';'";                                                                                            #
-                                                #         $h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )            #
-                                                #         while ( $v =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # " #
-                                                #         $contstate = 1;                                                                                              #
-                                                # } else {                                                                                                             #
-                                                #         $contstate = 0;                                                                                              #
-                                                # }                                                                                                                    #
-                                                ########################################################################################################################
 					}
 					elsif ($buf =~ /\G\015?\012/sxogca) {
 						#warn "Last line";
 						last;
 					}
-                                        ############################################################################################################################################################
-                                        # elsif ($buf =~ /\G[\011\040]+/sxogc) { # continuation                                                                                                    #
-                                        #         #warn "Continuation";                                                                                                                            #
-                                        #         if (length $lastkey) {                                                                                                                           #
-                                        #                 $buf =~ /\G ([^\015\012;]*+(;)?[^\015\012]*+) \015?\012/sxogc or return pos($buf) = $bpos; # need more data;                             #
-                                        #                 $h{ $lastkey } .= ' '.$1;                                                                                                                #
-                                        #                 if ( ( defined $2 or $contstate ) ) {                                                                                                    #
-                                        #                         #warn "With ;";                                                                                                                  #
-                                        #                         if ( ( my $ext = index( $h{ $lastkey }, ';', rindex( $h{ $lastkey }, ',' ) + 1) ) > -1 ) {                                       #
-                                        #                                 # Composite field. Need to reparse last field value (from ; after last ,)                                                #
-                                        #                                 # full key rescan, because of possible case: <key:value; field="value\n\tvalue continuation"\n>                          #
-                                        #                                 # regexp needed to set \G                                                                                                #
-                                        #                                 pos($h{ $lastkey }) = $ext;                                                                                              #
-                                        #                                 #warn "Rescan from $ext";                                                                                                #
-                                        #                                 #warn("<$1><$2><$3>"),                                                                                                   #
-                                        #                                 $h{ $lastkey . '+' . lc($1) } = ( defined $2 ? do { my $x = $2; $x =~ s{\\(.)}{$1}gs; $x } : $3 )                        #
-                                        #                                 while ( $h{ $lastkey } =~ m{ \G ; \s* ([^\s=]++)\s*= (?: "((?:[^\\"]++|\\.){0,4096}+)" | ([^;,\s]++) ) \s* }gcxso ); # " #
-                                        #                                 $contstate = 1;                                                                                                          #
-                                        #                         }                                                                                                                                #
-                                        #                 }                                                                                                                                        #
-                                        #         }                                                                                                                                                #
-                                        # }                                                                                                                                                        #
-                                        ############################################################################################################################################################
 					elsif($buf =~ /\G [^\012]* \Z/sxogca) {
-						if (length($buf) - $ixx > $self->[uSAC::HTTP::Server::max_header_size_]) {
+						if (length($buf) - $ixx > MAX_READ_SIZE) {
+							#$self->[uSAC::HTTP::Server::max_header_size_]) {
 							$self->badconn($fh,\substr($buf, pos($buf), $ixx), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
 							return $r->drop( "Too big headers from rhost for request <".substr($buf, $ixx, 32)."...>");
 						}
@@ -198,7 +156,7 @@ sub make_reader{
 					}
 					else {
 						my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;
-						$self->[uSAC::HTTP::Server::active_requests_]--;
+						#$self->[uSAC::HTTP::Server::active_requests_]--;
 						$self->badconn($fh,\$line, "Bad header for <$method $uri>+{@{[ %h ]}}");
 						my $content = 'Bad request headers';
 						my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
@@ -209,12 +167,14 @@ sub make_reader{
 				}
 				#Done with headers. 
 				#
-				$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ,undef,undef,undef,undef], 'uSAC::HTTP::Rex' ;
+				#TODO: downsample gettimeofday to a second
+				$req = bless [ $version, $r, \%h, $write, undef,undef,undef,  $self, 1 ,undef,undef,undef], 'uSAC::HTTP::Rex' ;
+				#$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ,undef,undef,undef,undef], 'uSAC::HTTP::Rex' ;
 
 
 				$pos = pos($buf);
 
-				$self->[uSAC::HTTP::Server::total_requests_]++;
+				#$self->[uSAC::HTTP::Server::total_requests_]++;
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{connection} =~/^Keep-Alive/ );
 
@@ -224,9 +184,10 @@ sub make_reader{
 				$ixx=0;
 				$state=0;
 				#$self->[uSAC::HTTP::Server::cb_]($line,$req);
+				$line=($h{host}//"")." $line" if $enable_hosts;
 				$cb->($line,$req);
 				weaken ($req->[1]);
-				weaken( $req->[8] );
+				#weaken( $req->[8] );
 				weaken( $req->[5] );
 				return;
 
@@ -235,31 +196,6 @@ sub make_reader{
 			else {
 			}
 		} # while read
-                #####################################################################################################################################################################
-                # return unless $self and $r;                                                                                                                                       #
-                # if (defined $len) {                                                                                                                                               #
-                #         if (length $buf == MAX_READ_SIZE) {                                                                                                                       #
-                #                 $self->badconn($fh,\$buf,"Can't read (@{[ MAX_READ_SIZE ]}), can't consume");                                                                     #
-                #                 # $! = Errno::EMSGSIZE; # Errno is useless, since not calling drop                                                                                #
-                #                 my $content = 'Non-consumable request';                                                                                                           #
-                #                 my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content; #
-                #                 $self->[uSAC::HTTP::Server::active_requests_]--;                                                                                                  #
-                #                 $write->($str);                                                                                                                                   #
-                #                 $write->(undef);                                                                                                                                  #
-                #                 return;                                                                                                                                           #
-                #         }                                                                                                                                                         #
-                #         else {                                                                                                                                                    #
-                #                 # $! = Errno::EPIPE;                                                                                                                              #
-                #                 # This is not an error, just EOF                                                                                                                  #
-                #         }                                                                                                                                                         #
-                # }                                                                                                                                                                 #
-                # ##########################################################################                                                                                        #
-                # # else {                                                                 #                                                                                        #
-                # #         return if $! == EAGAIN or $! == EINTR or $! == WSAEWOULDBLOCK; #                                                                                        #
-                # # }                                                                      #                                                                                        #
-                # ##########################################################################                                                                                        #
-                # $r->drop( $! ? "$!" : ());                                                                                                                                        #
-                #####################################################################################################################################################################
 	}; # io
 }
 

@@ -6,18 +6,14 @@ use common::sense;
 use feature "refaliasing";
 our $UPLOAD_LIMIT=10_000_000;
 
-BEGIN {
-	use uSAC::HTTP::Code qw<:constants>;
-	use uSAC::HTTP::Header qw<:constants>;
-}
+use uSAC::HTTP::Code qw<:constants>;
+use uSAC::HTTP::Header qw<:constants>;
+#use uSAC::HTTP::Server;
 use constant LF => "\015\012";
 
-use constant STATIC_HEADERS=>
-HTTP_SERVER.": ".uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", @uSAC::HTTP::Server::Subproducts).LF
-;
 
 use uSAC::HTTP::Session;
-use uSAC::HTTP::Server;
+#use uSAC::HTTP::Server;
 use uSAC::HTTP::Cookie qw<:all>;
 
 use AnyEvent;
@@ -35,13 +31,16 @@ use Scalar::Util qw(weaken);
 
 
 #Class attribute keys
+#method_ uri_
+#ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw<session_ method_ uri_ headers_ write_ chunked_ parsed_uri_ query_ reqcount_ server_ time_ cookies_ ctx_ handle_ attrs_>
+	"version_=0" ,qw<session_
+	headers_ write_ query_ server_ time_ cookies_ handle_ attrs_>
 );
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>attrs_-method_+1;
+use constant KEY_COUNT=>attrs_-version_+1;
 
 
                 #################################################################################################################################################
@@ -231,60 +230,36 @@ sub reply_simple;
 
 		#Reply the body and code specified. Adds Server and Content-Length headers
 		#Line, Rex, code, header_ref, content
+		
 		sub reply_simple{
 			use integer;
 			my ($line, $self)=@_;
 			#create a writer for the session
 			my $session=$self->[session_];
-			uSAC::HTTP::Session::push_writer 
-			#$session->push_writer(
-				$session,
-				"http1_1_socket_writer",
-				#"http1_1_default_writer",
-				undef;
-				#);
-			#$self->[write_]=$session->[uSAC::HTTP::Session::write_];
 
-			my $reply="HTTP/1.1 $_[2]".LF;
-			#my $reply="$self->[version_] $_[0]".LF;
 			my $content_length=length($_[4])+0;
-			$reply.=
-				STATIC_HEADERS
-				.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
-				.HTTP_CONTENT_LENGTH.": ".$content_length.LF	#this always render content length
-				;#if defined $_[1];	#Set server
+			my $reply=
+				"HTTP/1.1 $_[2]".LF
+				#.STATIC_HEADERS
+				.HTTP_DATE.": ".		$uSAC::HTTP::Server::Date.LF
+				.HTTP_CONTENT_LENGTH.": ".	$content_length.LF
+				.($session->[uSAC::HTTP::Session::closeme_]
+					?HTTP_CONNECTION.": close".LF
 
-				#TODO: benchmark length(undef)+0;
-			
-			#close connection after if marked
-			if($session->[uSAC::HTTP::Session::closeme_]){
-				$reply.=HTTP_CONNECTION.": close".LF;
+					:"")
+				.(($self->[version_] ne "HTTP/1.1")
+					?HTTP_CONNECTION.": ".	"Keep-Alive".LF
+					.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
 
-			}
-
-			#or send explicit keep alive?
-			elsif($self->[version_] ne "HTTP/1.1") {
-				$reply.=
-					HTTP_CONNECTION.": Keep-Alive".LF
-					.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
+					:"")
 				;
-			}
+			render_v1_1_headers  $reply, $_[3] if $_[3];
 
-
-			#User requested headers. 
-			my $i=0;
-			\my @headers=$_[3]//[];
-			for(0..@headers/2-1){
-				$reply.=$headers[$i++].": ".$headers[$i++].LF 
-			}
-
-			#my $cb; 
-			my $res;
 			#Append body
 			#say "Length: ", length($_[4])+0;
 			if($content_length< 1048576){
 				$reply.=LF.$_[4];
-				($res=$session->[uSAC::HTTP::Session::write_]($reply, \&uSAC::HTTP::Session::drop)) and uSAC::HTTP::Session::drop($res);
+				$self->[write_]($reply, \&uSAC::HTTP::Session::drop); 
 			}
 
 			else{
@@ -293,15 +268,24 @@ sub reply_simple;
 				$reply.=LF;#.$_[4];
 				\my $body=\$_[4];
 				my $hcb=sub {
-					($res=$session->[uSAC::HTTP::Session::write_]($body, \&uSAC::HTTP::Session::drop)) and uSAC::HTTP::Session::drop($res);
+					$self->[write_]($body, \&uSAC::HTTP::Session::drop);
 
 				};
-				$res=$session->[uSAC::HTTP::Session::write_]($reply,$hcb) and $hcb->($res);
+				$self->[write_]($reply,$hcb);
 
 			}
 			#Write the headers
 		}
-		
+
+sub render_v1_1_headers {
+	\my $buffer=\$_[0];
+	my $i=0;
+	\my @headers=$_[1]//[];
+	#say "RENDERING HEADERS ", @headers;
+	for(0..@headers/2-1){
+		$buffer.=join(": ",@headers[($i++,$i++)]).LF;#.": ".$headers[$i++].LF 
+	}
+}
 	 
 
 sub headers {

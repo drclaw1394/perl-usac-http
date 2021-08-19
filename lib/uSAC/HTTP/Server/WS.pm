@@ -19,6 +19,7 @@ use JSON::XS;
 use Scalar::Util 'weaken';
 
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Session;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Code qw<:constants>;
 

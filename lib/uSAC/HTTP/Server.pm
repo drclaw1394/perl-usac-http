@@ -4,10 +4,13 @@ use Data::Dumper;
 use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
-#our @Subproducts=();		#Global to be provided by applcation
+our @Subproducts;#=();		#Global to be provided by applcation
 
 use version;our $VERSION = version->declare('v0.1');
 use feature "refaliasing";
+
+use uSAC::HTTP;
+use Hustle::Table;
 #use feature ":all";
 
 #use uSAC::HTTP::Server::Kit;
@@ -38,14 +41,21 @@ use constant MAX_READ_SIZE => 128 * 1024;
 
 #Class attribute keys
 use enum (
-	"host_=0",qw<port_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ max_header_size_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ seconds_timer_ www_roots_ total_requests_>
+	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ max_header_size_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ seconds_timer_ www_roots_ total_requests_>
 );
 
-use uSAC::HTTP::Rex;
-use uSAC::HTTP::Server::WS;
+
+use uSAC::HTTP;
+use uSAC::HTTP::Code ":constants";
+use uSAC::HTTP::Header ":constants";
+#use uSAC::HTTP::Rex;
+#use uSAC::HTTP::Server::WS;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
+
+use constant STATIC_HEADERS=>
+HTTP_SERVER.": ".uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", @uSAC::HTTP::Server::Subproducts).LF ;
 
 given(\%uSAC::HTTP::Session::make_reader_reg){
 	$_->{http1_1_base}=\&make_reader;
@@ -79,7 +89,9 @@ sub new {
 	my $self = bless [], $pkg;
 	my %options=@_;
 	$self->[host_]=$options{host}//"0.0.0.0";
-	$self->[port_]=$options{iport}//8080;
+	$self->[port_]=$options{port}//8080;
+	$self->[enable_hosts_]=$options{enable_hosts};
+	$self->[table_]=Hustle::Table->new();
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
 	$self->[backlog_]=4096;
@@ -120,7 +132,6 @@ sub new {
 
 sub listen {
 	my $self = shift;
-		
 	for my $listen (@{ $self->[listen_] }) {
 		my ($host,$service) = split ':',$listen,2;
 		$service = $self->[port_] unless length $service;
@@ -274,9 +285,14 @@ sub accept {
 					uSAC::HTTP::Session::revive $session, $id, $fh;
 				}
 				else {
-					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self);
-
+					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self);
+					#TODO: push correct writer ie, ssl  for other sessions
+					uSAC::HTTP::Session::push_writer 
+						$session,
+						"http1_1_socket_writer",
+						undef;
 				}
+
 				uSAC::HTTP::Session::push_reader $session,"http1_1_base",undef; 
 				#initiate read
 				uSAC::HTTP::Session::_make_reader $session;
@@ -287,6 +303,41 @@ sub accept {
 		};
 	}
 	return;
+}
+
+sub current_cb {
+	shift->[cb_];
+}
+sub enable_hosts {
+	shift->[enable_hosts_];
+}
+sub add_end_point{
+	my ($self,$matcher,$end)=@_;
+	$self->[table_]->add($matcher,$end);
+}
+
+sub register_site {
+	my $self=shift;
+	my $site=shift;
+	$site->[uSAC::HTTP::server_]=$self;
+	my $name=$site->[uSAC::HTTP::id_];
+	$self->[sites_]{$name}=$site;
+	$site;
+}
+
+sub rebuild_dispatch {
+	my $self=shift;
+	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>undef);
+}
+
+sub run {
+	my $self=shift;
+	my $cv=AE::cv;
+	$self->rebuild_dispatch;
+	$self->listen;
+	$self->accept;
+
+	$cv->recv();
 }
 
 

@@ -23,7 +23,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2  make_static_file_writer>;
+our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -421,7 +421,7 @@ sub send_file_uri_norange {
 	
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		.uSAC::HTTP::Rex::STATIC_HEADERS
+		#.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
         	.($session->[uSAC::HTTP::Session::closeme_]?
 			HTTP_CONNECTION.": close".LF
@@ -443,11 +443,13 @@ sub send_file_uri_norange {
 	my $res;
 	my $rc;
 	my $total=0;
-	#Build the required stack
-	uSAC::HTTP::Session::push_writer 
-		$session,
-		"http1_1_socket_writer",
-		undef;
+        ####################################
+        # #Build the required stack        #
+        # uSAC::HTTP::Session::push_writer #
+        #         $session,                #
+        #         "http1_1_socket_writer", #
+        #         undef;                   #
+        ####################################
 
 	#my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
 	my $reader;$reader= sub {
@@ -473,7 +475,6 @@ sub send_file_uri_norange {
 		#non zero read length.. do the write	
 		$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
 	};
-
 
 	$reader->();
 
@@ -502,7 +503,7 @@ sub send_file_uri_norange_chunked {
 	
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		.uSAC::HTTP::Rex::STATIC_HEADERS
+		#.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
         	.($session->[uSAC::HTTP::Session::closeme_]?
 			HTTP_CONNECTION.": close".LF
@@ -511,10 +512,9 @@ sub send_file_uri_norange_chunked {
 		.$entry->[1]
 		#.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
 		.HTTP_TRANSFER_ENCODING.": chunked".LF
-		.HTTP_CONTENT_ENCODING.": gzip".LF
 		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
 		.HTTP_ACCEPT_RANGES.": bytes".LF
-		.LF;
+		;
 
 	#prime the buffer by doing a read first
 
@@ -525,20 +525,30 @@ sub send_file_uri_norange_chunked {
 	my $res;
 	my $rc;
 	my $total=0;
-	#Build the required stack
-	uSAC::HTTP::Session::push_writer 
-		$session,
-		"http1_1_socket_writer",
-		undef;
+        ####################################
+        # #Build the required stack        #
+        # uSAC::HTTP::Session::push_writer #
+        #         $session,                #
+        #         "http1_1_socket_writer", #
+        #         undef;                   #
+        ####################################
 
 	my $chunker;
-	if($rex->headers->{"accept-encoding"}=~/gzip/){
+
+	if($rex->headers->{"accept-encoding"}=~/deflate/){
 		#say "WILL DO GZIP";	
-		$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_gzip_writer";	
+		$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_deflate_writer";	
+		$reply.=
+		HTTP_CONTENT_ENCODING.": deflate".LF
+		.LF;
 	}
 	else{
 		$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
+
+		$reply.=
+		LF;
 	}
+
 	my $last=1;
 	my $timer;
 	my $reader;$reader= sub {
@@ -611,8 +621,9 @@ sub send_file_uri_range {
         my $response= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF; #response line
 
         my ($start,$end);
-        my $reply= uSAC::HTTP::Rex::STATIC_HEADERS
-                .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
+        my $reply= 
+		#uSAC::HTTP::Rex::STATIC_HEADERS
+                HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
 		;
 
         unless (open $in_fh, "<", $abs_path){
@@ -767,7 +778,7 @@ sub send_file_uri {
 	state $reply;
 
 	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		.uSAC::HTTP::Rex::STATIC_HEADERS
+		#.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
 
         #close connection after if marked
@@ -811,7 +822,7 @@ sub send_file_uri {
 		$_->( $reply.<$in_fh>);
 		$_->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_];
 		$_=undef;
-		${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;
+		#${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;
 	}
 	close $in_fh;
 	
@@ -1000,6 +1011,6 @@ sub send_file_mmap {
 }
 
 
-
+enable_cache;
 
 1;

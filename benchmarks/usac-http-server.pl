@@ -33,7 +33,7 @@ use constant LF=>"\015\012";
 given(\%uSAC::HTTP::Session::make_writer_reg){
 	$_->{http1_1_static_writer}=\&make_static_file_writer;
 	$_->{http1_1_chunked_writer}=\&make_chunked_writer;
-	$_->{http1_1_chunked_gzip_writer}=\&make_chunked_gzip_writer;
+	$_->{http1_1_chunked_deflate_writer}=\&make_chunked_deflate_writer;
 }
 #say "Chunked writer",\&make_chunked_writer;
 

@@ -9,7 +9,7 @@ use Scalar::Util 'refaddr', 'weaken';
 use EV;
 use AnyEvent;
 use Data::Dumper;
-use uSAC::HTTP::Server;
+#use uSAC::HTTP::Server;
 
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
@@ -17,7 +17,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -41,7 +41,9 @@ sub new {
 
 	$self->[id_]=$_[0];	
 	$self->[fh_]=$_[1];	
-	$self->[server_]=$_[2];	
+	$self->[sessions_]=$_[2];	
+	$self->[zombies_]=$_[3];	
+	$self->[server_]=$_[4];
 
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
@@ -68,7 +70,6 @@ sub revive {
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
 	$self->[rex_]=undef;
-	#$self->[server_]=$_[2];	
 
 	
 	#$self->_make_reader;
@@ -117,8 +118,8 @@ sub _make_reader {
 sub drop {
 	#my ($self,$err) = @_;
 	return unless $_[0]->[closeme_];
-	my $r = delete $_[0]->[server_][uSAC::HTTP::Server::sessions_]{$_[0]->[id_]}; #remove from server
-        $_[0]->[server_][uSAC::HTTP::Server::active_connections_]--;
+	my $r = delete $_[0]->[sessions_]{$_[0]->[id_]}; #remove from server
+	#$_[0]->[server_][uSAC::HTTP::Server::active_connections_]--;
 
 	close $_[0]->[fh_];
 
@@ -130,7 +131,7 @@ sub drop {
 	#$_[0]->[wbuf_]=undef;
 	#$_[0]->[rbuf_]=undef;
 
-	unshift @{$_[0]->[server_][uSAC::HTTP::Server::zombies_]}, $_[0];
+	unshift @{$_[0]->[zombies_]}, $_[0];
 }
 
 #pluggable interface
@@ -142,7 +143,7 @@ sub push_reader {
 
 	$self->[reader_cb_]=$cb;	#set the reader callback
 	$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args));
-	push $self->[read_stack_]->@*, $name;
+	#push $self->[read_stack_]->@*, $name;
 	#say "reader cb: ", $cb;
 }
 
