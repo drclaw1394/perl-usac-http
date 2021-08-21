@@ -443,13 +443,11 @@ sub send_file_uri_norange {
 	my $res;
 	my $rc;
 	my $total=0;
-        ####################################
-        # #Build the required stack        #
-        # uSAC::HTTP::Session::push_writer #
-        #         $session,                #
-        #         "http1_1_socket_writer", #
-        #         undef;                   #
-        ####################################
+	if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
+		$session->[uSAC::HTTP::Session::write_]->($reply);
+		return;
+
+	}
 
 	#my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
 	my $reader;$reader= sub {

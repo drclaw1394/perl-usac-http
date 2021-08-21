@@ -34,13 +34,12 @@ use Scalar::Util qw(weaken);
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw<session_
-	headers_ write_ query_ server_ time_ cookies_ handle_ attrs_>
+	"version_=0" ,qw< session_ headers_ write_ query_ server_ time_ cookies_ handle_ attrs_ method_ uri_>
 );
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>attrs_-version_+1;
+use constant KEY_COUNT=>uri_-version_+1;
 
 
                 #################################################################################################################################################
@@ -253,7 +252,7 @@ sub reply_simple;
 
 					:"")
 				;
-			render_v1_1_headers  $reply, $_[3] if $_[3];
+			render_v1_1_headers($reply, $_[3]) if $_[3];
 
 			#Append body
 			#say "Length: ", length($_[4])+0;
@@ -281,7 +280,6 @@ sub render_v1_1_headers {
 	\my $buffer=\$_[0];
 	my $i=0;
 	\my @headers=$_[1]//[];
-	#say "RENDERING HEADERS ", @headers;
 	for(0..@headers/2-1){
 		$buffer.=join(": ",@headers[($i++,$i++)]).LF;#.": ".$headers[$i++].LF 
 	}

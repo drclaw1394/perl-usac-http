@@ -6,7 +6,7 @@ use feature "say";
 use feature qw<refaliasing state>;
 no warnings "experimental";
 no feature "indirect";
-
+use Data::Dumper;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Code qw<:constants>;
@@ -31,7 +31,11 @@ sub log_simple {
 		my $next=shift;	#This is the next mw in the chain
 		say "making log";
 		sub {
-			say STDERR time,": Request: $_[0]";
+			#say STDERR Dumper $_[1];
+			say STDERR "\n";
+			say STDERR time;
+			say STDERR " Original URI: $_[1][uSAC::HTTP::Rex::uri_]";
+			say STDERR " Matcher:	   $_[0]";
 			return &$next;		#alway call next. this is just loggin
 		}
 	};

@@ -27,7 +27,7 @@ use uSAC::HTTP::Middler;
 use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
 #Class attribute keys
-use enum ("server_=0",qw(prefix_ id_ mount_ cors_ host_));
+use enum ("server_=0",qw(prefix_ id_ mount_ cors_ middleware_ host_));
 
 use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	host_-server_+1;
@@ -45,6 +45,7 @@ sub new {
 	$self->[prefix_]=	$options{prefix}//"";
 	$self->[host_]=		$options{host}//"";
 	$self->[cors_]=		$options{cors}//"";
+	$self->[middleware_]=	$options{middleware}//[];
 
 	#die "No server provided" unless $self->[server_];
 	die "No id provided" unless $self->[id_];
@@ -52,22 +53,56 @@ sub new {
 	bless $self, __PACKAGE__;
 }
 
-sub route{
+#Adds routes to a servers dispatch table
+#A handler is added for a successful match of method type
+#Any methods not supported are also added by with a 405 return
+#middleware can be specified. it is appended to the common middleware for the site
+#if prefixing is used, an automatic stripper middleware is installed. The original uri is
+#available in the rex object.
+#If the server is configured for virtual hosts, the matching mechanism also includes the host matcher
+#specified in the site initialization
+#
+sub route {
 	my $self=shift;
 	my $method_matcher=shift;
 	my $path_matcher=shift;
 	my $end=pop @_;
 	my @inner=@_;
-	push @inner, $self->_strip_prefix if $self->[prefix_];
+	unshift @inner, $self->_strip_prefix if $self->[prefix_];
+	push @inner, $self->[middleware_]->@* if $self->[middleware_];
 
 	#die "No Matcher provided " unless $matcher//0;
 	die "No end point provided" unless $end and ref $end eq "CODE";
+	state @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
+	my @non_matching=grep {!/$method_matcher/} @methods;
+	my @matching=grep {/$method_matcher/ } @methods;
+	my $sub;
+
+	if(@non_matching){
+		my $headers=[HTTP_ALLOW, join ", ",@matching]; 
+		$sub = sub { 
+			say "UNSPPORTED";
+			rex_reply_simple @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
+			return;	#cache this
+		};
+	}
+
 	my $matcher;
+	my $unsupported;
 	if($self->[server_]->enable_hosts){
 		$matcher=qr{^$self->[host_] $method_matcher $self->[prefix_]$path_matcher};
+		
+		for(@non_matching){
+			$unsupported=qr{^$self->[host_] $_ $self->[prefix_]$path_matcher};
+			$self->[server_]->add_end_point($unsupported,$sub)
+		}
 	}
 	else {
 		$matcher=qr{^$method_matcher $self->[prefix_]$path_matcher};
+		for(@non_matching){
+			$unsupported=qr{^$_ $self->[prefix_]$path_matcher};
+			$self->[server_]->add_end_point($unsupported,$sub)
+		}
 		if($self->[host_]){
 			warn "Server not configured for virtual hosts. Ignoring host specificatoin"
 		}
@@ -77,7 +112,6 @@ sub route{
 	if(@inner){
 		my $middler=uSAC::HTTP::Middler->new();
 		for(@inner){
-			say "adding middleware";
 			$middler->register($_);
 		}
 		($end,$stack)=$middler->link($end);
@@ -92,14 +126,16 @@ sub _strip_prefix {
 		my $next=shift;
 		say "making strip prefix";
 		sub {
+			my $new;
 			{
 				#NOTE: block used to make temp dynamic scope to protect capture groups
 				#being destroyed when running another match
 				#The space  is to prevent the host matching if present
-				$_[0]=~s/ $prefix/ /n;
+				$new=$_[0]=~s/ $prefix/ /nr;
+				shift @_;
 			}
 
-			return &$next;
+			return $next->($new, @_);
 		}
 	}
 
@@ -128,7 +164,7 @@ sub _strip_prefix {
 
 #Take matcher, list of innerware and endpoint sub
 
-our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE) /;
+our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
 
@@ -160,7 +196,7 @@ sub welcome_to_usac {
 	}
 	sub {
 		rex_reply_simple @_, HTTP_OK, undef, $data;
-		return;
+		return; #Enable caching
 	}
 }
 sub default_handler {

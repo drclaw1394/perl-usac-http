@@ -101,8 +101,8 @@ sub make_reader{
 			if ($state == 0) {
 				my $pos3=index $buf, LF, $ixx;
                                 $line=substr($buf,$ixx,$pos3);
-				$version=substr($line,-1,1)eq "1"?"HTTP/1.1":"HTTP/1.0";
-
+				($method,$uri,$version)=split " ",$line;
+				#$version=substr($line,-1,1)eq "1"?"HTTP/1.1":"HTTP/1.0";
                                 $line=uri_decode substr($buf,$ixx,$pos3-length($version)-1);
 				if($pos3>=0){
 					#end of line found
@@ -168,7 +168,7 @@ sub make_reader{
 				#Done with headers. 
 				#
 				#TODO: downsample gettimeofday to a second
-				$req = bless [ $version, $r, \%h, $write, undef,undef,undef,  $self, 1 ,undef,undef,undef], 'uSAC::HTTP::Rex' ;
+				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$method, $uri], 'uSAC::HTTP::Rex' ;
 				#$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ,undef,undef,undef,undef], 'uSAC::HTTP::Rex' ;
 
 
@@ -594,7 +594,7 @@ sub make_socket_writer{
 				#say "FULL WRITE NO APPEND";
 				#$offset=0;
 				#$cb=undef;
-				$cb->($ido);
+				$cb->($ido) if $cb;
 				return;# $ido;#0; #remainder of 0
 
 			}

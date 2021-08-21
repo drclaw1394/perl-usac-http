@@ -327,7 +327,9 @@ sub register_site {
 
 sub rebuild_dispatch {
 	my $self=shift;
-	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>undef);
+	my $cache={};
+	keys %$cache=512;
+	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>$cache);
 }
 
 sub run {
