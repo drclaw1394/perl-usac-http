@@ -74,6 +74,7 @@ sub route {
 	#die "No Matcher provided " unless $matcher//0;
 	die "No end point provided" unless $end and ref $end eq "CODE";
 	state @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
+
 	my @non_matching=grep {!/$method_matcher/} @methods;
 	my @matching=grep {/$method_matcher/ } @methods;
 	my $sub;
@@ -81,7 +82,7 @@ sub route {
 	if(@non_matching){
 		my $headers=[HTTP_ALLOW, join ", ",@matching]; 
 		$sub = sub { 
-			say "UNSPPORTED";
+			#TODO: how to add middleware ie logging?
 			rex_reply_simple @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
 			return;	#cache this
 		};
@@ -91,18 +92,18 @@ sub route {
 	my $unsupported;
 	if($self->[server_]->enable_hosts){
 		$matcher=qr{^$self->[host_] $method_matcher $self->[prefix_]$path_matcher};
-		
-		for(@non_matching){
-			$unsupported=qr{^$self->[host_] $_ $self->[prefix_]$path_matcher};
-			$self->[server_]->add_end_point($unsupported,$sub)
-		}
+                my $tmp=join "|", @non_matching;
+                my $mre=qr{$tmp};
+                $unsupported=qr{^$mre $self->[prefix_]$path_matcher};
+                $self->[server_]->add_end_point($unsupported,$sub);
 	}
 	else {
 		$matcher=qr{^$method_matcher $self->[prefix_]$path_matcher};
-		for(@non_matching){
-			$unsupported=qr{^$_ $self->[prefix_]$path_matcher};
-			$self->[server_]->add_end_point($unsupported,$sub)
-		}
+                my $tmp=join "|", @non_matching;
+                my $mre=qr{$tmp};
+                $unsupported=qr{^$mre $self->[prefix_]$path_matcher};
+                $self->[server_]->add_end_point($unsupported,$sub);
+
 		if($self->[host_]){
 			warn "Server not configured for virtual hosts. Ignoring host specificatoin"
 		}
@@ -134,7 +135,9 @@ sub _strip_prefix {
 				$new=$_[0]=~s/ $prefix/ /nr;
 				shift @_;
 			}
-
+			#The @_ is shifted to remove the alias of "line"
+			#Otherwise the above modifies the original input which effects the
+			#Hustle::Table cache
 			return $next->($new, @_);
 		}
 	}

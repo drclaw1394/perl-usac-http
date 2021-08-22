@@ -422,7 +422,7 @@ sub send_file_uri_norange {
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		#.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
+		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
         	.($session->[uSAC::HTTP::Session::closeme_]?
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
@@ -502,7 +502,7 @@ sub send_file_uri_norange_chunked {
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		#.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
+		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
         	.($session->[uSAC::HTTP::Session::closeme_]?
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
@@ -621,7 +621,7 @@ sub send_file_uri_range {
         my ($start,$end);
         my $reply= 
 		#uSAC::HTTP::Rex::STATIC_HEADERS
-                HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF
+                HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
 		;
 
         unless (open $in_fh, "<", $abs_path){
@@ -777,7 +777,7 @@ sub send_file_uri {
 
 	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		#.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;
+		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF;
 
         #close connection after if marked
         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){

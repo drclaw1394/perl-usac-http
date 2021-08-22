@@ -31,6 +31,9 @@ use constant MAX_READ_SIZE => 128 * 1024;
 our %make_reader_reg;	#hash of sub references which will make a reader ref of a particular name
 our %make_writer_reg;	#hash of sub references which will make a writer ref of a particular name
 
+
+our $Date;
+
 sub _make_reader;
 sub drop;
 
@@ -180,5 +183,19 @@ sub select_writer{
 	#say %make_writer_reg;
 	$self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self);
 }
+
+#timer for generating timestamps. 1 second resolution for HTTP date
+our $timer=AE::timer 0,1, sub {
+	state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+	state @days= qw(Sun Mon Tue Wed Thu Fri Sat);
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime;
+	#export to globally available time?
+	#
+	#Format Tue, 15 Nov 1994 08:12:31 GMT
+	#TODO: 0 padding of hour min sec
+	$Date="$days[$wday], $mday $months[$mon] ".($year+1900)." $hour:$min:$sec GMT";
+	#say scalar $self->[zombies_]->@*;
+	#say "Session count : ",scalar keys $self->[sessions_]->%*;
+};
 
 1;

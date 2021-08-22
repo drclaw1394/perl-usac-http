@@ -20,12 +20,14 @@ use uSAC::HTTP::Middleware ":all";
 use uSAC::HTTP::Static;
 
 
-given(\%uSAC::HTTP::Session::make_writer_reg){
-	$_->{http1_1_static_writer}=\&make_static_file_writer;
-	$_->{http1_1_chunked_writer}=\&make_chunked_writer;
-	$_->{http1_1_chunked_deflate_writer}=\&make_chunked_deflate_writer;
-}
-#say "Chunked writer",\&make_chunked_writer;
+###############################################################################
+# given(\%uSAC::HTTP::Session::make_writer_reg){                              #
+#         #$_->{http1_1_static_writer}=\&make_static_file_writer;             #
+#         $_->{http1_1_chunked_writer}=\&make_chunked_writer;                 #
+#         $_->{http1_1_chunked_deflate_writer}=\&make_chunked_deflate_writer; #
+# }                                                                           #
+# #say "Chunked writer",\&make_chunked_writer;                                #
+###############################################################################
 
 
 my @sys_roots=qw<data>;
@@ -82,7 +84,9 @@ my $site2=$server->register_site(
         )
 );
 
-site_route $site2=>GET=>'/$'=> (log_simple)=>uSAC::HTTP::welcome_to_usac;
+site_route $site2=>GET=>'/$'=> (
+	#log_simple
+)=>uSAC::HTTP::welcome_to_usac;
 site_route $site2=>GET=>'/small$'=>sub { rex_reply_simple @_, HTTP_OK, undef, "Some small data";return};
 
 #Public files

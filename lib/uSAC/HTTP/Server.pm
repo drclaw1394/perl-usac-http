@@ -30,26 +30,22 @@ use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN);
 
-#use Encode ();
-#use Compress::Zlib ();
-#use MIME::Base64 ();
 use Time::HiRes qw/gettimeofday/;
 
 use Carp 'croak';
 
-use constant MAX_READ_SIZE => 128 * 1024;
+#use constant MAX_READ_SIZE => 128 * 1024;
 
 #Class attribute keys
+#max_header_size_
 use enum (
-	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ max_header_size_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ seconds_timer_ www_roots_ total_requests_>
+	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ seconds_timer_ www_roots_ total_requests_>
 );
 
 
 use uSAC::HTTP;
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
-#use uSAC::HTTP::Rex;
-#use uSAC::HTTP::Server::WS;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
@@ -58,16 +54,17 @@ use constant STATIC_HEADERS=>
 HTTP_SERVER.": ".uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", @uSAC::HTTP::Server::Subproducts).LF ;
 
 given(\%uSAC::HTTP::Session::make_reader_reg){
-	$_->{http1_1_base}=\&make_reader;
-	$_->{http1_1_form_data}=\&make_form_data_reader;
-	$_->{http1_1_urlencoded}=\&make_form_urlencoded_reader;
-	#$_->{http1_1_default_writer}=\&make_default_writer;
-	$_->{websocket}=\&make_websocket_reader;
+        $_->{http1_1_base}=\&make_reader;
+        $_->{http1_1_form_data}=\&make_form_data_reader;
+        $_->{http1_1_urlencoded}=\&make_form_urlencoded_reader;
+        #$_->{http1_1_default_writer}=\&make_default_writer;
+        $_->{websocket}=\&make_websocket_reader;
 }
+
 given(\%uSAC::HTTP::Session::make_writer_reg){
-	$_->{http1_1_default_writer}=\&make_default_writer;
-	$_->{http1_1_socket_writer}=\&make_socket_writer;
-	$_->{websocket}=\&make_websocket_server_writer;
+        $_->{http1_1_default_writer}=\&make_default_writer;
+        $_->{http1_1_socket_writer}=\&make_socket_writer;
+        $_->{websocket}=\&make_websocket_server_writer;
 }
 
 #Add a mechanism for sub classing
@@ -75,10 +72,10 @@ use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>total_requests_-host_+1;
 
 
-use constant LF => "\015\012";
+#use constant LF => "\015\012";
 
 #Server Global values
-our $Date;	#For date header
+#our $Date;	#For date header
 our $DEFAULT_MIME=>"application/octet-stream";
 
 #our $ERROR_PAGE=>
@@ -96,7 +93,7 @@ sub new {
 	$self->[zombies_]=[];
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
-	$self->[max_header_size_]=MAX_READ_SIZE;
+	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
 	$self->[upgraders_]= {
 			"websocket" =>\&uSAC::HTTP::Server::WS::upgrader
@@ -202,19 +199,21 @@ sub listen {
 sub prepare {
 	#setup timer for constructing date header once a second
 	my ($self)=shift;
-
-	state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
-	state @days= qw(Sun Mon Tue Wed Thu Fri Sat);
-
-	$self->[seconds_timer_]=AE::timer 0,1, sub {
-		my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime;
-		#export to globally available time?
-		#
-		#Format Tue, 15 Nov 1994 08:12:31 GMT
-		$Date="$days[$wday], $mday $months[$mon] ".($year+1900)." $hour:$min:$sec GMT";
-		#say scalar $self->[zombies_]->@*;
-		#say "Session count : ",scalar keys $self->[sessions_]->%*;
-	};
+        ###########################################################################################
+        #                                                                                         #
+        # state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);                    #
+        # state @days= qw(Sun Mon Tue Wed Thu Fri Sat);                                           #
+        #                                                                                         #
+        # $self->[seconds_timer_]=AE::timer 0,1, sub {                                            #
+        #         my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime;               #
+        #         #export to globally available time?                                             #
+        #         #                                                                               #
+        #         #Format Tue, 15 Nov 1994 08:12:31 GMT                                           #
+        #         $Date="$days[$wday], $mday $months[$mon] ".($year+1900)." $hour:$min:$sec GMT"; #
+        #         #say scalar $self->[zombies_]->@*;                                              #
+        #         #say "Session count : ",scalar keys $self->[sessions_]->%*;                     #
+        # };                                                                                      #
+        ###########################################################################################
 }
 
 sub make_sysaccept {

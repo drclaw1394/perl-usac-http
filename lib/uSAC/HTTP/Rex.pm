@@ -240,7 +240,7 @@ sub reply_simple;
 			my $reply=
 				"HTTP/1.1 $_[2]".LF
 				#.STATIC_HEADERS
-				.HTTP_DATE.": ".		$uSAC::HTTP::Server::Date.LF
+				.HTTP_DATE.": ".		$uSAC::HTTP::Session::Date.LF
 				.HTTP_CONTENT_LENGTH.": ".	$content_length.LF
 				.($session->[uSAC::HTTP::Session::closeme_]
 					?HTTP_CONNECTION.": close".LF

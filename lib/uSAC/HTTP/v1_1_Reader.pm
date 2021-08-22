@@ -1,6 +1,6 @@
 package uSAC::HTTP::v1_1_Reader;
 use common::sense;
-use feature "refaliasing";
+use feature qw<refaliasing say switch>;
 no warnings "experimental";
 
 use Exporter 'import';
@@ -14,7 +14,6 @@ our @EXPORT_OK=qw<
 		make_form_urlencoded_reader
 		make_default_writer
 		make_socket_writer
-
 		uri_decode
 		parse_form
 		>;
@@ -655,7 +654,4 @@ sub make_socket_writer{
 		return
 	};
 }
-
-
-
 1;

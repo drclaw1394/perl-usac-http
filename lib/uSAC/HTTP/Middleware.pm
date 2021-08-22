@@ -2,11 +2,11 @@ package uSAC::HTTP::Middleware;
 use strict;
 use warnings;
 use Exporter 'import';
-use feature "say";
-use feature qw<refaliasing state>;
+use feature qw<refaliasing say switch state>;
 no warnings "experimental";
 no feature "indirect";
 use Data::Dumper;
+use uSAC::HTTP::Session;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Code qw<:constants>;
@@ -210,6 +210,12 @@ sub make_chunked_writer {
 	->register(\&uSAC::HTTP::Middleware::chunked)
 	->link($session->[uSAC::HTTP::Session::write_]);	#this could be a normal socket writer, orssl type
 	return $entrypoint;
+}
+
+given(\%uSAC::HTTP::Session::make_writer_reg){
+	#$_->{http1_1_static_writer}=\&make_static_file_writer;
+	$_->{http1_1_chunked_writer}=\&make_chunked_writer;
+	$_->{http1_1_chunked_deflate_writer}=\&make_chunked_deflate_writer;
 }
 
 1;
