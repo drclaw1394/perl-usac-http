@@ -227,14 +227,14 @@ sub _check_ranges{
 	my ($rex, $stat)=@_;
 	#check for ranges in the header
 	my @ranges;
-	given($rex->[uSAC::HTTP::Rex::headers_]{range}){
+	given($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 		when(undef){
 			#no ranges specified but create default
 			@ranges=([0,$stat->[7]-1]);
 		}
 		default {
 			#check the If-Range
-			my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"if-range"};
+			my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF_RANGE"};
 
 			#check rnage is present
 			#response code is then 206 partial
@@ -425,7 +425,9 @@ sub send_file_uri_norange {
 		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
         	.($session->[uSAC::HTTP::Session::closeme_]?
 			HTTP_CONNECTION.": close".LF
-			:HTTP_CONNECTION.": Keep-Alive".LF
+			:(HTTP_CONNECTION.": Keep-Alive".LF
+			.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
+			)
 		)
 		.$entry->[1]
 		.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart

@@ -87,7 +87,8 @@ my $site2=$server->register_site(
 site_route $site2=>GET=>'/$'=> (
 	#log_simple
 )=>uSAC::HTTP::welcome_to_usac;
-site_route $site2=>GET=>'/small$'=>sub { rex_reply_simple @_, HTTP_OK, undef, "Some small data";return};
+site_route $site2=>GET=>'/small$'=>sub {
+	rex_reply_simple @_, HTTP_OK, undef, "Some small data";return};
 
 #Public files
 site_route $site2 =>qr{GET|HEAD}=>qr{/public/$Path} =>

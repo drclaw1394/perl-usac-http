@@ -137,7 +137,7 @@ sub make_reader{
 					#warn "parse line >'".substr( $buf,pos($buf),index( $buf, "\012", pos($buf) )-pos($buf) )."'";
 
 					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
-						\my $e=\$h{lc $1};
+						\my $e=\$h{uc $1=~tr/-/_/r};
 						$e = defined $e ? $e.','.$2: $2;
 					}
 					elsif ($buf =~ /\G\015?\012/sxogca) {
@@ -175,7 +175,7 @@ sub make_reader{
 
 				#$self->[uSAC::HTTP::Server::total_requests_]++;
 				$r->[uSAC::HTTP::Session::rex_]=$req;
-				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{connection} =~/^Keep-Alive/ );
+				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{CONNECTION} =~/^Keep-Alive/ );
 
 				#shift buffer
 				$buf=substr $buf,$pos;
@@ -183,7 +183,7 @@ sub make_reader{
 				$ixx=0;
 				$state=0;
 				#$self->[uSAC::HTTP::Server::cb_]($line,$req);
-				$line=($h{host}//"")." $line" if $enable_hosts;
+				$line=($h{HOST}//"")." $line" if $enable_hosts;
 				$cb->($line,$req);
 				weaken ($req->[1]);
 				#weaken( $req->[8] );
@@ -575,6 +575,7 @@ sub make_socket_writer{
 
 
 	sub {
+		use integer;
 		($_[0]//0) or return;		#undefined input. was a stack reset
 
 		\my $buf=\$_[0];		#give the input a name

@@ -163,8 +163,8 @@ sub reply_simple;
 			my $cb=shift;
 			my $session=$rex->[uSAC::HTTP::Rex::session_];
 			#check if content type is correct first
-			say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'content-type'};
-			unless (index($rex->[headers_]{'content-type'},'multipart/form-data')>=0){
+			say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
+			unless (index($rex->[headers_]{'CONTENT_TYPE'},'multipart/form-data')>=0){
 				$session->[uSAC::HTTP::Session::closeme_]=1;
 				reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,undef,"multipart/formdata required";
 				return;
@@ -186,13 +186,13 @@ sub reply_simple;
 			my $mime=shift//'application/x-www-form-urlencoded';
 			my $cb=shift;	#cb for parts
 			my $session=$rex->[session_];
-			say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'content-type'};
+			say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
 			my @err_res;
 			given($rex->[headers_]){
-				when(index($_->{'content-type'},$mime)<0){
+				when(index($_->{'CONTENT_TYPE'},$mime)<0){
 					@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, undef, "applcation/x-www-form-urlencoded required");
 				}
-				when($_->{'content-length'} > $UPLOAD_LIMIT){
+				when($_->{'CONTENT_LENGTH'} > $UPLOAD_LIMIT){
 					@err_res=(HTTP_PAYLOAD_TOO_LARGE, undef, "limit: $UPLOAD_LIMIT");
 				}
 				default{
@@ -205,7 +205,7 @@ sub reply_simple;
 
 					#check for expects header and send 100 before trying to read
 					#given($rex->[uSAC::HTTP::Rex::headers_]){
-					if(defined($_->{expects})){
+					if(defined($_->{EXPECTS})){
 						#issue a continue response	
 						my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
 						$rex->[uSAC::HTTP::Rex::write_]->($reply);
@@ -245,12 +245,10 @@ sub reply_simple;
 				.($session->[uSAC::HTTP::Session::closeme_]
 					?HTTP_CONNECTION.": close".LF
 
-					:"")
-				.(($self->[version_] ne "HTTP/1.1")
-					?HTTP_CONNECTION.": ".	"Keep-Alive".LF
+					:(HTTP_CONNECTION.": Keep-Alive".LF
 					.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
-
-					:"")
+					)
+				)
 				;
 			render_v1_1_headers($reply, $_[3]) if $_[3];
 
@@ -296,7 +294,7 @@ sub headers {
 #Only parses if the internal field is undefined
 #otherwise uses pre parsed values
 sub cookies {
-	$_[0][cookies_]=parse_cookie $_[0][headers_]{cookie} unless $_[0][cookies_]//0;
+	$_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE} unless $_[0][cookies_]//0;
 	$_[0][cookies_];
 }
 
