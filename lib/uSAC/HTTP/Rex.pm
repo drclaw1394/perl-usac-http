@@ -235,9 +235,10 @@ sub reply_simple;
 			my ($line, $self)=@_;
 			#create a writer for the session
 			my $session=$self->[session_];
+			\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 			my $content_length=length($_[4])+0;
-			my $reply=
+			$reply=
 				"HTTP/1.1 $_[2]".LF
 				#.STATIC_HEADERS
 				.HTTP_DATE.": ".		$uSAC::HTTP::Session::Date.LF
@@ -256,7 +257,7 @@ sub reply_simple;
 			#say "Length: ", length($_[4])+0;
 			if($content_length< 1048576){
 				$reply.=LF.$_[4];
-				$self->[write_]($reply, \&uSAC::HTTP::Session::drop); 
+				$self->[write_]($reply);#, $session->[uSAC::HTTP::Session::dropper_]);#\&uSAC::HTTP::Session::drop); 
 			}
 
 			else{
@@ -265,7 +266,7 @@ sub reply_simple;
 				$reply.=LF;#.$_[4];
 				\my $body=\$_[4];
 				my $hcb=sub {
-					$self->[write_]($body, \&uSAC::HTTP::Session::drop);
+					$self->[write_]($body);#, $session->[uSAC::HTTP::Session::dropper_]);#\&uSAC::HTTP::Session::drop);
 
 				};
 				$self->[write_]($reply,$hcb);

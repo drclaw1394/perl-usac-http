@@ -573,29 +573,27 @@ sub make_socket_writer{
 	my $offset=0;
 	say  "++Making socket writer";
 
-
+	#Arguments are buffer and callback.
+	#do not call again until callback is called
+	#if no callback is provided, the session dropper is called.
+	#
 	sub {
 		use integer;
 		($_[0]//0) or return;		#undefined input. was a stack reset
 
 		\my $buf=\$_[0];		#give the input a name
 
-		my $cb= $_[1];			#give the callback a name
+		my $cb= $_[1]//$ido->[uSAC::HTTP::Session::dropper_];#sub {};			#give the callback a name
 		$offset=0;# if $pre_buffer!=$_[0];	#do offset reset if need beo
 		#$pre_buffer=$_[0];
 
 		if(!$ww){	#no write watcher so try synchronous write
-			#say "Length: ", length($buf),"offset: $offset";
-			my $len=length($buf)-$offset;
-			#say  \$buf,". ", $len if $len<=0;
-			$w = syswrite( $fh, $buf, $len, $offset);
+			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
 			$offset+=$w;
 			if($offset==length $buf){
 				#say "FULL WRITE NO APPEND";
-				#$offset=0;
-				#$cb=undef;
-				$cb->($ido) if $cb;
-				return;# $ido;#0; #remainder of 0
+				$cb->($ido);
+				return;
 
 			}
 			elsif(defined $w){# and length($buf)> $w){
@@ -610,9 +608,7 @@ sub make_socket_writer{
 					if($offset==length $buf) {
 						say "FULL async write";
 						undef $ww;
-						#$offset=0;
 						$cb->($ido);# if defined $cb;
-						#$cb=undef;
 					}
 					elsif(defined $w){
 						say "partial async write";
@@ -644,8 +640,6 @@ sub make_socket_writer{
 					#actual error		
 					$ww=undef;
 					$cb->();
-					#$offset=0;
-					#$cb=undef;
 					uSAC::HTTP::Session::drop $ido, "$!";
 					return;
 				}

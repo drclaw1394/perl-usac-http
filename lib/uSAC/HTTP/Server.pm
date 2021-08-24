@@ -28,7 +28,7 @@ use AnyEvent::Handle;
 use Scalar::Util 'refaddr', 'weaken';
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
-use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN);
+use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN SO_LINGER);
 
 use Time::HiRes qw/gettimeofday/;
 
@@ -276,6 +276,7 @@ sub accept {
 
 				#TODO: setup timeout for bad clients/connections
 
+				#setsockopt($fh, SOL_SOCKET, SO_LINGER, pack ("ll",1,0));
 				$id = ++$seq;
 
 

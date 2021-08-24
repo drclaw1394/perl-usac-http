@@ -3,11 +3,11 @@ package uSAC::HTTP::Static;
 use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
-
 use Scalar::Util qw<weaken>;
 use Devel::Peek qw<SvREFCNT>;
 use Errno qw<:POSIX EACCES ENOENT>;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK O_RDONLY);
+use Devel::Peek;
 use File::Spec;
 #use IO::AIO;
 use AnyEvent;
@@ -343,8 +343,12 @@ sub open_cache {
 	my $abs_path=shift;
 	$open_cache->{$abs_path}//do {
 		my $in_fh;
-		unless (open $in_fh, "<:unix", $abs_path){
-			delete $open_cache->{$abs_path};
+		return unless stat($abs_path) and -r _ and ! -d _; #undef if stat fails
+								#or incorrect premissions
+
+
+		unless(sysopen $in_fh,$abs_path,O_RDONLY|O_NONBLOCK){
+			#delete $open_cache->{$abs_path};
 			undef;
 		}
 		else {
@@ -361,63 +365,35 @@ sub open_cache {
 
 
 
-#################################################################################################
-# sub _check_access {                                                                           #
-#                                                                                               #
-#         my ($line, $rex,$uri,$sys_root)=@_;                                                   #
-#                                                                                               #
-#         my $abs_path=$sys_root."/".$uri;                                                      #
-#         my $in_fh;                                                                            #
-#                                                                                               #
-#         unless(stat $abs_path and -r _ and !-d _ and ($in_fh=open_cache $abs_path)){          #
-#                 uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;                    #
-#                 #remove from cache                                                            #
-#                 delete $open_cache->{$uri};                                                   #
-#                 return                                                                        #
-#         }                                                                                     #
-#                                                                                               #
-#         ######################################################################                #
-#         # if ( ! -r _ or -d _){                                              #                #
-#         #         uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_FORBIDDEN; #                #
-#         #         #remove from cache                                         #                #
-#         #         undef $open_cache->{$uri};                                 #                #
-#         #         return;                                                    #                #
-#         #                                                                    #                #
-#         # }                                                                  #                #
-#         ######################################################################                #
-#         #TODO:                                                                                #
-#         #       Check the Accept header for valid mime type before we open the file           #
-#         #                                                                                     #
-#                                                                                               #
-#         #check the cache                                                                      #
-#         #my $in_fh=open_cache $abs_path;                                                      #
-#         #uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_INTERNAL_SERVER_ERROR unless $in_fh; #
-#         return $in_fh;                                                                        #
-# }                                                                                             #
-#################################################################################################
-
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
 	use  integer;
 
-	my ($line,$rex,$uri,$sys_root)=@_;
+	my (undef,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	my $abs_path=$sys_root."/".$uri;
-
 	my $entry;
-	unless(stat $abs_path and -r _ and !-d _ and ($entry=open_cache $abs_path)){
-		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
+	unless($entry=open_cache $abs_path){
+		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		return;
+	}
+	my $in_fh=$entry->[0];
+
+	my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];	#reuses stat from check_access 
+	#Do stat on fh instead of path. Path requires resolving and is slower
+	#fh is already resolved and open.
+	unless(-r _ and !-d _){
+		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
 		#remove from cache
 		delete $open_cache->{$uri};
 		return
 	}
-	my $in_fh=$entry->[0];
 
 
-	my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
+	#my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
 	
 	$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
@@ -441,25 +417,50 @@ sub send_file_uri_norange {
 	my $offset=length($reply);
 
 	#\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
-	seek $in_fh,0,0;
-	my $res;
+	#my $res;
 	my $rc;
 	my $total=0;
+
 	if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
 		$session->[uSAC::HTTP::Session::write_]->($reply);
 		return;
-
 	}
 
+	#seek $in_fh,0,0;
 	#my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
 	my $reader;$reader= sub {
-		if($total==$content_length){	#end of file
-			uSAC::HTTP::Session::drop $session;
-			$reader=undef;
-			return;
+		if(1){
+			seek $in_fh,$total,0;
+			$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
 		}
-		$total+=$rc=sysread $in_fh, $reply, $read_size, $offset;
-		#$total+=$rc;	
+                #############################################################################################################
+                # else{                                                                                                     #
+                #         my $pread=3; #pread is 153 on macos, read is 3                                                    #
+                #         my $fn=fileno($in_fh);                                                                            #
+                #         my $r_offset=pack("I<",$offset);                                                                  #
+                #         my $buffer=(" " x (1024*1024));                                                                   #
+                #         #say "buffer length: ", length($buffer);                                                          #
+                #         seek $in_fh, $total, 0;                                                                           #
+                #         my $r_size=length($buffer)-1;#pack("I<",length $buffer);                                          #
+                #         $!=0;                                                                                             #
+                #         $reply.="x";                                                                                      #
+                #         say Dump $reply;                                                                                  #
+                #         say Dump substr($reply,$offset);                                                                  #
+                #         #say Dump $tmp;                                                                                   #
+                #         $rc=syscall $pread, $fn, substr($reply,$offset,$read_size-$offset), $read_size-$offset;#,$offset; #
+                #         if($rc<0){                                                                                        #
+                #                 say $!;                                                                                   #
+                #         }                                                                                                 #
+                #         else {                                                                                            #
+                #                                                                                                           #
+                #                 #$reply.=substr($buffer,0,$rc);                                                           #
+                #         }                                                                                                 #
+                #         say Dump $reply;                                                                                  #
+                #         #say "return count: ",$rc;                                                                        #
+                #         $total+=$rc                                                                                       #
+                #                                                                                                           #
+                # }                                                                                                         #
+                #############################################################################################################
 		
 		unless($rc//0 or $! == EAGAIN or $! == EINTR){
 			say "READ ERROR from file";
@@ -468,15 +469,26 @@ sub send_file_uri_norange {
 			delete $open_cache->{$uri};
 			close $in_fh;
 			$reader=undef;
-			uSAC::HTTP::Session::drop $session;
+			#uSAC::HTTP::Session::drop $session;
+			$session->[uSAC::HTTP::Session::dropper_]->();
 			return;
 		}
+
 		$offset=0;
 		#non zero read length.. do the write	
-		$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
+		if($total==$content_length){	#end of file
+			#uSAC::HTTP::Session::drop $session;
+			$session->[uSAC::HTTP::Session::write_]->($reply);#, $session->[uSAC::HTTP::Session::dropper_]);
+			#$session->[uSAC::HTTP::Session::dropper_]->();
+			$reader=undef;
+			return;
+		}
+		else{
+			$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
+		}
 	};
 
-	$reader->();
+	&$reader;#->();
 
 }
 
@@ -535,7 +547,7 @@ sub send_file_uri_norange_chunked {
 
 	my $chunker;
 
-	if($rex->headers->{"accept-encoding"}=~/deflate/){
+	if($rex->headers->{"ACCEPT_ENCODING"}=~/deflate/){
 		#say "WILL DO GZIP";	
 		$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_deflate_writer";	
 		$reply.=

@@ -17,7 +17,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -48,6 +48,7 @@ sub new {
 	$self->[zombies_]=$_[3];	
 	$self->[server_]=$_[4];
 
+	$self->[wbuf_]="x"x(4096*16);
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
 	#$self->[read_stack_]=[];
@@ -57,6 +58,30 @@ sub new {
 	#$self->[writer_cache_]={};
 
 	$self->[on_body_]=undef;	#allocate all the storage now
+	#$self->[dropper_]=make_dropper($self);
+	#
+	my $server=$self->[server_];
+	my $sessions=$self->[sessions_];
+	my $zombies=$self->[zombies_];
+	\my $fh=\$self->[fh_];
+	\my $rw=\$self->[rw_];
+	\my $ww=\$self->[ww_];
+	\my $id=\$self->[id_];
+	\my $closeme=\$self->[closeme_];
+	$self->[dropper_]=sub {
+		return unless $closeme;
+		delete $sessions->{$id};
+		close $fh;
+		$rw=undef;
+		$ww=undef;
+		$fh=undef;
+		$id=undef;
+		$closeme=undef;
+
+	unshift @$zombies, $self;
+
+	};
+
 	
 	#bless $self,$package
 	#make entry on the write stack
@@ -116,12 +141,35 @@ sub _make_reader {
 		}
 	};
 }
+sub make_dropper {
+	my $self=shift;	
+	my $server=$self->[server_];
+	my $sessions=$self->[sessions_];
+	my $zombies=$self->[zombies_];
+	\my $fh=\$self->[fh_];
+	\my $rw=\$self->[rw_];
+	\my $ww=\$self->[ww_];
+	\my $id=\$self->[id_];
+	\my $closeme=\$self->[closeme_];
+	sub {
+		return unless $closeme;
+		delete $sessions->{$id};
+		close $fh;
+		$rw=undef;
+		$ww=undef;
+		$fh=undef;
+		$id=undef;
+		$closeme=undef;
 
+	unshift @$zombies, $self;
+
+	}
+}
 
 sub drop {
 	#my ($self,$err) = @_;
 	return unless $_[0]->[closeme_];
-	my $r = delete $_[0]->[sessions_]{$_[0]->[id_]}; #remove from server
+	my $r = delete $_[0]->[server_][sessions_]{$_[0]->[id_]}; #remove from server
 	#$_[0]->[server_][uSAC::HTTP::Server::active_connections_]--;
 
 	close $_[0]->[fh_];
@@ -129,10 +177,8 @@ sub drop {
 	$_[0]->[fh_]=undef;
 	$_[0]->@[(rw_,ww_,fh_,id_,closeme_)]=(undef,undef,undef,undef,undef);#(undef) x 5;
 
-	$_[0]->[write_stack_]=undef;	#[];#[0]=undef;
-	$_[0]->[read_stack_]=undef;	#[];
-	#$_[0]->[wbuf_]=undef;
-	#$_[0]->[rbuf_]=undef;
+	#$_[0]->[write_stack_]=undef;	#[];#[0]=undef;
+	#$_[0]->[read_stack_]=undef;	#[];
 
 	unshift @{$_[0]->[zombies_]}, $_[0];
 }
