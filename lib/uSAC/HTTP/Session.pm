@@ -152,6 +152,7 @@ sub make_dropper {
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 	sub {
+		say "IN DROPPER";
 		return unless $closeme;
 		delete $sessions->{$id};
 		close $fh;
@@ -161,8 +162,7 @@ sub make_dropper {
 		$id=undef;
 		$closeme=undef;
 
-	unshift @$zombies, $self;
-
+		unshift @$zombies, $self;
 	}
 }
 

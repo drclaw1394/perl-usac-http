@@ -19,7 +19,7 @@ use uSAC::HTTP::Cookie qw<:all>;
 use AnyEvent;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<rex_headers rex_reply_simple>;
+our @EXPORT_OK=qw<rex_headers rex_reply_simple rex_reply_chunked>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -275,6 +275,38 @@ sub reply_simple;
 			#Write the headers
 		}
 
+		#rex, http_code, header, datacb 
+		sub reply_chunked{
+			use integer;
+			my (undef, $self, $code, $headers, $cb)=@_;
+			#create a writer for the session
+			my $session=$self->[session_];
+			#\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
+
+			#my $content_length=length($_[4])+0;
+			my $reply=
+				"HTTP/1.1 $code".LF
+				#.STATIC_HEADERS
+				.HTTP_DATE.": ".		$uSAC::HTTP::Session::Date.LF
+				#.HTTP_CONTENT_LENGTH.": ".	$content_length.LF
+				.($session->[uSAC::HTTP::Session::closeme_]
+					?HTTP_CONNECTION.": close".LF
+
+					:(HTTP_CONNECTION.": Keep-Alive".LF
+					.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
+					)
+				)
+				.HTTP_TRANSFER_ENCODING.": chunked".LF
+				;
+				render_v1_1_headers($reply, $headers) if $headers;
+				$reply.=LF;
+
+			my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
+			#write the header, and then do callback to let app write data
+			#use chunker as argument which will be first argument of callback
+			$self->[write_]($reply, $cb, $chunker);
+		}
+
 sub render_v1_1_headers {
 	\my $buffer=\$_[0];
 	my $i=0;
@@ -291,6 +323,7 @@ sub headers {
 
 *rex_headers=*headers;
 *rex_reply_simple=*reply_simple;
+*rex_reply_chunked=*reply_chunked;
 #returns parsed cookies from headers
 #Only parses if the internal field is undefined
 #otherwise uses pre parsed values

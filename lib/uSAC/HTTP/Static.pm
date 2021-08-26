@@ -9,6 +9,7 @@ use Errno qw<:POSIX EACCES ENOENT>;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK O_RDONLY);
 use Devel::Peek;
 use File::Spec;
+use File::Basename qw<basename>;
 #use IO::AIO;
 use AnyEvent;
 #use AnyEvent::AIO;
@@ -23,7 +24,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2>;
+our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -492,6 +493,107 @@ sub send_file_uri_norange {
 
 }
 
+sub _html_dir_list {
+	\my $output=$_[0];
+	my $headers=$_[1];
+	my $entries=$_[2];
+
+	if($headers){
+		$output.=
+		 "<table>\n"
+		."    <tr>\n"
+		."        <th>".join("</th><th>",@$headers)."</th>\n"
+		."    <tr>\n"
+		;
+	}
+	if(ref $entries eq "ARRAY"){
+		for my $row(@$entries){
+			$output.=
+			"    <tr>\n"
+			."        <td>".join("</td><td>",@$row)."</td>\n"
+			."    </tr>\n"
+			;
+		}
+	}
+	$output.="</table>";
+}
+
+sub list_dir {
+	my ($line,$rex,$uri,$sys_root,$renderer)=@_;
+
+	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
+
+	my $abs_path=$sys_root.$uri;
+	say "Listing dir for $abs_path";
+	stat $abs_path;
+	unless(-d _ and  -r _){
+		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		return;
+	}
+
+	#build uri from sysroot
+	my @fs_paths;
+	if($abs_path eq "$sys_root/"){
+	
+		@fs_paths=<$abs_path*>;	
+	}
+	else{
+		@fs_paths=<$abs_path.* $abs_path*>;	
+	}
+	say "Paths: @fs_paths";
+	my $results;
+
+	state $labels=[qw<name dev inode mode nlink uid gid rdev size access_time modification_time change_time block_size blocks>];
+	#push @results,\@labels;
+	for my $path (@fs_paths) {
+		my @stats=stat $path;
+		next unless -r _;
+		$path=~s|$sys_root/||;
+		say "Stats for $path: ", @stats;
+		my $base=basename $path;
+		my $base= -d _ ? "$base/":$base;
+		unshift @stats, qq|<a href="$rex->[uSAC::HTTP::Rex::uri_]$base">$base</a>|;
+		push @$results,\@stats;
+	}
+	#render html
+	$reply=
+		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
+		#.uSAC::HTTP::Rex::STATIC_HEADERS
+		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
+        	.($session->[uSAC::HTTP::Session::closeme_]?
+			HTTP_CONNECTION.": close".LF
+			:(HTTP_CONNECTION.": Keep-Alive".LF
+			.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
+			)
+		)
+		#.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
+		.HTTP_TRANSFER_ENCODING.": chunked".LF
+		.LF;
+	say "Results: ",@$results;
+
+
+	my $chunker;
+	$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
+	my $first=1;
+	my $ren=$renderer//\&_html_dir_list;
+	my $render;$render=sub {
+		$reply="";					#Reset buffer
+		($_[0]//0) or $chunker->(undef,sub {});		#Execute stack reset
+		unless($results){
+			$chunker->(""); #Send empty chunk to finish. no cb defaults to drop if required
+			return;
+		}
+	
+		$ren->(\$reply,$first?$labels:undef,$results);	#Render to output
+		$results=undef;					#mark as done
+
+		$chunker->($reply,$render);			#write out and call me when done
+
+	};
+	$session->[uSAC::HTTP::Session::write_]->($reply,$render);
+}
+
 sub send_file_uri_norange_chunked {
 	use  integer;
 
@@ -563,7 +665,7 @@ sub send_file_uri_norange_chunked {
 
 	my $last=1;
 	my $timer;
-	my $reader;$reader= sub {
+	my $reader; $reader= sub {
 
 		($_[0]//0) or $chunker->(undef,sub {});	#Execute stack reset
 

@@ -7,6 +7,7 @@ use Exporter 'import';
 use Encode qw<decode encode decode_utf8>;
 
 use Data::Dumper;
+#$Data::Dumper::Deparse=1;
 our @EXPORT_OK=qw<
 		make_reader
 		make_form_data_reader
@@ -584,6 +585,9 @@ sub make_socket_writer{
 		\my $buf=\$_[0];		#give the input a name
 
 		my $cb= $_[1]//$ido->[uSAC::HTTP::Session::dropper_];#sub {};			#give the callback a name
+		
+		#say "writer cb is: ", Dumper $cb;
+		my $arg=$_[2];
 		$offset=0;# if $pre_buffer!=$_[0];	#do offset reset if need beo
 		#$pre_buffer=$_[0];
 
@@ -592,9 +596,10 @@ sub make_socket_writer{
 			$offset+=$w;
 			if($offset==length $buf){
 				#say "FULL WRITE NO APPEND";
-				$cb->($ido);
+				#say "writer cb is: $cb";
+				$cb->($arg);
+				#$cb->($ido);
 				return;
-
 			}
 			elsif(defined $w){# and length($buf)> $w){
 				#say "PARITAL WRITE NO APPEND: wanted". length($buf). "got $w";
@@ -608,7 +613,8 @@ sub make_socket_writer{
 					if($offset==length $buf) {
 						say "FULL async write";
 						undef $ww;
-						$cb->($ido);# if defined $cb;
+						$cb->($arg);# if defined $cb;
+						#$cb->($ido);# if defined $cb;
 					}
 					elsif(defined $w){
 						say "partial async write";

@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 
-use feature qw<refaliasing say state switch>;
+use feature qw<refaliasing say state switch current_sub>;
 no warnings "experimental";
 no feature "indirect";
 
@@ -50,20 +50,34 @@ my $site1=$server->register_site(
 );
 
 site_route $site1 => 'GET' => '/small$' =>()=>sub{
-		state $data="x" x 1024;
+		state $data="a" x (1024*4);
 		#my ($line, $rex)=@_;
 		rex_reply_simple @_, HTTP_OK, undef, $data;
 		return;	
 };
 
+my $chunk_size=1024*4;
 site_route $site1=>GET=>'/big$' => sub{
-                state $data="a" x (1024*1024*4);
-                #my ($line, $rex)=@_;
-                rex_reply_simple @_, HTTP_OK, undef, $data;
+                state $data="a" x (1024*4);
+		#my ($line, $rex)=@_;
+		my $pos=0;
+		#cb simply returns the data chunks to send
+		#say @_;	
+		my $length=length $data;
+		rex_reply_chunked @_, HTTP_OK, undef, sub {
+			my $writer=$_[0];		#writer callback
+			return unless $writer;		#exit if error
+			
+			my $d=substr($data, $pos, $chunk_size);
+			$pos+=length $d;
+			
+			#say "Last: $last";	
+			$writer->($d, $pos == $length ? undef :__SUB__);		#callback to this sub
+		};
                 return;
 };
 
-site_route $site1=>qr{GET|HEAD}=>qr{/public/$Path}=>(
+site_route $site1=>qr{GET|HEAD}=>qr{/public$Path}=>(
 	#log_simple
         )=>sub {
 		send_file_uri_norange @_, $1, 'data';
@@ -87,16 +101,28 @@ my $site2=$server->register_site(
 site_route $site2=>GET=>'/$'=> (
 	#log_simple
 )=>uSAC::HTTP::welcome_to_usac;
+
 site_route $site2=>GET=>'/small$'=>sub {
 	rex_reply_simple @_, HTTP_OK, undef, "Some small data";return};
 
 #Public files
-site_route $site2 =>qr{GET|HEAD}=>qr{/public/$Path} =>
+site_route $site2 =>qr{GET|HEAD}=>qr{/public$Path} =>
         (
 		#log_simple
         ) =>
         sub {
-                send_file_uri_norange @_, $1, 'data';
+		my $rex=$_[1];
+		my $session=$rex->[uSAC::HTTP::Rex::session_];
+
+		if(substr($1,-1) eq "/"){
+			#directory listing?
+			\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
+
+			list_dir @_, $1,'data';
+		}
+		else{
+			send_file_uri_norange @_, $1, 'data';
+		}
                 return;
         };
 

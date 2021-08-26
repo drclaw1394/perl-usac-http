@@ -2,7 +2,7 @@ package uSAC::HTTP::Middleware;
 use strict;
 use warnings;
 use Exporter 'import';
-use feature qw<refaliasing say switch state>;
+use feature qw<refaliasing say switch state current_sub>;
 no warnings "experimental";
 no feature "indirect";
 use Data::Dumper;
@@ -76,17 +76,17 @@ sub chunked {
 	my $scratch="";
 
 	sub {
-		#say "Calling chunked";
 		my $cb=$_[1];
+		my $arg=$_[2]// __SUB__ ;		#argument to callback is self unless one is provided
 		unless(defined $_[0]){
-			return $next->(undef,$cb);
+			return $next->(undef,$cb,$arg);
 		}
+
 		\my $buf=\$_[0];	#input buffer
 		#take the length of the input buffer 
-		$scratch=sprintf("%02X".LF,length $buf);
-		$scratch.=$buf.LF;
-		#say "Scratch: ", $scratch;
-		$next->($scratch,$cb);
+		$scratch=sprintf("%02X".LF,length $buf).$buf.LF;
+		$scratch.="00".LF.LF unless $cb;
+		$next->($scratch,$cb,$arg);
 	}
 }
 sub gzip {

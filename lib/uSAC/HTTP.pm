@@ -172,8 +172,8 @@ our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
 
 our $Method=		qr{^([^ ]+)};
-our $Path=		qr{([^? ]+)};
-our $Comp=		qr{([^/ ]+)};
+our $Path=		qr{(/[^? ]*)};	#Remainder of path components  in request line
+our $Comp=		qr{/([^/ ]+)};	#Path component
 our $Query=		qr{(?:[?]([^# ]+)?)?};
 our $Fragment=		qr{(?:[#]([^ ]+)?)?};
 
