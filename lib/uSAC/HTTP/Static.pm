@@ -378,7 +378,7 @@ sub send_file_uri_norange {
 	my $abs_path=$sys_root."/".$uri;
 	my $entry;
 	unless($entry=open_cache $abs_path){
-		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
 		return;
 	}
 	my $in_fh=$entry->[0];
@@ -387,7 +387,7 @@ sub send_file_uri_norange {
 	#Do stat on fh instead of path. Path requires resolving and is slower
 	#fh is already resolved and open.
 	unless(-r _ and !-d _){
-		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
 		#remove from cache
 		delete $open_cache->{$uri};
 		return
@@ -528,7 +528,7 @@ sub list_dir {
 	say "Listing dir for $abs_path";
 	stat $abs_path;
 	unless(-d _ and  -r _){
-		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
 		return;
 	}
 
@@ -570,6 +570,7 @@ sub list_dir {
 		#.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
 		.HTTP_TRANSFER_ENCODING.": chunked".LF
 		.LF;
+
 	say "Results: ",@$results;
 
 
@@ -605,7 +606,7 @@ sub send_file_uri_norange_chunked {
 
 	my $entry;
 	unless(stat $abs_path and -r _ and !-d _ and ($entry=open_cache $abs_path)){
-		uSAC::HTTP::Rex::reply_simple undef, $rex, HTTP_NOT_FOUND;
+		rex_reply_simple undef, $rex, HTTP_NOT_FOUND;
 		#remove from cache
 		delete $open_cache->{$uri};
 		return
@@ -671,7 +672,6 @@ sub send_file_uri_norange_chunked {
 
 		if($total==$content_length){	#end of file
 			if($last){
-				
 				$last=0;
 				#say "calling with ", $reader;
 				$chunker->("", $reader);

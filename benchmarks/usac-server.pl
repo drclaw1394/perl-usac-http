@@ -65,8 +65,8 @@ site_route $site1=>GET=>'/big$' => sub{
 		#say @_;	
 		my $length=length $data;
 		rex_reply_chunked @_, HTTP_OK, undef, sub {
-			my $writer=$_[0];		#writer callback
-			return unless $writer;		#exit if error
+			return unless my $writer=$_[0];		#writer callback
+			#return unless $writer;		#exit if error
 			
 			my $d=substr($data, $pos, $chunk_size);
 			$pos+=length $d;
@@ -108,16 +108,11 @@ site_route $site2=>GET=>'/small$'=>sub {
 #Public files
 site_route $site2 =>qr{GET|HEAD}=>qr{/public$Path} =>
         (
-		#log_simple
+		log_simple
         ) =>
         sub {
-		my $rex=$_[1];
-		my $session=$rex->[uSAC::HTTP::Rex::session_];
-
+			
 		if(substr($1,-1) eq "/"){
-			#directory listing?
-			\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
-
 			list_dir @_, $1,'data';
 		}
 		else{

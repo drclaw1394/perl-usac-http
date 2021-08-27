@@ -301,6 +301,7 @@ sub reply_simple;
 				render_v1_1_headers($reply, $headers) if $headers;
 				$reply.=LF;
 
+
 			my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
 			#write the header, and then do callback to let app write data
 			#use chunker as argument which will be first argument of callback

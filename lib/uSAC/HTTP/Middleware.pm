@@ -74,19 +74,17 @@ sub chunked {
 	my $next=shift;
 	say "making chunked with", $next; 
 	my $scratch="";
+	#"x"x1024;
+	#$scratch="";
 
+	#data,cb,arg
 	sub {
-		my $cb=$_[1];
-		my $arg=$_[2]// __SUB__ ;		#argument to callback is self unless one is provided
-		unless(defined $_[0]){
-			return $next->(undef,$cb,$arg);
-		}
-
-		\my $buf=\$_[0];	#input buffer
-		#take the length of the input buffer 
-		$scratch=sprintf("%02X".LF,length $buf).$buf.LF;
-		$scratch.="00".LF.LF unless $cb;
-		$next->($scratch,$cb,$arg);
+		$_[2]//= __SUB__ ;		#argument to callback is self unless one is provided
+		return &$next unless defined $_[0];	#reset stack if requested. pass it on
+		$scratch=sprintf("%02X".LF,length $_[0]).$_[0].LF;
+		$scratch.="00".LF.LF unless $_[1];
+		shift;
+		$next->($scratch, @_);
 	}
 }
 sub gzip {
