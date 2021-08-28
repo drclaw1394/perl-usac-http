@@ -525,7 +525,7 @@ sub list_dir {
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	my $abs_path=$sys_root.$uri;
-	say "Listing dir for $abs_path";
+	#say "Listing dir for $abs_path";
 	stat $abs_path;
 	unless(-d _ and  -r _){
 		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
@@ -541,58 +541,39 @@ sub list_dir {
 	else{
 		@fs_paths=<$abs_path.* $abs_path*>;	
 	}
-	say "Paths: @fs_paths";
-	my $results;
 
 	state $labels=[qw<name dev inode mode nlink uid gid rdev size access_time modification_time change_time block_size blocks>];
-	#push @results,\@labels;
-	for my $path (@fs_paths) {
-		my @stats=stat $path;
-		next unless -r _;
-		$path=~s|$sys_root/||;
-		say "Stats for $path: ", @stats;
-		my $base=basename $path;
-		my $base= -d _ ? "$base/":$base;
-		unshift @stats, qq|<a href="$rex->[uSAC::HTTP::Rex::uri_]$base">$base</a>|;
-		push @$results,\@stats;
-	}
-	#render html
-	$reply=
-		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		#.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
-        	.($session->[uSAC::HTTP::Session::closeme_]?
-			HTTP_CONNECTION.": close".LF
-			:(HTTP_CONNECTION.": Keep-Alive".LF
-			.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
-			)
-		)
-		#.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
-		.HTTP_TRANSFER_ENCODING.": chunked".LF
-		.LF;
+	my @results=map {
+		#say "WORKING ON PATH: $_";
+		if(-r){			#only list items we can read
+			s|^$sys_root/||;			#strip out sys_root
+			my $base=(split "/")[-1].(-d _ ? "/":"");
 
-	say "Results: ",@$results;
-
-
-	my $chunker;
-	$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
-	my $first=1;
-	my $ren=$renderer//\&_html_dir_list;
-	my $render;$render=sub {
-		$reply="";					#Reset buffer
-		($_[0]//0) or $chunker->(undef,sub {});		#Execute stack reset
-		unless($results){
-			$chunker->(""); #Send empty chunk to finish. no cb defaults to drop if required
-			return;
+			[qq|<a href="$rex->[uSAC::HTTP::Rex::uri_]$base">$base</a>|,stat _];
 		}
-	
-		$ren->(\$reply,$first?$labels:undef,$results);	#Render to output
-		$results=undef;					#mark as done
+		else{
+			();
+		}
+	}
 
-		$chunker->($reply,$render);			#write out and call me when done
+	@fs_paths;
+	#say "Results ", @results;
+	my $ren=$renderer//\&_html_dir_list;
+
+	rex_reply_chunked undef, $rex, HTTP_OK, [], sub {
+		return unless my $writer=$_[0];			#no writer so bye
+
+		##### Start app logic
+		state $first=1;
+		$reply="";					#Reset buffer
+		$ren->(\$reply, $first?$labels : undef, \@results);	#Render to output
+		$first=0;
+
+		@results=();					#mark as done		
+		###### End app logic
+		$writer->($reply,@results? __SUB__ : undef);	#
 
 	};
-	$session->[uSAC::HTTP::Session::write_]->($reply,$render);
 }
 
 sub send_file_uri_norange_chunked {

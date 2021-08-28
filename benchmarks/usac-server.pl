@@ -6,6 +6,7 @@ use feature qw<refaliasing say state switch current_sub>;
 no warnings "experimental";
 no feature "indirect";
 
+use Data::Dumper;
 	my $fork=$ARGV[0]//0;
 BEGIN {
 	@uSAC::HTTP::Server::Subproducts=("testing/1.2");
@@ -106,17 +107,20 @@ site_route $site2=>GET=>'/small$'=>sub {
 	rex_reply_simple @_, HTTP_OK, undef, "Some small data";return};
 
 #Public files
-site_route $site2 =>qr{GET|HEAD}=>qr{/public$Path} =>
+site_route $site2 => qr{GET|HEAD}=>qr{/public$Path} =>
         (
-		log_simple
+		#log_simple
         ) =>
+
         sub {
 			
+		my $p=$1;
 		if(substr($1,-1) eq "/"){
-			list_dir @_, $1,'data';
+				#if($1=~m|/$|){
+			list_dir @_, $p,'data';
 		}
 		else{
-			send_file_uri_norange @_, $1, 'data';
+			send_file_uri_norange @_, $p, 'data';
 		}
                 return;
         };

@@ -87,6 +87,7 @@ sub chunked {
 		$next->($scratch, @_);
 	}
 }
+
 sub gzip {
 	my $next=shift;
 	say "making gzip with ", $next;
