@@ -9,9 +9,10 @@ use Digest::SHA1;
 use Encode qw<decode encode>;
 use Compress::Raw::Zlib qw(Z_SYNC_FLUSH);
 
-our @EXPORT_OK=qw<make_websocket_reader make_websocket_writer upgrade_to_websocket>;
+our @EXPORT_OK=qw<make_websocket_server_reader make_websocket_server_writer upgrade_to_websocket>;
 our @EXPORT=@EXPORT_OK;
 
+use Data::Dumper;
 use AnyEvent;
 use Config;
 use Time::HiRes ();
@@ -22,6 +23,8 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Code qw<:constants>;
+
+use uSAC::HTTP::Middler;
 
 my $LF=$uSAC::HTTP::Rex::LF;
 
@@ -35,7 +38,7 @@ sub time64 () {
 
 sub DEBUG () { 0 }
 
-use enum ( "writer_=0" ,qw<session_>);
+use enum ( "writer_=0" ,qw<on_message_ on_close_ on_error_ session_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -77,6 +80,18 @@ sub onclose {
 	$_[0]{onclose} = $_[1];
 }
 
+sub on_message {
+	$_[0]{on_message_}=$_[1];
+}
+sub on_close {
+	$_[0]{on_close_}=$_[1];
+}
+sub on_error {
+	$_[0]{on_error_}=$_[1];
+}
+
+
+
 #must be utf8 encoded prior to calling this
 sub send_utf8{
 	my $self = shift;
@@ -91,23 +106,23 @@ sub upgrade_to_websocket{
 	DEBUG && say  "Testing for websocket";
 	my $line=shift;
 	my $rex=shift;
-	my $uri=shift;
+	#my $uri=shift;
 	my $cb=shift;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	#attempt to do the match
 	given ($rex->[uSAC::HTTP::Rex::headers_]){
 		when (
-				$_->{connection} =~ /upgrade/i	#required
-				and  $_->{upgrade} =~ /websocket/i	#required
-				and  $_->{'sec-websocket-version'} ==13	#required
-				and  exists $_->{'sec-websocket-key'}	#required
-				and  $_->{'sec-webSocket-protocol'} =~ /.*/  #sub proto
+				$_->{CONNECTION} =~ /upgrade/i	#required
+				and  $_->{UPGRADE} =~ /websocket/i	#required
+				and  $_->{'SEC_WEBSOCKET_VERSION'} ==13	#required
+				and  exists $_->{'SEC_WEBSOCKET_KEY'}	#required
+				and  $_->{'SEC_WEBsOCKET_PROTOCOL'} =~ /.*/  #sub proto
 		){
 
 			#TODO:  origin testing, externsions,
 			# mangle the key
 			my $key=MIME::Base64::encode_base64 
-				Digest::SHA1::sha1( $_->{'sec-websocket-key'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
+				Digest::SHA1::sha1( $_->{'SEC_WEBSOCKET_KEY'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
 				"";
 			#
 			#reply
@@ -119,11 +134,11 @@ sub upgrade_to_websocket{
 				;
 			#support the permessage deflate
 			my $deflate_flag;
-			given($_->{'sec-websocket-extensions'}){
+			given($_->{'SEC_WEBSOCKET_EXTENSIONS'}){
 				when(/permessage-deflate/){
 					say "Permessage deflate";
-					$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
-					$deflate_flag=1;
+					#$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
+					#$deflate_flag=1;
 				}
 				default {
 				}
@@ -131,16 +146,20 @@ sub upgrade_to_websocket{
 
 			#write reply	
 			say $reply;
-			uSAC::HTTP::Session::push_writer 
-				$session,
-				"http1_1_default_writer",
-				undef;
-
+                        #####################################
+                        # uSAC::HTTP::Session::push_writer  #
+                        #         $session,                 #
+                        #         "http1_1_default_writer", #
+                        #         undef;                    #
+                        #####################################
+			local $/=", ";
+			say $rex->[uSAC::HTTP::Rex::headers_]->%*;
 			given($session->[uSAC::HTTP::Session::write_]){
 				say "Writer is: ", $_;
 				$_->( $reply.LF , sub {
+
 						say "handshake written out";
-						my $ws=uSAC::HTTP::Server::WS->new($rex->[uSAC::HTTP::Rex::session_]);
+						my $ws=uSAC::HTTP::Server::WS->new($session);
 						$cb->($ws);
 
 						#read and write setup create a new ws with just the session
@@ -166,7 +185,7 @@ sub upgrade_to_websocket{
 
 
 #This is called by the session reader. Data is in the scalar ref $buf
-sub make_websocket_reader {
+sub make_websocket_server_reader {
 
 	my $session=shift;	#session
 	#my $ws=shift;		#websocket
@@ -185,6 +204,7 @@ sub make_websocket_reader {
 	my $on_fragment=$session->[uSAC::HTTP::Session::reader_cb_];
 	say "ON FRAGMENT: ", $on_fragment;
 	sub {
+		say "IN WS READER";
 		#do the frame parsing here
 		say $buf;
 		while( length $buf> 2){
@@ -381,13 +401,8 @@ sub make_websocket_reader {
 
 }
 
-#possibly not required.. default writer should work
-#server writer does not mask data
-sub make_websocket_server_writer {
-	my $session=shift;	#session
-	#my $ws=shift;		#websocket
-
-	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
+sub _websocket_writer {
+	my $next =shift;	# This is the reference to the next item in the stack
 
 	sub {
 		#take input data, convert to frame and use normal writer?
@@ -396,11 +411,15 @@ sub make_websocket_server_writer {
 
 		# Head
 		my $frame = 0b00000000;
+		say "fin is $fin";
+		say "op is $op";
+
 		vec($frame, 0, 8) = $op | 0b10000000 if $fin;
 		vec($frame, 0, 8) |= 0b01000000 if $rsv1;
 		vec($frame, 0, 8) |= 0b00100000 if $rsv2;
 		vec($frame, 0, 8) |= 0b00010000 if $rsv3;
-		printf "Frame: %X\n",$frame;
+		say "Frame ",unpack "H*",$frame;
+		#printf "Frame: %X\n",$frame;
 		my $len = length $payload;
 		# Mask payload
 		warn "PAYLOAD: $payload\n" if DEBUG;
@@ -451,11 +470,23 @@ sub make_websocket_server_writer {
 		print "Built frame = \n".xd( "$frame" ) if DEBUG;
 
 		say "FRAME TO SEND ",$frame;
-		$session->[uSAC::HTTP::Session::write_]->($frame);
+		say "NEXT is : ", $next;
+		$next->($frame);
 		return;
 	}
-
 }
+
+#sub which links the websocket to socket stream
+#
+sub make_websocket_server_writer {
+	my $session=shift;	#session
+
+	my ($entry_point,$stack)=uSAC::HTTP::Middler->new()
+		->register(\&_websocket_writer)
+		->link($session->[uSAC::HTTP::Session::write_]);
+	return $entry_point;
+}
+
 
 sub new {
 	my $pkg = shift;
@@ -469,23 +500,19 @@ sub new {
 		session=>$session,
 		maxframe      => 1024*1024,
 		mask          => 0,
-		ping_interval => 5,
+		ping_interval => 2,
 		state         => OPEN,
 		%args,
 	}, $pkg;
-	#create the new read and writer pair based on protocol
-        ##########################
-        # $session->push_writer( #
-        #         "websocket",   #
-        #         $self,         #
-        #                        #
-        #                        #
-        # );                     #
-        ##########################
-	#
 	$session->[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
-	$self->{writer_}=make_websocket_server_writer $session;	#create a writer and store in ws
+	#create the new read and writer pair based on protocol
+        $self->{writer_}=$session->select_writer(
+                "websocket",
+        );
+	#
+	#$self->{writer_}=make_websocket_server_writer $session;	#create a writer and store in ws
 	say "Created writer: ",$self->{writer_};
+	#$self->{writer_}=$session->[uSAC::HTTP::Session::write_];
 
 	#the pushed reader now has access to the writer via the session->rex
 	$session->push_reader(
@@ -496,10 +523,11 @@ sub new {
 			$self->{writer_}->(1,0,0,0,TEXT,"HELLO BACK")
 		}
 	);
+
 	#setup ping
 	$self->{pinger} = AE::timer 0,$self->{ping_interval}, sub {
 		say "Sending ping";
-		$self->{ping_id} = time64();
+		$self->{ping_id} = "hello";#time64();
 		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id});
 	} if $self->{ping_interval} > 0;
 
@@ -579,7 +607,7 @@ sub setup {
 			if ($op == TEXT) {
 				utf8::decode( $data );
 			}
-			$self->{onmessage} && $self->{onmessage}(
+			$self->{on_message_} && $self->{on_message_}(
 				$data,
 				$op == TEXT ? 'text' : 'binary'
 			);

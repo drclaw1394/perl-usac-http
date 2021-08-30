@@ -91,6 +91,7 @@ sub new {
 	$self->[table_]=Hustle::Table->new();
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
+	register_site($self, uSAC::HTTP->new(id=>"default"));
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	#$self->[max_header_size_]=MAX_READ_SIZE;
@@ -316,6 +317,8 @@ sub add_end_point{
 	$self->[table_]->add($matcher,$end);
 }
 
+#registers a site object with the server
+#returns the object
 sub register_site {
 	my $self=shift;
 	my $site=shift;
@@ -323,6 +326,24 @@ sub register_site {
 	my $name=$site->[uSAC::HTTP::id_];
 	$self->[sites_]{$name}=$site;
 	$site;
+}
+#returns the default site
+sub default_site {
+	my $self=shift;
+	$self->[sites_]{default};
+}
+
+#returns the site registered with the specified name
+#Returns default if not specififed
+sub site {
+	my $self=shift;
+	my $name=shift;
+	$self->[sites_]{$name//"default"}
+}
+
+sub route {
+	my $self=shift;
+	$self->site->route(@_);
 }
 
 sub rebuild_dispatch {

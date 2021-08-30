@@ -83,7 +83,7 @@ sub new {
 	};
 
 	
-	#bless $self,$package
+	bless $self,$package;
 	#make entry on the write stack
 	#$self->_make_reader;
 	#_make_reader $self;	
