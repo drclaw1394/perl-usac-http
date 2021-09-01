@@ -382,6 +382,7 @@ sub make_websocket_server_reader {
 					substr $buf,0, $hlen+$len,'';
 					#TODO: drop the session, undef any read/write subs
 					$self->{pinger}=undef;
+					$self->{on_close_}->();
 					$session->drop;
 
 				}
@@ -409,7 +410,8 @@ sub _websocket_writer {
 	sub {
 		#take input data, convert to frame and use normal writer?
 		my ($fin, $rsv1, $rsv2, $rsv3, $op, $payload, $cb,$arg) = @_;
-		$arg//=__SUB__;
+		$cb//=sub {};		#if no callback provided, fire and forget
+		$arg//=__SUB__;		#Use 'self' as argument if none provided
 		warn "BUILDING FRAME\n" if DEBUG;
 
 		# Head
@@ -417,10 +419,19 @@ sub _websocket_writer {
 		say "fin is $fin";
 		say "op is $op";
 
-		vec($frame, 0, 8) = $op | 0b10000000 if $fin;
-		vec($frame, 0, 8) |= 0b01000000 if $rsv1;
-		vec($frame, 0, 8) |= 0b00100000 if $rsv2;
-		vec($frame, 0, 8) |= 0b00010000 if $rsv3;
+                #################################################
+                # vec($frame, 0, 8) = $op | 0b10000000 if $fin; #
+                # vec($frame, 0, 8) |= 0b01000000 if $rsv1;     #
+                # vec($frame, 0, 8) |= 0b00100000 if $rsv2;     #
+                # vec($frame, 0, 8) |= 0b00010000 if $rsv3;     #
+                #################################################
+
+		#vec($frame, 0, 8) = 
+		$frame= pack "C", $op 
+		| ($fin && 0b10000000)
+		| ($rsv1 && 0b01000000) 
+		| ($rsv2 && 0b00100000)
+		| ($rsv3 && 0b00010000);
 		say "Frame ",unpack "H*",$frame;
 		#printf "Frame: %X\n",$frame;
 		my $len = length $payload;
@@ -525,18 +536,21 @@ sub new {
 	$self->{pinger} = AE::timer 0,$self->{ping_interval}, sub {
 		say "Sending ping";
 		$self->{ping_id} = "hello";#time64();
-		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id},sub {
-				say "WRITER CALLBACK";
-				if($_[0]){
-					say "good to go again";
-				}
-				else{
-					say "ERROR... need to close";
-					$self->{pinger}=undef;
-					$session->drop;
-
-				}
-			});
+		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id});
+                #########################################################
+                # ,sub {                                                #
+                #                 say "WRITER CALLBACK";                #
+                #                 if($_[0]){                            #
+                #                         say "good to go again";       #
+                #                 }                                     #
+                #                 else{                                 #
+                #                         say "ERROR... need to close"; #
+                #                         $self->{pinger}=undef;        #
+                #                         $session->drop;               #
+                #                                                       #
+                #                 }                                     #
+                #         });                                           #
+                #########################################################
 	} if $self->{ping_interval} > 0;
 
 	return $self;
@@ -562,197 +576,214 @@ sub _xor_mask($$) {
 	);
 }
 
-sub parse_frame {
-	my ($self,$rbuf) = @_;
-	return if length $$rbuf < 2;
-	my $clone = $$rbuf;
-	#say "parsing frame: \n".xd "$clone";
-	my $head = substr $clone, 0, 2;
-	my $fin  = (vec($head, 0, 8) & 0b10000000) == 0b10000000 ? 1 : 0;
-	my $rsv1 = (vec($head, 0, 8) & 0b01000000) == 0b01000000 ? 1 : 0;
-	#warn "RSV1: $rsv1\n" if DEBUG;
-	my $rsv2 = (vec($head, 0, 8) & 0b00100000) == 0b00100000 ? 1 : 0;
-	#warn "RSV2: $rsv2\n" if DEBUG;
-	my $rsv3 = (vec($head, 0, 8) & 0b00010000) == 0b00010000 ? 1 : 0;
-	#warn "RSV3: $rsv3\n" if DEBUG;
-
-	# Opcode
-	my $op = vec($head, 0, 8) & 0b00001111;
-	warn "OPCODE: $op ($OP{$op})\n" if DEBUG;
-	
-	# Length
-	my $len = vec($head, 1, 8) & 0b01111111;
-	warn "LENGTH: $len\n" if DEBUG;
-
-	# No payload
-	my $hlen = 2;
-	if ($len == 0) { warn "NOTHING\n" if DEBUG }
-
-	# Small payload
-	elsif ($len < 126) { warn "SMALL\n" if DEBUG }
-
-	# Extended payload (16bit)
-	elsif ($len == 126) {
-		return unless length $clone > 4;
-		$hlen = 4;
-		my $ext = substr $clone, 2, 2;
-		$len = unpack 'n', $ext;
-		warn "EXTENDED (16bit): $len\n" if DEBUG;
-	}
-
-	# Extended payload (64bit)
-	elsif ($len == 127) {
-		return unless length $clone > 10;
-		$hlen = 10;
-		my $ext = substr $clone, 2, 8;
-		$len =
-			$Config{ivsize} > 4
-			? unpack('Q>', $ext)
-			: unpack('N', substr($ext, 4, 4));
-		warn "EXTENDED (64bit): $len\n" if DEBUG;
-	}
-	
-	
-	# TODO !!!
-	# Check message size
-	#$self->finish and return if $len > $self->{maxframe};
-	
-
-	# Check if whole packet has arrived
-	my $masked = vec($head, 1, 8) & 0b10000000;
-	return if length $clone < ($len + $hlen + ($masked ? 4 : 0));
-	substr $clone, 0, $hlen, '';
-
-	# Payload
-	$len += 4 if $masked;
-	return if length $clone < $len;
-	my $payload = $len ? substr($clone, 0, $len, '') : '';
-
-	# Unmask payload
-	if ($masked) {
-		warn "UNMASKING PAYLOAD\n" if DEBUG;
-		my $mask = substr($payload, 0, 4, '');
-		$payload = _xor_mask($payload, $mask);
-		#say xd $payload;
-	}
-	warn "PAYLOAD: $payload\n" if DEBUG;
-	$$rbuf = $clone;
-	
-	return [$fin, $rsv1, $rsv2, $rsv3, $op, $payload];
+sub write_text {
+	$_[0]->{writer_}->(1,0,0,0,TEXT,$_[1]);
 }
 
-sub send_frame {
-	my ($self, $fin, $rsv1, $rsv2, $rsv3, $op, $payload) = @_;
-	$self->{h} or return warn "No handle for sending frame";
-	warn "BUILDING FRAME\n" if DEBUG;
-	
-	# Head
-	my $frame = 0b00000000;
-	vec($frame, 0, 8) = $op | 0b10000000 if $fin;
-	vec($frame, 0, 8) |= 0b01000000 if $rsv1;
-	vec($frame, 0, 8) |= 0b00100000 if $rsv2;
-	vec($frame, 0, 8) |= 0b00010000 if $rsv3;
-	
-	my $len = length $payload;
-	# Mask payload
-	warn "PAYLOAD: $payload\n" if DEBUG;
-	my $masked = $self->{mask};
-	if ($masked) {
-		warn "MASKING PAYLOAD\n" if DEBUG;
-		my $mask = pack 'N', int(rand( 2**32 ));
-		$payload = $mask . _xor_mask($payload, $mask);
-	}
-	
-	# Length
-	#my $len = length $payload;
-	#$len -= 4 if $self->{masked};
-	
-	# Empty prefix
-	my $prefix = 0;
-	
-	# Small payload
-	if ($len < 126) {
-		vec($prefix, 0, 8) = $masked ? ($len | 0b10000000) : $len;
-		$frame .= $prefix;
-	}
-	
-	# Extended payload (16bit)
-	elsif ($len < 65536) {
-		vec($prefix, 0, 8) = $masked ? (126 | 0b10000000) : 126;
-		$frame .= $prefix;
-		$frame .= pack 'n', $len;
-	}
-	
-	# Extended payload (64bit)
-	else {
-		vec($prefix, 0, 8) = $masked ? (127 | 0b10000000) : 127;
-		$frame .= $prefix;
-		$frame .=
-			$Config{ivsize} > 4
-			? pack('Q>', $len)
-			: pack('NN', $len >> 32, $len & 0xFFFFFFFF);
-	}
-	
-	if (DEBUG) {
-		warn 'HEAD: ', unpack('B*', $frame), "\n";
-		warn "OPCODE: $op\n";
-	}
-	
-	# Payload
-	$frame .= $payload;
-	print "Built frame = \n".xd( "$frame" ) if DEBUG;
-	
-	$self->{h}->push_write( $frame );
-	return;
+sub write_binary {
+	$_[0]->{writer_}->(1,0,0,0,BINARY,$_[1]);
+
 }
 
-sub send : method {
-	my $self = shift;
-	my $data = shift;
-	my $is_text;
-	if (ref $data) {
-		$is_text = 1;
-		$data = $JSON->encode($data);
-	}
-	elsif ( utf8::is_utf8($data) ) {
-		if ( utf8::downgrade($data,1) ) {
-		
-		}
-		else {
-			$is_text = 1;
-			utf8::encode($data);
-		}
-	}
-	$self->send_frame(1, 0, 0, 0, ($is_text ? TEXT : BINARY ), $data);
-}
+#############################################################################
+# sub parse_frame {                                                         #
+#         my ($self,$rbuf) = @_;                                            #
+#         return if length $$rbuf < 2;                                      #
+#         my $clone = $$rbuf;                                               #
+#         #say "parsing frame: \n".xd "$clone";                             #
+#         my $head = substr $clone, 0, 2;                                   #
+#         my $fin  = (vec($head, 0, 8) & 0b10000000) == 0b10000000 ? 1 : 0; #
+#         my $rsv1 = (vec($head, 0, 8) & 0b01000000) == 0b01000000 ? 1 : 0; #
+#         #warn "RSV1: $rsv1\n" if DEBUG;                                   #
+#         my $rsv2 = (vec($head, 0, 8) & 0b00100000) == 0b00100000 ? 1 : 0; #
+#         #warn "RSV2: $rsv2\n" if DEBUG;                                   #
+#         my $rsv3 = (vec($head, 0, 8) & 0b00010000) == 0b00010000 ? 1 : 0; #
+#         #warn "RSV3: $rsv3\n" if DEBUG;                                   #
+#                                                                           #
+#         # Opcode                                                          #
+#         my $op = vec($head, 0, 8) & 0b00001111;                           #
+#         warn "OPCODE: $op ($OP{$op})\n" if DEBUG;                         #
+#                                                                           #
+#         # Length                                                          #
+#         my $len = vec($head, 1, 8) & 0b01111111;                          #
+#         warn "LENGTH: $len\n" if DEBUG;                                   #
+#                                                                           #
+#         # No payload                                                      #
+#         my $hlen = 2;                                                     #
+#         if ($len == 0) { warn "NOTHING\n" if DEBUG }                      #
+#                                                                           #
+#         # Small payload                                                   #
+#         elsif ($len < 126) { warn "SMALL\n" if DEBUG }                    #
+#                                                                           #
+#         # Extended payload (16bit)                                        #
+#         elsif ($len == 126) {                                             #
+#                 return unless length $clone > 4;                          #
+#                 $hlen = 4;                                                #
+#                 my $ext = substr $clone, 2, 2;                            #
+#                 $len = unpack 'n', $ext;                                  #
+#                 warn "EXTENDED (16bit): $len\n" if DEBUG;                 #
+#         }                                                                 #
+#                                                                           #
+#         # Extended payload (64bit)                                        #
+#         elsif ($len == 127) {                                             #
+#                 return unless length $clone > 10;                         #
+#                 $hlen = 10;                                               #
+#                 my $ext = substr $clone, 2, 8;                            #
+#                 $len =                                                    #
+#                         $Config{ivsize} > 4                               #
+#                         ? unpack('Q>', $ext)                              #
+#                         : unpack('N', substr($ext, 4, 4));                #
+#                 warn "EXTENDED (64bit): $len\n" if DEBUG;                 #
+#         }                                                                 #
+#                                                                           #
+#                                                                           #
+#         # TODO !!!                                                        #
+#         # Check message size                                              #
+#         #$self->finish and return if $len > $self->{maxframe};            #
+#                                                                           #
+#                                                                           #
+#         # Check if whole packet has arrived                               #
+#         my $masked = vec($head, 1, 8) & 0b10000000;                       #
+#         return if length $clone < ($len + $hlen + ($masked ? 4 : 0));     #
+#         substr $clone, 0, $hlen, '';                                      #
+#                                                                           #
+#         # Payload                                                         #
+#         $len += 4 if $masked;                                             #
+#         return if length $clone < $len;                                   #
+#         my $payload = $len ? substr($clone, 0, $len, '') : '';            #
+#                                                                           #
+#         # Unmask payload                                                  #
+#         if ($masked) {                                                    #
+#                 warn "UNMASKING PAYLOAD\n" if DEBUG;                      #
+#                 my $mask = substr($payload, 0, 4, '');                    #
+#                 $payload = _xor_mask($payload, $mask);                    #
+#                 #say xd $payload;                                         #
+#         }                                                                 #
+#         warn "PAYLOAD: $payload\n" if DEBUG;                              #
+#         $$rbuf = $clone;                                                  #
+#                                                                           #
+#         return [$fin, $rsv1, $rsv2, $rsv3, $op, $payload];                #
+# }                                                                         #
+#                                                                           #
+#############################################################################
+##############################################################################
+# sub send_frame {                                                           #
+#         my ($self, $fin, $rsv1, $rsv2, $rsv3, $op, $payload) = @_;         #
+#         $self->{h} or return warn "No handle for sending frame";           #
+#         warn "BUILDING FRAME\n" if DEBUG;                                  #
+#                                                                            #
+#         # Head                                                             #
+#         my $frame = 0b00000000;                                            #
+#         vec($frame, 0, 8) = $op | 0b10000000 if $fin;                      #
+#         vec($frame, 0, 8) |= 0b01000000 if $rsv1;                          #
+#         vec($frame, 0, 8) |= 0b00100000 if $rsv2;                          #
+#         vec($frame, 0, 8) |= 0b00010000 if $rsv3;                          #
+#                                                                            #
+#         my $len = length $payload;                                         #
+#         # Mask payload                                                     #
+#         warn "PAYLOAD: $payload\n" if DEBUG;                               #
+#         my $masked = $self->{mask};                                        #
+#         if ($masked) {                                                     #
+#                 warn "MASKING PAYLOAD\n" if DEBUG;                         #
+#                 my $mask = pack 'N', int(rand( 2**32 ));                   #
+#                 $payload = $mask . _xor_mask($payload, $mask);             #
+#         }                                                                  #
+#                                                                            #
+#         # Length                                                           #
+#         #my $len = length $payload;                                        #
+#         #$len -= 4 if $self->{masked};                                     #
+#                                                                            #
+#         # Empty prefix                                                     #
+#         my $prefix = 0;                                                    #
+#                                                                            #
+#         # Small payload                                                    #
+#         if ($len < 126) {                                                  #
+#                 vec($prefix, 0, 8) = $masked ? ($len | 0b10000000) : $len; #
+#                 $frame .= $prefix;                                         #
+#         }                                                                  #
+#                                                                            #
+#         # Extended payload (16bit)                                         #
+#         elsif ($len < 65536) {                                             #
+#                 vec($prefix, 0, 8) = $masked ? (126 | 0b10000000) : 126;   #
+#                 $frame .= $prefix;                                         #
+#                 $frame .= pack 'n', $len;                                  #
+#         }                                                                  #
+#                                                                            #
+#         # Extended payload (64bit)                                         #
+#         else {                                                             #
+#                 vec($prefix, 0, 8) = $masked ? (127 | 0b10000000) : 127;   #
+#                 $frame .= $prefix;                                         #
+#                 $frame .=                                                  #
+#                         $Config{ivsize} > 4                                #
+#                         ? pack('Q>', $len)                                 #
+#                         : pack('NN', $len >> 32, $len & 0xFFFFFFFF);       #
+#         }                                                                  #
+#                                                                            #
+#         if (DEBUG) {                                                       #
+#                 warn 'HEAD: ', unpack('B*', $frame), "\n";                 #
+#                 warn "OPCODE: $op\n";                                      #
+#         }                                                                  #
+#                                                                            #
+#         # Payload                                                          #
+#         $frame .= $payload;                                                #
+#         print "Built frame = \n".xd( "$frame" ) if DEBUG;                  #
+#                                                                            #
+#         $self->{h}->push_write( $frame );                                  #
+#         return;                                                            #
+# }                                                                          #
+#                                                                            #
+##############################################################################
+##############################################################################
+# sub send : method {                                                        #
+#         my $self = shift;                                                  #
+#         my $data = shift;                                                  #
+#         my $is_text;                                                       #
+#         if (ref $data) {                                                   #
+#                 $is_text = 1;                                              #
+#                 $data = $JSON->encode($data);                              #
+#         }                                                                  #
+#         elsif ( utf8::is_utf8($data) ) {                                   #
+#                 if ( utf8::downgrade($data,1) ) {                          #
+#                                                                            #
+#                 }                                                          #
+#                 else {                                                     #
+#                         $is_text = 1;                                      #
+#                         utf8::encode($data);                               #
+#                 }                                                          #
+#         }                                                                  #
+#         $self->send_frame(1, 0, 0, 0, ($is_text ? TEXT : BINARY ), $data); #
+# }                                                                          #
+##############################################################################
 
-sub close : method {
-=for rem
-   1000
-
-      1000 indicates a normal closure, meaning that the purpose for
-      which the connection was established has been fulfilled.
-=cut
-	my $self = shift;
-	my $cb = pop;
-	my $code = shift // 1000;
-	my $msg = shift;
-	if ($self->{state} == OPEN) {
-		$self->send_frame(1,0,0,0,CLOSE,pack("na*",$code,$msg));
-		$self->{state} = CLOSING;
-		$self->{close_cb} = shift;
-	}
-	elsif ($self->{state} == CLOSING) {
-		return;
-	}
-	elsif ($self->{state} == CLOSED) {
-		warn "called close, while already closed from @{[ (caller)[1,2] ]}";
-	}
-	else {
-		warn "close not possible in state $self->{state} from @{[ (caller)[1,2] ]}";
-	}
-}
-
+################################################################################################
+# sub close : method {                                                                         #
+# =for rem                                                                                     #
+#    1000                                                                                      #
+#                                                                                              #
+#       1000 indicates a normal closure, meaning that the purpose for                          #
+#       which the connection was established has been fulfilled.                               #
+# =cut                                                                                         #
+#         my $self = shift;                                                                    #
+#         my $cb = pop;                                                                        #
+#         my $code = shift // 1000;                                                            #
+#         my $msg = shift;                                                                     #
+#         if ($self->{state} == OPEN) {                                                        #
+#                 $self->send_frame(1,0,0,0,CLOSE,pack("na*",$code,$msg));                     #
+#                 $self->{state} = CLOSING;                                                    #
+#                 $self->{close_cb} = shift;                                                   #
+#         }                                                                                    #
+#         elsif ($self->{state} == CLOSING) {                                                  #
+#                 return;                                                                      #
+#         }                                                                                    #
+#         elsif ($self->{state} == CLOSED) {                                                   #
+#                 warn "called close, while already closed from @{[ (caller)[1,2] ]}";         #
+#         }                                                                                    #
+#         else {                                                                               #
+#                 warn "close not possible in state $self->{state} from @{[ (caller)[1,2] ]}"; #
+#         }                                                                                    #
+# }                                                                                            #
+#                                                                                              #
+################################################################################################
 sub DESTROY {
 	my $self = shift;
 	my $caller = "@{[ (caller)[1,2] ]}";

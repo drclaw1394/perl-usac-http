@@ -77,6 +77,7 @@ sub new {
 		$fh=undef;
 		$id=undef;
 		$closeme=undef;
+		#say "DROP COMPLETE...";
 
 	unshift @$zombies, $self;
 
@@ -141,31 +142,33 @@ sub _make_reader {
 		}
 	};
 }
-sub make_dropper {
-	my $self=shift;	
-	my $server=$self->[server_];
-	my $sessions=$self->[sessions_];
-	my $zombies=$self->[zombies_];
-	\my $fh=\$self->[fh_];
-	\my $rw=\$self->[rw_];
-	\my $ww=\$self->[ww_];
-	\my $id=\$self->[id_];
-	\my $closeme=\$self->[closeme_];
-	sub {
-		say "IN DROPPER";
-		return unless $closeme;
-		delete $sessions->{$id};
-		close $fh;
-		$rw=undef;
-		$ww=undef;
-		$fh=undef;
-		$id=undef;
-		$closeme=undef;
-
-		unshift @$zombies, $self;
-	}
-}
-
+#############################################
+# sub make_dropper {                        #
+#         my $self=shift;                   #
+#         my $server=$self->[server_];      #
+#         my $sessions=$self->[sessions_];  #
+#         my $zombies=$self->[zombies_];    #
+#         \my $fh=\$self->[fh_];            #
+#         \my $rw=\$self->[rw_];            #
+#         \my $ww=\$self->[ww_];            #
+#         \my $id=\$self->[id_];            #
+#         \my $closeme=\$self->[closeme_];  #
+#         sub {                             #
+#                 say "IN DROPPER";         #
+#                 return unless $closeme;   #
+#                 delete $sessions->{$id};  #
+#                 close $fh;                #
+#                 $rw=undef;                #
+#                 $ww=undef;                #
+#                 $fh=undef;                #
+#                 $id=undef;                #
+#                 $closeme=undef;           #
+#                                           #
+#                 unshift @$zombies, $self; #
+#         }                                 #
+# }                                         #
+#                                           #
+#############################################
 sub drop {
 	#my ($self,$err) = @_;
 	return unless $_[0]->[closeme_];

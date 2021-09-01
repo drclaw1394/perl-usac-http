@@ -7,9 +7,9 @@ no warnings "experimental";
 no feature "indirect";
 use Data::Dumper;
 use uSAC::HTTP::Session;
-use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Code qw<:constants>;
+use uSAC::HTTP::Rex;
 
 use IO::Compress::Gzip;
 use Compress::Raw::Zlib;

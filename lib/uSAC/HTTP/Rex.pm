@@ -3,7 +3,7 @@
 package uSAC::HTTP::Rex;
 use version; our $VERSION = version->declare('v0.1');
 use common::sense;
-use feature "refaliasing";
+use feature qw<refaliasing switch>;
 our $UPLOAD_LIMIT=10_000_000;
 
 use uSAC::HTTP::Code qw<:constants>;
@@ -19,7 +19,7 @@ use uSAC::HTTP::Cookie qw<:all>;
 use AnyEvent;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<rex_headers rex_reply_simple rex_reply_chunked>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -308,6 +308,27 @@ sub reply_simple;
 			$self->[write_]($reply, $cb, $chunker);
 		}
 
+		sub reply {
+			#wrapper for simple and chunked
+			# if the body element is a code ref, or array ref, then chunked is used
+			given(ref $_[4]){
+				reply_chunked @_ when "CODE";
+				when("ARRAY"){
+					#send each element of array as a chunk
+					my $i=0;
+					my $chunks=pop;
+					push @$chunks, "";
+
+					reply_chunked @_ ,sub {
+						$i != $chunks->@* and $_[0]->($chunks->[$i++],__SUB__);
+					};
+				}
+				default {
+					reply_simple @_;
+				}
+			}
+		}
+
 sub render_v1_1_headers {
 	\my $buffer=\$_[0];
 	my $i=0;
@@ -325,6 +346,7 @@ sub headers {
 *rex_headers=*headers;
 *rex_reply_simple=*reply_simple;
 *rex_reply_chunked=*reply_chunked;
+*rex_reply=*reply;
 #returns parsed cookies from headers
 #Only parses if the internal field is undefined
 #otherwise uses pre parsed values
