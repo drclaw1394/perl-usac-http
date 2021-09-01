@@ -54,12 +54,17 @@ site_route $server=>"GET"=>"/large"=>()=>sub {
 };
 site_route $server=>"GET"=>"/chunks"=>()=>sub {
 	state $data= "x"x(4096*4096);
-	my $size=4096*1024;
-	my $offset=-$size;;
+	my $size=4096*128;
+	my $offset=0;#-$size;;
 	rex_reply @_, HTTP_OK, undef, sub {
+		return unless $_[0];
 
-		$offset==length $data and return;			#break out when sent all
-		$_[0]->(substr($data, $offset+=$size, $size),__SUB__);	#send substr
+		$offset>length $data and return;			#break out when sent all
+		my $d=$offset<length $data?substr($data, $offset, $size):"";
+		$offset+=$size;
+		
+		#say "OFFSET: $offset size: ", length $data;
+		$_[0]->($d,__SUB__);	#send substr
 	};
 };
 

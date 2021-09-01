@@ -558,7 +558,7 @@ sub make_socket_writer{
 		use integer;
 
 		($_[0]//0) or return;		#undefined input. was a stack reset
-
+		
 		\my $buf=\$_[0];		#give the input a name
 
 		my $cb= $_[1]//$ido->[uSAC::HTTP::Session::dropper_];#sub {};			#give the callback a name
@@ -629,7 +629,7 @@ sub make_socket_writer{
 		}
 		else {
 			#watcher existing, add to queue
-			say "Watcher exists, pushing to queue+++";
+			#say "Watcher exists, pushing to queue+++";
 			push @queue, [$buf,0,$cb,$arg];
 		}
 		return

@@ -70,7 +70,7 @@ sub authenticate_simple{
 #TRANFER ENCODINGS OUTPUTS
 #
 #Takes input and makes chunks and writes to next
-sub chunked {
+sub chunked{
 	my $next=shift;
 	say "making chunked with", $next; 
 	my $scratch="";
@@ -85,6 +85,25 @@ sub chunked {
 		$scratch.="00".LF.LF unless $_[1];
 		shift;
 		$next->($scratch, @_);
+	}
+}
+
+my $sub=sub{};
+sub chunked_2{
+	my $next=shift;
+	say "making chunked with", $next; 
+	my $scratch="";
+
+	sub {
+		$_[2]//= __SUB__ ;		#argument to callback is self unless one is provided
+		return &$next unless defined $_[0];	#reset stack if requested. pass it on
+		#say "length of input ", length $_[0];
+		$next->(sprintf("%02X".LF,length $_[0]),$sub,1);
+		$next->($_[0],$sub,1);#->($scratch, @_);
+		#$_[0].=LF;
+		#$scratch.="00".LF.LF unless $_[1];
+		shift;
+		$_[0]?$next->(LF,@_):$next->(LF."00".LF.LF,@_);
 	}
 }
 
