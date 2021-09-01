@@ -9,7 +9,7 @@ use Digest::SHA1;
 use Encode qw<decode encode>;
 use Compress::Raw::Zlib qw(Z_SYNC_FLUSH);
 
-our @EXPORT_OK=qw<make_websocket_server_reader make_websocket_server_writer upgrade_to_websocket>;
+our @EXPORT_OK=qw<upgrade_to_websocket>;
 our @EXPORT=@EXPORT_OK;
 
 use Data::Dumper;
@@ -186,7 +186,7 @@ sub upgrade_to_websocket{
 
 #This is called by the session reader. Data is in the scalar ref $buf
 sub make_websocket_server_reader {
-
+	my $self=shift;
 	my $session=shift;	#session
 	#my $ws=shift;		#websocket
 
@@ -201,7 +201,7 @@ sub make_websocket_server_reader {
 	my $payload="";
 	my $hlen;
 	my $mode;
-	my $on_fragment=$session->[uSAC::HTTP::Session::reader_cb_];
+	\my $on_fragment=\$self->{on_message_};#$session->[uSAC::HTTP::Session::reader_cb_];
 	say "ON FRAGMENT: ", $on_fragment;
 	sub {
 		say "IN WS READER";
@@ -381,6 +381,8 @@ sub make_websocket_server_reader {
 					say "GOT CLOSE";
 					substr $buf,0, $hlen+$len,'';
 					#TODO: drop the session, undef any read/write subs
+					$self->{pinger}=undef;
+					$session->drop;
 
 				}
 				default{
@@ -406,7 +408,8 @@ sub _websocket_writer {
 
 	sub {
 		#take input data, convert to frame and use normal writer?
-		my ($fin, $rsv1, $rsv2, $rsv3, $op, $payload) = @_;
+		my ($fin, $rsv1, $rsv2, $rsv3, $op, $payload, $cb,$arg) = @_;
+		$arg//=__SUB__;
 		warn "BUILDING FRAME\n" if DEBUG;
 
 		# Head
@@ -471,7 +474,7 @@ sub _websocket_writer {
 
 		say "FRAME TO SEND ",$frame;
 		say "NEXT is : ", $next;
-		$next->($frame);
+		$next->($frame,$cb,$arg);
 		return;
 	}
 }
@@ -479,6 +482,7 @@ sub _websocket_writer {
 #sub which links the websocket to socket stream
 #
 sub make_websocket_server_writer {
+	my $self=shift;
 	my $session=shift;	#session
 
 	my ($entry_point,$stack)=uSAC::HTTP::Middler->new()
@@ -502,133 +506,42 @@ sub new {
 		mask          => 0,
 		ping_interval => 2,
 		state         => OPEN,
+		on_message_ => sub {say "Default on message"},
+		on_error_	=> sub { say "Default on error"},
+		on_close_	=> sub { say "Default on close"},
+		
 		%args,
 	}, $pkg;
 	$session->[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
-	#create the new read and writer pair based on protocol
-        $self->{writer_}=$session->select_writer(
-                "websocket",
-        );
-	#
-	#$self->{writer_}=make_websocket_server_writer $session;	#create a writer and store in ws
+	$session->[uSAC::HTTP::Session::closeme_]=1;	#At the end of the session close the socket
+	$self->{writer_}=make_websocket_server_writer $self, $session;	#create a writer and store in ws
 	say "Created writer: ",$self->{writer_};
-	#$self->{writer_}=$session->[uSAC::HTTP::Session::write_];
 
 	#the pushed reader now has access to the writer via the session->rex
-	$session->push_reader(
-		"websocket",
-		sub {
-			say "ws reader cb: $_[0]";
-			return unless defined $_[0];
-			$self->{writer_}->(1,0,0,0,TEXT,"HELLO BACK")
-		}
-	);
+	$session->[uSAC::HTTP::Session::read_]=make_websocket_server_reader($self,$session);
+	$session->[uSAC::HTTP::Session::reader_cb_]=undef;
 
 	#setup ping
 	$self->{pinger} = AE::timer 0,$self->{ping_interval}, sub {
 		say "Sending ping";
 		$self->{ping_id} = "hello";#time64();
-		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id});
+		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id},sub {
+				say "WRITER CALLBACK";
+				if($_[0]){
+					say "good to go again";
+				}
+				else{
+					say "ERROR... need to close";
+					$self->{pinger}=undef;
+					$session->drop;
+
+				}
+			});
 	} if $self->{ping_interval} > 0;
 
-	#$self->setup;
 	return $self;
 }
 
-sub setup {
-	my $self = shift;
-	weaken($self);
-	$self->{h}->on_read(sub {
-		$self or return;
-		#say "read".xd( $_[0]{rbuf} );
-		while ( my $frame = $self->parse_frame( \$_[0]{rbuf} )) {
-			#p $frame;
-			my $op = $frame->[4] || CONTINUATION;
-			if ($op == PONG) {
-				if ($self->{ping_id} == $frame->[5]) {
-					my $now = time64();
-					warn sprintf "Received pong for our ping. RTT: %0.6fs\n", ($now - $self->{ping_id})/1e6;
-				} else {
-					warn "Not our ping: $frame->[5]";
-				}
-				next;
-			}
-			elsif ($op == PING) {
-				$self->send_frame(1, 0, 0, 0, PONG, $frame->[5]);
-				next;
-			}
-			elsif ($op == CLOSE) {
-				my ($code,$reason) = unpack 'na*', $frame->[5] if $frame->[5];
-				
-				$self->{onerror} && delete($self->{onerror})->($code,$reason) if $frame->[5];
-				
-				if ( $self->{state} == OPEN ) {
-					# close was initiated by remote
-					warn "remote close $code $reason";
-					$self->send_frame(1,0,0,0,CLOSE,$frame->[5]);
-					$self->{state} = CLOSED;
-					$self->{onclose} && delete($self->{onclose})->({ clean => 1, code => $code, reason => $reason });
-					$self or return;
-					$self->destroy;
-					return;
-				}
-				elsif ( $self->{state} == CLOSING ) {
-					# close was initiated by us
-					$self->{close_cb} && delete($self->{close_cb})->();
-					$self->{onclose} && delete($self->{onclose})->({ clean => 1, code => $code, reason => $reason });
-					$self or return;
-					$self->destroy;
-					return;
-				}
-				else {
-					warn "close in wrong state";
-				}
-				
-				$self->destroy;
-				last;
-			}
-			
-			
-			# TODO: fin/!fin, continuation
-			
-			#if ( !$frame->[0] ) {
-			#	# TODO: check summary size
-			#	$self->{cont} .= $frame->[5];
-			#	next;
-			#}
-			
-			
-			if ( $op == CONTINUATION ) {
-				$self->{cont} .= $frame->[5];
-				next;
-			}
-			
-			my $data = ( delete $self->{cont} ).$frame->[5];
-			if ($op == TEXT) {
-				utf8::decode( $data );
-			}
-			$self->{on_message_} && $self->{on_message_}(
-				$data,
-				$op == TEXT ? 'text' : 'binary'
-			);
-		}
-	});
-	$self->{h}->on_error(sub {
-		$self or return;
-		warn "h error: @_";
-		$self->{onerror} && delete($self->{onerror})->(0,$_[1]);
-		$self or return;
-		$self->{onclose} && delete($self->{onclose})->({ clean => 0, data => $_[1] });
-		$self or return;
-		$self->destroy;
-	});
-	$self->{pinger} = AE::timer 0,$self->{ping_interval}, sub {
-		$self and $self->{h} or return;
-		$self->{ping_id} = time64();
-		$self->send_frame( 1,0,0,0, PING, $self->{ping_id});
-	} if $self->{ping_interval} > 0;
-	return;
-}
 
 sub destroy {
 	my $self = shift;

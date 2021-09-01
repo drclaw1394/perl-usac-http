@@ -284,6 +284,10 @@ sub accept {
 				$session=pop @zombies;
 				if($session){
 					uSAC::HTTP::Session::revive $session, $id, $fh;
+					uSAC::HTTP::Session::push_writer 
+						$session,
+						"http1_1_socket_writer",
+						undef;
 				}
 				else {
 					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self);

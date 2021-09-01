@@ -181,6 +181,7 @@ sub drop {
 	#$_[0]->[read_stack_]=undef;	#[];
 
 	unshift @{$_[0]->[zombies_]}, $_[0];
+	say "DROP COMPLETE...";
 }
 
 #pluggable interface
