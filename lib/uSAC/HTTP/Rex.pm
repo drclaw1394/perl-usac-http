@@ -255,23 +255,9 @@ sub reply_simple;
 
 			#Append body
 			#say "Length: ", length($_[4])+0;
-			if($content_length< 1048576){
-				$reply.=LF.$_[4];
-				$self->[write_]($reply);#, $session->[uSAC::HTTP::Session::dropper_]);#\&uSAC::HTTP::Session::drop); 
-			}
+			$reply.=LF.$_[4];
+			$self->[write_]($reply,undef);#, $session->[uSAC::HTTP::Session::dropper_]);#\&uSAC::HTTP::Session::drop); 
 
-			else{
-
-				#only send data chunks at a time
-				$reply.=LF;#.$_[4];
-				\my $body=\$_[4];
-				my $hcb=sub {
-					$self->[write_]($body);#, $session->[uSAC::HTTP::Session::dropper_]);#\&uSAC::HTTP::Session::drop);
-
-				};
-				$self->[write_]($reply,$hcb);
-
-			}
 			#Write the headers
 		}
 
@@ -328,6 +314,7 @@ sub reply_simple;
 				}
 			}
 		}
+
 
 sub render_v1_1_headers {
 	\my $buffer=\$_[0];

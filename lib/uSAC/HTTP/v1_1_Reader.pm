@@ -552,38 +552,71 @@ sub make_socket_writer{
 	#do not call again until callback is called
 	#if no callback is provided, the session dropper is called.
 	#
-	my @queue; # data, offset, cb, arg
+	\my @queue=$ido->[uSAC::HTTP::Session::write_queue_]; # data, offset, cb, arg
 
 	sub {
 		use integer;
 
-		($_[0]//0) or return;		#undefined input. was a stack reset
+		$_[0]//return;		#undefined input. was a stack reset
 		
 		\my $buf=\$_[0];		#give the input a name
 
-		my $cb= $_[1]//$ido->[uSAC::HTTP::Session::dropper_];#sub {};			#give the callback a name
-		
-		#say "writer cb is: ", Dumper $cb;
-		my $arg=$_[2]//__SUB__;
+		my $dropper=$ido->[uSAC::HTTP::Session::dropper_];	#default callback
+		my $cb= $_[1]//$dropper;		#when no cb provided, use dropper
+		my $arg=$_[2]//__SUB__;			#is this sub unless provided
+
+
 		$offset=0;# if $pre_buffer!=$_[0];	#do offset reset if need beo
 		#$pre_buffer=$_[0];
-
+		#say "preview: ", substr($buf ,0 , 10),"length: ", length $_[0];
 		if(!$ww){	#no write watcher so try synchronous write
+			#say "No watcher";
 			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
 			$offset+=$w;
 			if($offset==length $buf){
 				#say "FULL WRITE NO APPEND";
 				#say "writer cb is: $cb";
-				$cb->($arg);
-				#$cb->($ido);
+				if($dropper == $cb){
+					$cb->();
+				}
+				else {
+					$cb->($arg);
+                                        ###############################################
+                                        # my $timer; $timer=AE::timer 0.0, 0.0, sub { #
+                                        #         $cb->($arg);                        #
+                                        #         $timer=undef;                       #
+                                        # };                                          #
+                                        ###############################################
+				}
 				return;
 			}
-			elsif(defined $w){
+			#else{
+					
+				#say "w is $w";
+				if(!defined($w) and $! != EAGAIN and $! != EINTR){
+					#this is actual error
+					say "ERROR IN WRITE NO APPEND";
+					say $!;
+					#actual error		
+					$ww=undef;
+					@queue=();	#reset queue for session reuse
+					$cb->(undef);
+					$dropper->(1);
+					#uSAC::HTTP::Session::drop $ido, "$!";
+					return;
+				}
+
+				#either a partial write or an EAGAIN situation
+
+				#say "EAGAIN or partial write";
+				#If the write was only partial, or had a async 'error'
+				#push the buffer to setup events
 				push @queue,[$buf,$offset,$cb,$arg];
 				#say "PARTIAL WRITE Synchronous";
 				my $entry;
 				$ww = AE::io $fh, 1, sub {
 					$ido or return;
+					#say "ido in async ok";
 					$entry=$queue[0];
 					\my $buf=\$entry->[0];
 					\my $offset=\$entry->[1];
@@ -596,36 +629,37 @@ sub make_socket_writer{
 						#say "FULL async write";
 						shift @queue;
 						undef $ww unless @queue;
-						$cb->($arg);# if defined $cb;
+						#$cb->($arg);# if defined $cb;
+						if($dropper == $cb){
+							$cb->();
+						}
+						else {
+								$cb->($arg);
+                                                        ###############################################
+                                                        # my $timer; $timer=AE::timer 0.0, 0.0, sub { #
+                                                        #         $cb->($arg);                        #
+                                                        #         $timer=undef;                       #
+                                                        # };                                          #
+                                                        ###############################################
+						}
+						return;
 					}
-					elsif(defined $w){
-						#say "partial async write";
-					}
-					else{
-						#error
-						return if $! == EAGAIN or $! == EINTR;#or $! == WSAEWOULDBLOCK){
+
+					if(!defined($w) and $! != EAGAIN and $! != EINTR){
+						#this is actual error
+						say "ERROR IN EVENT WRITE";
+						say $!;
+						#actual error		
 						$ww=undef;
+						@queue=();	#reset queue for session reuse
 						$cb->(undef);
+						$dropper->(1);
 						#uSAC::HTTP::Session::drop $ido, "$!";
 						return;
 					}
 				};
+
 				return
-
-			}
-			else {
-				unless( $! == EAGAIN or $! == EINTR){
-
-					say "ERROR IN WRITE NO APPEND";
-					say $!;
-					#actual error		
-					$ww=undef;
-					$cb->(undef);
-					#uSAC::HTTP::Session::drop $ido, "$!";
-					return;
-				}
-			}
-
 		}
 		else {
 			#watcher existing, add to queue

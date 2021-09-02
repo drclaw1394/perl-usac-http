@@ -17,7 +17,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ write_queue_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -57,19 +57,21 @@ sub new {
 	#$self->[write_stack_]=[];
 	#$self->[writer_cache_]={};
 
+	$self->[write_queue_]=[];
 	$self->[on_body_]=undef;	#allocate all the storage now
 	#$self->[dropper_]=make_dropper($self);
 	#
 	my $server=$self->[server_];
 	my $sessions=$self->[sessions_];
-	my $zombies=$self->[zombies_];
+	#my $zombies=$self->[zombies_];
 	\my $fh=\$self->[fh_];
 	\my $rw=\$self->[rw_];
 	\my $ww=\$self->[ww_];
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
-		return unless $closeme;
+		#say "Close me: $closeme";
+		return unless $closeme||$_[0];
 		delete $sessions->{$id};
 		close $fh;
 		$rw=undef;
@@ -77,9 +79,10 @@ sub new {
 		$fh=undef;
 		$id=undef;
 		$closeme=undef;
+		$self->[write_queue_]->@*=();
+	        unshift @{$self->[zombies_]}, $self;
 		#say "DROP COMPLETE...";
 
-	unshift @$zombies, $self;
 
 	};
 
@@ -99,6 +102,7 @@ sub revive {
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
 	$self->[rex_]=undef;
+	$self->[write_queue_]->@*=();
 
 	
 	#$self->_make_reader;
@@ -127,7 +131,7 @@ sub _make_reader {
 			#End of file
 			#say "END OF  READER";
 			$self->[closeme_]=1;
-			drop $self;
+			$self->[dropper_]->();
 			$self->[rw_]=undef;
 		}
 		#when(undef){
@@ -137,7 +141,7 @@ sub _make_reader {
 			return if $! == EAGAIN or $! == EINTR;
 			#say "ERROR IN READER";
 			$self->[closeme_]=1;
-			drop $self;
+			$self->[dropper_]->();
 			$self->[rw_]=undef;
 		}
 	};
@@ -169,23 +173,25 @@ sub _make_reader {
 # }                                         #
 #                                           #
 #############################################
-sub drop {
-	#my ($self,$err) = @_;
-	return unless $_[0]->[closeme_];
-	my $r = delete $_[0]->[server_][sessions_]{$_[0]->[id_]}; #remove from server
-	#$_[0]->[server_][uSAC::HTTP::Server::active_connections_]--;
-
-	close $_[0]->[fh_];
-
-	$_[0]->[fh_]=undef;
-	$_[0]->@[(rw_,ww_,fh_,id_,closeme_)]=(undef,undef,undef,undef,undef);#(undef) x 5;
-
-	#$_[0]->[write_stack_]=undef;	#[];#[0]=undef;
-	#$_[0]->[read_stack_]=undef;	#[];
-
-	unshift @{$_[0]->[zombies_]}, $_[0];
-	say "DROP COMPLETE...";
-}
+##############################################################################################
+# sub drop {                                                                                 #
+#         #my ($self,$err) = @_;                                                             #
+#         return unless $_[0]->[closeme_];                                                   #
+#         my $r = delete $_[0]->[server_][sessions_]{$_[0]->[id_]}; #remove from server      #
+#         #$_[0]->[server_][uSAC::HTTP::Server::active_connections_]--;                      #
+#                                                                                            #
+#         close $_[0]->[fh_];                                                                #
+#                                                                                            #
+#         $_[0]->[fh_]=undef;                                                                #
+#         $_[0]->@[(rw_,ww_,fh_,id_,closeme_)]=(undef,undef,undef,undef,undef);#(undef) x 5; #
+#                                                                                            #
+#         #$_[0]->[write_stack_]=undef;   #[];#[0]=undef;                                    #
+#         #$_[0]->[read_stack_]=undef;    #[];                                               #
+#         $_[0]->[write_queue_]=[];                                                          #
+#         unshift @{$_[0]->[zombies_]}, $_[0];                                               #
+#         say "DROP COMPLETE...";                                                            #
+# }                                                                                          #
+##############################################################################################
 
 #pluggable interface
 #=====================
