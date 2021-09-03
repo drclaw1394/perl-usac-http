@@ -101,7 +101,7 @@ my $site2=$server->register_site(
 
 site_route $site2=>GET=>'/$'=> (
 	#log_simple
-)=>uSAC::HTTP::welcome_to_usac;
+)=>sub { rex_reply_simple @_, HTTP_OK, undef, "site2 root"};
 
 site_route $site2=>GET=>'/small$'=>sub {
 	rex_reply_simple @_, HTTP_OK, undef, "Some small data";return};

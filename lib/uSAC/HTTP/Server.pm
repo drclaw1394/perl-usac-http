@@ -9,16 +9,10 @@ our @Subproducts;#=();		#Global to be provided by applcation
 use version;our $VERSION = version->declare('v0.1');
 use feature "refaliasing";
 
-use uSAC::HTTP;
-use Hustle::Table;
-#use feature ":all";
+use uSAC::HTTP;			#site, sub site, and host
+use Hustle::Table;		#dispatching of endpoints
+use uSAC::HTTP::Rex;		#subs for replying
 
-#use uSAC::HTTP::Server::Kit;
-
-#use Exporter;
-#our @ISA = qw(Exporter);
-#our @EXPORT_OK = our @EXPORT = qw(http_server);
-#
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
 
@@ -80,6 +74,29 @@ our $DEFAULT_MIME=>"application/octet-stream";
 
 #our $ERROR_PAGE=>
 \our %MIME=do "./mime.pl";
+# Basic handlers
+#
+# Welcome message
+sub usac_welcome {
+	state $data;
+	say " WELCOME";
+	unless($data){
+		local $/=undef;
+		$data=<DATA>;
+	}
+	state $sub=sub {
+		rex_reply_simple @_, HTTP_OK, undef, $data;
+		return; #Enable caching
+	}
+}
+
+sub usac_default_handler {
+		#my ($line,$rex)=@_;
+		state $sub=sub {
+			rex_reply_simple @_, HTTP_NOT_FOUND,undef,"Not found";
+			return;
+		}
+}
 
 sub new {
 	my $pkg = shift;
@@ -88,7 +105,7 @@ sub new {
 	$self->[host_]=$options{host}//"0.0.0.0";
 	$self->[port_]=$options{port}//8080;
 	$self->[enable_hosts_]=$options{enable_hosts};
-	$self->[table_]=Hustle::Table->new();
+	$self->[table_]=Hustle::Table->new(usac_default_handler);
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
 	register_site($self, uSAC::HTTP->new(id=>"default"));
@@ -345,6 +362,7 @@ sub site {
 	$self->[sites_]{$name//"default"}
 }
 
+#Duck type as a site 
 sub route {
 	my $self=shift;
 	$self->site->route(@_);
@@ -354,6 +372,14 @@ sub rebuild_dispatch {
 	my $self=shift;
 	my $cache={};
 	keys %$cache=512;
+	#check if the default site has more than one( ie the default) entry
+	#if 0, then add the server catch all
+	#else do not modifiy
+	if($self->[table_]->@*==1 or keys $self->[sites_]->%* > 1){
+		site_route $self=>'GET'=>qr{.*}=>()=>usac_welcome;
+	}
+
+
 	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>$cache);
 }
 
@@ -366,6 +392,7 @@ sub run {
 
 	$cv->recv();
 }
+
 
 
 #########################################################################################
@@ -419,6 +446,10 @@ sub run {
 #                                                                                       #
 #########################################################################################
 
-1; # End of uSAC::HTTP::Server
-__END__
-
+1; 
+__DATA__
+<html>
+	<body>
+		Welcome to uSAC
+	</body>
+</html>

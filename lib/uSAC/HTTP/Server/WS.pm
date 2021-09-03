@@ -383,7 +383,8 @@ sub make_websocket_server_reader {
 					#TODO: drop the session, undef any read/write subs
 					$self->{pinger}=undef;
 					$self->{on_close_}->();
-					$session->drop;
+					$session->[uSAC::HTTP::Session::dropper_]->(1);
+					#$session->drop;
 
 				}
 				default{
@@ -535,8 +536,10 @@ sub new {
 	#setup ping
 	$self->{pinger} = AE::timer 0,$self->{ping_interval}, sub {
 		say "Sending ping";
-		$self->{ping_id} = "hello";#time64();
-		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id});
+		$self->{ping_id} = "hello";	#time64();
+		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id}); #no cb used->dropper defalt
+
+		
                 #########################################################
                 # ,sub {                                                #
                 #                 say "WRITER CALLBACK";                #
@@ -784,27 +787,29 @@ sub write_binary {
 # }                                                                                            #
 #                                                                                              #
 ################################################################################################
-sub DESTROY {
-	my $self = shift;
-	my $caller = "@{[ (caller)[1,2] ]}";
-	if ($self->{h} and $self->{state} != CLOSED) {
-		warn "initiate close by DESTROY";
-		my $copy = bless {%$self}, 'AnyEvent::HTTP::Server::WS::CLOSING';
-		$copy->close(sub {
-			warn "closed";
-			undef $copy;
-		});
-	}
-	#warn "Destroy ws $self by $caller";
-	%$self = ();
-}
-
-package AnyEvent::HTTP::Server::WS::CLOSING;
-
-our @ISA = qw(uSAC::HTTP::Server::WS);
-
-sub DESTROY {
-	
-}
+#####################################################################################
+# sub DESTROY {                                                                     #
+#         my $self = shift;                                                         #
+#         my $caller = "@{[ (caller)[1,2] ]}";                                      #
+#         if ($self->{h} and $self->{state} != CLOSED) {                            #
+#                 warn "initiate close by DESTROY";                                 #
+#                 my $copy = bless {%$self}, 'AnyEvent::HTTP::Server::WS::CLOSING'; #
+#                 $copy->close(sub {                                                #
+#                         warn "closed";                                            #
+#                         undef $copy;                                              #
+#                 });                                                               #
+#         }                                                                         #
+#         #warn "Destroy ws $self by $caller";                                      #
+#         %$self = ();                                                              #
+# }                                                                                 #
+#                                                                                   #
+# package AnyEvent::HTTP::Server::WS::CLOSING;                                      #
+#                                                                                   #
+# our @ISA = qw(uSAC::HTTP::Server::WS);                                            #
+#                                                                                   #
+# sub DESTROY {                                                                     #
+#                                                                                   #
+# }                                                                                 #
+#####################################################################################
 
 1;

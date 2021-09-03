@@ -494,28 +494,30 @@ sub send_file_uri_norange {
 }
 
 sub _html_dir_list {
-	\my $output=$_[0];
-	my $headers=$_[1];
-	my $entries=$_[2];
+	sub {
+		\my $output=$_[0];
+		my $headers=$_[1];
+		my $entries=$_[2];
 
-	if($headers){
-		$output.=
-		 "<table>\n"
-		."    <tr>\n"
-		."        <th>".join("</th><th>",@$headers)."</th>\n"
-		."    <tr>\n"
-		;
-	}
-	if(ref $entries eq "ARRAY"){
-		for my $row(@$entries){
+		if($headers){
 			$output.=
-			"    <tr>\n"
-			."        <td>".join("</td><td>",@$row)."</td>\n"
-			."    </tr>\n"
+			"<table>\n"
+			."    <tr>\n"
+			."        <th>".join("</th><th>",@$headers)."</th>\n"
+			."    <tr>\n"
 			;
 		}
+		if(ref $entries eq "ARRAY"){
+			for my $row(@$entries){
+				$output.=
+				"    <tr>\n"
+				."        <td>".join("</td><td>",@$row)."</td>\n"
+				."    </tr>\n"
+				;
+			}
+		}
+		$output.="</table>";
 	}
-	$output.="</table>";
 }
 
 sub list_dir {
@@ -528,7 +530,7 @@ sub list_dir {
 	#say "Listing dir for $abs_path";
 	stat $abs_path;
 	unless(-d _ and  -r _){
-		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		rex_reply_simple undef, $rex, HTTP_NOT_FOUND, undef ,"";
 		return;
 	}
 
@@ -558,9 +560,9 @@ sub list_dir {
 
 	@fs_paths;
 	#say "Results ", @results;
-	my $ren=$renderer//\&_html_dir_list;
+	my $ren=$renderer//_html_dir_list;
 
-	rex_reply_chunked undef, $rex, HTTP_OK, [], sub {
+	rex_reply_chunked undef, $rex, HTTP_OK, undef, sub {
 		return unless my $writer=$_[0];			#no writer so bye
 
 		##### Start app logic

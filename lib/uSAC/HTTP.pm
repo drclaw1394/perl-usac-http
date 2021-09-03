@@ -6,7 +6,7 @@ use feature ":all";
 
 use Exporter "import";
 
-our @EXPORT_OK=qw(location default_handler LF site_route $Path);
+our @EXPORT_OK=qw(LF site_route $Path);
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
@@ -68,7 +68,7 @@ sub route {
 	my $path_matcher=shift;
 	my $end=pop @_;
 	my @inner=@_;
-	unshift @inner, $self->_strip_prefix if $self->[prefix_];
+	unshift @inner, $self->_strip_prefix if $self->[prefix_];	#make strip prefix first of middleware
 	push @inner, $self->[middleware_]->@* if $self->[middleware_];
 
 	#die "No Matcher provided " unless $matcher//0;
@@ -89,25 +89,21 @@ sub route {
 	}
 
 	my $matcher;
-	my $unsupported;
+	#my $unsupported;
 	if($self->[server_]->enable_hosts){
 		$matcher=qr{^$self->[host_] $method_matcher $self->[prefix_]$path_matcher};
-                my $tmp=join "|", @non_matching;
-                my $mre=qr{$tmp};
-                $unsupported=qr{^$mre $self->[prefix_]$path_matcher};
-                $self->[server_]->add_end_point($unsupported,$sub);
 	}
 	else {
 		$matcher=qr{^$method_matcher $self->[prefix_]$path_matcher};
-                my $tmp=join "|", @non_matching;
-                my $mre=qr{$tmp};
-                $unsupported=qr{^$mre $self->[prefix_]$path_matcher};
-                $self->[server_]->add_end_point($unsupported,$sub);
 
 		if($self->[host_]){
 			warn "Server not configured for virtual hosts. Ignoring host specificatoin"
 		}
 	}
+	my $tmp=join "|", @non_matching;
+	my $mre=qr{$tmp};
+	my $unsupported=qr{^$mre $self->[prefix_]$path_matcher};
+	$self->[server_]->add_end_point($unsupported,$sub);
 	say $matcher, $end;
 	my ($entry,$stack);
 	if(@inner){
@@ -119,6 +115,7 @@ sub route {
 	}
 	$self->[server_]->add_end_point($matcher,$end);
 }
+
 #middleware to strip prefix
 sub _strip_prefix {
 	my $self=shift;
@@ -132,7 +129,11 @@ sub _strip_prefix {
 				#NOTE: block used to make temp dynamic scope to protect capture groups
 				#being destroyed when running another match
 				#The space  is to prevent the host matching if present
-				$new=$_[0]=~s/ $prefix/ /nr;
+				given($_[1]){
+					$_->[uSAC::HTTP::Rex::uri_stripped_]=$_->[uSAC::HTTP::Rex::uri_]=~s/$prefix//nr;
+					$new=$_->[uSAC::HTTP::Rex::host_]." ".$_->[uSAC::HTTP::Rex::method_]." ".$_->[uSAC::HTTP::Rex::uri_stripped_];
+				}
+				#$new=$_[0]=~s/ $prefix/ /nr;
 				shift @_;
 			}
 			#The @_ is shifted to remove the alias of "line"
@@ -191,30 +192,8 @@ sub ends_with {
 	sub {0 <= index reverse($_[0]), $test}
 }
 
-sub welcome_to_usac {
-	state $data;
-	unless($data){
-		local $/=undef;
-		$data=<DATA>;
-	}
-	sub {
-		rex_reply_simple @_, HTTP_OK, undef, $data;
-		return; #Enable caching
-	}
-}
-sub default_handler {
-		#my ($line,$rex)=@_;
-		rex_reply_simple @_, (HTTP_NOT_FOUND,undef,"Go away");
-		return 1;
-}
 sub site_route {
 	my $self=shift;
 	$self->route(@_);
 }
 1;
-__DATA__
-<html>
-	<body>
-		Welcome to uSAC
-	</body>
-</html>

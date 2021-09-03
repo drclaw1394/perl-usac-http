@@ -103,7 +103,10 @@ sub make_reader{
                                 $line=substr($buf,$ixx,$pos3);
 				($method,$uri,$version)=split " ",$line;
 				#$version=substr($line,-1,1)eq "1"?"HTTP/1.1":"HTTP/1.0";
-                                $line=uri_decode substr($buf,$ixx,$pos3-length($version)-1);
+				$uri=uri_decode $uri;
+				
+				#$line=uri_decode substr($buf,$ixx,$pos3-length($version)-1);
+				$line="$method $uri";
 				if($pos3>=0){
 					#end of line found
 						$state   = 1;
@@ -168,7 +171,8 @@ sub make_reader{
 				#Done with headers. 
 				#
 				#TODO: downsample gettimeofday to a second
-				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$method, $uri], 'uSAC::HTTP::Rex' ;
+				my $host=$h{HOST}//"";
+				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$host, $method, $uri, $uri], 'uSAC::HTTP::Rex' ;
 				#$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ,undef,undef,undef,undef], 'uSAC::HTTP::Rex' ;
 
 
@@ -184,7 +188,7 @@ sub make_reader{
 				$ixx=0;
 				$state=0;
 				#$self->[uSAC::HTTP::Server::cb_]($line,$req);
-				$line=($h{HOST}//"")." $line" if $enable_hosts;
+				$line=$host." ".$line if $enable_hosts;
 				$cb->($line,$req);
 				weaken ($req->[1]);
 				#weaken( $req->[8] );

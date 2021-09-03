@@ -9,8 +9,6 @@ use uSAC::HTTP::Server;
 use uSAC::HTTP::Server::WS;
 use feature "current_sub";
 
-$uSAC::HTTP::Session::make_reader_reg{"websocket"}=\&make_websocket_server_reader;
-$uSAC::HTTP::Session::make_writer_reg{"websocket"}=\&make_websocket_server_writer;
 
 my $server=uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",
@@ -30,7 +28,6 @@ site_route $server =>'GET'=>"/\$"=>sub {
 site_route $server => GET=>"/ws"=>sub {
 	say "Websocket upgrade";
 	my $ws;
-	my $writer;
 	upgrade_to_websocket @_	,sub {
 		$ws=$_[0];
 		$ws->on_message(sub {
@@ -41,10 +38,9 @@ site_route $server => GET=>"/ws"=>sub {
 			say "GOT error$_[0]";
 		});
 		$ws->on_close(sub {
-			say "GOT close $_[0]";
+			say "GOT close";
 		});
 		say "GOT WEBSOCKET ", $_[0];
-
 	};
 };
 
@@ -54,7 +50,7 @@ site_route $server=>"GET"=>"/large"=>()=>sub {
 };
 
 site_route $server=>"GET"=>"/chunks"=>()=>sub {
-	state $data= "x"x(4096*4096);
+	state $data= "x" x (4096*4096);
 	my $size=4096*128;
 	my $offset=0;#-$size;;
 	rex_reply @_, HTTP_OK, undef, sub {
@@ -62,6 +58,7 @@ site_route $server=>"GET"=>"/chunks"=>()=>sub {
 
 		my $d=substr($data, $offset, $size);	#Data to send
 		$offset+=$size;				#update offset
+		
 		$_[0]->($d, $offset<length $data?__SUB__:undef);	#send substr
 	};
 };

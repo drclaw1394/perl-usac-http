@@ -34,7 +34,7 @@ use Scalar::Util qw(weaken);
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ server_ time_ cookies_ handle_ attrs_ method_ uri_>
+	"version_=0" ,qw< session_ headers_ write_ query_ server_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_>
 );
 
 #Add a mechanism for sub classing
@@ -303,10 +303,10 @@ sub reply_simple;
 					#send each element of array as a chunk
 					my $i=0;
 					my $chunks=pop;
-					push @$chunks, "";
+					#push @$chunks, "";
 
 					reply_chunked @_ ,sub {
-						$i != $chunks->@* and $_[0]->($chunks->[$i++],__SUB__);
+						$_[0]->($chunks->[$i++], $i != $chunks->@* ? __SUB__:undef);
 					};
 				}
 				default {
@@ -314,6 +314,7 @@ sub reply_simple;
 				}
 			}
 		}
+
 
 
 sub render_v1_1_headers {
@@ -342,6 +343,6 @@ sub cookies {
 	$_[0][cookies_];
 }
 
-1;
 
-__END__
+
+1;

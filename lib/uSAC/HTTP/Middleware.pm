@@ -34,8 +34,9 @@ sub log_simple {
 			#say STDERR Dumper $_[1];
 			say STDERR "\n";
 			say STDERR time;
+			say STDERR " Host: $_[1][uSAC::HTTP::Rex::host_]";
 			say STDERR " Original URI: $_[1][uSAC::HTTP::Rex::uri_]";
-			say STDERR " Matcher:	   $_[0]";
+			say STDERR " Matcher URI:	   $_[1][uSAC::HTTP::Rex::uri_stripped_]";
 			return &$next;		#alway call next. this is just loggin
 		}
 	};
