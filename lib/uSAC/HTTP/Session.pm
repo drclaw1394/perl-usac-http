@@ -71,6 +71,7 @@ sub new {
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
 		#say "Close me: $closeme";
+		#say "Calling dropper";
 		return unless $closeme||$_[0];
 		delete $sessions->{$id};
 		close $fh;

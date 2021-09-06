@@ -143,6 +143,8 @@ sub make_reader{
 					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 						\my $e=\$h{uc $1=~tr/-/_/r};
 						$e = defined $e ? $e.','.$2: $2;
+						#say $e;
+						redo;
 					}
 					elsif ($buf =~ /\G\015?\012/sxogca) {
 						#warn "Last line";
@@ -155,7 +157,10 @@ sub make_reader{
 							return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, $ixx, 32)."...>");
 						}
 						#warn "Need more";
-						return pos($buf) = $bpos; # need more data
+						say "need more";
+						#return pos($buf) = $bpos; # need more data
+						$pos=pos($buf);
+						return;
 					}
 					else {
 						my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;

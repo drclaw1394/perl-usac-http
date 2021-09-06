@@ -24,7 +24,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
+our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -225,35 +225,37 @@ my %stat_cache;
 ###########################################################################################################################
 
 sub _check_ranges{
-	my ($rex, $stat)=@_;
+	my ($rex, $length)=@_;
 	#check for ranges in the header
 	my @ranges;
 	given($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 		when(undef){
+			#this should be and error
 			#no ranges specified but create default
-			@ranges=([0,$stat->[7]-1]);
+			@ranges=([0,$length-1]);#$stat->[7]-1]);
 		}
 		default {
 			#check the If-Range
 			my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF_RANGE"};
 
-			#check rnage is present
+			#check range is present
 			#response code is then 206 partial
 			#
 			#Multiple ranges, we then return multipart doc
 			my $unit;
 			my $i=0;
 			my $pos;	
-			my $size=$stat->[7];
+			my $size=$length;
 			given(tr/ //dr){				#Remove whitespace
 				#exract unit
 				$pos=index $_, "=";
 				$unit= substr $_, 0, $pos++;
-				for(split(",",substr($_, $pos))){
-
-					my ($start,$end)=split "-"; #, substr($_, $pos, $pos2-$pos);
+				my $specs= substr $_,$pos;
+				
+				for my $spec (split(",",$specs)){
+					my ($start,$end)=split "-", $spec; #, substr($_, $pos, $pos2-$pos);
 					$end||=$size-1;	#No end specified. use entire length
-					unless($start){
+					unless(defined $start){
 						#no start specified. This a count, not index
 						$start=$size-$end;
 						$end=$size-1;
@@ -365,7 +367,6 @@ sub open_cache {
 }
 
 
-
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
@@ -413,12 +414,11 @@ sub send_file_uri_norange {
 		.HTTP_ACCEPT_RANGES.": bytes".LF
 		.LF;
 
-	#prime the buffer by doing a read first
+	#Check if we want to do ranges
+	#
 
 	my $offset=length($reply);
 
-	#\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
-	#my $res;
 	my $rc;
 	my $total=0;
 
@@ -427,41 +427,11 @@ sub send_file_uri_norange {
 		return;
 	}
 
-	#seek $in_fh,0,0;
-	#my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
-	my $reader;$reader= sub {
+	my $reader; $reader= sub {
 		if(1){
 			seek $in_fh,$total,0;
 			$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
 		}
-                #############################################################################################################
-                # else{                                                                                                     #
-                #         my $pread=3; #pread is 153 on macos, read is 3                                                    #
-                #         my $fn=fileno($in_fh);                                                                            #
-                #         my $r_offset=pack("I<",$offset);                                                                  #
-                #         my $buffer=(" " x (1024*1024));                                                                   #
-                #         #say "buffer length: ", length($buffer);                                                          #
-                #         seek $in_fh, $total, 0;                                                                           #
-                #         my $r_size=length($buffer)-1;#pack("I<",length $buffer);                                          #
-                #         $!=0;                                                                                             #
-                #         $reply.="x";                                                                                      #
-                #         say Dump $reply;                                                                                  #
-                #         say Dump substr($reply,$offset);                                                                  #
-                #         #say Dump $tmp;                                                                                   #
-                #         $rc=syscall $pread, $fn, substr($reply,$offset,$read_size-$offset), $read_size-$offset;#,$offset; #
-                #         if($rc<0){                                                                                        #
-                #                 say $!;                                                                                   #
-                #         }                                                                                                 #
-                #         else {                                                                                            #
-                #                                                                                                           #
-                #                 #$reply.=substr($buffer,0,$rc);                                                           #
-                #         }                                                                                                 #
-                #         say Dump $reply;                                                                                  #
-                #         #say "return count: ",$rc;                                                                        #
-                #         $total+=$rc                                                                                       #
-                #                                                                                                           #
-                # }                                                                                                         #
-                #############################################################################################################
 		
 		unless($rc//0 or $! == EAGAIN or $! == EINTR){
 			say "READ ERROR from file";
@@ -478,12 +448,11 @@ sub send_file_uri_norange {
 		$offset=0;
 		#non zero read length.. do the write	
 		if($total==$content_length){	#end of file
-			#uSAC::HTTP::Session::drop $session;
-			$session->[uSAC::HTTP::Session::write_]->($reply);#, $session->[uSAC::HTTP::Session::dropper_]);
-			#$session->[uSAC::HTTP::Session::dropper_]->();
+			$session->[uSAC::HTTP::Session::write_]->($reply);
 			$reader=undef;
 			return;
 		}
+
 		else{
 			$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
 		}
@@ -649,30 +618,12 @@ sub send_file_uri_norange_chunked {
 
 	my $last=1;
 	my $timer;
+	#my $offset=length $reply;
 	my $reader; $reader= sub {
 
 		($_[0]//0) or $chunker->(undef,sub {});	#Execute stack reset
-
-		if($total==$content_length){	#end of file
-			if($last){
-				$last=0;
-				#say "calling with ", $reader;
-				$chunker->("", $reader);
-				return;
-			}
-			else {
-				#say "Completely done";	
-                                ###############################################
-                                # $chunker->("", sub {                        #
-                                #         uSAC::HTTP::Session::drop $session; #
-                                #         });                                 #
-                                ###############################################
-					uSAC::HTTP::Session::drop $session;
-				$reader=undef;
-				return;
-			}
-		}
-		$total+=$rc=sysread $in_fh, $reply, $read_size;
+		seek $in_fh, $total, 0;
+		$total+=$rc=sysread $in_fh, $reply, $read_size;#-$offset, $offset;
 		
 		unless($rc//0 or $! == EAGAIN or $! == EINTR){
 			say "READ ERROR from file";
@@ -680,422 +631,240 @@ sub send_file_uri_norange_chunked {
 			say $!;
 			delete $open_cache->{$uri};
 			close $in_fh;
-			#$reader=undef;
-			$chunker->("", $reader);
-			uSAC::HTTP::Session::drop $session;
+			$reader=undef;
+			#$chunker=undef;
+			$session->[uSAC::HTTP::Session::dropper_]->();
+			#$chunker->(undef, $reader);
+			#uSAC::HTTP::Session::drop $session;
 			return;
 		}
+		#$offset=0;
+		#non zero read length.. do the write	
+		if($total==$content_length){	#end of file
+			$chunker->($reply);
+			$reader=undef;
+			return;
+		}
+		else{
+			$chunker->($reply,$reader);
+		}
+
 
 		#Note: GZIP take time, so much time that the when the data is compressed
 		#the socket is probably writable again. The way the writer works is it trys
 		#nonblocking write before making a event listener. Potentiall this callback 
 		#would never be executed based on an event, so we force it to be to prevent
 		#a blocking cycle which would prevent other requests from being processed at all
-		$timer=AE::timer 0.0,0, sub { $timer=undef; $chunker->($reply, $reader)};
+		#$timer=AE::timer 0.0,0, sub { $timer=undef; $chunker->($reply, $reader)};
 	};
 
 
 	#write the header
 	$session->[uSAC::HTTP::Session::write_]->($reply,$reader);
-	#start the reader
-	#$reader->();
 
 }
 
-
-
-#List the contents of the dir
-#optionally in recursive manner?
-sub dir_list {
-	
-}
 
 sub send_file_uri_range {
-        my ($line,$rex,$uri,$sys_root)=@_;
-        my $abs_path=$sys_root."/".$uri;
-        my $in_fh;
+	use  integer;
+
+	my (undef,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
-        my $response= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF; #response line
+	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
-        my ($start,$end);
-        my $reply= 
-		#uSAC::HTTP::Rex::STATIC_HEADERS
-                HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
-		;
+	my $abs_path=$sys_root."/".$uri;
+	my $entry;
+	unless($entry=open_cache $abs_path){
+		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		return;
+	}
+	my $in_fh=$entry->[0];
 
-        unless (open $in_fh, "<", $abs_path){
-                #TODO: Generate error response
-                # forbidden? not found?
-                $response=
-                        "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_FORBIDDEN.LF
-                        .$reply
-			.HTTP_CONNECTION.": close".LF
-			.LF;
+	my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];	#reuses stat from check_access 
+	#Do stat on fh instead of path. Path requires resolving and is slower
+	#fh is already resolved and open.
+	unless(-r _ and !-d _){
+		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		#remove from cache
+		delete $open_cache->{$uri};
+		return
+	}
 
-			uSAC::HTTP::Session::push_writer 
-				$session,
-				"http1_1_default_writer",
-				undef;
-			$session->[uSAC::HTTP::Session::closeme_]=1;
-			$session->[uSAC::HTTP::Session::write_]->($response);
-			uSAC::HTTP::Session::drop $session;
-                return;
 
-        }
-        my $stat=[stat $in_fh];
+	
 
-	my $total=$stat->[7];
+	#say "CONTENT Length: $content_length";
 
-        my @ranges=_check_ranges $rex, $stat;
+        my @ranges=_check_ranges $rex, $content_length;
+	#$,=", ";
+
+	#say "Ranges : ",$ranges[0]->@*;
         if(@ranges==0){
-                $response=
+                my $response=
                         "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_RANGE_NOT_SATISFIABLE.LF
                         .$reply
-                	.HTTP_CONTENT_RANGE.": */$total".LF           #TODO: Multipart had this in each part, not main header
+                	.HTTP_CONTENT_RANGE.": */$content_length".LF           #TODO: Multipart had this in each part, not main header
 			.HTTP_CONNECTION.": close".LF
 			.LF;
-
-			uSAC::HTTP::Session::push_writer 
-				$session,
-				"http1_1_default_writer",
-				undef;
 			$session->[uSAC::HTTP::Session::closeme_]=1;
 			$session->[uSAC::HTTP::Session::write_]->($response);
-			uSAC::HTTP::Session::drop $session;
                 return;
         }
 
 
 	#calculate total length from ranges
-	my $content_length=0;
-	$content_length+=($_[1]-$_[0]+1) for @ranges;
+	my $total_length=0;
+	$total_length+=($_->[1]-$_->[0]+1) for @ranges;
 
-        #The following only returns the whole file in the reply;
-        $start=$ranges[0][0];
-        $end=$ranges[0][1];
-        $total=$stat->[7];
-        my $length=$end-$start+1;#$stat->[7];#(stat $in_fh)[7];#$abs_path;
-        seek $in_fh,$start,0;
 
-        $uri=~$path_ext;        #match results in $1;
+	#$uri=~$path_ext;        #match results in $1;
 
 	my $boundary="THIS_IS THE BOUNDARY";
-        $reply=
-                HTTP_CONTENT_TYPE.": multipart/byteranges; boundary=$boundary".LF
-                .HTTP_CONTENT_LENGTH.": ".$content_length.LF                    #need to be length of multipart
-                .HTTP_ACCEPT_RANGES.": bytes".LF
-                .HTTP_ETAG.": ".$stat->[9]."-".$length.LF
-                .LF
-		.$boundary.LF
-		.LF;
+	$reply=
+		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_PARTIAL_CONTENT.LF
+		#.uSAC::HTTP::Rex::STATIC_HEADERS
+		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
+        	.($session->[uSAC::HTTP::Session::closeme_]?
+			HTTP_CONNECTION.": close".LF
+			:(HTTP_CONNECTION.": Keep-Alive".LF
+			.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
+			)
+		)
+		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
+		.HTTP_ACCEPT_RANGES.": bytes".LF
+		.do {
+			if(@ranges==1){
+				HTTP_CONTENT_RANGE.": $ranges[0][0]-$ranges[0][1]/$content_length".LF
+				.HTTP_CONTENT_LENGTH.": ".$total_length.LF			#need to be length of multipart
+				.$entry->[1]
+				#.LF
+			}
+			else {
+				HTTP_CONTENT_TYPE.": multipart/byteranges; boundary=$boundary".LF
+				#.HTTP_TRANSFER_ENCODING.": chunked".LF
+				.LF
+			}
+		}
+		;
+	#TODO:
+	#
+	# Need to implement the chunked transfer mechanism or precalculate the
+	# entire multipart length (including headers, LF etc)
+	#
+	# Currently only a single byte range is supported (ie no multipart)
 
-		#.HTTP_CONTENT_RANGE.": $start-$end/$total".LF           #TODO: Multipart had this in each part, not main header
-		#HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$1}//$uSAC::HTTP::Server::DEFAULT_MIME).LF
-        #prime the buffer by doing a read first
-        my $read_total=0;
-        my $write_total=0;
-
-
-	my $index=0;#index of current range
-
-        $length+=length $reply; #total length
 
         #setup write watcher
-        my $ww;
         my $session=$rex->[uSAC::HTTP::Rex::session_];
         \my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
-        #this is single part response
-        $ww = AE::io $out_fh, 1, sub {
+	
+	my $state=0;#=@ranges==1?1:0;	#0 single header,1 multi header,2 data
+	my $rc;
 
-                if(length($reply)< $read_size and $read_total<$length){
-                        given(sysread $in_fh, $reply,$read_size, length $reply){
-                                when($_>0){
-                                        #write to socket
-                                        $read_total+=$_;
-                                }
-                                when(0){
-                                        #end of file. should not get here
-                                }
-                                when (undef){
-                                        #error
-                                        #drop
-                                        $ww=undef;
-                                        close $in_fh;
-                                        uSAC::HTTP::Session::drop $session;
-                                        $session=undef;
-                                }
-                        }
-                }
-                given(syswrite $out_fh,$reply){
-                        when($_>0){
-                                $write_total+=$_;
-                                $reply=substr $reply, $_;
-                                if($write_total==$length){
-                                        #finished
-                                        #drop
-                                        $ww=undef;
-                                        close $in_fh;
+	my $index=-1;#=0;#index of current range
+        my $offset;#+=length $reply; #total length
+	my ($start,$end, $chunk_offset, $pos, $length);
 
-                                        uSAC::HTTP::Session::drop $session;
-                                        $session=undef;
-                                }
-                        }
-                        when(0){
-                                #say "EOF WRITE";
-                                #end of file
-                                #drop
-                                $ww=undef;
-                                close $in_fh;
-                                uSAC::HTTP::Session::drop $session;
-                                        $session=undef;
+	my $reader;$reader= sub {
+		while(1){
+			given($state){
+				when(0){
+					#say "";
+					#say "Updating state"; 
+					#update 
+					$index++;
+					$start=	$ranges[$index][0];
+					$end=	$ranges[$index][1];
+					$chunk_offset=0;
+					$length=$end-$start+1;
+					$pos=$start;
 
-                        }
-                        when(undef){
-                                #error
-                                #say "WRITE ERROR: ", $!;
-                                unless( $! == EAGAIN or $! == EINTR){
-                                        #say $!;
-                                        $ww=undef;
-                                        close $in_fh;
-                                        uSAC::HTTP::Session::drop $session;
-                                        $session=undef;
-                                        return;
-                                }
-                        }
-                }
-        };
+					#say "doing header";
+					#normal header
+					#we need to write headers
+					$reply="" if $index; #reset the reply to empty stirng
+					if(@ranges>1){
+						$reply.=
+						LF."--".$boundary.LF
+						.HTTP_CONTENT_RANGE.": $ranges[$index][0]-$ranges[$index][1]/$content_length".LF
+						.$entry->[1]
+						.LF
+					}
+					else {
+						$reply.=LF;
+					}
+					$offset=length $reply;
+					$state=1;
+					redo;
+				}
+
+				when(1){
+					#do data
+					#say "doing data";
+					seek $in_fh,$pos,0 or say "Couldnot seek";
+					$chunk_offset+=$rc=sysread $in_fh, $reply, $length-$chunk_offset, $offset;
+					$pos+=$rc;
+					#say "Range start: $start";
+					#say "Range end: $end";
+					#say "Range offset: $chunk_offset";
+					#say "File pos: $pos";
+					#say "Range length: $length";
+
+					unless($rc//0 or $! == EAGAIN or $! == EINTR){
+						say "READ ERROR from file";
+						#say $rc;
+						say $!;
+						delete $open_cache->{$uri};
+						close $in_fh;
+						$reader=undef;
+						#uSAC::HTTP::Session::drop $session;
+						$session->[uSAC::HTTP::Session::dropper_]->();
+						return;
+					}
+					$offset=0;
+					#non zero read length.. do the write	
+					if($chunk_offset==$length){	#end of file
+						#add boundary
+						if(@ranges==1){
+							$session->[uSAC::HTTP::Session::write_]->($reply);
+							return;
+						}
+						if($index==@ranges-1){
+							#that was the last read of data .. finish
+							#say "Last range, writing last boundary also";
+							$reply.=LF."--".$boundary."--".LF;
+							$state=0;
+							$session->[uSAC::HTTP::Session::write_]->($reply);
+							$reader=undef;
+						}
+						else{
+							#more ranges to follow
+							#say "End of range. writing boundary";
+							#$reply=LF;#."--".$boundary.LF;
+							$state=0;
+							$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
+						}
+
+						last;
+					}
+
+					else{
+						$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
+						last;
+					}
+				}
+				default {
+
+				}
+			}
+		}
+
+
+	};
+
+	&$reader;#->();
 }
 
-
-
-sub send_file_uri {
-	my ($rex,$uri,$sys_root)=@_;
-	#my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_];
-	state @stat;
-	state $reply;
-
-	$reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		#.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF;
-
-        #close connection after if marked
-        if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){
-                $reply.=HTTP_CONNECTION.": close".LF;
-
-        }
-	#or send explicit keep alive?
-	#if($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {
-	else{
-		$reply.=
-			HTTP_CONNECTION.": Keep-Alive".LF
-			#.HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF
-		;
-	}
-
-
-	#open my $fh,"<",
-	my $abs_path;
-	$abs_path=$sys_root."/".$uri;
-
-	#TODO: add error checking.
-	my $in_fh;	
-	unless (open $in_fh, "<", $abs_path){
-		#error and return;
-		say $!;
-	}
-	@stat=stat $in_fh;#$abs_path;
-
-	#continue
-	
-
-
-	#$offset//=0;			#Default offset is 0
-	#$length//=$stat[7]-$offset;	#Default length is remainder
-
-	$reply.=HTTP_CONTENT_LENGTH.": ".$stat[7].LF.LF;
-	#say $reply;
-	local $/=undef;	
-	given($rex->[uSAC::HTTP::Rex::write_]){
-		$_->( $reply.<$in_fh>);
-		$_->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_];
-		$_=undef;
-		#${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;
-	}
-	close $in_fh;
-	
-}
-
-###########################################################################################################################################################################
-# #locate and stat the the uri in one of the system roots                                                                                                                 #
-# sub stat_uri{                                                                                                                                                           #
-#         my ($uri,$cb,@sys_roots)=@_;                                                                                                                                    #
-#         #say "Doing uri stat for $uri";                                                                                                                                 #
-#                                                                                                                                                                         #
-#         my $abs_path;                                                                                                                                                   #
-#         my $index=0;                                                                                                                                                    #
-#         my $next;                                                                                                                                                       #
-#         $next=sub {                                                                                                                                                     #
-#                 #say "testing index: $_[0]=> $sys_roots[$_[$_]]";                                                                                                       #
-#                 $abs_path=File::Spec->rel2abs($sys_roots[$_[0]]."/".$uri);      #abs path for aio                                                                       #
-#                 #say "ABS path: $abs_path";                                                                                                                             #
-#                 #do stat to check file exists                                                                                                                           #
-#                 aio_stat $abs_path, sub {                                                                                                                               #
-#                         unless($_[0]){                                                                                                                                  #
-#                                 #no error                                                                                                                               #
-#                                 $next=undef;                                                                                                                            #
-#                                 $cb->($abs_path);                                                                                                                       #
-#                         }                                                                                                                                               #
-#                         else{                                                                                                                                           #
-#                                 if($index == @sys_roots){                                                                                                               #
-#                                         #not found anywhere                                                                                                             #
-#                                 }                                                                                                                                       #
-#                                 else{                                                                                                                                   #
-#                                         #try again                                                                                                                      #
-#                                         $next->($index++);                                                                                                              #
-#                                 }                                                                                                                                       #
-#                         }                                                                                                                                               #
-#                                                                                                                                                                         #
-#                 };                                                                                                                                                      #
-#         };                                                                                                                                                              #
-#         $next->($index++);                                                                                                                                              #
-# }                                                                                                                                                                       #
-#                                                                                                                                                                         #
-# #Do stat                                                                                                                                                                #
-# #Do open                                                                                                                                                                #
-# #write any                                                                                                                                                              #
-#                                                                                                                                                                         #
-# sub send_file_uri_sendfile{                                                                                                                                             #
-#         my ($rex,$uri,$offset,$length,$cb,@sys_roots)=@_;                                                                                                               #
-#         my $out_fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_];                                                                                 #
-#         my @stat;                                                                                                                                                       #
-#         my $reply;                                                                                                                                                      #
-#                                                                                                                                                                         #
-#         $reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF                                                                                                          #
-#                 .uSAC::HTTP::Rex::STATIC_HEADERS                                                                                                                        #
-#                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                                                                                                           #
-#                                                                                                                                                                         #
-#         #close connection after if marked                                                                                                                               #
-#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){                                                                                   #
-#                 $reply.=HTTP_CONNECTION.": close".LF;                                                                                                                   #
-#                                                                                                                                                                         #
-#         }                                                                                                                                                               #
-#         #or send explicit keep alive?                                                                                                                                   #
-#         elsif($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {                                                                                                        #
-#                 $reply.=                                                                                                                                                #
-#                         HTTP_CONNECTION.": Keep-Alive".LF                                                                                                               #
-#                         .HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF                                                                                                     #
-#                 ;                                                                                                                                                       #
-#         }                                                                                                                                                               #
-#                                                                                                                                                                         #
-#                                                                                                                                                                         #
-#         #open my $fh,"<",                                                                                                                                               #
-#         my $abs_path;                                                                                                                                                   #
-#         for(@sys_roots){                                                                                                                                                #
-#                 $abs_path=File::Spec->rel2abs($_."/".$uri);     #abs path for aio                                                                                       #
-#                 @stat=stat $abs_path;                                                                                                                                   #
-#                 last unless @stat;                                                                                                                                      #
-#         }                                                                                                                                                               #
-#                                                                                                                                                                         #
-#         #TODO: do non found if no stat                                                                                                                                  #
-#         my $in_fh;                                                                                                                                                      #
-#         unless (open $in_fh, "<", $abs_path){                                                                                                                           #
-#                 #error and return;                                                                                                                                      #
-#         }                                                                                                                                                               #
-#                                                                                                                                                                         #
-#         #continue                                                                                                                                                       #
-#                                                                                                                                                                         #
-#                                                                                                                                                                         #
-#                                                                                                                                                                         #
-#         $offset//=0;                    #Default offset is 0                                                                                                            #
-#         $length//=$stat[7]-$offset;     #Default length is remainder                                                                                                    #
-#                                                                                                                                                                         #
-#         $reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;                                                                                                                 #
-#                                                                                                                                                                         #
-#         $rex->[uSAC::HTTP::Rex::write_]->( $reply, sub {                                                                                                                #
-#                         aio_sendfile $out_fh,$in_fh,$offset, $length, sub {                                                                                             #
-#                                 $rex->[uSAC::HTTP::Rex::write_]->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_];                 #
-#                         };                                                                                                                                              #
-#                 });                                                                                                                                                     #
-#                                                                                                                                                                         #
-# }                                                                                                                                                                       #
-# sub send_file_uri_aio {                                                                                                                                                 #
-#         my ($rex,$uri,$offset,$length,$cb,@sys_roots)=@_;                                                                                                               #
-#         my $fh=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::fh_];                                                                                     #
-#         my $_cb ;                                                                                                                                                       #
-#         my @stat;                                                                                                                                                       #
-#                                                                                                                                                                         #
-#         my $reply;                                                                                                                                                      #
-#         $reply="$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF                                                                                                          #
-#                 .uSAC::HTTP::Rex::STATIC_HEADERS                                                                                                                        #
-#                 .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF;                                                                                                           #
-#                                                                                                                                                                         #
-#         #close connection after if marked                                                                                                                               #
-#         if($rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]){                                                                                   #
-#                 $reply.=HTTP_CONNECTION.": close".LF;                                                                                                                   #
-#                                                                                                                                                                         #
-#         }                                                                                                                                                               #
-#                                                                                                                                                                         #
-#         #or send explicit keep alive?                                                                                                                                   #
-#         elsif($rex->[uSAC::HTTP::Rex::version_] ne "HTTP/1.1") {                                                                                                        #
-#                 $reply.=                                                                                                                                                #
-#                         HTTP_CONNECTION.": Keep-Alive".LF                                                                                                               #
-#                         .HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF                                                                                                     #
-#                 ;                                                                                                                                                       #
-#         }                                                                                                                                                               #
-#                                                                                                                                                                         #
-#         #TODO: do content type look up here?                                                                                                                            #
-#                                                                                                                                                                         #
-#         $_cb=sub {                                                                                                                                                      #
-#                 unless (defined $_[0]){                                                                                                                                 #
-#                         #say "Stat error for uri";                                                                                                                      #
-#                         #reply with erro                                                                                                                                #
-#                         $cb->(undef);                                                                                                                                   #
-#                         return;                                                                                                                                         #
-#                 }                                                                                                                                                       #
-#                 $_cb=undef;                                                                                                                                             #
-#                 #on stat success do open                                                                                                                                #
-#                 @stat=stat _;                                                                                                                                           #
-#                 local $,=", ";                                                                                                                                          #
-#                 #say "Stat: ", @stat;                                                                                                                                   #
-#                 $offset//=0;                    #Default offset is 0                                                                                                    #
-#                 $length//=$stat[7]-$offset;     #Default length is remainder                                                                                            #
-#                 #say "Range start: $offset, range length: $length";                                                                                                     #
-#                                                                                                                                                                         #
-#                 $_cb=sub {                                                                                                                                              #
-#                         #on success to send file                                                                                                                        #
-#                         $_cb=undef;                                                                                                                                     #
-#                         return undef unless $_[0];                                                                                                                      #
-#                         my $in_fh=$_[0];                                                                                                                                #
-#                         #say "open success";                                                                                                                            #
-#                         #once we get here we can write headers                                                                                                          #
-#                         $reply.=HTTP_CONTENT_LENGTH.": ".$length.LF.LF;                                                                                                 #
-#                         my $send;                                                                                                                                       #
-#                         given ($rex->[uSAC::HTTP::Rex::write_]){                                                                                                        #
-#                                 $send=sub {                                                                                                                             #
-#                                         aio_sendfile $fh,$in_fh,$offset, $length, sub {                                                                                 #
-#                                                 $send=undef;                                                                                                            #
-#                                                 #say "Send file success";                                                                                               #
-#                                                 #send stats of file to originating caller                                                                               #
-#                                                 #$cb->(@stat);                                                                                                          #
-#                                                 $rex->[uSAC::HTTP::Rex::write_]->( undef ) if $rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::closeme_]; #
-#                                                 #delete $self->[write_];                                                                                                #
-#                                                                                                                                                                         #
-#                                                 #                               $_=undef;                                                                               #
-#                                                 ${ $rex->[uSAC::HTTP::Rex::reqcount_] }--;                                                                              #
-#                                         };                                                                                                                              #
-#                                 };                                                                                                                                      #
-#                                                                                                                                                                         #
-#                                 #if( $self->[write_] ) {                                                                                                                #
-#                                 #say $reply;                                                                                                                            #
-#                                 $rex->[uSAC::HTTP::Rex::write_]->( $reply, $send);                                                                                      #
-#                         }                                                                                                                                               #
-#                                                                                                                                                                         #
-#                 };                                                                                                                                                      #
-#                 aio_open $_[0], IO::AIO::O_RDONLY,0, $_cb;                                                                                                              #
-#         };                                                                                                                                                              #
-#         stat_uri $uri, $_cb, @sys_roots;                                                                                                                                #
-# }                                                                                                                                                                       #
-###########################################################################################################################################################################
 
 
 #attempt to load file from memory cache, fall back to loaded from disk and updating cache
@@ -1105,8 +874,22 @@ sub send_file_cached {
 
 #open a file and map it to memory and use writev?
 sub send_file_mmap {
+
 }
 
+#Send a file, based on header information
+sub send_file {
+	my $rex=$_[1];
+	#test for ranges
+	if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+		send_file_uri_range @_;
+		return;
+	}
+	else{
+		#Send normal
+		send_file_uri_norange @_;
+	}
+}
 
 enable_cache;
 

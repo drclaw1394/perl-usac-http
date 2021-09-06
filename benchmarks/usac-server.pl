@@ -120,7 +120,8 @@ site_route $site2 => qr{GET|HEAD}=>qr{/public$Path} =>
 			list_dir @_, $p,'data';
 		}
 		else{
-			send_file_uri_norange @_, $p, 'data';
+			send_file @_, $p, 'data';
+			#send_file_uri_range @_, $p, 'data';
 		}
                 return;
         };
