@@ -17,7 +17,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ write_queue_ on_body_>);
+use enum ( "id_=0" ,qw<time_ fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ write_queue_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -32,7 +32,8 @@ our %make_reader_reg;	#hash of sub references which will make a reader ref of a 
 our %make_writer_reg;	#hash of sub references which will make a writer ref of a particular name
 
 
-our $Date;
+our $Date;		#Date string for http
+our $Time;		#seconds from epoch
 
 sub _make_reader;
 sub drop;
@@ -43,6 +44,7 @@ sub new {
 	my $self=[];
 
 	$self->[id_]=$_[0];	
+	$self->[time_]=$Time;
 	$self->[fh_]=$_[1];	
 	$self->[sessions_]=$_[2];	
 	$self->[zombies_]=$_[3];	
@@ -99,6 +101,7 @@ sub new {
 sub revive {
 	my $self=shift;
 	$self->[id_]=$_[0];	
+	$self->[time_]=$Time;
 	$self->[fh_]=$_[1];	
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
@@ -122,6 +125,7 @@ sub _make_reader {
 	\my $reader=\$self->[read_];
 
 	$self->[rw_] = AE::io $fh, 0, sub {
+		$self->[time_]=$Time;	#Update the last access time
 		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
 		if($len>0){
 			$reader->();
@@ -245,14 +249,16 @@ sub select_writer{
 our $timer=AE::timer 0,1, sub {
 	state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 	state @days= qw(Sun Mon Tue Wed Thu Fri Sat);
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime;
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime($Time=time);
 	#export to globally available time?
 	#
 	#Format Tue, 15 Nov 1994 08:12:31 GMT
 	#TODO: 0 padding of hour min sec
-	$Date="$days[$wday], $mday $months[$mon] ".($year+1900)." $hour:$min:$sec GMT";
+	$Date="$days[$wday], $mday $months[$mon] ".($year+1900).sprintf(" %02d:%02d:%02d",$hour, $min, $sec)." GMT";
+	#say $Date;
 	#say scalar $self->[zombies_]->@*;
 	#say "Session count : ",scalar keys $self->[sessions_]->%*;
 };
+
 
 1;

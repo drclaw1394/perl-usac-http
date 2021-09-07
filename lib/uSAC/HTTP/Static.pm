@@ -24,7 +24,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
+our @EXPORT_OK =qw<static_file_from static_content send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -344,7 +344,8 @@ sub enable_cache {
 
 sub open_cache {
 	my $abs_path=shift;
-	$open_cache->{$abs_path}//do {
+	#$open_cache->{$abs_path}//do {
+	#do {
 		my $in_fh;
 		return unless stat($abs_path) and -r _ and ! -d _; #undef if stat fails
 								#or incorrect premissions
@@ -363,7 +364,7 @@ sub open_cache {
 			$entry[0]=$in_fh;
 			$open_cache->{$abs_path}=\@entry;
 		}
-	};
+		#};
 }
 
 
@@ -377,22 +378,27 @@ sub send_file_uri_norange {
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	my $abs_path=$sys_root."/".$uri;
-	my $entry;
-	unless($entry=open_cache $abs_path){
+	my $entry=$open_cache->{$abs_path}//open_cache $abs_path;
+	
+	#unless($entry=open_cache $abs_path){
+	unless($entry){
 		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
 		return;
 	}
 	my $in_fh=$entry->[0];
 
-	my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];	#reuses stat from check_access 
-	#Do stat on fh instead of path. Path requires resolving and is slower
-	#fh is already resolved and open.
-	unless(-r _ and !-d _){
-		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
-		#remove from cache
-		delete $open_cache->{$uri};
-		return
-	}
+	#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh; 
+
+	my ($content_length, $mod_time)=(stat $in_fh)[7,9];
+
+        #Do stat on fh instead of path. Path requires resolving and is slower
+        #fh is already resolved and open.
+        unless(-r _ and !-d _){
+                rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+                #remove from cache
+                delete $open_cache->{$abs_path};
+                return
+        }
 
 
 	#my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
@@ -428,16 +434,14 @@ sub send_file_uri_norange {
 	}
 
 	my $reader; $reader= sub {
-		if(1){
-			seek $in_fh,$total,0;
-			$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
-		}
+		seek $in_fh,$total,0;
+		$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
 		
 		unless($rc//0 or $! == EAGAIN or $! == EINTR){
 			say "READ ERROR from file";
 			#say $rc;
 			say $!;
-			delete $open_cache->{$uri};
+			delete $open_cache->{$abs_path};
 			close $in_fh;
 			$reader=undef;
 			#uSAC::HTTP::Session::drop $session;
@@ -556,11 +560,12 @@ sub send_file_uri_norange_chunked {
 
 	my $abs_path=$sys_root."/".$uri;
 
-	my $entry;
-	unless(stat $abs_path and -r _ and !-d _ and ($entry=open_cache $abs_path)){
+	my $entry=$open_cache->{$abs_path}//open_cache $abs_path;
+
+	unless($entry and stat $abs_path and -r _ and !-d _){
 		rex_reply_simple undef, $rex, HTTP_NOT_FOUND;
 		#remove from cache
-		delete $open_cache->{$uri};
+		delete $open_cache->{$abs_path};
 		return
 	}
 	my $in_fh=$entry->[0];
@@ -629,7 +634,7 @@ sub send_file_uri_norange_chunked {
 			say "READ ERROR from file";
 			say $rc;
 			say $!;
-			delete $open_cache->{$uri};
+			delete $open_cache->{$abs_path};
 			close $in_fh;
 			$reader=undef;
 			#$chunker=undef;
@@ -876,20 +881,42 @@ sub send_file_cached {
 sub send_file_mmap {
 
 }
-
 #Send a file, based on header information
-sub send_file {
-	my $rex=$_[1];
-	#test for ranges
-	if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-		send_file_uri_range @_;
-		return;
-	}
-	else{
-		#Send normal
-		send_file_uri_norange @_;
+sub static_file_from {
+	#my %args=@_;
+	my $root=$_[0];
+	sub {
+		my $rex=$_[1];
+		my $p=$1;
+		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+			send_file_uri_range @_, $p, $root;
+			return;
+		}
+		elsif($p=~m|/$|){
+			list_dir @_, $p, $root;
+		}
+		else{
+			#Send normal
+			send_file_uri_norange @_, $p, $root;
+		}
 	}
 }
+
+sub send_file {
+		my $rex=$_[1];
+		#test for ranges
+		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+			send_file_uri_range @_;
+			return;
+		}
+		elsif($_[2]=~m|/$|){
+			list_dir @_;
+		}
+		else{
+			#Send normal
+			send_file_uri_norange @_;
+		}
+	}
 
 enable_cache;
 

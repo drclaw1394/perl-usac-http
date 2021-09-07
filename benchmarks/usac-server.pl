@@ -104,10 +104,14 @@ site_route $site2=>GET=>'/$'=> (
 )=>sub { rex_reply_simple @_, HTTP_OK, undef, "site2 root"};
 
 site_route $site2=>GET=>'/small$'=>sub {
-	rex_reply_simple @_, HTTP_OK, undef, "Some small data";return};
+	rex_reply_simple @_, HTTP_OK, undef, "Some small data"; return};
+
+site_route $site2=>	GET => "/static/content"=> static_content txt=>"This is data";
 
 #Public files
-site_route $site2 => qr{GET|HEAD}=>qr{/public$Path} =>
+site_route $site2 => 	GET 	 => qr{/public$Path}   => static_file_from "data";
+
+site_route $site2 => qr{GET|HEAD}=> qr{/oipublic$Path} =>
         (
 		#log_simple
         ) =>
@@ -115,8 +119,8 @@ site_route $site2 => qr{GET|HEAD}=>qr{/public$Path} =>
         sub {
 			
 		my $p=$1;
-		if(substr($1,-1) eq "/"){
-				#if($1=~m|/$|){
+		#if(substr($1,-1) eq "/"){
+		if($p=~m|/$|){
 			list_dir @_, $p,'data';
 		}
 		else{

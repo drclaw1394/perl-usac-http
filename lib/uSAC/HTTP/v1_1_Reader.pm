@@ -86,7 +86,7 @@ sub make_reader{
 		use integer;
 		#$self and $r or return;
 		$len=length $buf;
-		while ( $self and $len ) {
+		while ( $len ) {
 			#Dual mode variables:
 			#	server:
 			#	$method => method
@@ -157,7 +157,7 @@ sub make_reader{
 							return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, $ixx, 32)."...>");
 						}
 						#warn "Need more";
-						say "need more";
+						#say "need more";
 						#return pos($buf) = $bpos; # need more data
 						$pos=pos($buf);
 						return;
@@ -175,7 +175,6 @@ sub make_reader{
 				}
 				#Done with headers. 
 				#
-				#TODO: downsample gettimeofday to a second
 				my $host=$h{HOST}//"";
 				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$host, $method, $uri, $uri], 'uSAC::HTTP::Rex' ;
 				#$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ,undef,undef,undef,undef], 'uSAC::HTTP::Rex' ;
@@ -581,6 +580,7 @@ sub make_socket_writer{
 		if(!$ww){	#no write watcher so try synchronous write
 			#say "No watcher";
 			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
+			$ido->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
 			$offset+=$w;
 			if($offset==length $buf){
 				#say "FULL WRITE NO APPEND";
@@ -632,6 +632,7 @@ sub make_socket_writer{
 					\my $cb=\$entry->[2];
 					\my $arg=\$entry->[3];
 					$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
+					$ido->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
 
 					$offset+=$w;
 					if($offset==length $buf) {

@@ -33,7 +33,7 @@ use Carp 'croak';
 #Class attribute keys
 #max_header_size_
 use enum (
-	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ seconds_timer_ www_roots_ total_requests_>
+	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ total_requests_>
 );
 
 
@@ -74,6 +74,8 @@ our $DEFAULT_MIME=>"application/octet-stream";
 
 #our $ERROR_PAGE=>
 \our %MIME=do "./mime.pl";
+
+
 # Basic handlers
 #
 # Welcome message
@@ -217,6 +219,26 @@ sub listen {
 sub prepare {
 	#setup timer for constructing date header once a second
 	my ($self)=shift;
+	my $interval=1;
+	my $timeout=10;
+	$self->[server_clock_]=time;	
+
+	$self->[stream_timer_]=AE::timer 0,$interval, sub {
+		#iterate through all connections and check the difference between the last update
+		$self->[server_clock_]+=$interval;
+		#and the current tick
+		my $session;
+		for(keys $self->[sessions_]->%*){
+			$session=$self->[sessions_]{$_};
+			#say "checking id: $_ time: ", $session->[uSAC::HTTP::Session::time_];
+
+			if(($self->[server_clock_]-$session->[uSAC::HTTP::Session::time_])> $timeout){
+				$session->[uSAC::HTTP::Session::closeme_]=1;
+				$session->[uSAC::HTTP::Session::dropper_]->();
+			}
+		}
+	};
+
         ###########################################################################################
         #                                                                                         #
         # state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);                    #

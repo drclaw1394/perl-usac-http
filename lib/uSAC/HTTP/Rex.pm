@@ -19,7 +19,7 @@ use uSAC::HTTP::Cookie qw<:all>;
 use AnyEvent;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -236,29 +236,39 @@ sub reply_simple;
 			#create a writer for the session
 			my $session=$self->[session_];
 			\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
-
-			my $content_length=length($_[4])+0;
-			$reply=
-				"HTTP/1.1 $_[2]".LF
-				#.STATIC_HEADERS
-				.HTTP_DATE.": ".		$uSAC::HTTP::Session::Date.LF
-				.HTTP_CONTENT_LENGTH.": ".	$content_length.LF
-				.($session->[uSAC::HTTP::Session::closeme_]
-					?HTTP_CONNECTION.": close".LF
-
-					:(HTTP_CONNECTION.": Keep-Alive".LF
-					.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
+			#my $content_length=length($_[4])+0;
+			my $headers=[
+				HTTP_DATE,		$uSAC::HTTP::Session::Date,
+				HTTP_CONTENT_LENGTH,	length ($_[4])+0,
+				($session->[uSAC::HTTP::Session::closeme_]
+					?(HTTP_CONNECTION,	"close")
+					:(	HTTP_CONNECTION,	"Keep-Alive",
+						HTTP_KEEP_ALIVE,	"timeout=10, max=1000"
 					)
 				)
-				;
-			render_v1_1_headers($reply, $_[3]) if $_[3];
 
-			#Append body
-			#say "Length: ", length($_[4])+0;
+			];
+                        #########################################################################
+                        # $reply=                                                               #
+                        #         "HTTP/1.1 $_[2]".LF                                           #
+                        #         #.STATIC_HEADERS                                              #
+                        #         .HTTP_DATE.": ".                $uSAC::HTTP::Session::Date.LF #
+                        #         .HTTP_CONTENT_LENGTH.": ".      $content_length.LF            #
+                        #         .($session->[uSAC::HTTP::Session::closeme_]                   #
+                        #                 ?HTTP_CONNECTION.": close".LF                         #
+                        #                                                                       #
+                        #                 :(HTTP_CONNECTION.": Keep-Alive".LF                   #
+                        #                 .HTTP_KEEP_ALIVE.": ".  "timeout=5, max=1000".LF      #
+                        #                 )                                                     #
+                        #         )                                                             #
+                        #         ;                                                             #
+                        #########################################################################
+			$reply="HTTP/1.1 $_[2]".LF;
+			render_v1_1_headers($reply,$headers,$_[3]);
+			#render_v1_1_headers($reply, $_[3]);
+
 			$reply.=LF.$_[4];
-			$self->[write_]($reply,undef);#, $session->[uSAC::HTTP::Session::dropper_]);#\&uSAC::HTTP::Session::drop); 
-
-			#Write the headers
+			$self->[write_]($reply);	#fire and forget
 		}
 
 		#rex, http_code, header, datacb 
@@ -315,14 +325,47 @@ sub reply_simple;
 			}
 		}
 
+#returns a sub which always renders the same content.
+#http code is always
+sub static_content {
+	my $static=pop;	#Content is the last item
+	my $ext=$_[0]//"txt";
+	my $headers=
+	[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
+	sub {
+		reply_simple @_, HTTP_OK, $headers, $static; return
+	}
+}
 
 
+###########################################################################
+# sub render_v1_1_headers_return {                                        #
+#         use integer;                                                    #
+#         my $buffer="";                                                  #
+#         for(@_){                                                        #
+#                 my $i=0;                                                #
+#                 \my @headers=$_//[];                                    #
+#                 #for(0..@headers/2-1){                                  #
+#                 while($i<@headers){                                     #
+#                         #$buffer.=join(": ",@headers[($i++,$i++)]).LF;  #
+#                         $buffer.=$headers[$i++].": ".$headers[$i++].LF; #
+#                 }                                                       #
+#         }                                                               #
+#         $buffer;                                                        #
+# }                                                                       #
+###########################################################################
 sub render_v1_1_headers {
-	\my $buffer=\$_[0];
-	my $i=0;
-	\my @headers=$_[1]//[];
-	for(0..@headers/2-1){
-		$buffer.=join(": ",@headers[($i++,$i++)]).LF;#.": ".$headers[$i++].LF 
+	use integer;
+	\my $buffer=\shift;#$_[0];
+	my $i;
+	for(@_){
+		$i=0;
+		\my @headers=$_;
+		#for(0..@headers/2-1){
+		while($i<@headers){
+			#$buffer.=join(": ",@headers[($i++,$i++)]).LF;
+			$buffer.=$headers[$i++].": ".$headers[$i++].LF;
+		}
 	}
 }
 	 
