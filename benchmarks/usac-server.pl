@@ -21,16 +21,6 @@ use uSAC::HTTP::Middleware ":all";
 use uSAC::HTTP::Static;
 
 
-###############################################################################
-# given(\%uSAC::HTTP::Session::make_writer_reg){                              #
-#         #$_->{http1_1_static_writer}=\&make_static_file_writer;             #
-#         $_->{http1_1_chunked_writer}=\&make_chunked_writer;                 #
-#         $_->{http1_1_chunked_deflate_writer}=\&make_chunked_deflate_writer; #
-# }                                                                           #
-# #say "Chunked writer",\&make_chunked_writer;                                #
-###############################################################################
-
-
 my @sys_roots=qw<data>;
 
 
@@ -83,11 +73,11 @@ site_route $site1=>qr{GET|HEAD}=>qr{/public$Path}=>(
         )=>sub {
 		send_file_uri_norange @_, $1, 'data';
 		return;
-
 };
 
 site_route $site1=>GET=>'.*'=> (log_simple)=>sub {
-                rex_reply_simple @_, HTTP_OK, undef, "CATCH ALL FOR SITE 1";
+	say "asdfasdf";
+                rex_reply_simple @_, HTTP_OK, [], "CATCH ALL FOR SITE 1";
                 return;
 };
 
@@ -107,31 +97,14 @@ site_route $site2=>GET=>'/small$'=>sub {
 	rex_reply_simple @_, HTTP_OK, undef, "Some small data"; return};
 
 site_route $site2=>	GET => "/static/content"=> static_content txt=>"This is data";
+#site_route $site=> $Any_Method => 
 
 #Public files
-site_route $site2 => 	GET 	 => qr{/public$Path}   => static_file_from "data";
+site_route $site2 => 	qr{GET|HEAD}	 => qr{/public$Path}   => static_file_from "data";
 
-site_route $site2 => qr{GET|HEAD}=> qr{/oipublic$Path} =>
-        (
-		#log_simple
-        ) =>
-
-        sub {
-			
-		my $p=$1;
-		#if(substr($1,-1) eq "/"){
-		if($p=~m|/$|){
-			list_dir @_, $p,'data';
-		}
-		else{
-			send_file @_, $p, 'data';
-			#send_file_uri_range @_, $p, 'data';
-		}
-                return;
-        };
 
 site_route $site2=>GET=>'.*'=>
         (log_simple)=>
-        sub { rex_reply_simple @_, HTTP_OK, undef, "CATCH ALL FOR SITE 2"; return;
+        sub { rex_reply_simple @_, HTTP_OK, undef , "CATCH ALL FOR SITE 2"; return;
         };
 $server->run;

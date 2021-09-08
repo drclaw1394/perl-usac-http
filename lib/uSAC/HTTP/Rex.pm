@@ -360,7 +360,7 @@ sub render_v1_1_headers {
 	my $i;
 	for(@_){
 		$i=0;
-		\my @headers=$_;
+		\my @headers=$_//[];
 		#for(0..@headers/2-1){
 		while($i<@headers){
 			#$buffer.=join(": ",@headers[($i++,$i++)]).LF;

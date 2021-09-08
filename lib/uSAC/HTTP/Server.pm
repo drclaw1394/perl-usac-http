@@ -36,6 +36,9 @@ use enum (
 	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ total_requests_>
 );
 
+use Exporter qw<import>;
+our @EXPORT_OK=qw<define_server define_interface define_port define_mime_map define_mime_default set_enable_hosts>;
+our @EXPORT=@EXPORT_OK;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Code ":constants";
@@ -86,12 +89,14 @@ sub usac_welcome {
 		local $/=undef;
 		$data=<DATA>;
 	}
+
 	state $sub=sub {
 		rex_reply_simple @_, HTTP_OK, undef, $data;
 		return; #Enable caching
 	}
 }
 
+#if nothing else on this server matches, this will run
 sub usac_default_handler {
 		#my ($line,$rex)=@_;
 		state $sub=sub {
@@ -110,7 +115,7 @@ sub new {
 	$self->[table_]=Hustle::Table->new(usac_default_handler);
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
-	register_site($self, uSAC::HTTP->new(id=>"default"));
+	register_site($self, uSAC::HTTP->new(id=>"default",host=>qr{[^ ]+}));
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	#$self->[max_header_size_]=MAX_READ_SIZE;
@@ -120,28 +125,6 @@ sub new {
 		};
 		
 	
-	if (exists $self->[listen_]) {
-		$self->[listen_] = [ $self->[listen_] ] unless ref $self->[listen_];
-		my %dup;
-		for (@{ $self->[listen_] }) {
-			if($dup{ lc $_ }++) {
-				croak "Duplicate host $_ in listen\n";
-			}
-			my ($h,$p) = split ':',$_,2;
-			$h = '0.0.0.0' if $h eq '*';
-			$h = length ( $self->[host_] ) ? $self->[host_] : '0.0.0.0' unless length $h;
-			$p = length ( $self->[port_] ) ? $self->[port_] : 8080 unless length $p;
-			$_ = join ':',$h,$p;
-		}
-		($self->[host_],$self->[port_]) = split ':',$self->[listen_][0],2;
-	} else {
-		$self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];
-	}
-
-	$self->can("handle_request")
-		and croak "It's a new version of ".__PACKAGE__.". For old version use `legacy' branch, or better make some minor patches to support new version";
-	
-	#$self->{request} = 'uSAC::HTTP::Rex';
 	
 	return $self;
 }
@@ -385,18 +368,21 @@ sub site {
 }
 
 #Duck type as a site 
-sub route {
+sub add_route {
 	my $self=shift;
-	$self->site->route(@_);
+	$self->site->add_route(@_);
+}
+
+sub set_enable_hosts{
+	say "Enabling host support for: ", $_;
+	$_->[enable_hosts_]=$_[0]//0;
 }
 
 sub rebuild_dispatch {
 	my $self=shift;
 	my $cache={};
 	keys %$cache=512;
-	#check if the default site has more than one( ie the default) entry
-	#if 0, then add the server catch all
-	#else do not modifiy
+	#The dispatcher always has a default. If we only have 1 entry in the dispatch table (ie the default)
 	if($self->[table_]->@*==1 or keys $self->[sites_]->%* > 1){
 		site_route $self=>'GET'=>qr{.*}=>()=>usac_welcome;
 	}
@@ -408,6 +394,24 @@ sub rebuild_dispatch {
 sub run {
 	my $self=shift;
 	my $cv=AE::cv;
+
+	if (exists $self->[listen_]) {
+		$self->[listen_] = [ $self->[listen_] ] unless ref $self->[listen_];
+		my %dup;
+		for (@{ $self->[listen_] }) {
+			if($dup{ lc $_ }++) {
+				croak "Duplicate host $_ in listen\n";
+			}
+			my ($h,$p) = split ':',$_,2;
+			$h = '0.0.0.0' if $h eq '*';
+			$h = length ( $self->[host_] ) ? $self->[host_] : '0.0.0.0' unless length $h;
+			$p = length ( $self->[port_] ) ? $self->[port_] : 8080 unless length $p;
+			$_ = join ':',$h,$p;
+		}
+		($self->[host_],$self->[port_]) = split ':',$self->[listen_][0],2;
+	} else {
+		$self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];
+	}
 	$self->rebuild_dispatch;
 	$self->listen;
 	$self->accept;
@@ -415,6 +419,38 @@ sub run {
 	$cv->recv();
 }
 
+#declarative setup
+sub define_listener {
+	#assumes server is $_;
+	#adds listener	
+}
+
+sub define_server :prototype(&) {
+	my $sub=shift;
+	my $server=uSAC::HTTP::Server->new();
+	$_=$server;
+	$sub->();
+	$server;
+}
+sub define_interface {
+	my $server=$_;
+	$server->[host_]=$_[0];
+}
+sub define_port {
+	my $server=$_;
+	$server->[port_]=$_[0];
+}
+sub define_mime_default{
+	my $server=$_;
+	$server->[port_]=$_[0];
+	$DEFAULT_MIME=>$_[0]//"application/octet-stream";
+
+
+}
+sub define_mime_map {
+	\our %MIME=do "./mime.pl";
+
+}
 
 
 #########################################################################################

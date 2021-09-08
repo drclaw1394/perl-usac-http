@@ -1,12 +1,14 @@
 package uSAC::HTTP;
 use warnings;
 use strict;
+
 use version; our $VERSION=version->declare("v0.0.1");
 use feature ":all";
+no warnings "experimental";
 
 use Exporter "import";
 
-our @EXPORT_OK=qw(LF site_route $Path);
+our @EXPORT_OK=qw(LF site_route define_route define_site define_prefix define_id define_host define_middleware $Path $Any_Method);
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
@@ -48,7 +50,7 @@ sub new {
 	$self->[middleware_]=	$options{middleware}//[];
 
 	#die "No server provided" unless $self->[server_];
-	die "No id provided" unless $self->[id_];
+	#die "No id provided" unless $self->[id_];
 
 	bless $self, __PACKAGE__;
 }
@@ -62,7 +64,7 @@ sub new {
 #If the server is configured for virtual hosts, the matching mechanism also includes the host matcher
 #specified in the site initialization
 #
-sub route {
+sub add_route {
 	my $self=shift;
 	my $method_matcher=shift;
 	my $path_matcher=shift;
@@ -171,6 +173,7 @@ sub _strip_prefix {
 our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
+our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS)/;
 
 our $Method=		qr{^([^ ]+)};
 our $Path=		qr{(/[^? ]*)};	#Remainder of path components  in request line
@@ -194,6 +197,52 @@ sub ends_with {
 
 sub site_route {
 	my $self=shift;
-	$self->route(@_);
+	$self->add_route(@_);
+}
+
+#declare a site
+#first argument is sub
+sub define_site :prototype(&) {
+	my $server=$_;
+	say "server",$server;
+	my $sub=shift;
+	my $self= uSAC::HTTP->new(server=>$server);
+	local  $_=$self;
+	$sub->();
+}
+
+sub define_route {
+	my $self=$_;	#The site to use
+	$self->add_route(@_);
+}
+sub define_id {
+	my $self=$_;
+	$self->[id_]=shift;
+}
+sub define_prefix {
+	my $self=$_;
+        given(my $prefix=shift){
+                unless(m|^/|){
+                        warn "Prefix '$_' needs to start with a '/'. Fixing";
+                        $_="/".$_;
+                }
+		$self->[prefix_]=$_;
+        }
+}
+sub define_host {
+	my $self=$_;
+	$self->[host_]=shift;
+	#$self->[server_]->set_enable_hosts(1);
+}
+
+sub define_middleware{
+	my $self=$_;
+	
+	if(ref($_[0])eq"ARRAY"){
+		$self->[middleware_]=shift;
+	}
+	else{
+		$self->[middleware_]=[@_];
+	}
 }
 1;
