@@ -122,26 +122,42 @@ sub add_route {
 sub _strip_prefix {
 	my $self=shift;
 	my $prefix=$self->[prefix_];
+	my $len=length $prefix;
 	sub {
 		my $next=shift;
 		say "making strip prefix";
 		sub {
-			my $new;
-			{
-				#NOTE: block used to make temp dynamic scope to protect capture groups
-				#being destroyed when running another match
-				#The space  is to prevent the host matching if present
-				given($_[1]){
-					$_->[uSAC::HTTP::Rex::uri_stripped_]=$_->[uSAC::HTTP::Rex::uri_]=~s/$prefix//nr;
-					$new=$_->[uSAC::HTTP::Rex::host_]." ".$_->[uSAC::HTTP::Rex::method_]." ".$_->[uSAC::HTTP::Rex::uri_stripped_];
-				}
-				#$new=$_[0]=~s/ $prefix/ /nr;
-				shift @_;
-			}
-			#The @_ is shifted to remove the alias of "line"
-			#Otherwise the above modifies the original input which effects the
-			#Hustle::Table cache
-			return $next->($new, @_);
+                        #{
+                                #NOTE: block used to make temp dynamic scope to protect capture groups
+                                #being destroyed when running another match
+                                #The space  is to prevent the host matching if present
+                                shift @_;
+                                for($_[0]){     #this is actually arg 1
+                                        $_->[uSAC::HTTP::Rex::uri_stripped_]= substr($_->[uSAC::HTTP::Rex::uri_],$len);
+                                        unshift @_, $_->[uSAC::HTTP::Rex::host_]." ".$_->[uSAC::HTTP::Rex::method_]." ".$_->[uSAC::HTTP::Rex::uri_stripped_];
+                                }
+                                #$new=$_[0]=~s/ $prefix/ /nr;
+                                return &$next;
+                                #}
+			#my $new;
+                        #########################################################################################################################################
+                        # {                                                                                                                                     #
+                        #         #NOTE: block used to make temp dynamic scope to protect capture groups                                                        #
+                        #         #being destroyed when running another match                                                                                   #
+                        #         #The space  is to prevent the host matching if present                                                                        #
+                        #         shift @_;                                                                                                                     #
+                        #         given($_[0]){                                                                                                                 #
+                        #                 $_->[uSAC::HTTP::Rex::uri_stripped_]=$_->[uSAC::HTTP::Rex::uri_]=~s/$prefix//nr;                                      #
+                        #                 unshift @_, $_->[uSAC::HTTP::Rex::host_]." ".$_->[uSAC::HTTP::Rex::method_]." ".$_->[uSAC::HTTP::Rex::uri_stripped_]; #
+                        #         }                                                                                                                             #
+                        #         #$new=$_[0]=~s/ $prefix/ /nr;                                                                                                 #
+                        #                                                                                                                                       #
+                        #         #The @_ is shifted to remove the alias of "line"                                                                              #
+                        #         #Otherwise the above modifies the original input which effects the                                                            #
+                        #         #Hustle::Table cache                                                                                                          #
+                        #         return &$next;#->($new, @_);                                                                                                  #
+                        # }                                                                                                                                     #
+                        #########################################################################################################################################
 		}
 	}
 
@@ -213,7 +229,18 @@ sub define_site :prototype(&) {
 
 sub define_route {
 	my $self=$_;	#The site to use
-	$self->add_route(@_);
+	#first element is tested for short cut get use
+	given($_[0]){
+		when(m|^/|){
+			#starting with a slash, short cut for GET and head
+			unshift @_, "GET";
+			$self->add_route(@_);
+		}
+		default{
+			#normal	
+			$self->add_route(@_);
+		}
+	}
 }
 sub define_id {
 	my $self=$_;
@@ -244,5 +271,9 @@ sub define_middleware{
 	else{
 		$self->[middleware_]=[@_];
 	}
+}
+
+sub define_error_page {
+		
 }
 1;

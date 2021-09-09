@@ -34,12 +34,12 @@ use Scalar::Util qw(weaken);
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ server_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_>
+	"version_=0" ,qw< session_ headers_ write_ query_ server_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ static_headers_ >
 );
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>uri_-version_+1;
+use constant KEY_COUNT=>static_headers_-version_+1;
 
 
                 #################################################################################################################################################
@@ -248,23 +248,8 @@ sub reply_simple;
 				)
 
 			];
-                        #########################################################################
-                        # $reply=                                                               #
-                        #         "HTTP/1.1 $_[2]".LF                                           #
-                        #         #.STATIC_HEADERS                                              #
-                        #         .HTTP_DATE.": ".                $uSAC::HTTP::Session::Date.LF #
-                        #         .HTTP_CONTENT_LENGTH.": ".      $content_length.LF            #
-                        #         .($session->[uSAC::HTTP::Session::closeme_]                   #
-                        #                 ?HTTP_CONNECTION.": close".LF                         #
-                        #                                                                       #
-                        #                 :(HTTP_CONNECTION.": Keep-Alive".LF                   #
-                        #                 .HTTP_KEEP_ALIVE.": ".  "timeout=5, max=1000".LF      #
-                        #                 )                                                     #
-                        #         )                                                             #
-                        #         ;                                                             #
-                        #########################################################################
 			$reply="HTTP/1.1 $_[2]".LF;
-			render_v1_1_headers($reply,$headers,$_[3]);
+			render_v1_1_headers($reply, $self->[static_headers_], $headers, $_[3]);
 			#render_v1_1_headers($reply, $_[3]);
 
 			$reply.=LF.$_[4];
@@ -277,24 +262,36 @@ sub reply_simple;
 			my (undef, $self, $code, $headers, $cb)=@_;
 			#create a writer for the session
 			my $session=$self->[session_];
-			#\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
+			\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 			#my $content_length=length($_[4])+0;
-			my $reply=
-				"HTTP/1.1 $code".LF
-				#.STATIC_HEADERS
-				.HTTP_DATE.": ".		$uSAC::HTTP::Session::Date.LF
-				#.HTTP_CONTENT_LENGTH.": ".	$content_length.LF
-				.($session->[uSAC::HTTP::Session::closeme_]
-					?HTTP_CONNECTION.": close".LF
-
-					:(HTTP_CONNECTION.": Keep-Alive".LF
-					.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
+			$reply= "HTTP/1.1 $code".LF;
+			my $headers=[
+				HTTP_DATE,		$uSAC::HTTP::Session::Date,
+				($session->[uSAC::HTTP::Session::closeme_]
+					?(HTTP_CONNECTION,	"close")
+					:(	HTTP_CONNECTION,	"Keep-Alive",
+						HTTP_KEEP_ALIVE,	"timeout=10, max=1000"
 					)
-				)
-				.HTTP_TRANSFER_ENCODING.": chunked".LF
-				;
-				render_v1_1_headers($reply, $headers) if $headers;
+				),
+				HTTP_TRANSFER_ENCODING, "chunked"
+
+			];
+                                #################################################################
+                                # #.STATIC_HEADERS                                              #
+                                # .HTTP_DATE.": ".                $uSAC::HTTP::Session::Date.LF #
+                                # #.HTTP_CONTENT_LENGTH.": ".     $content_length.LF            #
+                                # .($session->[uSAC::HTTP::Session::closeme_]                   #
+                                #         ?HTTP_CONNECTION.": close".LF                         #
+                                #                                                               #
+                                #         :(HTTP_CONNECTION.": Keep-Alive".LF                   #
+                                #         .HTTP_KEEP_ALIVE.": ".  "timeout=5, max=1000".LF      #
+                                #         )                                                     #
+                                # )                                                             #
+                                # .HTTP_TRANSFER_ENCODING.": chunked".LF                        #
+                                # ;                                                             #
+                                #################################################################
+				render_v1_1_headers($reply, $headers, $self->[static_headers_], $headers);
 				$reply.=LF;
 
 
@@ -338,22 +335,6 @@ sub static_content {
 }
 
 
-###########################################################################
-# sub render_v1_1_headers_return {                                        #
-#         use integer;                                                    #
-#         my $buffer="";                                                  #
-#         for(@_){                                                        #
-#                 my $i=0;                                                #
-#                 \my @headers=$_//[];                                    #
-#                 #for(0..@headers/2-1){                                  #
-#                 while($i<@headers){                                     #
-#                         #$buffer.=join(": ",@headers[($i++,$i++)]).LF;  #
-#                         $buffer.=$headers[$i++].": ".$headers[$i++].LF; #
-#                 }                                                       #
-#         }                                                               #
-#         $buffer;                                                        #
-# }                                                                       #
-###########################################################################
 sub render_v1_1_headers {
 	use integer;
 	\my $buffer=\shift;#$_[0];
@@ -361,9 +342,7 @@ sub render_v1_1_headers {
 	for(@_){
 		$i=0;
 		\my @headers=$_//[];
-		#for(0..@headers/2-1){
 		while($i<@headers){
-			#$buffer.=join(": ",@headers[($i++,$i++)]).LF;
 			$buffer.=$headers[$i++].": ".$headers[$i++].LF;
 		}
 	}

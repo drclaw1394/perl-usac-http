@@ -75,6 +75,7 @@ sub make_reader{
 
 	my $cb=$self->current_cb;#$self->[uSAC::HTTP::Server::cb_];
 	my $enable_hosts=$self->enable_hosts;
+	my $static_headers=$self->static_headers;
 	my ($state,$seq) = (0,0);
 	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
 	my $line;
@@ -176,7 +177,7 @@ sub make_reader{
 				#Done with headers. 
 				#
 				my $host=$h{HOST}//"";
-				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$host, $method, $uri, $uri], 'uSAC::HTTP::Rex' ;
+				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$host, $method, $uri, $uri, $static_headers], 'uSAC::HTTP::Rex' ;
 				#$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ,undef,undef,undef,undef], 'uSAC::HTTP::Rex' ;
 
 

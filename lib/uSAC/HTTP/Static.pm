@@ -881,23 +881,29 @@ sub send_file_cached {
 sub send_file_mmap {
 
 }
-#Send a file, based on header information
+
+#setup to use send file
+#if $1 is defined, it is used as the uri, otherwise the stripped uri in the rex is used
 sub static_file_from {
 	#my %args=@_;
 	my $root=$_[0];
 	sub {
 		my $rex=$_[1];
-		my $p=$1;
+		#my $p=$1;
+		my $p=$1//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+		#say "STATIC FILE FROM: ", $p;
 		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 			send_file_uri_range @_, $p, $root;
 			return;
 		}
 		elsif($p=~m|/$|){
 			list_dir @_, $p, $root;
+			return;
 		}
 		else{
 			#Send normal
 			send_file_uri_norange @_, $p, $root;
+			return;
 		}
 	}
 }
@@ -911,10 +917,12 @@ sub send_file {
 		}
 		elsif($_[2]=~m|/$|){
 			list_dir @_;
+			return;
 		}
 		else{
 			#Send normal
 			send_file_uri_norange @_;
+			return;
 		}
 	}
 

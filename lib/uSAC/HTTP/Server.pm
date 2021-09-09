@@ -33,11 +33,11 @@ use Carp 'croak';
 #Class attribute keys
 #max_header_size_
 use enum (
-	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ total_requests_>
+	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ total_requests_>
 );
 
 use Exporter qw<import>;
-our @EXPORT_OK=qw<define_server define_interface define_port define_mime_map define_mime_default set_enable_hosts>;
+our @EXPORT_OK=qw<define_server define_interface define_port define_mime_map define_mime_default set_enable_hosts define_sub_product>;
 our @EXPORT=@EXPORT_OK;
 
 use uSAC::HTTP;
@@ -47,8 +47,6 @@ use uSAC::HTTP::Session;
 use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
 
-use constant STATIC_HEADERS=>
-HTTP_SERVER.": ".uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", @uSAC::HTTP::Server::Subproducts).LF ;
 
 given(\%uSAC::HTTP::Session::make_reader_reg){
         $_->{http1_1_base}=\&make_reader;
@@ -115,17 +113,12 @@ sub new {
 	$self->[table_]=Hustle::Table->new(usac_default_handler);
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
-	register_site($self, uSAC::HTTP->new(id=>"default",host=>qr{[^ ]+}));
+	$self->[static_headers_]=[];#STATIC_HEADERS;
+	register_site($self, uSAC::HTTP->new(id=>"default",host=>'[^ ]+'));
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
-	$self->[upgraders_]= {
-			"websocket" =>\&uSAC::HTTP::Server::WS::upgrader
-		};
-		
-	
-	
 	return $self;
 }
 
@@ -338,6 +331,10 @@ sub current_cb {
 sub enable_hosts {
 	shift->[enable_hosts_];
 }
+
+sub static_headers {
+	shift->[static_headers_];
+}
 sub add_end_point{
 	my ($self,$matcher,$end)=@_;
 	$self->[table_]->add($matcher,$end);
@@ -450,6 +447,12 @@ sub define_mime_default{
 sub define_mime_map {
 	\our %MIME=do "./mime.pl";
 
+}
+sub define_sub_product {
+		my $server=$_;
+		my $sub_product=$_[0];
+		$server->[static_headers_]=[
+	HTTP_SERVER,	uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) ];
 }
 
 
