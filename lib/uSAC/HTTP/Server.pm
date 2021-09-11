@@ -336,8 +336,8 @@ sub static_headers {
 	shift->[static_headers_];
 }
 sub add_end_point{
-	my ($self,$matcher,$end)=@_;
-	$self->[table_]->add($matcher,$end);
+	my ($self,$matcher,$end, $ctx)=@_;
+	$self->[table_]->add(matcher=>$matcher,sub=>$end, ctx=>$ctx);
 }
 
 #registers a site object with the server
@@ -437,6 +437,7 @@ sub define_port {
 	my $server=$_;
 	$server->[port_]=$_[0];
 }
+
 sub define_mime_default{
 	my $server=$_;
 	$server->[port_]=$_[0];
@@ -444,6 +445,7 @@ sub define_mime_default{
 
 
 }
+
 sub define_mime_map {
 	\our %MIME=do "./mime.pl";
 
@@ -452,7 +454,7 @@ sub define_sub_product {
 		my $server=$_;
 		my $sub_product=$_[0];
 		$server->[static_headers_]=[
-	HTTP_SERVER,	uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) ];
+	[HTTP_SERVER,	uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) ]];
 }
 
 

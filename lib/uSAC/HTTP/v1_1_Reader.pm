@@ -241,7 +241,7 @@ sub make_form_data_reader {
 		my $processed=0;
 
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];
-		my $type = $h{'content-type'};
+		my $type = $h{'CONTENT_TYPE'};
 		say "content type: $type";
 		#TODO: check for content-disposition and filename if only a single part.
 		my $boundary="--".(split("=", $type))[1];
@@ -284,7 +284,8 @@ sub make_form_data_reader {
 							#update buffer for readstack
 							$buf=substr $buf,$processed;
 							say $buf;
-							$cb->(undef,$form_headers);
+							$cb->(undef,undef);
+							#$cb->(undef,$form_headers);
 							uSAC::HTTP::Session::pop_reader($session);
 							#$session->pop_reader;
 							return;
@@ -323,7 +324,7 @@ sub make_form_data_reader {
 
 					while (){
 						if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
-							\my $e=\$form_headers->{lc $1};
+							\my $e=\$form_headers->{uc $1=~tr/-/_/r};
 							$e = defined $e ? $e.','.$2: $2;
 							say "Got header: $e";
 
@@ -345,7 +346,7 @@ sub make_form_data_reader {
 							$state=0;
 							last;
 							#process disposition
-							given($form_headers->{'content-disposition'}){
+							given($form_headers->{'CONTENT_DISPOSITION'}){
 								when(undef){
 									#this is an error
 								}
@@ -362,7 +363,7 @@ sub make_form_data_reader {
 							}
 
 							#process content-type
-							given($form_headers->{'content-type'}){
+							given($form_headers->{'CONTENT_TYPE'}){
 								when(undef){
 									#not set
 								}
@@ -371,7 +372,7 @@ sub make_form_data_reader {
 							}
 
 							#process content type
-							$form_headers->{'content-type'};
+							$form_headers->{'CONTENT_TYPE'};
 
 
 							#if headers are ok then look for boundary
@@ -427,7 +428,7 @@ sub make_form_urlencoded_reader {
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];	#
-		my $len = $h{'content-length'}//0; #number of bytes to read, or 0 if undefined
+		my $len = $h{'CONTENT_LENGTH'}//0; #number of bytes to read, or 0 if undefined
 
 		my $new=length($buf)-$processed;	#length of read buffer
 
@@ -437,7 +438,7 @@ sub make_form_urlencoded_reader {
 
 		#when the remaining length is 0, pop this sub from the stack
 		if($processed==$len){
-			$cb->(undef,$form_headers);
+			$cb->(undef,undef);#$form_headers);
 			#return to the previous 
 			$processed=0;
 			#$session->pop_reader;	#This assumes that the normal 1.1 reader previous in the stack

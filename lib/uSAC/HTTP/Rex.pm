@@ -19,7 +19,7 @@ use uSAC::HTTP::Cookie qw<:all>;
 use AnyEvent;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_upload rex_parse_fields>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -41,63 +41,6 @@ use enum (
 use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>static_headers_-version_+1;
 
-
-                #################################################################################################################################################
-                # sub connection { $_[0][headers_]{connection} =~ /^([^;]+)/ && lc( $1 ) }                                                                      #
-                #                                                                                                                                               #
-                # sub method  { $_[0][method_] }                                                                                                                #
-                # sub full_uri { 'http://' . $_[0][headers_]{host} . $_[0][uri_] }                                                                              #
-                # sub uri     { $_[0][uri_] }                                                                                                                   #
-                # sub headers { $_[0][headers_] }                                                                                                               #
-                # sub attrs   { $_[0][attrs_] //= {} }                                                                                                          #
-                # sub server  { $_[0][server_] }                                                                                                                #
-                #                                                                                                                                               #
-                #                                                                                                                                               #
-                #                                                                                                                                               #
-                #                                                                                                                                               #
-                # sub uri_parse {                                                                                                                               #
-                #         $_[0][parsed_uri_] = [                                                                                                                #
-                #                 $_[0][uri_] =~ m{ ^                                                                                                           #
-                #                         (?:                                                                                                                   #
-                #                                 (?:(?:([a-z]+):|)//|)                                                                                         #
-                #                                 ([^/]+)                                                                                                       #
-                #                         |)                                                                                                                    #
-                #                         (/[^?]*)                                                                                                              #
-                #                         (?:                                                                                                                   #
-                #                                 \? (.+|)                                                                                                      #
-                #                                 |                                                                                                             #
-                #                         )                                                                                                                     #
-                #                 $ }xso                                                                                                                        #
-                #         ];                                                                                                                                    #
-                #         # $_[0][5][2] = url_unescape( $_[0][5][2] );                                                                                          #
-                #         $_[0][query_] = +{ map { my ($k,$v) = split /=/,$_,2; +( url_unescape($k) => url_unescape($v) ) } split /&/, $_[0][parsed_uri_][3] }; #
-                # }                                                                                                                                             #
-                #                                                                                                                                               #
-                #                                                                                                                                               #
-                # sub path    {                                                                                                                                 #
-                #         $_[0][parsed_uri_] or $_[0]->uri_parse;                                                                                               #
-                #         $_[0][parsed_uri_][2];                                                                                                                #
-                # }                                                                                                                                             #
-                #                                                                                                                                               #
-                # sub query    {                                                                                                                                #
-                #         $_[0][parsed_uri_] or $_[0]->uri_parse;                                                                                               #
-                #         $_[0][parsed_uri_][3];                                                                                                                #
-                # }                                                                                                                                             #
-                #                                                                                                                                               #
-                # sub params {                                                                                                                                  #
-                #         $_[0][query_] or $_[0]->uri_parse;                                                                                                    #
-                #         $_[0][query_];                                                                                                                        #
-                # }                                                                                                                                             #
-                #                                                                                                                                               #
-                # sub param {                                                                                                                                   #
-                #         $_[0][query_] or $_[0]->uri_parse;                                                                                                    #
-                #         if ($_[1]) {                                                                                                                          #
-                #                 return $_[0][query_]{$_[1]};                                                                                                  #
-                #         } else {                                                                                                                              #
-                #                 return keys %{ $_[0][query_] };                                                                                               #
-                #         }                                                                                                                                     #
-                # }                                                                                                                                             #
-                #################################################################################################################################################
 		
 sub reply_simple;
 		
@@ -113,47 +56,6 @@ sub reply_simple;
 			#call replySimple with extra headers
 		}
 
-        ##############################################################################################################
-        # sub reply_headers {                                                                                        #
-        #         my ($line,$self,$code,$headers)=@_;                                                                #
-        #         my $session=$self->[session_];                                                                     #
-        #         my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_socket_writer";                  #
-        #                                                                                                            #
-        #                 my $reply="HTTP/1.1 $code".LF;                                                             #
-        #                 #my $content_length=length($_[4])+0;                                                       #
-        #                 $reply.=                                                                                   #
-        #                         STATIC_HEADERS                                                                     #
-        #                         .HTTP_DATE.": ".$uSAC::HTTP::Server::Date.LF                                       #
-        #                         #.HTTP_CONTENT_LENGTH.": ".$content_length.LF   #this always render content length #
-        #                         ;#if defined $_[1];     #Set server                                                #
-        #                                                                                                            #
-        #                         #TODO: benchmark length(undef)+0;                                                  #
-        #                                                                                                            #
-        #                 #close connection after if marked                                                          #
-        #                 if($session->[uSAC::HTTP::Session::closeme_]){                                             #
-        #                         $reply.=HTTP_CONNECTION.": close".LF;                                              #
-        #                                                                                                            #
-        #                 }                                                                                          #
-        #                                                                                                            #
-        #                 #or send explicit keep alive?                                                              #
-        #                 elsif($self->[version_] ne "HTTP/1.1") {                                                   #
-        #                         $reply.=                                                                           #
-        #                                 HTTP_CONNECTION.": Keep-Alive".LF                                          #
-        #                                 .HTTP_KEEP_ALIVE.": timeout=5, max=1000".LF                                #
-        #                         ;                                                                                  #
-        #                 }                                                                                          #
-        #                                                                                                            #
-        #                                                                                                            #
-        #                 #User requested headers.                                                                   #
-        #                 my $i=0;                                                                                   #
-        #                 \my @headers=$_[3]//[];                                                                    #
-        #                 for(0..@headers/2-1){                                                                      #
-        #                         $reply.=$headers[$i++].": ".$headers[$i++].LF                                      #
-        #                 }                                                                                          #
-        #                                                                                                            #
-        # }                                                                                                          #
-        ##############################################################################################################
-
 
 		#multipart for type.
 		#Sub parts can be of different types and possible content encodings?
@@ -166,7 +68,7 @@ sub reply_simple;
 			say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
 			unless (index($rex->[headers_]{'CONTENT_TYPE'},'multipart/form-data')>=0){
 				$session->[uSAC::HTTP::Session::closeme_]=1;
-				reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,undef,"multipart/formdata required";
+				reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
 				return;
 			}
 			uSAC::HTTP::Session::push_reader
@@ -183,17 +85,17 @@ sub reply_simple;
 		sub handle_urlencode_upload {
 			my $line=shift;
 			my $rex=shift;	#rex object
-			my $mime=shift//'application/x-www-form-urlencoded';
 			my $cb=shift;	#cb for parts
+			my $mime=shift//'application/x-www-form-urlencoded';
 			my $session=$rex->[session_];
-			say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
+			say "CONTENT TYPE ON UPLOAD:\n", $rex->[headers_]{'CONTENT_TYPE'};
 			my @err_res;
 			given($rex->[headers_]){
 				when(index($_->{'CONTENT_TYPE'},$mime)<0){
-					@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, undef, "applcation/x-www-form-urlencoded required");
+					@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "applcation/x-www-form-urlencoded required");
 				}
 				when($_->{'CONTENT_LENGTH'} > $UPLOAD_LIMIT){
-					@err_res=(HTTP_PAYLOAD_TOO_LARGE, undef, "limit: $UPLOAD_LIMIT");
+					@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $UPLOAD_LIMIT");
 				}
 				default{
 
@@ -220,6 +122,56 @@ sub reply_simple;
 			reply_simple $line,$rex,@err_res; 
 		}
 
+		sub handle_upload {
+			my (undef, $rex, $cb, $mime)=@_;
+			$mime//='application/x-www-form-urlencoded';
+			given ($rex->[headers_]{CONTENT_TYPE}){
+				handle_form_upload @_ when /multipart\/form-data/;
+				handle_urlencode_upload @_ when /$mime/;
+				default {
+					reply_simple undef,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or $mime required";
+				}
+			}
+		}
+
+		sub parse_fields {
+			my $rex=shift;
+			say "Data: ",$_[0];
+			say "Headers: ", $_[1]->%*;
+
+			#0=>data
+			#1=>section header
+			#
+			#parse the fields	
+			given($rex->[headers_]{CONTENT_TYPE}){
+				when(/multipart\/form-data/){
+					#parse content disposition
+					my $kv={};
+					for(map tr/ //dr, split ";", $_[1]->{CONTENT_DISPOSITION}){
+						my ($key, $value)=split "=";
+						$kv->{$key}=$value;
+					}
+					return $kv;
+				}
+				when('application/x-www-form-urlencoded'){
+					#parse content disposition
+					#TODO: decode uri encoding
+					my $kv={};
+					for(map tr/ //dr,split "&", $_[0]){
+						my ($key,$value)=split "=";
+						$kv->{$key}=$value;
+					}
+					return $kv;
+				}
+					
+				default {
+					return {};
+				}
+
+			}
+
+		}
+
 		#binary data.
 		# might have contetn-encoding apply however ie base64, gzip
 
@@ -238,20 +190,21 @@ sub reply_simple;
 			\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 			#my $content_length=length($_[4])+0;
 			my $headers=[
-				HTTP_DATE,		$uSAC::HTTP::Session::Date,
-				HTTP_CONTENT_LENGTH,	length ($_[4])+0,
+				[HTTP_DATE,		$uSAC::HTTP::Session::Date],
+				[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
 				($session->[uSAC::HTTP::Session::closeme_]
-					?(HTTP_CONNECTION,	"close")
-					:(	HTTP_CONNECTION,	"Keep-Alive",
-						HTTP_KEEP_ALIVE,	"timeout=10, max=1000"
+					?[HTTP_CONNECTION,	"close"]
+					:([	HTTP_CONNECTION,	"Keep-Alive"],
+						[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
 					)
 				)
 
 			];
-			$reply="HTTP/1.1 $_[2]".LF;
-			render_v1_1_headers($reply, $self->[static_headers_], $headers, $_[3]);
-			#render_v1_1_headers($reply, $_[3]);
 
+			$reply="HTTP/1.1 $_[2]".LF;
+			for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
+				$reply.=$h->[0].": ".$h->[1].LF;
+			}
 			$reply.=LF.$_[4];
 			$self->[write_]($reply);	#fire and forget
 		}
@@ -267,31 +220,20 @@ sub reply_simple;
 			#my $content_length=length($_[4])+0;
 			$reply= "HTTP/1.1 $code".LF;
 			my $headers=[
-				HTTP_DATE,		$uSAC::HTTP::Session::Date,
+				[HTTP_DATE,		$uSAC::HTTP::Session::Date],
 				($session->[uSAC::HTTP::Session::closeme_]
-					?(HTTP_CONNECTION,	"close")
-					:(	HTTP_CONNECTION,	"Keep-Alive",
-						HTTP_KEEP_ALIVE,	"timeout=10, max=1000"
+					?[HTTP_CONNECTION,	"close"]
+					:(	[HTTP_CONNECTION,	"Keep-Alive"],
+						[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
 					)
 				),
-				HTTP_TRANSFER_ENCODING, "chunked"
+				[HTTP_TRANSFER_ENCODING, "chunked"]
 
 			];
-                                #################################################################
-                                # #.STATIC_HEADERS                                              #
-                                # .HTTP_DATE.": ".                $uSAC::HTTP::Session::Date.LF #
-                                # #.HTTP_CONTENT_LENGTH.": ".     $content_length.LF            #
-                                # .($session->[uSAC::HTTP::Session::closeme_]                   #
-                                #         ?HTTP_CONNECTION.": close".LF                         #
-                                #                                                               #
-                                #         :(HTTP_CONNECTION.": Keep-Alive".LF                   #
-                                #         .HTTP_KEEP_ALIVE.": ".  "timeout=5, max=1000".LF      #
-                                #         )                                                     #
-                                # )                                                             #
-                                # .HTTP_TRANSFER_ENCODING.": chunked".LF                        #
-                                # ;                                                             #
-                                #################################################################
-				render_v1_1_headers($reply, $headers, $self->[static_headers_], $headers);
+				#render_v1_1_headers($reply, $headers, $self->[static_headers_], $_[3]);
+				for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
+					$reply.=$h->[0].": ".$h->[1].LF;
+				}
 				$reply.=LF;
 
 
@@ -328,14 +270,14 @@ sub static_content {
 	my $static=pop;	#Content is the last item
 	my $ext=$_[0]//"txt";
 	my $headers=
-	[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
+	[[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)]];
 	sub {
 		reply_simple @_, HTTP_OK, $headers, $static; return
 	}
 }
 
 
-sub render_v1_1_headers {
+sub render_v1_1_headers_flat {
 	use integer;
 	\my $buffer=\shift;#$_[0];
 	my $i;
@@ -345,6 +287,20 @@ sub render_v1_1_headers {
 		while($i<@headers){
 			$buffer.=$headers[$i++].": ".$headers[$i++].LF;
 		}
+	}
+}
+sub render_v1_1_headers_multi {
+	\my $buffer=\shift;#$_[0];
+	for(@_){
+		for my $h (@$_){
+			$buffer.=$h->[0].": ".$h->[1].LF;
+		}
+	}
+}
+sub render_v1_1_headers {
+	\my $buffer=\shift;#$_[0];
+	for my $h (@_){
+		$buffer.=$h->[0].": ".$h->[1].LF;
 	}
 }
 	 
@@ -357,6 +313,10 @@ sub headers {
 *rex_reply_simple=*reply_simple;
 *rex_reply_chunked=*reply_chunked;
 *rex_reply=*reply;
+*rex_form_upload=*handle_form_upload;
+*rex_urlencoded_upload=*handle_urlencode_upload;
+*rex_upload=*handle_upload;
+*rex_parse_fields=*parse_fields;
 #returns parsed cookies from headers
 #Only parses if the internal field is undefined
 #otherwise uses pre parsed values

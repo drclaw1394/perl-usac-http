@@ -102,11 +102,12 @@ sub add_route {
 			warn "Server not configured for virtual hosts. Ignoring host specificatoin"
 		}
 	}
+	say $matcher, $end;
+	$self->[server_]->add_end_point($matcher,$end);
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
 	my $unsupported=qr{^$mre $self->[prefix_]$path_matcher};
-	$self->[server_]->add_end_point($unsupported,$sub);
-	say $matcher, $end;
+	$self->[server_]->add_end_point($unsupported,$sub, $self);
 	my ($entry,$stack);
 	if(@inner){
 		my $middler=uSAC::HTTP::Middler->new();
@@ -115,7 +116,6 @@ sub add_route {
 		}
 		($end,$stack)=$middler->link($end);
 	}
-	$self->[server_]->add_end_point($matcher,$end);
 }
 
 #middleware to strip prefix

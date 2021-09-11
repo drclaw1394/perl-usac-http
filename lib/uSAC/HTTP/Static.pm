@@ -360,7 +360,7 @@ sub open_cache {
 			#
 			my $ext=substr $abs_path, index($abs_path, ".")+1;
 			my @entry;
-			$entry[1]=HTTP_CONTENT_TYPE.": ".($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME).LF;
+			$entry[1]=[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
 			$entry[0]=$in_fh;
 			$open_cache->{$abs_path}=\@entry;
 		}
@@ -372,7 +372,6 @@ sub open_cache {
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
 	use  integer;
-
 	my (undef,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
@@ -403,22 +402,26 @@ sub send_file_uri_norange {
 
 	#my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
 	
-	$reply=
-		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		#.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
-        	.($session->[uSAC::HTTP::Session::closeme_]?
-			HTTP_CONNECTION.": close".LF
-			:(HTTP_CONNECTION.": Keep-Alive".LF
-			.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
+	$reply= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF;
+	my $headers=[
+		[HTTP_DATE, $uSAC::HTTP::Session::Date],
+        	($session->[uSAC::HTTP::Session::closeme_]?
+			[HTTP_CONNECTION, "close"]
+			:([HTTP_CONNECTION, "Keep-Alive"],
+			[HTTP_KEEP_ALIVE,"timeout=5, max=1000"]
 			)
-		)
-		.$entry->[1]
-		.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
+		),
+		$entry->[1],
+		[HTTP_CONTENT_LENGTH, $content_length],			#need to be length of multipart
 		#.HTTP_TRANSFER_ENCODING.": chunked".LF
-		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
-		.HTTP_ACCEPT_RANGES.": bytes".LF
-		.LF;
+		[HTTP_ETAG,"\"$mod_time-$content_length\""],
+		[HTTP_ACCEPT_RANGES,"bytes"]
+	];
+
+	for my $h ($rex->[uSAC::HTTP::Rex::static_headers_]->@*, $headers->@*){
+		$reply.=$h->[0].": ".$h->[1].LF;
+	}
+	$reply.=LF;
 
 	#Check if we want to do ranges
 	#
@@ -436,33 +439,35 @@ sub send_file_uri_norange {
 	my $reader; $reader= sub {
 		seek $in_fh,$total,0;
 		$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
-		
-		unless($rc//0 or $! == EAGAIN or $! == EINTR){
-			say "READ ERROR from file";
-			#say $rc;
-			say $!;
-			delete $open_cache->{$abs_path};
-			close $in_fh;
-			$reader=undef;
-			#uSAC::HTTP::Session::drop $session;
-			$session->[uSAC::HTTP::Session::dropper_]->();
-			return;
-		}
 
 		$offset=0;
 		#non zero read length.. do the write	
 		if($total==$content_length){	#end of file
 			$session->[uSAC::HTTP::Session::write_]->($reply);
-			$reader=undef;
 			return;
 		}
 
-		else{
+		elsif($rc//0){
 			$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
+			return;
 		}
+		elsif( $! != EAGAIN and  $! != EINTR){
+				say "READ ERROR from file";
+				#say $rc;
+				say $!;
+				delete $open_cache->{$abs_path};
+				close $in_fh;
+				$reader=undef;
+				#uSAC::HTTP::Session::drop $session;
+				$session->[uSAC::HTTP::Session::dropper_]->();
+				return;
+		}
+
+		#else {  EAGAIN }
+
 	};
 
-	&$reader;#->();
+	$reader->();
 
 }
 
@@ -503,7 +508,7 @@ sub list_dir {
 	#say "Listing dir for $abs_path";
 	stat $abs_path;
 	unless(-d _ and  -r _){
-		rex_reply_simple undef, $rex, HTTP_NOT_FOUND, undef ,"";
+		rex_reply_simple undef, $rex, HTTP_NOT_FOUND, [],"";
 		return;
 	}
 
@@ -535,7 +540,7 @@ sub list_dir {
 	#say "Results ", @results;
 	my $ren=$renderer//_html_dir_list;
 
-	rex_reply_chunked undef, $rex, HTTP_OK, undef, sub {
+	rex_reply_chunked undef, $rex, HTTP_OK,[] , sub {
 		return unless my $writer=$_[0];			#no writer so bye
 
 		##### Start app logic
