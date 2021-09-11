@@ -77,7 +77,7 @@ sub make_reader{
 	my $enable_hosts=$self->enable_hosts;
 	my $static_headers=$self->static_headers;
 	my ($state,$seq) = (0,0);
-	my ($method,$uri,$version,$lastkey,$contstate,$bpos,$len,$pos, $req);
+	my ($method,$uri,$version,$len,$pos, $req);
 	my $line;
 
 	my $ixx = 0;
@@ -111,7 +111,7 @@ sub make_reader{
 				if($pos3>=0){
 					#end of line found
 						$state   = 1;
-						$lastkey = undef;
+						#$lastkey = undef;
 						#Reset header information for each request	
 						%h=();
 						#%h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
@@ -159,7 +159,6 @@ sub make_reader{
 						}
 						#warn "Need more";
 						#say "need more";
-						#return pos($buf) = $bpos; # need more data
 						$pos=pos($buf);
 						return;
 					}

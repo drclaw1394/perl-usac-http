@@ -214,22 +214,6 @@ sub prepare {
 			}
 		}
 	};
-
-        ###########################################################################################
-        #                                                                                         #
-        # state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);                    #
-        # state @days= qw(Sun Mon Tue Wed Thu Fri Sat);                                           #
-        #                                                                                         #
-        # $self->[seconds_timer_]=AE::timer 0,1, sub {                                            #
-        #         my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime;               #
-        #         #export to globally available time?                                             #
-        #         #                                                                               #
-        #         #Format Tue, 15 Nov 1994 08:12:31 GMT                                           #
-        #         $Date="$days[$wday], $mday $months[$mon] ".($year+1900)." $hour:$min:$sec GMT"; #
-        #         #say scalar $self->[zombies_]->@*;                                              #
-        #         #say "Session count : ",scalar keys $self->[sessions_]->%*;                     #
-        # };                                                                                      #
-        ###########################################################################################
 }
 
 sub make_sysaccept {

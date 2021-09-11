@@ -19,7 +19,7 @@ use uSAC::HTTP::Cookie qw<:all>;
 use AnyEvent;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_upload rex_parse_form_params rex_parse_query_params>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_handle_upload rex_parse_form_params rex_parse_query_params>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -141,19 +141,20 @@ sub handle_upload {
 	}
 }
 
-
+#parse a form in either form-data or urlencoded.
+#First arg is rex
+#second is data
+#third is the header for each part if applicable
 sub parse_form_params {
 	my $rex=shift;
-	say "Data: ",$_[0];
-	say "Headers: ", $_[1]->%*;
-
-	#0=>data
-	#1=>section header
+	#0=>rex
+	#1=>data
+	#2=>section header
 	#
 	#parse the fields	
 	given($rex->[headers_]{CONTENT_TYPE}){
 		when(/multipart\/form-data/){
-			#parse content disposition
+			#parse content disposition (name, filename etc)
 			my $kv={};
 			for(map tr/ //dr, split ";", $_[1]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
@@ -162,10 +163,8 @@ sub parse_form_params {
 			return $kv;
 		}
 		when('application/x-www-form-urlencoded'){
-			#parse content disposition
-			#TODO: decode uri encoding
 			my $kv={};
-			for(map tr/ //dr,split "&", uri_decode $_[0]){
+			for(split "&", uri_decode $_[0]){
 				my ($key,$value)=split "=";
 				$kv->{$key}=$value;
 			}
@@ -183,12 +182,13 @@ sub parse_form_params {
 sub parse_query_params {
 	my $rex=shift;
 	#NOTE: This should already be decoded so no double decode
-	my $kv;
-	say "URL TO PARSE: ", $rex->[uri_];
-	my $i=index($rex->[uri_],"?");
-	for(map tr/ //dr,split "&", substr($rex->[uri_],$i+1)){
-		my ($key,$value)=split "=";
-		$kv->{$key}=$value;
+	my $kv={};
+	if(my $i=index($rex->[uri_],"?")){
+		for(map tr/ //dr,split "&", substr($rex->[uri_],$i+1)){
+			my ($key,$value)=split "=";
+			$kv->{$key}=$value;
+
+		}
 	}
 	return $kv;
 }
@@ -336,7 +336,14 @@ sub headers {
 
 #Returns parsed query parameters. If they don't exist, they are parse first
 sub query {
-	return $_[0]->[query_]//($_[0]->[query_]=parse_query_params @_);
+	$_[0][query_]//($_[0][query_]=parse_query_params @_);
+}
+
+#returns parsed cookies from headers
+#Only parses if the internal field is undefined
+#otherwise uses pre parsed values
+sub cookies {
+	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE});
 }
 
 *rex_headers=*headers;
@@ -345,16 +352,9 @@ sub query {
 *rex_reply=*reply;
 *rex_form_upload=*handle_form_upload;
 *rex_urlencoded_upload=*handle_urlencode_upload;
-*rex_upload=*handle_upload;
+*rex_handle_upload=*handle_upload;
 *rex_parse_form_params=*parse_form_params;
 *rex_parse_query_params=*parse_query_params;
-#returns parsed cookies from headers
-#Only parses if the internal field is undefined
-#otherwise uses pre parsed values
-sub cookies {
-	$_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE} unless $_[0][cookies_]//0;
-	$_[0][cookies_];
-}
 
 
 
