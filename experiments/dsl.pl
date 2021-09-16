@@ -8,6 +8,7 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Middleware ":all";
 use uSAC::HTTP::Static;
+use Data::Dumper;
 
 
 
@@ -122,9 +123,9 @@ my $server; $server=define_server {
         # };                                                                       #
         ############################################################################
 
-	define_route POST=> "/multipart" => rex_handle_multipart_upload sub {
+	define_route POST=> "/multipart" => rex_stream_multipart_upload sub {
 		say "multipart";
-		#0=> line
+		#0=> line/undef
 		#1=> rex
 		#2=> data
 		#3=> part headers
@@ -136,15 +137,16 @@ my $server; $server=define_server {
 			rex_reply_simple undef, $rex, HTTP_OK,[], "multipart uploaded";
 		}
 	};
-	define_route POST=> "/urlencoded" => rex_handle_urlencoded_upload  sub {
+	define_route POST=> "/urlencoded" => rex_stream_urlencoded_upload  sub {
 		my $rex=$_[1];
+		say $_[2];
 		if($_[4]){
 			rex_reply_simple undef, $rex, HTTP_OK,[], "urlencoded uploaded";
 		}
 		
 	};
 
-	define_route POST=> "/form" => rex_handle_form_upload  sub {
+	define_route POST=> "/form\$" => rex_stream_form_upload  sub {
 		my $rex=$_[1];
 		if($_[4]){
 			rex_reply_simple undef, $rex, HTTP_OK,[], "form uploaded";
@@ -157,10 +159,27 @@ my $server; $server=define_server {
 		#2=> $filename
 		#3=> last flag
 		my $rex=$_[1];
+		say "Rex: $rex";
 		if($_[3]){
 			say "File $_[2] was saved";
 			rex_reply_simple undef, $rex, HTTP_OK,[], "files uploaded to disk";
 		}
+	};
+
+	define_route POST=> "/form_file"=> rex_save_form_to_file  dir=>"uploads2",prefix=>"aaa", sub {
+
+		my $rex=$_[1];
+		my $fields=$_[2];
+		say "save form to file cb ",Dumper $fields;
+			rex_reply_simple undef, $rex, HTTP_OK,[], "files uploaded to disk";
+	};
+
+	define_route POST=> "/form_url"=> rex_save_form  sub {
+
+		my $rex=$_[1];
+		my $fields=$_[2];
+		say "save form ",Dumper $fields;
+			rex_reply_simple undef, $rex, HTTP_OK,[], "url form uploaded";
 	};
 
 	define_route "/cmd"=>sub {
