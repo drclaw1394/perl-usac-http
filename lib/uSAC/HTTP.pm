@@ -29,10 +29,10 @@ use uSAC::HTTP::Middler;
 use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
 #Class attribute keys
-use enum ("server_=0",qw(prefix_ id_ mount_ cors_ middleware_ host_));
+use enum ("server_=0",qw(prefix_ id_ mount_ cors_ middleware_ host_ parent_ built_prefix_));
 
 use constant KEY_OFFSET=>	0;
-use constant KEY_COUNT=>	host_-server_+1;
+use constant KEY_COUNT=>	built_prefix_-server_+1;
 
 use constant LF=>"\015\012";
 
@@ -77,12 +77,13 @@ sub add_route {
 	die "No end point provided" unless $end and ref $end eq "CODE";
 	state @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 
-	my @non_matching=grep {!/$method_matcher/} @methods;
+	my @non_matching=(qr{[^ ]+});#grep {!/$method_matcher/} @methods;
+	#my @non_matching=grep {!/$method_matcher/} @methods;
 	my @matching=grep {/$method_matcher/ } @methods;
 	my $sub;
 
 	if(@non_matching){
-		my $headers=[HTTP_ALLOW, join ", ",@matching]; 
+		my $headers=[[HTTP_ALLOW, join ", ",@matching]];
 		$sub = sub { 
 			#TODO: how to add middleware ie logging?
 			rex_reply_simple @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
@@ -92,21 +93,31 @@ sub add_route {
 
 	my $matcher;
 	#my $unsupported;
+	my $bp=$self->built_prefix;
 	if($self->[server_]->enable_hosts){
-		$matcher=qr{^$self->[host_] $method_matcher $self->[prefix_]$path_matcher};
+		my $bp=$self->built_prefix;
+		$matcher=qr{^$self->[host_] $method_matcher $bp$path_matcher};
 	}
 	else {
-		$matcher=qr{^$method_matcher $self->[prefix_]$path_matcher};
+		$matcher=qr{^$method_matcher $bp$path_matcher};
 
 		if($self->[host_]){
 			warn "Server not configured for virtual hosts. Ignoring host specificatoin"
 		}
 	}
-	say $matcher, $end;
+	say "  matching: $matcher";	
 	$self->[server_]->add_end_point($matcher,$end);
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
-	my $unsupported=qr{^$mre $self->[prefix_]$path_matcher};
+	my $unsupported;
+	if($self->[server_]->enable_hosts){
+		$unsupported=qr{^$self->[host_] $mre $bp$path_matcher};
+		
+	}
+	else {
+		$unsupported=qr{^$mre $bp$path_matcher};
+	}
+	say "Unmatching: $unsupported";	
 	$self->[server_]->add_end_point($unsupported,$sub, $self);
 	my ($entry,$stack);
 	if(@inner){
@@ -121,11 +132,10 @@ sub add_route {
 #middleware to strip prefix
 sub _strip_prefix {
 	my $self=shift;
-	my $prefix=$self->[prefix_];
+	my $prefix=$self->[built_prefix_];
 	my $len=length $prefix;
 	sub {
 		my $next=shift;
-		say "making strip prefix";
 		sub {
                         #{
                                 #NOTE: block used to make temp dynamic scope to protect capture groups
@@ -184,6 +194,30 @@ sub _strip_prefix {
 #                                                                                                #
 ##################################################################################################
 
+sub server {
+	return $_[0][server_];
+}
+sub parent_site {
+	$_[0][parent_];
+}
+
+#returns (and builds if required), the prefixs for this sub site
+sub built_prefix {
+	my $parent;
+	if($_[0][parent_]){
+		$parent=$_[0][parent_]->built_prefix;
+	}
+	else {
+		$parent="";
+
+	}
+	$_[0]->[built_prefix_]//($_[0]->[built_prefix_]=$parent.$_[0][prefix_]);
+}
+
+sub host {
+	$_[0]->[host_];
+}
+
 #Take matcher, list of innerware and endpoint sub
 
 our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS) /;
@@ -216,13 +250,27 @@ sub site_route {
 	$self->add_route(@_);
 }
 
-#declare a site
-#first argument is sub
+=over 
+
+=item C<define_site>
+
+Creates a new site and sets the server to the C<$_> dynamic variable
+After the server is set. the C<$_> in localised and set to the new site
+
+=back
+
+=cut
+
 sub define_site :prototype(&) {
 	my $server=$_;
-	say "server",$server;
+	unless(ref($server)=~/Server/){
+		#Acutal a site
+		$server=$server->server;
+	}
 	my $sub=shift;
 	my $self= uSAC::HTTP->new(server=>$server);
+	$self->[parent_]=$_;
+	$self->[host_]=$self->[parent_]->host; #inherit parent host
 	local  $_=$self;
 	$sub->();
 }
@@ -246,6 +294,7 @@ sub define_id {
 	my $self=$_;
 	$self->[id_]=shift;
 }
+
 sub define_prefix {
 	my $self=$_;
         given(my $prefix=shift){
@@ -254,8 +303,11 @@ sub define_prefix {
                         $_="/".$_;
                 }
 		$self->[prefix_]=$_;
+		$self->[built_prefix_]=undef;	#force rebuilding
+		$self->built_prefix;		#build abs prefix
         }
 }
+
 sub define_host {
 	my $self=$_;
 	$self->[host_]=shift;

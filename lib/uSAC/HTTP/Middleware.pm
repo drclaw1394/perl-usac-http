@@ -29,9 +29,7 @@ sub log_simple {
 	#No configuration used in this logger, so reuse the same sub for each call
 	state $sub=sub {
 		my $next=shift;	#This is the next mw in the chain
-		say "making log";
 		sub {
-			#say STDERR Dumper $_[1];
 			say STDERR "\n";
 			say STDERR time;
 			say STDERR " Host: $_[1][uSAC::HTTP::Rex::host_]";
@@ -46,7 +44,6 @@ sub log_simple {
 
 sub authenticate_simple{
 	my $next=shift;
-	say "making authenticate with next: ", $next; 
 	sub {
 		#this sub input is line, and rex
 		my $rex=$_[1];
@@ -73,7 +70,6 @@ sub authenticate_simple{
 #Takes input and makes chunks and writes to next
 sub chunked{
 	my $next=shift;
-	say "making chunked with", $next; 
 	my $scratch="";
 	#"x"x1024;
 	#$scratch="";
@@ -92,13 +88,11 @@ sub chunked{
 my $sub=sub{};
 sub chunked_2{
 	my $next=shift;
-	say "making chunked with", $next; 
 	my $scratch="";
 
 	sub {
 		$_[2]//= __SUB__ ;		#argument to callback is self unless one is provided
 		return &$next unless defined $_[0];	#reset stack if requested. pass it on
-		#say "length of input ", length $_[0];
 		$next->(sprintf("%02X".LF,length $_[0]),$sub,1);
 		$next->($_[0],$sub,1);#->($scratch, @_);
 		#$_[0].=LF;
@@ -110,7 +104,6 @@ sub chunked_2{
 
 sub gzip {
 	my $next=shift;
-	say "making gzip with ", $next;
 	my $scratch="";
 	my $compressor;
 	sub {
@@ -157,12 +150,10 @@ sub gzip {
 
 sub deflate {
 	my $next=shift;
-	say "making deflate with ", $next;
 	my $scratch="";
 	my $compressor;
 	my $status;
 	$compressor=Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6);
-	say $compressor;
 	$scratch="";
 	sub {
 		my $cb=$_[1];

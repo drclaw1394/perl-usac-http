@@ -249,6 +249,7 @@ sub make_form_data_reader {
 		#say "buffer len:", length $buf;
 		#say "buffer:", $buf;
 		while($processed < length $buf){
+			say "form while";
 			given($state){
 				when(0){
 					say "STATE $state. Looking for boundary";
@@ -256,48 +257,41 @@ sub make_form_data_reader {
 					#Attempt to match boundary
 					my $index=index($buf,$boundary,$processed);
 					if($index>=0){
+						
 
 						say "FOUND boundary and index: $index first: $first";
 						#send partial data to callback
 						my $len=($index-2)-$processed;	#-2 for LF
 
-						say "Headers: ",Dumper $form_headers;
-						$cb->(substr($buf,$processed,$len),$form_headers) unless $first;
-						$first=0;
-
-						#move past data and boundary
-						$processed+=$index+$b_len;
-
-						#end search
-						#say "buffer:",substr $buf, $processed;
 
 
-						#test if this is the last boundary
-						if(substr($buf,$processed,4) eq "--".LF){
-							#END OF MULTIPART FORM
-							#Remove from io stack
-							#callback with undef?
-							say "END OF MULTIPART";
-							$processed+=4;
+						#test if last
+						my $offset=$index+$b_len;
+						if(substr($buf,$offset,2)eq LF){
+							#not last
+							$cb->(undef, $rex, substr($buf,$processed,$len),$form_headers) unless $first;
+							$first=0;
+							#move past data and boundary
+							$processed+=$offset+2;
+							$state=1;
+							$form_headers={};
+							redo;
 
-							#update buffer for readstack
-							$buf=substr $buf,$processed;
-							say $buf;
-							$cb->(undef,undef);
-							#$cb->(undef,$form_headers);
+						}
+						elsif(substr($buf,$offset,4) eq "--".LF){
+							say "END BOUNDARD FOUND";
+							$first=1;	#reset first;
+							$cb->(undef, $rex, substr($buf,$processed,$len),$form_headers,1);
+							$processed+=$offset+4;
 							uSAC::HTTP::Session::pop_reader($session);
-							#$session->pop_reader;
 							return;
 						}
-						elsif(substr($buf,$processed,2) eq LF){
-							#it wasn't last part, so move to next state
-							#reset headers now
-							$form_headers={};
-							say "moving to next state";
-							$processed+=2;
-							$state=1;
-							redo;
+						else{
+							#need more
+							say "need more";
+							return
 						}
+
 					}
 
 					else {
@@ -305,7 +299,7 @@ sub make_form_data_reader {
 						# Full boundary not found, send partial, upto boundary length
 						my $len=length($buf)-$b_len;		#don't send boundary
 						say Dumper $form_headers;
-						$cb->(substr($buf, $processed, $len),undef);#$form_headers);
+						$cb->(undef, $rex, substr($buf, $processed, $len),$form_headers);#$form_headers);
 						$processed+=$len;
 						#wait for next read now
 						return;
@@ -342,40 +336,6 @@ sub make_form_data_reader {
 							#headers done. setup
 
 							#go back to state 0 and look for boundary
-							$state=0;
-							last;
-							#process disposition
-							given($form_headers->{'CONTENT_DISPOSITION'}){
-								when(undef){
-									#this is an error
-								}
-								default {
-									#parse fields, and filenames
-									#Content-Disposition: form-data; name="image"; filename="mybook.png"
-									my @params=split /; +/; 
-									$params[0] eq "form-data";
-									my @form=split "=", $params[1];
-									#quoted?		
-									my @filename=split "=". $params[2];
-
-								}
-							}
-
-							#process content-type
-							given($form_headers->{'CONTENT_TYPE'}){
-								when(undef){
-									#not set
-								}
-								default {
-								}
-							}
-
-							#process content type
-							$form_headers->{'CONTENT_TYPE'};
-
-
-							#if headers are ok then look for boundary
-							#
 							$state=0;
 							last;
 						}
@@ -421,23 +381,27 @@ sub make_form_urlencoded_reader {
 	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];	#Alias buffer (not a reference)
 	\my $cb=\$session->[uSAC::HTTP::Session::reader_cb_];	#Alias reference to current cb
 	\my $rex=\$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
-	my $form_headers={};					#Not really used but required for cb	
 	my $processed=0;					#stateful position in buffer
-	
+	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];	#
-		my $len = $h{'CONTENT_LENGTH'}//0; #number of bytes to read, or 0 if undefined
+		my $len =
+		$header->{CONTENT_LENGTH}=		#copy header to part header
+		$h{'CONTENT_LENGTH'}//0; #number of bytes to read, or 0 if undefined
+
+		$header->{CONTENT_TYPE}=$h{CONTENT_TYPE};
 
 		my $new=length($buf)-$processed;	#length of read buffer
 
 		$new=$new>$len?$len:$new;		#clamp to content length
-		$cb->(substr($buf,0,$new,""),$form_headers);		#send to cb and shift buffer down
 		$processed+=$new;			#track how much we have processed
 
 		#when the remaining length is 0, pop this sub from the stack
 		if($processed==$len){
-			$cb->(undef,undef);#$form_headers);
+			$cb->(undef, $rex, substr($buf,0,$new,""),$header,1);		#send to cb and shift buffer down
+			$header={};
+			#$cb->(undef,undef);#$form_headers);
 			#return to the previous 
 			$processed=0;
 			#$session->pop_reader;	#This assumes that the normal 1.1 reader previous in the stack
@@ -447,6 +411,7 @@ sub make_form_urlencoded_reader {
 		}
 		else {
 			#keep on stack until done
+			$cb->(undef, $rex, substr($buf,0,$new,""),$header);		#send to cb and shift buffer down
 		}
 
 	}

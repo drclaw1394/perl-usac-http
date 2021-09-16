@@ -35,10 +35,8 @@ sub link {
 
 	for my $i (reverse 0..@middleware-1){
 		my $maker=$middleware[$i];
-		#say "maker: $maker";
 		
 		my $next_target=($i==@middleware-1)?$dispatcher:$mw[$i+1];
-		say "next target: ", $next_target;
 
 		$mw[$i]=$maker->($next_target,$dispatcher);	#call with next and last
 	}

@@ -142,7 +142,6 @@ sub listen {
 		
 		socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";
 		
-		say "FILENO ",fileno $fh;
 		if ($af == AF_INET || $af == AF_INET6) {
 			setsockopt $fh, SOL_SOCKET, SO_REUSEADDR, 1
 				or Carp::croak "listen/so_reuseaddr: $!"
@@ -368,7 +367,6 @@ sub rebuild_dispatch {
 		site_route $self=>'GET'=>qr{.*}=>()=>usac_welcome;
 	}
 
-
 	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>$cache);
 }
 
@@ -398,6 +396,26 @@ sub run {
 	$self->accept;
 
 	$cv->recv();
+}
+
+sub server {
+	return $_[0];
+}
+
+sub parent_site {
+	return;
+}
+
+sub built_prefix {
+	"";
+}
+
+sub host {
+	"";
+}
+
+sub list_routes {
+	#dump all routes	
 }
 
 #declarative setup

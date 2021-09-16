@@ -3,7 +3,7 @@
 package uSAC::HTTP::Rex;
 use version; our $VERSION = version->declare('v0.1');
 use common::sense;
-use feature qw<refaliasing switch>;
+use feature qw<refaliasing switch state>;
 our $UPLOAD_LIMIT=10_000_000;
 
 use uSAC::HTTP::Code qw<:constants>;
@@ -18,8 +18,10 @@ use uSAC::HTTP::Cookie qw<:all>;
 
 use AnyEvent;
 use Exporter 'import';
+use File::Temp qw<tempfile>;
+use File::Path qw<make_path>;
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_handle_upload rex_parse_form_params rex_parse_query_params>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_handle_upload rex_handle_multipart_upload rex_handle_form_upload rex_handle_urlencoded_upload rex_upload_to_file rex_save_to_file rex_parse_form_params rex_parse_query_params>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -66,42 +68,54 @@ sub reply_DEFLATE {
 
 #multipart for type.
 #Sub parts can be of different types and possible content encodings?
-sub handle_form_upload {
-	my $line=shift;
-	my $rex=shift;
-	my $cb=shift;
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	#check if content type is correct first
-	say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
-	unless (index($rex->[headers_]{'CONTENT_TYPE'},'multipart/form-data')>=0){
-		$session->[uSAC::HTTP::Session::closeme_]=1;
-		reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
-		return;
+sub handle_multipart_upload {
+		my $cb=shift;
+	sub {
+		my $line=shift;
+		my $rex=shift;
+		shift;		#remove place holder for mime
+		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		#check if content type is correct first
+		say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
+		unless (index($rex->[headers_]{'CONTENT_TYPE'},'multipart/form-data')>=0){
+			$session->[uSAC::HTTP::Session::closeme_]=1;
+			reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
+			return;
+		}
+		uSAC::HTTP::Session::push_reader
+		$session,
+		"http1_1_form_data",
+
+		$cb
+		;
+		$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 	}
-	uSAC::HTTP::Session::push_reader
-	$session,
-	"http1_1_form_data",
-
-	$cb
-	;
-	$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
-
 }
-#percent/urlencoded data
-#possible content-encoding as well?
-sub handle_urlencode_upload {
+
+#reads a post/put request
+#handles HTTP/1.1 continue
+#checks mime types are as specified (any type is default)
+#runs callback with parts of data
+#
+sub handle_upload {
+	my $mime=shift//".*";#application/x-www-form-urlencoded';
+	my $upload_limit=$UPLOAD_LIMIT;
+	my $cb=shift;	#cb for parts
+
+	sub {
 	my $line=shift;
 	my $rex=shift;	#rex object
-	my $cb=shift;	#cb for parts
-	my $mime=shift//'application/x-www-form-urlencoded';
+
+
 	my $session=$rex->[session_];
-	say "CONTENT TYPE ON UPLOAD:\n", $rex->[headers_]{'CONTENT_TYPE'};
+	say "CONTENT TYPE ON UPLOAD:", $rex->[headers_]{'CONTENT_TYPE'};
+	say $mime;
 	my @err_res;
 	given($rex->[headers_]){
-		when(index($_->{'CONTENT_TYPE'},$mime)<0){
-			@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "applcation/x-www-form-urlencoded required");
+		when($_->{'CONTENT_TYPE'}!~/$mime/){
+			@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
 		}
-		when($_->{'CONTENT_LENGTH'} > $UPLOAD_LIMIT){
+		when($_->{'CONTENT_LENGTH'} > $upload_limit){
 			@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $UPLOAD_LIMIT");
 		}
 		default{
@@ -128,17 +142,71 @@ sub handle_urlencode_upload {
 	$session->[uSAC::HTTP::Session::closeme_]=1;
 	reply_simple $line,$rex,@err_res; 
 }
+}
+sub handle_urlencoded_upload {
+	handle_upload "application/x-www-form-urlencoded", shift;
+}
 
-sub handle_upload {
-	my (undef, $rex, $cb, $mime)=@_;
-	$mime//='application/x-www-form-urlencoded';
-	given ($rex->[headers_]{CONTENT_TYPE}){
-		handle_form_upload @_ when /multipart\/form-data/;
-		handle_urlencode_upload @_ when $mime;
-		default {
-			reply_simple undef,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or $mime required";
+#uses handle_upload or handle_multipart_upload setup for
+#html forms
+sub handle_form_upload {
+	my ($cb)=@_;
+	my $multi=handle_multipart_upload @_;
+	my $url=handle_urlencoded_upload @_;
+	sub{
+		given ($_[1][headers_]{CONTENT_TYPE}){
+			&$multi when /multipart\/form-data/;
+			&$url when 'application/x-www-form-urlencoded';
+			default {
+				reply_simple undef,$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+			}
 		}
 	}
+}
+
+#Returns a sub which writes the streaming data to file. Callback is called when file is
+#completely downloaded
+#
+sub save_to_file {
+	my $cb=pop;
+	my %options=@_;
+	
+        my $tmp_dir=$options{dir}//"uploads";	#temp dir to save file to
+        my $prefix=$options{prefix}//"uSAC";
+	my $mime=$options{mime};#//"application/x-www-form-urlencoded";
+	my $path=$options{path};
+
+	make_path $tmp_dir unless $path;
+
+	handle_upload $mime, sub {
+		my $rex=$_[1];
+		#handle_upload @_, $mime, sub {
+			state $header=0;
+			state ($handle, $name);
+			my $wc;
+			if( $header != $_[1]){
+				#first chunk 
+				$header=$_[1];
+				close $handle if $handle;
+				$handle=undef;
+				if($path){
+					open $handle, ">", $path;
+					$name=(split "/", $path)[-1];
+				}
+				else{
+					($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
+				}
+			}
+			$wc=syswrite $handle, $_[0];
+			#TODO: error checking and drop connection on write error
+			if($_[2]){
+				$header=0;
+				$cb->(undef, $rex, $name,1);
+			}
+
+			#}
+	}
+	
 }
 
 #parse a form in either form-data or urlencoded.
@@ -350,12 +418,13 @@ sub cookies {
 *rex_reply_simple=*reply_simple;
 *rex_reply_chunked=*reply_chunked;
 *rex_reply=*reply;
-*rex_form_upload=*handle_form_upload;
 *rex_urlencoded_upload=*handle_urlencode_upload;
 *rex_handle_upload=*handle_upload;
+*rex_handle_multipart_upload=*handle_multipart_upload;
+*rex_handle_urlencoded_upload=*handle_urlencoded_upload;
+*rex_handle_form_upload=*handle_form_upload;
 *rex_parse_form_params=*parse_form_params;
 *rex_parse_query_params=*parse_query_params;
-
-
+*rex_save_to_file=*save_to_file;
 
 1;

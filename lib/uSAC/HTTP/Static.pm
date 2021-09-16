@@ -344,6 +344,7 @@ sub enable_cache {
 
 sub open_cache {
 	my $abs_path=shift;
+	say "OPEN CACHE";
 	#$open_cache->{$abs_path}//do {
 	#do {
 		my $in_fh;
@@ -358,10 +359,12 @@ sub open_cache {
 		else {
 			#lookup mime type
 			#
-			my $ext=substr $abs_path, index($abs_path, ".")+1;
+			my $ext=substr $abs_path, rindex($abs_path, ".")+1;
 			my @entry;
 			$entry[1]=[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
 			$entry[0]=$in_fh;
+			$entry[2]=(stat _)[7];
+			$entry[3]=(stat _)[9];
 			$open_cache->{$abs_path}=\@entry;
 		}
 		#};
@@ -388,16 +391,19 @@ sub send_file_uri_norange {
 
 	#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh; 
 
-	my ($content_length, $mod_time)=(stat $in_fh)[7,9];
-
-        #Do stat on fh instead of path. Path requires resolving and is slower
-        #fh is already resolved and open.
-        unless(-r _ and !-d _){
-                rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
-                #remove from cache
-                delete $open_cache->{$abs_path};
-                return
-        }
+	my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
+        #########################################################################
+        # my ($content_length, $mod_time)=(stat $in_fh)[7,9];                   #
+        #                                                                       #
+        # #Do stat on fh instead of path. Path requires resolving and is slower #
+        # #fh is already resolved and open.                                     #
+        # unless(-r _ and !-d _){                                               #
+        #         rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";           #
+        #         #remove from cache                                            #
+        #         delete $open_cache->{$abs_path};                              #
+        #         return                                                        #
+        # }                                                                     #
+        #########################################################################
 
 
 	#my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
@@ -423,20 +429,17 @@ sub send_file_uri_norange {
 	}
 	$reply.=LF;
 
-	#Check if we want to do ranges
-	#
-
-	my $offset=length($reply);
-
-	my $rc;
-	my $total=0;
 
 	if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
 		$session->[uSAC::HTTP::Session::write_]->($reply);
 		return;
 	}
 
-	my $reader; $reader= sub {
+	my $offset=length($reply);
+	my $rc;
+	my $total=0;
+
+	sub {
 		seek $in_fh,$total,0;
 		$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
 
@@ -447,8 +450,8 @@ sub send_file_uri_norange {
 			return;
 		}
 
-		elsif($rc//0){
-			$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
+		elsif($rc){
+			$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
 			return;
 		}
 		elsif( $! != EAGAIN and  $! != EINTR){
@@ -457,17 +460,13 @@ sub send_file_uri_norange {
 				say $!;
 				delete $open_cache->{$abs_path};
 				close $in_fh;
-				$reader=undef;
-				#uSAC::HTTP::Session::drop $session;
 				$session->[uSAC::HTTP::Session::dropper_]->();
 				return;
 		}
 
 		#else {  EAGAIN }
 
-	};
-
-	$reader->();
+	}->();
 
 }
 
