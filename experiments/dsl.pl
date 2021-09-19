@@ -195,20 +195,21 @@ my $server; $server=define_server {
 	#Login processing
 	define_route "GET|POST"=>qr{(/login)}=>sub {
 		my $rex=$_[1];
-		state $static=static_file_from "data";
-		state $form=rex_save_web_form sub {
-			say "Processing form";
-			pop;
-			say Dumper pop;
-			say Dumper @_;
-			rex_reply_simple undef,$rex , HTTP_OK,[],"yarrrp";
-				
-		};
 
 		push @_, "/login.htmlt";
 		given($_[1]->method){
-			&$static when "GET";
-			&$form when "POST";
+			&{static_file_from "data"} when "GET";
+			&{rex_save_web_form sub {
+					say "Processing form";
+					pop;
+					say Dumper pop;
+					say Dumper @_;
+					rex_reply_simple undef,$rex , HTTP_OK,[],"yarrrp";
+
+				}} when "POST";
+			#&$static when "GET";
+			#&$form when "POST";
+			#rex_reply_simple undef,$rex , HTTP_OK,[],"yarrrp" when "POST";
 		}
 	};
 

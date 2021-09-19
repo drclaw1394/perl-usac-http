@@ -385,11 +385,7 @@ sub make_form_urlencoded_reader {
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
-		say "in url encoded reader";
-		say $buf;
 		
-		say "";
-		say length $buf;
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];	#
 		my $len =
 		$header->{CONTENT_LENGTH}=		#copy header to part header
@@ -478,7 +474,7 @@ sub make_socket_writer_append{
 
 					$offset+=$w;
 					if($offset==length $buf) {
-						say "FULL async write";
+						#say "FULL async write";
 						undef $ww;
 						$cb->($arg);# if defined $cb;
 					}
@@ -526,7 +522,6 @@ sub make_socket_writer{
 	my $w;
 	my $offset=0;
 	say  "++Making socket writer";
-
 	#Arguments are buffer and callback.
 	#do not call again until callback is called
 	#if no callback is provided, the session dropper is called.
@@ -596,7 +591,6 @@ sub make_socket_writer{
 				my $entry;
 				$ww = AE::io $fh, 1, sub {
 					$ido or return;
-					#say "ido in async ok";
 					$entry=$queue[0];
 					\my $buf=\$entry->[0];
 					\my $offset=\$entry->[1];

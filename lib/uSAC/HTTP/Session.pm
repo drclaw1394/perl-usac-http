@@ -132,12 +132,12 @@ sub _make_reader {
 		}
 		#when(0){
 		elsif($len==0){
-
-			#End of file
-			#say "END OF  READER";
-			$self->[closeme_]=1;
-			$self->[dropper_]->();
-			$self->[rw_]=undef;
+			#say "read len is zero";
+                        #End of file
+                        #say "END OF  READER";
+                        $self->[closeme_]=1;
+                        $self->[dropper_]->();
+                        $self->[rw_]=undef;
 		}
 		#when(undef){
 		else {
@@ -206,7 +206,8 @@ sub push_reader {
 	my ($self,$name,$cb)=@_;
 
 	$self->[reader_cb_]=$cb;	#set the reader callback
-	$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args));
+	$self->[read_]=($make_reader_reg{$name}($self));#,@args));
+	#$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args));
 	push $self->[read_stack_]->@*, $name;
 	#say "reader cb: ", $cb;
 }
@@ -214,7 +215,8 @@ sub push_reader {
 sub push_writer {
 	my ($self,$name,$cb)=@_;
 	#$self->[writer_cb_]=$cb;	#cb to call when write needs more data/is complete
-	$self->[write_]=($self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self));#,@args));
+	$self->[write_]=($make_writer_reg{$name}($self));#,@args));
+	#$self->[write_]=($self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self));#,@args));
 	#push $self->[write_stack_]->@*, $name;
 	#$self->[reader_cb_]=$cb;
 }
@@ -225,7 +227,8 @@ sub pop_reader {
 	my ($self)=@_;
 	pop @{$self->[read_stack_]};			#remove the previous
 	my $name=$self->[read_stack_]->@[$self->[read_stack_]->@*-1];;		#
-	$self->[read_]=$self->[reader_cache_]{$name};
+	$self->[read_]=($make_reader_reg{$name}($self));#,@args));
+	#$self->[read_]=$self->[reader_cache_]{$name};
 	#//=$make_reader_reg{$name}($self,@args));
 	#$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
 }

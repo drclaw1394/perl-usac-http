@@ -108,7 +108,6 @@ sub stream_upload {
 		my $line=shift;
 		my $rex=shift;	#rex object
 
-
 		my $session=$rex->[session_];
 		say "CONTENT TYPE ON UPLOAD:", $rex->[headers_]{'CONTENT_TYPE'};
 		say $mime;
@@ -132,6 +131,7 @@ sub stream_upload {
 				#given($rex->[uSAC::HTTP::Rex::headers_]){
 				if(defined($_->{EXPECTS})){
 					#issue a continue response	
+					say "writing continue";
 					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
 					$rex->[uSAC::HTTP::Rex::write_]->($reply);
 				}
