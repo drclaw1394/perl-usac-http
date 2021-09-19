@@ -23,7 +23,7 @@ use Exporter 'import';
 use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_handle_upload rex_stream_multipart_upload rex_stream_form_upload rex_stream_urlencoded_upload rex_upload_to_file rex_save_to_file rex_save_form_to_file rex_save_form rex_parse_form_params rex_parse_query_params>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_handle_upload rex_stream_multipart_upload rex_stream_form_upload rex_stream_urlencoded_upload rex_upload_to_file rex_save_to_file rex_save_form_to_file rex_save_form rex_save_web_form rex_parse_form_params rex_parse_query_params>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -136,7 +136,7 @@ sub stream_upload {
 					$rex->[uSAC::HTTP::Rex::write_]->($reply);
 				}
 
-				$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
+				$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex) if $session->[uSAC::HTTP::Session::rbuf_];
 				return;
 			}
 		}
@@ -145,6 +145,7 @@ sub stream_upload {
 		reply_simple $line,$rex,@err_res; 
 	}
 }
+
 sub stream_urlencoded_upload {
 	stream_upload "application/x-www-form-urlencoded", shift;
 }
@@ -168,9 +169,12 @@ sub stream_form_upload {
 
 #process urlencoded form
 #Return a set of kv pairs
+#Last item is $cb
 sub save_form {
 	my $cb=pop;
 	#The actual sub called
+	#Expected inputs
+	#	line, rex, data, part header, completeflag
 	stream_urlencoded_upload sub {
 		my $rex=$_[1];
 		state $part_header=0;
@@ -234,6 +238,25 @@ sub save_form_to_file {
 		if($_[4]){
 			#that was the last part
 			$cb->(undef, $rex, $fields,1);
+		}
+	}
+}
+
+#Handles either multipart or urlencoded body forms
+#Callback is last argument and is called  on complete upload of all data
+#Expected inputs to sub ref:
+#	line, rex, data, part header, completeflag
+sub save_web_form {
+	my ($cb)=@_;
+	my $multi= save_form_to_file @_;
+	my $url=save_form @_;
+	sub{
+		given ($_[1][headers_]{CONTENT_TYPE}){
+			&$multi when /multipart\/form-data/;
+			&$url when 'application/x-www-form-urlencoded';
+			default {
+				reply_simple undef,$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+			}
 		}
 	}
 }
@@ -477,6 +500,9 @@ sub render_v1_1_headers {
 sub headers {
 	return $_[0]->[headers_];
 }
+sub method {
+	$_[0][method_];
+}
 
 #Returns parsed query parameters. If they don't exist, they are parse first
 sub query {
@@ -494,14 +520,20 @@ sub cookies {
 *rex_reply_simple=*reply_simple;
 *rex_reply_chunked=*reply_chunked;
 *rex_reply=*reply;
-*rex_stream_upload=*stream_upload;
-*rex_stream_multipart_upload=*stream_multipart_upload;
-*rex_stream_urlencoded_upload=*stream_urlencoded_upload;
-*rex_stream_form_upload=*stream_form_upload;
+
+#Streamed with octets as they become available
+*rex_stream_upload=*stream_upload;			#normal file	
+*rex_stream_multipart_upload=*stream_multipart_upload;	#multipart 
+*rex_stream_urlencoded_upload=*stream_urlencoded_upload;#like normal but forced mime type
+*rex_stream_form_upload=*stream_form_upload;		#Automatially handles multipart and urlencoded form upload streams
+
 *rex_parse_form_params=*parse_form_params;
 *rex_parse_query_params=*parse_query_params;
-*rex_save_to_file=*save_to_file;
-*rex_save_form_to_file=*save_form_to_file;
-*rex_save_form=*save_form;
+
+#Called when upload is complete
+*rex_save_to_file=*save_to_file;			#save general file
+*rex_save_form_to_file=*save_form_to_file;		#save multipart files to disk
+*rex_save_form=*save_form;				#process form when complete ready
+*rex_save_web_form=*save_web_form;
 
 1;

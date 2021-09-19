@@ -73,7 +73,7 @@ sub new {
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
 		#say "Close me: $closeme";
-		#say "Calling dropper";
+
 		return unless $closeme||$_[0];
 		delete $sessions->{$id};
 		close $fh;
@@ -83,8 +83,9 @@ sub new {
 		$id=undef;
 		$closeme=undef;
 		$self->[write_queue_]->@*=();
-	        unshift @{$self->[zombies_]}, $self;
-		#say "DROP COMPLETE...";
+		unshift @{$self->[zombies_]}, $self;
+		say caller;
+		say "DROP COMPLETE...";
 
 
 	};
@@ -120,7 +121,6 @@ sub _make_reader {
 	weaken $self;
 	\my $fh=\$self->[fh_];
 	\my $buf=\$self->[rbuf_];
-	#my $ref=\$self->[rbuf_];	
 	my $len;
 	\my $reader=\$self->[read_];
 
@@ -207,7 +207,7 @@ sub push_reader {
 
 	$self->[reader_cb_]=$cb;	#set the reader callback
 	$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args));
-	#push $self->[read_stack_]->@*, $name;
+	push $self->[read_stack_]->@*, $name;
 	#say "reader cb: ", $cb;
 }
 

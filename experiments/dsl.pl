@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use feature qw<state say>;
+use feature qw<switch state say>;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Code qw<:constants>;
@@ -8,8 +8,10 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Middleware ":all";
 use uSAC::HTTP::Static;
+use Template::Vanilla;
 use Data::Dumper;
-
+$Data::Dumper::Maxdepth=1;
+my $templates=Template::Vanilla->new();
 
 
 my $server; $server=define_server {
@@ -189,6 +191,35 @@ my $server; $server=define_server {
 		#say $kv->%*;
 		rex_reply_simple @_, HTTP_OK,[],"yarrrp";
 	};
+
+	#Login processing
+	define_route "GET|POST"=>qr{(/login)}=>sub {
+		my $rex=$_[1];
+		state $static=static_file_from "data";
+		state $form=rex_save_web_form sub {
+			say "Processing form";
+			pop;
+			say Dumper pop;
+			say Dumper @_;
+			rex_reply_simple undef,$rex , HTTP_OK,[],"yarrrp";
+				
+		};
+
+		push @_, "/login.htmlt";
+		given($_[1]->method){
+			&$static when "GET";
+			&$form when "POST";
+		}
+	};
+
+	#end login processing
+
+	define_route "/template"=>sub {
+		my $buf="";
+		include "./templates/login.vpl", $templates, @_;
+		rex_reply_simple @_, HTTP_OK,[],$buf;
+	};
+
 };
 
 $server->run;

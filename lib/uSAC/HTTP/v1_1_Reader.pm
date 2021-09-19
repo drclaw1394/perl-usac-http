@@ -385,6 +385,11 @@ sub make_form_urlencoded_reader {
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
+		say "in url encoded reader";
+		say $buf;
+		
+		say "";
+		say length $buf;
 		\my %h=$rex->[uSAC::HTTP::Rex::headers_];	#
 		my $len =
 		$header->{CONTENT_LENGTH}=		#copy header to part header

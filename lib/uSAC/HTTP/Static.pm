@@ -414,7 +414,7 @@ sub send_file_uri_norange {
         	($session->[uSAC::HTTP::Session::closeme_]?
 			[HTTP_CONNECTION, "close"]
 			:([HTTP_CONNECTION, "Keep-Alive"],
-			[HTTP_KEEP_ALIVE,"timeout=5, max=1000"]
+			[HTTP_KEEP_ALIVE,"timeout=10, max=1000"]
 			)
 		),
 		$entry->[1],
@@ -887,15 +887,23 @@ sub send_file_mmap {
 }
 
 #setup to use send file
-#if $1 is defined, it is used as the uri, otherwise the stripped uri in the rex is used
+#if $_[2] is defined, it is used as the uri,  the first capture $1 is used
 sub static_file_from {
 	#my %args=@_;
 	my $root=$_[0];
 	sub {
 		my $rex=$_[1];
 		#my $p=$1;
-		my $p=$1//$rex->[uSAC::HTTP::Rex::uri_stripped_];
-		#say "STATIC FILE FROM: ", $p;
+		my $p;
+		if($_[2]){
+			$p=$_[2];
+			pop;
+		}	
+		else {
+			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+		}
+		say "STATIC FILE FROM: ", $p;
+		say @_;
 		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 			send_file_uri_range @_, $p, $root;
 			return;
