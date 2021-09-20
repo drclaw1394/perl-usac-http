@@ -285,6 +285,12 @@ sub define_route {
 	my $self=$_;	#The site to use
 	#first element is tested for short cut get use
 	given($_[0]){
+		when(ref eq "ARRAY"){
+			#Methods specified as an array ref
+			my $a=shift;
+			unshift @_, "(?:".join("|", @$a).")";
+			$self->add_route(@_);
+		}
 		when(m|^/|){
 			#starting with a slash, short cut for GET and head
 			unshift @_, "GET";

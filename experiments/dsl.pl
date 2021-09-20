@@ -192,12 +192,15 @@ my $server; $server=define_server {
 		rex_reply_simple @_, HTTP_OK,[],"yarrrp";
 	};
 
+	define_route ["GET","POST"]=>"/arrayref"=>static_content "got array ref";
+
+
 	#Login processing
-	define_route "GET"=>qr{(/login)}=>sub {
+	define_route "GET"=>"/login\$"=>sub {
 		push @_, "/login.htmlt";
 		&{static_file_from "data"};
 	};
-	define_route "POST"=>qr{(/login)}=>sub {
+	define_route "POST"=>"/login\$"=>sub {
 
 		&{rex_save_web_form sub {
 			pop;			#last flag
@@ -213,8 +216,15 @@ my $server; $server=define_server {
 
 	define_route "/template"=>sub {
 		my $buf="";
-		include "./templates/login.vpl", $templates, @_;
-		rex_reply_simple @_, HTTP_OK,[],$buf;
+		include "./templates/login.vpl", $templates, \$buf, @_;
+		rex_reply_simple @_, HTTP_OK, [], $buf;
+	};
+
+	define_route POST=>"/template"=>sub {
+		&{rex_save_web_form sub {
+			pop;
+
+		}};
 	};
 
 };
