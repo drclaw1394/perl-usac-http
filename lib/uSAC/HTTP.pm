@@ -29,7 +29,7 @@ use uSAC::HTTP::Middler;
 use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
 #Class attribute keys
-use enum ("server_=0",qw(prefix_ id_ mount_ cors_ middleware_ host_ parent_ built_prefix_));
+use enum ("server_=0",qw(prefix_ id_ mount_ cors_ middleware_ host_ parent_ unsupported_ built_prefix_));
 
 use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	built_prefix_-server_+1;
@@ -48,6 +48,7 @@ sub new {
 	$self->[host_]=		$options{host}//"";
 	$self->[cors_]=		$options{cors}//"";
 	$self->[middleware_]=	$options{middleware}//[];
+	$self->[unsupported_]=[];
 
 	#die "No server provided" unless $self->[server_];
 	#die "No id provided" unless $self->[id_];
@@ -117,8 +118,10 @@ sub add_route {
 	else {
 		$unsupported=qr{^$mre $bp$path_matcher};
 	}
-	say "Unmatching: $unsupported";	
-	$self->[server_]->add_end_point($unsupported,$sub, $self);
+	#say "Unmatching: $unsupported";	
+	#$self->[server_]->add_end_point($unsupported,$sub, $self);
+	push $self->[unsupported_]->@*, [$unsupported, $sub,$self];
+
 	my ($entry,$stack);
 	if(@inner){
 		my $middler=uSAC::HTTP::Middler->new();
@@ -199,6 +202,9 @@ sub server {
 }
 sub parent_site {
 	$_[0][parent_];
+}
+sub unsupported {
+	return $_[0]->[unsupported_];
 }
 
 #returns (and builds if required), the prefixs for this sub site

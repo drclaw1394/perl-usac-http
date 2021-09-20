@@ -367,6 +367,20 @@ sub rebuild_dispatch {
 		site_route $self=>'GET'=>qr{.*}=>()=>usac_welcome;
 	}
 
+	#here we add the unsupported methods to the table before building it
+	#Note: this is different to a unfound URL resource.
+	#These give a method not supported error, while an unfound resource is a
+	#not found error
+	#
+	#Because of the general matching, they are added to the table after all sites
+	#have positive matches installed.
+	#
+	for(keys $self->[sites_]->%*){
+		for ($self->[sites_]{$_}->unsupported->@*){
+			$self->add_end_point($_->@*);
+		}
+	}
+
 	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>$cache);
 }
 

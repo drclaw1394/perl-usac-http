@@ -193,24 +193,20 @@ my $server; $server=define_server {
 	};
 
 	#Login processing
-	define_route "GET|POST"=>qr{(/login)}=>sub {
-		my $rex=$_[1];
-
+	define_route "GET"=>qr{(/login)}=>sub {
 		push @_, "/login.htmlt";
-		given($_[1]->method){
-			&{static_file_from "data"} when "GET";
-			&{rex_save_web_form sub {
-					say "Processing form";
-					pop;
-					say Dumper pop;
-					say Dumper @_;
-					rex_reply_simple undef,$rex , HTTP_OK,[],"yarrrp";
+		&{static_file_from "data"};
+	};
+	define_route "POST"=>qr{(/login)}=>sub {
 
-				}} when "POST";
-			#&$static when "GET";
-			#&$form when "POST";
-			#rex_reply_simple undef,$rex , HTTP_OK,[],"yarrrp" when "POST";
-		}
+		&{rex_save_web_form sub {
+			pop;			#last flag
+			say Dumper pop;		#fields from form
+			say Dumper @_;
+
+			rex_reply_simple @_, HTTP_OK, [], "yarrrp";
+
+		}}
 	};
 
 	#end login processing
