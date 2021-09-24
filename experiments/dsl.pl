@@ -222,7 +222,7 @@ my $server; $server=define_server {
 		rex_reply_simple @_, HTTP_OK, [], $buf;
 	};
 
-	define_route POST=>"/template"=>sub {
+	define_route POST=>"/template"=>(log_simple)=>sub {
 		&{rex_save_web_form sub {
 			say "END FORM CALLBACK";
 			pop;

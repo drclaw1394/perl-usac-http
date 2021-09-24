@@ -122,23 +122,25 @@ sub _make_reader {
 	my $fh=$self->[fh_];
 	\my $buf=\$self->[rbuf_];
 	my $len;
-	my $reader=$self->[read_];
+	\my $reader=\$self->[read_];
 
 	$self->[rw_] = AE::io $fh, 0, sub {
 		$self->[time_]=$Time;	#Update the last access time
 		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
+		#say "BUFFER FROM STREAM:\n";
+		#say $buf;
 		if($len>0){
+			#say "Calling reader: ", $reader;
 			$reader->();
 		}
 		#when(0){
 		elsif($len==0){
 			#say "read len is zero";
                         #End of file
-			say "";
-			say "END OF  READER";
+			#say "END OF  READER";
 			$self->[closeme_]=1;
-			$self->[dropper_]->();
 			$self->[rw_]=undef;
+			$self->[dropper_]->();
 		}
 		#when(undef){
 		else {
