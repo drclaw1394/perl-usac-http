@@ -3,7 +3,7 @@ use common::sense;
 use Data::Dumper;
 use feature "refaliasing";
 no warnings "experimental";
-use Scalar::Util 'refaddr', 'weaken';
+use Scalar::Util 'openhandle','refaddr', 'weaken';
 
 #require uSAC::HTTP::Server;
 use EV;
@@ -28,8 +28,8 @@ use constant MAX_READ_SIZE => 128 * 1024;
 #to the filehandle
 #
 
-our %make_reader_reg;	#hash of sub references which will make a reader ref of a particular name
-our %make_writer_reg;	#hash of sub references which will make a writer ref of a particular name
+#our %make_reader_reg;	#hash of sub references which will make a reader ref of a particular name
+#our %make_writer_reg;	#hash of sub references which will make a writer ref of a particular name
 
 
 our $Date;		#Date string for http
@@ -84,8 +84,8 @@ sub new {
 		$closeme=undef;
 		$self->[write_queue_]->@*=();
 		unshift @{$self->[zombies_]}, $self;
-		say caller;
-		say "DROP COMPLETE...";
+		#say caller;
+		#say "DROP COMPLETE...";
 
 
 	};
@@ -119,10 +119,10 @@ sub revive {
 sub _make_reader {
 	my $self=shift;
 	weaken $self;
-	\my $fh=\$self->[fh_];
+	my $fh=$self->[fh_];
 	\my $buf=\$self->[rbuf_];
 	my $len;
-	\my $reader=\$self->[read_];
+	my $reader=$self->[read_];
 
 	$self->[rw_] = AE::io $fh, 0, sub {
 		$self->[time_]=$Time;	#Update the last access time
@@ -134,17 +134,18 @@ sub _make_reader {
 		elsif($len==0){
 			#say "read len is zero";
                         #End of file
-                        #say "END OF  READER";
-                        $self->[closeme_]=1;
-                        $self->[dropper_]->();
-                        $self->[rw_]=undef;
+			say "";
+			say "END OF  READER";
+			$self->[closeme_]=1;
+			$self->[dropper_]->();
+			$self->[rw_]=undef;
 		}
 		#when(undef){
 		else {
 			#potential error
 			#say "ERROR";
 			return if $! == EAGAIN or $! == EINTR;
-			#say "ERROR IN READER";
+			say "ERROR IN READER";
 			$self->[closeme_]=1;
 			$self->[dropper_]->();
 			$self->[rw_]=undef;
@@ -202,50 +203,72 @@ sub _make_reader {
 #=====================
 #
 
+#######################################################################################################
+# sub push_reader {                                                                                   #
+#         my ($self,$name,$cb)=@_;                                                                    #
+#                                                                                                     #
+#         $self->[reader_cb_]=$cb;        #set the reader callback                                    #
+#         $self->[read_]=($make_reader_reg{$name}($self));#,@args));                                  #
+#         #$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args)); #
+#         push $self->[read_stack_]->@*, $name;                                                       #
+#         #say "reader cb: ", $cb;                                                                    #
+# }                                                                                                   #
+#######################################################################################################
 sub push_reader {
-	my ($self,$name,$cb)=@_;
-
-	$self->[reader_cb_]=$cb;	#set the reader callback
-	$self->[read_]=($make_reader_reg{$name}($self));#,@args));
-	#$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args));
-	push $self->[read_stack_]->@*, $name;
-	#say "reader cb: ", $cb;
+	push $_[0][read_stack_]->@*, $_[0][read_]=$_[1];
+	#$_[0][reader_cb_]=$_[2];
 }
 
 sub push_writer {
-	my ($self,$name,$cb)=@_;
-	#$self->[writer_cb_]=$cb;	#cb to call when write needs more data/is complete
-	$self->[write_]=($make_writer_reg{$name}($self));#,@args));
-	#$self->[write_]=($self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self));#,@args));
-	#push $self->[write_stack_]->@*, $name;
-	#$self->[reader_cb_]=$cb;
+	$_[0][write_]=$_[1];
 }
+########################################################################################################
+# sub push_writer {                                                                                    #
+#         my ($self,$name,$cb)=@_;                                                                     #
+#         #$self->[writer_cb_]=$cb;       #cb to call when write needs more data/is complete           #
+#         $self->[write_]=($make_writer_reg{$name}($self));#,@args));                                  #
+#         #$self->[write_]=($self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self));#,@args)); #
+#         #push $self->[write_stack_]->@*, $name;                                                      #
+#         #$self->[reader_cb_]=$cb;                                                                    #
+# }                                                                                                    #
+########################################################################################################
 
 #Reuse the previous reader in the stack
 #Does not attempt to remake it...
+#####################################################################################
+# sub pop_reader {                                                                  #
+#         my ($self)=@_;                                                            #
+#         pop @{$self->[read_stack_]};                    #remove the previous      #
+#         my $name=$self->[read_stack_]->@[$self->[read_stack_]->@*-1];;          # #
+#         $self->[read_]=($make_reader_reg{$name}($self));#,@args));                #
+#         #$self->[read_]=$self->[reader_cache_]{$name};                            #
+#         #//=$make_reader_reg{$name}($self,@args));                                #
+#         #$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];          #
+# }                                                                                 #
+#####################################################################################
 sub pop_reader {
-	my ($self)=@_;
-	pop @{$self->[read_stack_]};			#remove the previous
-	my $name=$self->[read_stack_]->@[$self->[read_stack_]->@*-1];;		#
-	$self->[read_]=($make_reader_reg{$name}($self));#,@args));
-	#$self->[read_]=$self->[reader_cache_]{$name};
-	#//=$make_reader_reg{$name}($self,@args));
-	#$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
+	pop $_[0][read_stack_]->@*;
+	$_[0][read_]=$_[0][read_stack_][-1];
 }
 sub pop_writer {
 	my ($self)=@_;
 	pop @{$self->[write_stack_]};			#remove the previous
 	my $name=$self->[write_stack_]->@[$self->[write_stack_]->@*-1];
-	$self->[read_]=$self->[writer_cache_]{$name};
+	#$self->[read_]=$self->[writer_cache_]{$name};
 	#//=$make_reader_reg{$name}($self,@args));
 	#$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
 }
 
-sub select_writer{
-	my ($self,$name)=@_;
-	#	say "In select writer";
-	#say %make_writer_reg;
-	$self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self);
+###########################################################################
+# sub select_writer{                                                      #
+#         my ($self,$name)=@_;                                            #
+#         #       say "In select writer";                                 #
+#         #say %make_writer_reg;                                          #
+#         $self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self); #
+# }                                                                       #
+###########################################################################
+sub set_writer {
+	$_[0]->[write_]=$_[1];
 }
 
 #timer for generating timestamps. 1 second resolution for HTTP date

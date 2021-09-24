@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use feature qw<switch state say>;
+use feature qw<switch state say declared_refs refaliasing>;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Code qw<:constants>;
@@ -27,7 +27,7 @@ my $server; $server=define_server {
 		define_id 	"My Site";		#Descriptive name of site
 		define_host 	"localhost:8080";	#Host we will match
 		define_prefix 	"/sub";			#Prefix if applicable
-		#define_middleware log_simple;		#Middleware common to all routes
+		define_middleware log_simple;		#Middleware common to all routes
 		#routes
 		define_route 	GET=>'/hello$'=>static_content "Sub site";
 		define_route	GET=>'/hello_logged'=>(log_simple)=>static_content "Logged";
@@ -148,8 +148,9 @@ my $server; $server=define_server {
 		
 	};
 
-	define_route POST=> "/form\$" => rex_stream_form_upload  sub {
+	define_route POST=> "/form\$" =>(log_simple)=> rex_stream_form_upload  sub {
 		my $rex=$_[1];
+		say $rex;
 		if($_[4]){
 			rex_reply_simple undef, $rex, HTTP_OK,[], "form uploaded";
 		}
@@ -216,13 +217,18 @@ my $server; $server=define_server {
 
 	define_route "/template"=>sub {
 		my $buf="";
+		say "ABOUT TO IN CLUDE";
 		include "./templates/login.vpl", $templates, \$buf, @_;
 		rex_reply_simple @_, HTTP_OK, [], $buf;
 	};
 
 	define_route POST=>"/template"=>sub {
 		&{rex_save_web_form sub {
+			say "END FORM CALLBACK";
 			pop;
+			pop;
+			say "read buffer: ", $_[1]->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::rbuf_];
+			rex_reply_simple @_, HTTP_OK, [], "df";
 
 		}};
 	};

@@ -10,6 +10,7 @@ use Data::Dumper;
 
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
+use uSAC::HTTP::v1_1_Reader;
 #use uSAC::HTTP::Server;
 use constant LF => "\015\012";
 
@@ -76,6 +77,7 @@ sub stream_multipart_upload{
 		my $line=shift;
 		my $rex=shift;
 		shift;		#remove place holder for mime
+		say "CB ", $cb;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#check if content type is correct first
 		say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
@@ -86,11 +88,10 @@ sub stream_multipart_upload{
 		}
 		uSAC::HTTP::Session::push_reader
 		$session,
-		"http1_1_form_data",
-
-		$cb
-		;
+		make_form_data_reader $session, $cb ;
 		$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
+		#$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex) if $session->[uSAC::HTTP::Session::rbuf_];
+		return;
 	}
 }
 
@@ -107,6 +108,8 @@ sub stream_upload {
 	sub {
 		my $line=shift;
 		my $rex=shift;	#rex object
+		say $rex;
+		say "Callback ", $cb;
 
 		my $session=$rex->[session_];
 		say "CONTENT TYPE ON UPLOAD:", $rex->[headers_]{'CONTENT_TYPE'};
@@ -123,9 +126,7 @@ sub stream_upload {
 
 				uSAC::HTTP::Session::push_reader
 				$session,
-				"http1_1_urlencoded",
-				$cb
-				;
+				make_form_urlencoded_reader $session, $cb ;
 
 				#check for expects header and send 100 before trying to read
 				#given($rex->[uSAC::HTTP::Rex::headers_]){
@@ -322,7 +323,7 @@ sub parse_form_params {
 			say "form data";
 			#parse content disposition (name, filename etc)
 			my $kv={};
-			say $_[3];
+			say Dumper $_[3];
 			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
 				$kv->{$key}=$value;

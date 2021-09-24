@@ -11,9 +11,7 @@ use Data::Dumper;
 our @EXPORT_OK=qw<
 		make_reader
 		make_form_data_reader
-		make_plain_text_reader
 		make_form_urlencoded_reader
-		make_default_writer
 		make_socket_writer
 		uri_decode
 		parse_form
@@ -68,8 +66,8 @@ sub make_reader{
 
 	my $self=$r->[uSAC::HTTP::Session::server_];
 	\my $buf=\$r->[uSAC::HTTP::Session::rbuf_];
-	\my $fh=\$r->[uSAC::HTTP::Session::fh_];
-	\my $write=\$r->[uSAC::HTTP::Session::write_];
+	my $fh=$r->[uSAC::HTTP::Session::fh_];
+	my $write=$r->[uSAC::HTTP::Session::write_];
 	#weaken $write;
 	weaken $r;
 
@@ -83,7 +81,7 @@ sub make_reader{
 	my $ixx = 0;
 	my %h;		#Define the header storage here, once per connection
 	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
-	sub {
+	$r->[uSAC::HTTP::Session::read_]=sub {
 		use integer;
 		#$self and $r or return;
 		$len=length $buf;
@@ -223,8 +221,8 @@ sub make_form_data_reader {
 	use integer;
 	my $session=shift;
 	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
-	\my $cb=\$session->[uSAC::HTTP::Session::reader_cb_];
-	\my $rex=\$session->[uSAC::HTTP::Session::rex_];
+	my $cb=shift;\$session->[uSAC::HTTP::Session::reader_cb_];
+	my $rex=$session->[uSAC::HTTP::Session::rex_];
 
 
 	my $state=0;
@@ -234,20 +232,21 @@ sub make_form_data_reader {
 
 	sub {
 		say "IN FORM PARSER";
+		say $buf;
 		#\my $buf=shift;#buffer from io loop
 		#my $rex=shift;
 		#my $cb=$session->[uSAC::HTTP::Session::reader_cb_];
 		my $processed=0;
 
-		\my %h=$rex->[uSAC::HTTP::Rex::headers_];
+		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];
 		my $type = $h{'CONTENT_TYPE'};
 		say "content type: $type";
 		#TODO: check for content-disposition and filename if only a single part.
 		my $boundary="--".(split("=", $type))[1];
 		say  "boundary:",$boundary;
 		my $b_len=length $boundary;
-		#say "buffer len:", length $buf;
-		#say "buffer:", $buf;
+		say "buffer len:", length $buf;
+		say "Processed $processed";
 		while($processed < length $buf){
 			say "form while";
 			given($state){
@@ -273,6 +272,8 @@ sub make_form_data_reader {
 							$first=0;
 							#move past data and boundary
 							$processed+=$offset+2;
+							$buf=substr $buf, $processed;
+							$processed=0;
 							$state=1;
 							$form_headers={};
 							redo;
@@ -283,6 +284,8 @@ sub make_form_data_reader {
 							$first=1;	#reset first;
 							$cb->(undef, $rex, substr($buf,$processed,$len),$form_headers,1);
 							$processed+=$offset+4;
+							$buf=substr $buf, $processed;
+							$processed=0;
 							uSAC::HTTP::Session::pop_reader($session);
 							return;
 						}
@@ -301,6 +304,8 @@ sub make_form_data_reader {
 						say Dumper $form_headers;
 						$cb->(undef, $rex, substr($buf, $processed, $len),$form_headers);#$form_headers);
 						$processed+=$len;
+						$buf=substr $buf, $processed;
+						$processed=0;
 						#wait for next read now
 						return;
 					}
@@ -362,9 +367,6 @@ sub make_form_data_reader {
 
 }
 
-sub make_plain_text_reader {
-
-}
 
 
 #This reads http1/1.1 post type 
@@ -379,14 +381,16 @@ sub make_form_urlencoded_reader {
 	#
 	my $session=shift;
 	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];	#Alias buffer (not a reference)
-	\my $cb=\$session->[uSAC::HTTP::Session::reader_cb_];	#Alias reference to current cb
-	\my $rex=\$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
+	my $cb=shift;#$_[1];#=$session->[uSAC::HTTP::Session::reader_cb_]=$_[1];	#Alias reference to current cb
+	my $rex=$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
+	say $rex;
+	say $cb;
 	my $processed=0;					#stateful position in buffer
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
 		
-		\my %h=$rex->[uSAC::HTTP::Rex::headers_];	#
+		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];	#
 		my $len =
 		$header->{CONTENT_LENGTH}=		#copy header to part header
 		$h{'CONTENT_LENGTH'}//0; #number of bytes to read, or 0 if undefined
@@ -513,29 +517,28 @@ sub make_socket_writer_append{
 }
 sub make_socket_writer{
 	#take a session and alias the variables to lexicals
-	my $ido=shift;
-	weaken $ido;
+	my $session=shift;
+	weaken $session;
 	my $wbuf;# $$wbuf="";# buffer is for this sub only \$ido->[uSAC::HTTP::Session::wbuf_];
-	\my $ww=\$ido->[uSAC::HTTP::Session::ww_];
-	\my $fh=\$ido->[uSAC::HTTP::Session::fh_]; #reference to file handle.
+	my $ww=$session->[uSAC::HTTP::Session::ww_];
+	my $fh=$session->[uSAC::HTTP::Session::fh_]; #reference to file handle.
 	weaken $fh;
 	my $w;
 	my $offset=0;
-	say  "++Making socket writer";
 	#Arguments are buffer and callback.
 	#do not call again until callback is called
 	#if no callback is provided, the session dropper is called.
 	#
-	\my @queue=$ido->[uSAC::HTTP::Session::write_queue_]; # data, offset, cb, arg
+	\my @queue=$session->[uSAC::HTTP::Session::write_queue_]; # data, offset, cb, arg
 
-	sub {
+	$session->[uSAC::HTTP::Session::write_]=sub {
 		use integer;
 
 		$_[0]//return;		#undefined input. was a stack reset
 		
 		\my $buf=\$_[0];		#give the input a name
 
-		my $dropper=$ido->[uSAC::HTTP::Session::dropper_];	#default callback
+		my $dropper=$session->[uSAC::HTTP::Session::dropper_];	#default callback
 		my $cb= $_[1]//$dropper;		#when no cb provided, use dropper
 		my $arg=$_[2]//__SUB__;			#is this sub unless provided
 
@@ -546,7 +549,7 @@ sub make_socket_writer{
 		if(!$ww){	#no write watcher so try synchronous write
 			#say "No watcher";
 			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
-			$ido->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
+			$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
 			$offset+=$w;
 			if($offset==length $buf){
 				#say "FULL WRITE NO APPEND";
@@ -577,7 +580,7 @@ sub make_socket_writer{
 					@queue=();	#reset queue for session reuse
 					$cb->(undef);
 					$dropper->(1);
-					#uSAC::HTTP::Session::drop $ido, "$!";
+					#uSAC::HTTP::Session::drop $session, "$!";
 					return;
 				}
 
@@ -590,14 +593,14 @@ sub make_socket_writer{
 				#say "PARTIAL WRITE Synchronous";
 				my $entry;
 				$ww = AE::io $fh, 1, sub {
-					$ido or return;
+					$session or return;
 					$entry=$queue[0];
 					\my $buf=\$entry->[0];
 					\my $offset=\$entry->[1];
 					\my $cb=\$entry->[2];
 					\my $arg=\$entry->[3];
 					$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
-					$ido->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
+					$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
 
 					$offset+=$w;
 					if($offset==length $buf) {
@@ -629,7 +632,7 @@ sub make_socket_writer{
 						@queue=();	#reset queue for session reuse
 						$cb->(undef);
 						$dropper->(1);
-						#uSAC::HTTP::Session::drop $ido, "$!";
+						#uSAC::HTTP::Session::drop $session, "$!";
 						return;
 					}
 				};

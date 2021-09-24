@@ -107,6 +107,14 @@ sub add_route {
 		}
 	}
 	say "  matching: $matcher";	
+	my ($entry,$stack);
+	if(@inner){
+		my $middler=uSAC::HTTP::Middler->new();
+		for(@inner){
+			$middler->register($_);
+		}
+		($end,$stack)=$middler->link($end);
+	}
 	$self->[server_]->add_end_point($matcher,$end);
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
@@ -122,14 +130,6 @@ sub add_route {
 	#$self->[server_]->add_end_point($unsupported,$sub, $self);
 	push $self->[unsupported_]->@*, [$unsupported, $sub,$self];
 
-	my ($entry,$stack);
-	if(@inner){
-		my $middler=uSAC::HTTP::Middler->new();
-		for(@inner){
-			$middler->register($_);
-		}
-		($end,$stack)=$middler->link($end);
-	}
 }
 
 #middleware to strip prefix

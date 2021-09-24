@@ -48,19 +48,23 @@ use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
 
 
-given(\%uSAC::HTTP::Session::make_reader_reg){
-        $_->{http1_1_base}=\&make_reader;
-        $_->{http1_1_form_data}=\&make_form_data_reader;
-        $_->{http1_1_urlencoded}=\&make_form_urlencoded_reader;
-        #$_->{http1_1_default_writer}=\&make_default_writer;
-        $_->{websocket}=\&make_websocket_reader;
-}
+###################################################################
+# given(\%uSAC::HTTP::Session::make_reader_reg){                  #
+#         $_->{http1_1_base}=\&make_reader;                       #
+#         $_->{http1_1_form_data}=\&make_form_data_reader;        #
+#         $_->{http1_1_urlencoded}=\&make_form_urlencoded_reader; #
+#         #$_->{http1_1_default_writer}=\&make_default_writer;    #
+#         $_->{websocket}=\&make_websocket_reader;                #
+# }                                                               #
+###################################################################
 
-given(\%uSAC::HTTP::Session::make_writer_reg){
-        $_->{http1_1_default_writer}=\&make_default_writer;
-        $_->{http1_1_socket_writer}=\&make_socket_writer;
-        $_->{websocket}=\&make_websocket_server_writer;
-}
+################################################################
+# given(\%uSAC::HTTP::Session::make_writer_reg){               #
+#         #$_->{http1_1_default_writer}=\&make_default_writer; #
+#         #$_->{http1_1_socket_writer}=\&make_socket_writer;   #
+#         #$_->{websocket}=\&make_websocket_server_writer;     #
+# }                                                            #
+################################################################
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -282,21 +286,30 @@ sub accept {
 				$session=pop @zombies;
 				if($session){
 					uSAC::HTTP::Session::revive $session, $id, $fh;
-					uSAC::HTTP::Session::push_writer 
-						$session,
-						"http1_1_socket_writer",
-						undef;
+					#uSAC::HTTP::Session::set_writer $session, make_socket_writer $session;
+					make_socket_writer $session;
+                                        ####################################
+                                        # uSAC::HTTP::Session::push_writer #
+                                        #         $session,                #
+                                        #         "http1_1_socket_writer", #
+                                        #         undef;                   #
+                                        ####################################
 				}
 				else {
 					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self);
-					#TODO: push correct writer ie, ssl  for other sessions
-					uSAC::HTTP::Session::push_writer 
-						$session,
-						"http1_1_socket_writer",
-						undef;
+					#uSAC::HTTP::Session::set_writer $session, make_socket_writer $session;
+					make_socket_writer $session;
+                                        ##########################################################
+                                        # #TODO: push correct writer ie, ssl  for other sessions #
+                                        # uSAC::HTTP::Session::push_writer                       #
+                                        #         $session,                                      #
+                                        #         "http1_1_socket_writer",                       #
+                                        #         undef;                                         #
+                                        ##########################################################
 				}
 
-				uSAC::HTTP::Session::push_reader $session,"http1_1_base",undef; 
+				#uSAC::HTTP::Session::push_reader $session,"http1_1_base",undef; 
+				uSAC::HTTP::Session::push_reader $session, make_reader $session;
 				#initiate read
 				uSAC::HTTP::Session::_make_reader $session;
 				$sessions{ $id } = $session;
