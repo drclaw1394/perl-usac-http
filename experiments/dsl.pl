@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use feature qw<switch state say declared_refs refaliasing>;
+no warnings "experimental";
 
 use uSAC::HTTP;
 use uSAC::HTTP::Code qw<:constants>;
@@ -18,7 +19,7 @@ my $server; $server=define_server {
 	
 	define_interface "0.0.0.0";		#adds a interface to to bind on 
 	define_port 8080;			#Add a port to bind on
-	set_enable_hosts 1;			#Turn on virtual hosts
+	set_enable_hosts 0;			#Turn on virtual hosts
 	define_sub_product "myserver/1";
 	
 
@@ -28,6 +29,7 @@ my $server; $server=define_server {
 		define_host 	"localhost:8080";	#Host we will match
 		define_prefix 	"/sub";			#Prefix if applicable
 		define_middleware log_simple;		#Middleware common to all routes
+
 		#routes
 		define_route 	GET=>'/hello$'=>static_content "Sub site";
 		define_route	GET=>'/hello_logged'=>(log_simple)=>static_content "Logged";
@@ -217,17 +219,15 @@ my $server; $server=define_server {
 
 	define_route "/template"=>sub {
 		my $buf="";
-		say "ABOUT TO IN CLUDE";
 		include "./templates/login.vpl", $templates, \$buf, @_;
 		rex_reply_simple @_, HTTP_OK, [], $buf;
 	};
 
 	define_route POST=>"/template"=>(log_simple)=>sub {
 		&{rex_save_web_form sub {
-			say "END FORM CALLBACK";
-			pop;
-			pop;
-			say "read buffer: ", $_[1]->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::rbuf_];
+			#say "END FORM CALLBACK";
+			pop;	#last flag
+			pop;	#form kvey value hash
 			rex_reply_simple @_, HTTP_OK, [], "df";
 
 		}};

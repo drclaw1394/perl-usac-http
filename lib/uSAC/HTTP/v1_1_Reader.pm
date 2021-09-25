@@ -231,8 +231,6 @@ sub make_form_data_reader {
 	my $form_headers={};
 
 	sub {
-		say "IN FORM PARSER", __SUB__;
-		say $buf;
 		#\my $buf=shift;#buffer from io loop
 		#my $rex=shift;
 		#my $cb=$session->[uSAC::HTTP::Session::reader_cb_];
@@ -240,25 +238,20 @@ sub make_form_data_reader {
 
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];
 		my $type = $h{'CONTENT_TYPE'};
-		say "content type: $type";
 		#TODO: check for content-disposition and filename if only a single part.
 		my $boundary="--".(split("=", $type))[1];
-		say  "boundary:",$boundary;
 		my $b_len=length $boundary;
-		say "buffer len:", length $buf;
-		say "Processed $processed";
 		while($processed < length $buf){
-			say "form while";
 			given($state){
 				when(0){
-					say "STATE $state. Looking for boundary";
+					#say "STATE $state. Looking for boundary";
 					#%h=();
 					#Attempt to match boundary
 					my $index=index($buf,$boundary,$processed);
 					if($index>=0){
 						
 
-						say "FOUND boundary and index: $index first: $first";
+						#say "FOUND boundary and index: $index first: $first";
 						#send partial data to callback
 						my $len=($index-2)-$processed;	#-2 for LF
 
@@ -280,7 +273,7 @@ sub make_form_data_reader {
 
 						}
 						elsif(substr($buf,$offset,4) eq "--".LF){
-							say "END BOUNDARD FOUND";
+							#say "END BOUNDARD FOUND";
 							$first=1;	#reset first;
 							$cb->(undef, $rex, substr($buf,$processed,$len),$form_headers,1);
 							$processed+=$offset+4;
@@ -291,17 +284,16 @@ sub make_form_data_reader {
 						}
 						else{
 							#need more
-							say "need more";
+							#say "need more";
 							return
 						}
 
 					}
 
 					else {
-						say "NOT FOUND boundary and index: $index";
+						#say "NOT FOUND boundary and index: $index";
 						# Full boundary not found, send partial, upto boundary length
 						my $len=length($buf)-$b_len;		#don't send boundary
-						say Dumper $form_headers;
 						$cb->(undef, $rex, substr($buf, $processed, $len),$form_headers);#$form_headers);
 						$processed+=$len;
 						$buf=substr $buf, $processed;
@@ -317,20 +309,20 @@ sub make_form_data_reader {
 
 				when(1){
 					#read any headers
-					say "State  $state. READING HEADERS";
+					#say "State  $state. READING HEADERS";
 					pos($buf)=$processed;
 
 					while (){
 						if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 							\my $e=\$form_headers->{uc $1=~tr/-/_/r};
 							$e = defined $e ? $e.','.$2: $2;
-							say "Got header: $e";
+							#say "Got header: $e";
 
 							#need to split to isolate name and filename
 							redo;
 						}
 						elsif ($buf =~ /\G\015\012/sxogca) {
-							say "HEADERS DONE";
+							#say "HEADERS DONE";
 							$processed=pos($buf);
 
 							#readjust the buffer no
@@ -355,13 +347,13 @@ sub make_form_data_reader {
 				}
 
 				default {
-					say "DEFAULT";
+					#say "DEFAULT";
 
 				}
 			}
-			say "End of while";
+			#say "End of while";
 		}
-		say "End of form reader";
+		#say "End of form reader";
 	}
 
 

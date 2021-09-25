@@ -77,10 +77,9 @@ sub stream_multipart_upload{
 		my $line=shift;
 		my $rex=shift;
 		shift;		#remove place holder for mime
-		say "CB ", $cb;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#check if content type is correct first
-		say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
+		#say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
 		unless (index($rex->[headers_]{'CONTENT_TYPE'},'multipart/form-data')>=0){
 			$session->[uSAC::HTTP::Session::closeme_]=1;
 			reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
@@ -320,10 +319,10 @@ sub parse_form_params {
 	#parse the fields	
 	given($rex->[headers_]{CONTENT_TYPE}){
 		when(/multipart\/form-data/){
-			say "form data";
+			#say "form data";
 			#parse content disposition (name, filename etc)
 			my $kv={};
-			say Dumper $_[3];
+			#say Dumper $_[3];
 			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
 				$kv->{$key}=$value;

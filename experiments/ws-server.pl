@@ -12,7 +12,7 @@ use feature "current_sub";
 
 my $server=uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",
-	port=>8081,
+	port=>8080,
 	#cb=>sub{}
 );
 
@@ -76,7 +76,8 @@ __DATA__
 	</head>
 	<body>
 		<script >
-			var ws=new WebSocket("ws://localhost:8081/ws","chat");
+			
+			var ws=new WebSocket("ws://"+location.host+"/ws","chat");
 
 			ws.onopen=function(event){
 				console.log("websocket open");
