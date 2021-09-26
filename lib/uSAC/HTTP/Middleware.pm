@@ -32,9 +32,10 @@ sub log_simple {
 		sub {
 			say STDERR "\n";
 			say STDERR time;
-			say STDERR " Host: $_[1][uSAC::HTTP::Rex::host_]";
-			say STDERR " Original URI: $_[1][uSAC::HTTP::Rex::uri_]";
-			say STDERR " Matcher URI:	   $_[1][uSAC::HTTP::Rex::uri_stripped_]";
+			say STDERR " Host: 		$_[1][uSAC::HTTP::Rex::host_]";
+			say STDERR " Original URI: 	$_[1][uSAC::HTTP::Rex::uri_]";
+			say STDERR " Matcher URI:	$_[1][uSAC::HTTP::Rex::uri_stripped_]";
+			say STDERR " Hit counter:		", $_[0][3];
 			return &$next;		#alway call next. this is just loggin
 		}
 	};

@@ -105,8 +105,8 @@ sub stream_upload {
 	my $cb=shift;	#cb for parts
 
 	sub {
-		my $line=shift;
-		my $rex=shift;	#rex object
+		#my $line=shift;
+		my $rex=$_[1];#shift;	#rex object
 		say $rex;
 		say "Callback ", $cb;
 
@@ -118,14 +118,17 @@ sub stream_upload {
 			when($_->{'CONTENT_TYPE'}!~/$mime/){
 				@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
 			}
+
 			when($_->{'CONTENT_LENGTH'} > $upload_limit){
 				@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $UPLOAD_LIMIT");
 			}
+
 			default{
 
+				say "Setting up url reader: ", Dumper @_;
 				uSAC::HTTP::Session::push_reader
 				$session,
-				make_form_urlencoded_reader $session, $cb ;
+				make_form_urlencoded_reader @_, $session, $cb ;
 
 				#check for expects header and send 100 before trying to read
 				#given($rex->[uSAC::HTTP::Rex::headers_]){
@@ -142,7 +145,7 @@ sub stream_upload {
 		}
 
 		$session->[uSAC::HTTP::Session::closeme_]=1;
-		reply_simple $line,$rex,@err_res; 
+		reply_simple @_, @err_res;#$line,$rex,@err_res; 
 	}
 }
 
@@ -176,6 +179,7 @@ sub save_form {
 	#Expected inputs
 	#	line, rex, data, part header, completeflag
 	stream_urlencoded_upload sub {
+		my $usac=$_[0];
 		my $rex=$_[1];
 		state $part_header=0;
 		state $fields={};
@@ -191,7 +195,7 @@ sub save_form {
 
 		if($_[4]){
 			#that was the last part
-			$cb->(undef, $rex, $fields,1);
+			$cb->($usac, $rex, $fields,1);
 		}
 	}
 

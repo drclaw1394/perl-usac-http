@@ -8,7 +8,7 @@ no warnings "experimental";
 
 use Exporter "import";
 
-our @EXPORT_OK=qw(LF site_route define_route define_site define_prefix define_id define_host define_middleware $Path $Any_Method);
+our @EXPORT_OK=qw(LF site_route define_route define_site define_prefix define_id define_host define_middleware usac_site_url usac_site_see_other $Path $Any_Method);
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
@@ -28,6 +28,7 @@ use uSAC::HTTP::Server::WS;
 use uSAC::HTTP::Middler;
 use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
+use Data::Dumper;
 #Class attribute keys
 use enum ("server_=0",qw(prefix_ id_ mount_ cors_ middleware_ host_ parent_ unsupported_ built_prefix_));
 
@@ -80,7 +81,7 @@ sub add_route {
 
 	my @non_matching=(qr{[^ ]+});#grep {!/$method_matcher/} @methods;
 	#my @non_matching=grep {!/$method_matcher/} @methods;
-	my @matching=grep {/$method_matcher/ } @methods;
+	my @matching=grep { /$method_matcher/ } @methods;
 	my $sub;
 
 	if(@non_matching){
@@ -115,7 +116,7 @@ sub add_route {
 		}
 		($end,$stack)=$middler->link($end);
 	}
-	$self->[server_]->add_end_point($matcher,$end);
+	$self->[server_]->add_end_point($matcher, $end, $self);
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
 	my $unsupported;
@@ -140,37 +141,8 @@ sub _strip_prefix {
 	sub {
 		my $next=shift;
 		sub {
-                        #{
-                                #NOTE: block used to make temp dynamic scope to protect capture groups
-                                #being destroyed when running another match
-                                #The space  is to prevent the host matching if present
-                                shift @_;
-                                for($_[0]){     #this is actually arg 1
-                                        $_->[uSAC::HTTP::Rex::uri_stripped_]= substr($_->[uSAC::HTTP::Rex::uri_],$len);
-                                        unshift @_, $_->[uSAC::HTTP::Rex::host_]." ".$_->[uSAC::HTTP::Rex::method_]." ".$_->[uSAC::HTTP::Rex::uri_stripped_];
-                                }
-                                #$new=$_[0]=~s/ $prefix/ /nr;
-                                return &$next;
-                                #}
-			#my $new;
-                        #########################################################################################################################################
-                        # {                                                                                                                                     #
-                        #         #NOTE: block used to make temp dynamic scope to protect capture groups                                                        #
-                        #         #being destroyed when running another match                                                                                   #
-                        #         #The space  is to prevent the host matching if present                                                                        #
-                        #         shift @_;                                                                                                                     #
-                        #         given($_[0]){                                                                                                                 #
-                        #                 $_->[uSAC::HTTP::Rex::uri_stripped_]=$_->[uSAC::HTTP::Rex::uri_]=~s/$prefix//nr;                                      #
-                        #                 unshift @_, $_->[uSAC::HTTP::Rex::host_]." ".$_->[uSAC::HTTP::Rex::method_]." ".$_->[uSAC::HTTP::Rex::uri_stripped_]; #
-                        #         }                                                                                                                             #
-                        #         #$new=$_[0]=~s/ $prefix/ /nr;                                                                                                 #
-                        #                                                                                                                                       #
-                        #         #The @_ is shifted to remove the alias of "line"                                                                              #
-                        #         #Otherwise the above modifies the original input which effects the                                                            #
-                        #         #Hustle::Table cache                                                                                                          #
-                        #         return &$next;#->($new, @_);                                                                                                  #
-                        # }                                                                                                                                     #
-                        #########################################################################################################################################
+			$_[1]->[uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len);
+                        return &$next;
 		}
 	}
 
@@ -223,6 +195,28 @@ sub built_prefix {
 sub host {
 	$_[0]->[host_];
 }
+
+#makes a url to with in the site
+#match entry
+#rex
+#partial url
+sub usac_site_url {
+
+	say "Main:", Dumper $_[0];
+	$_[0][4][built_prefix_].$_[1];		
+}
+
+#redirect to within site
+#match entry
+#rex
+#partial url
+#code
+sub usac_site_see_other{
+	my $url=usac_site_url @_;
+	splice @_, 2;
+	rex_reply_simple @_, HTTP_SEE_OTHER,[[HTTP_LOCATION, $url]],"See other";
+}
+
 
 #Take matcher, list of innerware and endpoint sub
 
@@ -340,4 +334,5 @@ sub define_middleware{
 sub define_error_page {
 		
 }
+
 1;

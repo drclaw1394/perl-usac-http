@@ -5,6 +5,7 @@ no warnings "experimental";
 
 use uSAC::HTTP;
 use uSAC::HTTP::Code qw<:constants>;
+use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Middleware ":all";
@@ -19,7 +20,7 @@ my $server; $server=define_server {
 	
 	define_interface "0.0.0.0";		#adds a interface to to bind on 
 	define_port 8080;			#Add a port to bind on
-	set_enable_hosts 0;			#Turn on virtual hosts
+	set_enable_hosts 1;			#Turn on virtual hosts
 	define_sub_product "myserver/1";
 	
 
@@ -35,6 +36,8 @@ my $server; $server=define_server {
 		define_route	GET=>'/hello_logged'=>(log_simple)=>static_content "Logged";
 		define_route 	GET=>"/public$Path"=>static_file_from "data";
 		#define_route 	GET=>"/public$Path"=>static_file_from "data";
+
+		
 		define_site {
 			define_prefix "/more";
 			define_id "two deep";
@@ -145,7 +148,7 @@ my $server; $server=define_server {
 		my $rex=$_[1];
 		say $_[2];
 		if($_[4]){
-			rex_reply_simple undef, $rex, HTTP_OK,[], "urlencoded uploaded";
+			rex_reply_simple undef, $rex, HTTP_SEE_OTHER,[[HTTP_LOCATION,'/progress']], "urlencoded uploaded";
 		}
 		
 	};
@@ -200,9 +203,11 @@ my $server; $server=define_server {
 
 	#Login processing
 	define_route "GET"=>"/login\$"=>sub {
+		say @_;
 		push @_, "/login.htmlt";
 		&{static_file_from "data"};
 	};
+
 	define_route "POST"=>"/login\$"=>sub {
 
 		&{rex_save_web_form sub {
@@ -210,9 +215,15 @@ my $server; $server=define_server {
 			say Dumper pop;		#fields from form
 			say Dumper @_;
 
-			rex_reply_simple @_, HTTP_OK, [], "yarrrp";
+			#rex_reply_simple @_, HTTP_OK, [], "yarrrp";
+			usac_site_see_other @_, "/progress";
+			#rex_reply_simple @_, HTTP_SEE_OTHER,[[HTTP_LOCATION,'/progress']], "yarp";
 
 		}}
+	};
+
+	define_route "/progress"=>sub {
+		rex_reply_simple @_, HTTP_OK, [], "progress page";
 	};
 
 	#end login processing
