@@ -30,7 +30,7 @@ our %reverse; @reverse{@names}=@values;
 $reverse{undef}=0;			#catching
 
 
-our @EXPORT_OK= (parse_cookie, new_cookie, expire_cookies, keys %const_names);
+our @EXPORT_OK= (usac_parse_cookie, usac_new_cookie, usac_expire_cookies, keys %const_names);
 our %EXPORT_TAGS=(
 	constants=> [keys %const_names],
 	all=>		[@EXPORT_OK]
@@ -57,7 +57,7 @@ sub new {
 	$self;
 }
 
-sub new_cookie {
+sub usac_new_cookie {
 	my $package=__PACKAGE__;
 	my $self=bless [], $package;
 	$self->[COOKIE_HTTPONLY]=undef;	#allocate storage
@@ -75,7 +75,7 @@ sub new_cookie {
 
 }
 #expires a list of cookies by name
-sub expire_cookies {
+sub usac_expire_cookies {
 	my $package=__PACKAGE__;
 	map {
 		my $self=bless [], $package;
@@ -89,7 +89,7 @@ sub expire_cookies {
 }
 
 #Parse cookie string from client into key value pairs.
-sub parse_cookie {
+sub usac_parse_cookie {
 	my %values;
 	for(split ";", $_[0]=~tr/ //dr){
 		($key,$value)= split "=";

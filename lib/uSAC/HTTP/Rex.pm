@@ -39,7 +39,7 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ server_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ static_headers_ >
+	"version_=0" ,qw< session_ headers_ write_ query_ server_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ static_headers_ >
 );
 
 #Add a mechanism for sub classing
@@ -514,8 +514,14 @@ sub query {
 #Only parses if the internal field is undefined
 #otherwise uses pre parsed values
 sub cookies {
-	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE});
+	$_[0][cookies_]//($_[0][cookies_]=usac_parse_cookie $_[0][headers_]{COOKIE});
 }
+
+sub state {
+	$_[0][state_]=$_[1] if $_[1];
+	$_[0][state_];
+}
+
 
 *rex_headers=*headers;
 *rex_reply_simple=*reply_simple;

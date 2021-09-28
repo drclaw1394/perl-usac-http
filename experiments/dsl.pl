@@ -29,7 +29,9 @@ my $server; $server=usac_server {
 		usac_id 	"My Site";		#Descriptive name of site
 		usac_host 	"localhost:8080";	#Host we will match
 		usac_prefix 	"/sub";			#Prefix if applicable
-		usac_innerware log_simple;		#Middleware common to all routes
+		usac_innerware 
+				state_simple(on_new=>sub {{new=>1,time=>time}})
+				;		#Middleware common to all routes
 
 		#routes
 		usac_route 	GET=>'/hello$'=>static_content "Sub site";
@@ -144,6 +146,7 @@ my $server; $server=usac_server {
 			rex_reply_simple undef, $rex, HTTP_OK,[], "multipart uploaded";
 		}
 	};
+
 	usac_route POST=> "/urlencoded" => rex_stream_urlencoded_upload  sub {
 		my $rex=$_[1];
 		say $_[2];
@@ -170,7 +173,7 @@ my $server; $server=usac_server {
 		say "Rex: $rex";
 		if($_[3]){
 			say "File $_[2] was saved";
-			rex_reply_simple undef, $rex, HTTP_OK,[], "files uploaded to disk";
+			rex_reply_simple undef, $rex, HTTP_OK, [], "files uploaded to disk";
 		}
 	};
 

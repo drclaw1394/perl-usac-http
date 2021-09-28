@@ -9,13 +9,19 @@ use Data::Dumper;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Code qw<:constants>;
+use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Cookie;
 
 use IO::Compress::Gzip;
 use Compress::Raw::Zlib;
+
+use MIME::Base64;		
+use Digest::SHA1;
+
 use constant LF => "\015\012";
 
-our @EXPORT_OK=qw<log_simple authenticate_simple make_chunked_writer make_chunked_deflate_writer>;
+our @EXPORT_OK=qw<log_simple authenticate_simple state_simple make_chunked_writer make_chunked_deflate_writer>;
 our @EXPORT=();
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
@@ -68,11 +74,68 @@ sub authenticate_simple{
 }
 
 #configure basic session management
-sub session_simple {
+sub state_simple {
+	#given a hash ref to store the state
+	state $defualt_store={};
+	my %options=@_;
+	my $states=$options{store}//$defualt_store;
+	my $state_cb=$options{on_new}//sub {{new=>1}};
+
+	sub {
+		my $next=shift;
+		#output sup
+		sub {
+			my $rex=$_[1];
+			#Add Set cookie to the headers, if state is defined
+			if(my $state=$rex->state){
+				push $_[3]->@*, 
+				[HTTP_SET_COOKIE, 
+					new_cookie(USAC_STATE_ID=>$state->{key})
+					->serialize_set_cookie
+				];
+			}
+			&$next;
+
+		
+		};
+
+		#input sub
+		sub {
+			my $rex=$_[1];
+			my $state_key;
+			my $state;
+			$state_key=$rex->cookies->{USAC_STATE_ID};	
+			if($state_key){
+				$state=$states->{$state_key};
+				#existing state
+				say "EXISTING STATE";
+			}
+			else {
+				say "CREATING NEW STATE";
+				#create a new state
+				$state=&$state_cb;
+				#create the state_key
+				unless ($state->{key}){	
+					$state->{key}= unpack "H*", Digest::SHA1::sha1(time)
+				}
+				$states->{$state->{key}}=$state;
+			}
+
+			#set the state for rex
+			$rex->state($state);
+			say Dumper $state;
+			&$next;
+		}
+	}
+}
+
+sub state_token {
 	sub {
 		my $next=shift;
 		sub {
-
+			my $rex=$_[1];
+			my $state;
+			$rex->cookies->{USAC_STATE_TOKEN};	
 		}
 	}
 }
