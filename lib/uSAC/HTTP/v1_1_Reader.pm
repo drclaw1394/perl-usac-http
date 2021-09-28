@@ -219,9 +219,11 @@ sub make_reader{
 # Basically scan through the entire contents of the body and locate the border stirng 
 sub make_form_data_reader {
 	use integer;
-	my $session=shift;
+
+	my ($usac,$rex,$session,$cb)=@_;	
+	#my $session=shift;
 	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
-	my $cb=shift;#\$session->[uSAC::HTTP::Session::reader_cb_];
+	#my $cb=shift;#\$session->[uSAC::HTTP::Session::reader_cb_];
 	my $rex=$session->[uSAC::HTTP::Session::rex_];
 
 
@@ -261,7 +263,7 @@ sub make_form_data_reader {
 						my $offset=$index+$b_len;
 						if(substr($buf,$offset,2)eq LF){
 							#not last
-							$cb->(undef, $rex, substr($buf,$processed,$len),$form_headers) unless $first;
+							$cb->($usac, $rex, substr($buf,$processed,$len),$form_headers) unless $first;
 							$first=0;
 							#move past data and boundary
 							$processed+=$offset+2;
@@ -275,7 +277,7 @@ sub make_form_data_reader {
 						elsif(substr($buf,$offset,4) eq "--".LF){
 							#say "END BOUNDARD FOUND";
 							$first=1;	#reset first;
-							$cb->(undef, $rex, substr($buf,$processed,$len),$form_headers,1);
+							$cb->($usac, $rex, substr($buf,$processed,$len),$form_headers,1);
 							$processed+=$offset+4;
 							$buf=substr $buf, $processed;
 							$processed=0;
@@ -294,7 +296,7 @@ sub make_form_data_reader {
 						#say "NOT FOUND boundary and index: $index";
 						# Full boundary not found, send partial, upto boundary length
 						my $len=length($buf)-$b_len;		#don't send boundary
-						$cb->(undef, $rex, substr($buf, $processed, $len),$form_headers);#$form_headers);
+						$cb->($usac, $rex, substr($buf, $processed, $len),$form_headers);#$form_headers);
 						$processed+=$len;
 						$buf=substr $buf, $processed;
 						$processed=0;
@@ -372,13 +374,10 @@ sub make_form_urlencoded_reader {
 	#These values are shared for a session
 	#
 	my ($usac,$rex,$session,$cb)=@_;	
-	say "in make_form_urlencoded_reader ", Dumper @_;
 	#my $session=shift;
 	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];	#Alias buffer (not a reference)
 	#my $cb=shift;#$_[1];#=$session->[uSAC::HTTP::Session::reader_cb_]=$_[1];	#Alias reference to current cb
 	my $rex=$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
-	say $rex;
-	say $cb;
 	my $processed=0;					#stateful position in buffer
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
@@ -398,7 +397,6 @@ sub make_form_urlencoded_reader {
 
 		#when the remaining length is 0, pop this sub from the stack
 		if($processed==$len){
-			say "CAlling cb for urlencoded_reader", Dumper $usac;
 			$cb->($usac, $rex, substr($buf,0,$new,""),$header,1);		#send to cb and shift buffer down
 			$header={};
 			#$cb->(undef,undef);#$form_headers);
@@ -411,7 +409,6 @@ sub make_form_urlencoded_reader {
 		}
 		else {
 			#keep on stack until done
-			say "CAlling cb for urlencoded_reader", Dumper $usac;
 			$cb->($usac, $rex, substr($buf,0,$new,""),$header);		#send to cb and shift buffer down
 		}
 

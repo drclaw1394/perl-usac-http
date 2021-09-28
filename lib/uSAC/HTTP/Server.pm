@@ -37,7 +37,7 @@ use enum (
 );
 
 use Exporter qw<import>;
-our @EXPORT_OK=qw<define_server define_interface define_port define_mime_map define_mime_default set_enable_hosts define_sub_product>;
+our @EXPORT_OK=qw<usac_server usac_interface usac_port usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
 our @EXPORT=@EXPORT_OK;
 
 use uSAC::HTTP;
@@ -366,7 +366,7 @@ sub add_route {
 	$self->site->add_route(@_);
 }
 
-sub set_enable_hosts{
+sub usac_hosts  {
 	say "Enabling host support for: ", $_;
 	$_->[enable_hosts_]=$_[0]//0;
 }
@@ -446,28 +446,28 @@ sub list_routes {
 }
 
 #declarative setup
-sub define_listener {
+sub usac_listener {
 	#assumes server is $_;
 	#adds listener	
 }
 
-sub define_server :prototype(&) {
+sub usac_server :prototype(&) {
 	my $sub=shift;
 	my $server=uSAC::HTTP::Server->new();
 	$_=$server;
 	$sub->();
 	$server;
 }
-sub define_interface {
+sub usac_interface {
 	my $server=$_;
 	$server->[host_]=$_[0];
 }
-sub define_port {
+sub usac_port {
 	my $server=$_;
 	$server->[port_]=$_[0];
 }
 
-sub define_mime_default{
+sub usac_mime_default{
 	my $server=$_;
 	$server->[port_]=$_[0];
 	$DEFAULT_MIME=>$_[0]//"application/octet-stream";
@@ -475,11 +475,11 @@ sub define_mime_default{
 
 }
 
-sub define_mime_map {
+sub usac_mime_map {
 	\our %MIME=do "./mime.pl";
 
 }
-sub define_sub_product {
+sub usac_sub_product {
 		my $server=$_;
 		my $sub_product=$_[0];
 		$server->[static_headers_]=[

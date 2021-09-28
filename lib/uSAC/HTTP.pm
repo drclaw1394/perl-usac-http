@@ -8,7 +8,15 @@ no warnings "experimental";
 
 use Exporter "import";
 
-our @EXPORT_OK=qw(LF site_route define_route define_site define_prefix define_id define_host define_middleware usac_site_url usac_site_see_other $Path $Any_Method);
+my @redirects=qw<
+	usac_redirect_see_other 
+	usac_redirect_found
+	usac_redirect_temporary
+	usac_redirect_not_modified
+	>;
+	
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_innerware usac_site_url $Path $Any_Method), @redirects);
+
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
@@ -201,20 +209,40 @@ sub host {
 #rex
 #partial url
 sub usac_site_url {
-
-	say "Main:", Dumper $_[0];
-	$_[0][4][built_prefix_].$_[1];		
+	#match_entry->context->built_prefix
+	$_[0][4][built_prefix_].pop;		
 }
+
 
 #redirect to within site
 #match entry
 #rex
 #partial url
 #code
-sub usac_site_see_other{
+sub usac_redirect_see_other{
 	my $url=usac_site_url @_;
 	splice @_, 2;
-	rex_reply_simple @_, HTTP_SEE_OTHER,[[HTTP_LOCATION, $url]],"See other";
+	rex_reply_simple @_, HTTP_SEE_OTHER,[[HTTP_LOCATION, $url]],"";
+}
+
+sub usac_redirect_found {
+	my $url=usac_site_url @_;
+	splice @_, 2;
+	rex_reply_simple @_, HTTP_FOUND,[[HTTP_LOCATION, $url]],"";
+	
+}
+
+sub usac_redirect_temporary {
+	my $url=usac_site_url @_;
+	splice @_, 2;
+	rex_reply_simple @_, HTTP_TEMPORARY_REDIRECT,[[HTTP_LOCATION, $url]],"";
+	
+}
+sub usac_redirect_not_modified {
+	my $url=usac_site_url @_;
+	splice @_, 2;
+	rex_reply_simple @_, HTTP_NOT_MODIFIED,[[HTTP_LOCATION, $url]],"";
+	
 }
 
 
@@ -252,7 +280,7 @@ sub site_route {
 
 =over 
 
-=item C<define_site>
+=item C<usac_site>
 
 Creates a new site and sets the server to the C<$_> dynamic variable
 After the server is set. the C<$_> in localised and set to the new site
@@ -261,7 +289,7 @@ After the server is set. the C<$_> in localised and set to the new site
 
 =cut
 
-sub define_site :prototype(&) {
+sub usac_site :prototype(&) {
 	my $server=$_;
 	unless(ref($server)=~/Server/){
 		#Acutal a site
@@ -275,7 +303,7 @@ sub define_site :prototype(&) {
 	$sub->();
 }
 
-sub define_route {
+sub usac_route {
 	my $self=$_;	#The site to use
 	#first element is tested for short cut get use
 	given($_[0]){
@@ -296,12 +324,12 @@ sub define_route {
 		}
 	}
 }
-sub define_id {
+sub usac_id {
 	my $self=$_;
 	$self->[id_]=shift;
 }
 
-sub define_prefix {
+sub usac_prefix {
 	my $self=$_;
         given(my $prefix=shift){
                 unless(m|^/|){
@@ -314,13 +342,13 @@ sub define_prefix {
         }
 }
 
-sub define_host {
+sub usac_host {
 	my $self=$_;
 	$self->[host_]=shift;
 	#$self->[server_]->set_enable_hosts(1);
 }
 
-sub define_middleware{
+sub usac_innerware {
 	my $self=$_;
 	
 	if(ref($_[0])eq"ARRAY"){
@@ -331,7 +359,7 @@ sub define_middleware{
 	}
 }
 
-sub define_error_page {
+sub usac_error_page {
 		
 }
 

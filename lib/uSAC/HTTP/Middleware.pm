@@ -44,20 +44,36 @@ sub log_simple {
 
 
 sub authenticate_simple{
-	my $next=shift;
+	my %options=@_;
+	#cookie name to use 
+	#create a hash to store session ids
+	#
 	sub {
-		#this sub input is line, and rex
-		my $rex=$_[1];
-		my $cookies=parse_cookie $rex->headers->{cookie};
-		say "checking cookies";
-		#check that the current ip address of the client is the same as previously set?
-		unless($cookies->{test}){
-			say "invalid test variable... return forbidden";
-			rex_reply_simple @_, (HTTP_FORBIDDEN, undef, "Go away!");
-			return;
-		}
+		my $next=shift;
+		sub {
+			#this sub input is line, and rex
+			my $rex=$_[1];
+			my $cookies=$rex->cookies;
+			say "checking cookies";
+			#check that cookie value is found and valid in hash
+			unless($cookies->{test}){
+				say "invalid test variable... return forbidden";
+				rex_reply_simple @_, (HTTP_FORBIDDEN, undef, "Go away!");
+				return;
+			}
 
-		return &$next;		#alway call next. this is just loggin
+			return &$next;		#alway call next. this is just loggin
+		}
+	}
+}
+
+#configure basic session management
+sub session_simple {
+	sub {
+		my $next=shift;
+		sub {
+
+		}
 	}
 }
 

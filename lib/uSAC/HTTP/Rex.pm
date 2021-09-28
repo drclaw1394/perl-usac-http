@@ -74,9 +74,9 @@ sub reply_DEFLATE {
 sub stream_multipart_upload{
 		my $cb=shift;
 	sub {
-		my $line=shift;
-		my $rex=shift;
-		shift;		#remove place holder for mime
+		my $line=$_[0];#shift;
+		my $rex=$_[1];#shift;
+		#shift;		#remove place holder for mime
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#check if content type is correct first
 		#say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
@@ -87,7 +87,7 @@ sub stream_multipart_upload{
 		}
 		uSAC::HTTP::Session::push_reader
 		$session,
-		make_form_data_reader $session, $cb ;
+		make_form_data_reader @_, $session, $cb ;
 		$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 		#$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex) if $session->[uSAC::HTTP::Session::rbuf_];
 		return;
@@ -107,8 +107,6 @@ sub stream_upload {
 	sub {
 		#my $line=shift;
 		my $rex=$_[1];#shift;	#rex object
-		say $rex;
-		say "Callback ", $cb;
 
 		my $session=$rex->[session_];
 		say "CONTENT TYPE ON UPLOAD:", $rex->[headers_]{'CONTENT_TYPE'};
@@ -125,7 +123,6 @@ sub stream_upload {
 
 			default{
 
-				say "Setting up url reader: ", Dumper @_;
 				uSAC::HTTP::Session::push_reader
 				$session,
 				make_form_urlencoded_reader @_, $session, $cb ;
@@ -210,6 +207,7 @@ sub save_form_to_file {
         my $prefix=$options{prefix}//"uSAC";
 	#The actual sub called
 	stream_multipart_upload sub {
+		my $usac=$_[0];
 		my $rex=$_[1];
 		state $part_header=0;
 		state $kv;
@@ -223,6 +221,7 @@ sub save_form_to_file {
 			close $handle if $handle;
 			$name=$handle=undef;
 			$kv=&parse_form_params;
+			say "Parsed form";
 
 			#test for file
 			if($kv->{filename}){
@@ -241,7 +240,7 @@ sub save_form_to_file {
 		my $wc=syswrite $handle, $_[2] if $handle;
 		if($_[4]){
 			#that was the last part
-			$cb->(undef, $rex, $fields,1);
+			$cb->($usac, $rex, $fields,1);
 		}
 	}
 }
@@ -323,10 +322,8 @@ sub parse_form_params {
 	#parse the fields	
 	given($rex->[headers_]{CONTENT_TYPE}){
 		when(/multipart\/form-data/){
-			#say "form data";
 			#parse content disposition (name, filename etc)
 			my $kv={};
-			#say Dumper $_[3];
 			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
 				$kv->{$key}=$value;
