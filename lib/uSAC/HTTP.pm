@@ -116,15 +116,16 @@ sub add_route {
 		}
 	}
 	say "  matching: $matcher";	
-	my ($entry,$stack);
+	my $outer;
 	if(@inner){
 		my $middler=uSAC::HTTP::Middler->new();
 		for(@inner){
 			$middler->register($_);
 		}
-		($end,$stack)=$middler->link($end);
+		($end,$outer)=$middler->link($end);
 	}
-	$self->[server_]->add_end_point($matcher, $end, $self);
+	#$outer//=sub {@_};
+	$self->[server_]->add_end_point($matcher, $end, [$self,$outer]);
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
 	my $unsupported;
@@ -137,7 +138,7 @@ sub add_route {
 	}
 	#say "Unmatching: $unsupported";	
 	#$self->[server_]->add_end_point($unsupported,$sub, $self);
-	push $self->[unsupported_]->@*, [$unsupported, $sub,$self];
+	push $self->[unsupported_]->@*, [$unsupported, $sub,[$self,$outer]];
 
 }
 
@@ -147,11 +148,18 @@ sub _strip_prefix {
 	my $prefix=$self->[built_prefix_];
 	my $len=length $prefix;
 	sub {
-		my $next=shift;
-		sub {
-			$_[1]->[uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len);
-                        return &$next;
-		}
+		my $inner_next=shift;
+		my $outer_next=shift;
+		(
+			sub {
+				$_[1]->[uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len);
+				return &$inner_next;
+			},
+
+			sub {
+				&$outer_next;
+			}
+		)
 	}
 
 }

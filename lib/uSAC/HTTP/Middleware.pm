@@ -34,16 +34,26 @@ sub log_simple {
 
 	#No configuration used in this logger, so reuse the same sub for each call
 	state $sub=sub {
-		my $next=shift;	#This is the next mw in the chain
-		sub {
-			say STDERR "\n";
-			say STDERR time;
-			say STDERR " Host: 		$_[1][uSAC::HTTP::Rex::host_]";
-			say STDERR " Original URI: 	$_[1][uSAC::HTTP::Rex::uri_]";
-			say STDERR " Matcher URI:	$_[1][uSAC::HTTP::Rex::uri_stripped_]";
-			say STDERR " Hit counter:		", $_[0][3];
-			return &$next;		#alway call next. this is just loggin
-		}
+		my $inner_next=shift;	#This is the next mw in the chain
+		my $outer_next=shift;
+		(
+			sub {
+				say STDERR "\n";
+				say STDERR time;
+				say STDERR " Host: 		$_[1][uSAC::HTTP::Rex::host_]";
+				say STDERR " Original URI: 	$_[1][uSAC::HTTP::Rex::uri_]";
+				say STDERR " Matcher URI:	$_[1][uSAC::HTTP::Rex::uri_stripped_]";
+				say STDERR " Hit counter:		", $_[0][3];
+				return &$inner_next;		#alway call next. this is just loggin
+			},
+			sub {
+				say STDERR "\n";
+				say STDERR time;
+				say STDERR " Logging on the way out";
+				say STDERR " Renered";
+				return &$outer_next;
+			}
+		)
 	};
 	$sub;
 }
@@ -80,63 +90,53 @@ sub state_simple {
 	my %options=@_;
 	my $states=$options{store}//$defualt_store;
 	my $state_cb=$options{on_new}//sub {{new=>1}};
-
 	sub {
-		my $next=shift;
-		#output sup
-		sub {
-			my $rex=$_[1];
-			#Add Set cookie to the headers, if state is defined
-			if(my $state=$rex->state){
-				push $_[3]->@*, 
-				[HTTP_SET_COOKIE, 
-					new_cookie(USAC_STATE_ID=>$state->{key})
-					->serialize_set_cookie
-				];
-			}
-			&$next;
-
-		
-		};
-
-		#input sub
-		sub {
-			my $rex=$_[1];
-			my $state_key;
-			my $state;
-			$state_key=$rex->cookies->{USAC_STATE_ID};	
-			if($state_key){
-				$state=$states->{$state_key};
-				#existing state
-				say "EXISTING STATE";
-			}
-			else {
-				say "CREATING NEW STATE";
-				#create a new state
-				$state=&$state_cb;
-				#create the state_key
-				unless ($state->{key}){	
-					$state->{key}= unpack "H*", Digest::SHA1::sha1(time)
+		my $inner_next=shift;
+		my $outer_next=shift;
+		(
+			#input sub
+			sub {
+				state $i;
+				my $rex=$_[1];
+				my $state_key;
+				my $state;
+				$state_key=$rex->cookies->{USAC_STATE_ID};	
+				if($state_key){
+					$state=$states->{$state_key};
+					#existing state
+					#say "EXISTING STATE";
 				}
-				$states->{$state->{key}}=$state;
+				else {
+					#create a new state
+					$state=&$state_cb;
+					#create the state_key
+					unless ($state->{key}){	
+						$state->{key}= unpack "H*", Digest::SHA1::sha1(time+$i++)
+					}
+					$states->{$state->{key}}=$state;
+				}
+
+				#set the state for rex
+				$rex->state($state);
+				#say Dumper $state;
+				&$inner_next;
+			},
+
+			sub {
+				my $rex=$_[1];
+				#Add Set cookie to the headers, if state is defined
+				if(my $state=$rex->state){
+                                       push $_[3]->@*,
+				       #[DUMMY=>"HEADER"]
+                                        [HTTP_SET_COOKIE,
+                                                usac_new_cookie(USAC_STATE_ID=>$state->{key})
+                                                ->serialize_set_cookie
+                                        ];
+				}
+				#say "setting cookie";
+				&$outer_next;
 			}
-
-			#set the state for rex
-			$rex->state($state);
-			say Dumper $state;
-			&$next;
-		}
-	}
-}
-
-sub state_token {
-	sub {
-		my $next=shift;
-		sub {
-			my $rex=$_[1];
-			my $state;
-			$rex->cookies->{USAC_STATE_TOKEN};	
-		}
+		)
 	}
 }
 

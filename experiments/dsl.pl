@@ -30,6 +30,7 @@ my $server; $server=usac_server {
 		usac_host 	"localhost:8080";	#Host we will match
 		usac_prefix 	"/sub";			#Prefix if applicable
 		usac_innerware 
+		#log_simple,
 				state_simple(on_new=>sub {{new=>1,time=>time}})
 				;		#Middleware common to all routes
 
@@ -182,7 +183,7 @@ my $server; $server=usac_server {
 		my $rex=$_[1];
 		my $fields=$_[2];
 		say "save form to file cb ",Dumper $fields;
-			rex_reply_simple undef, $rex, HTTP_OK,[], "files uploaded to disk";
+		rex_reply_simple undef, $rex, HTTP_OK,[], "files uploaded to disk";
 	};
 
 	usac_route POST=> "/form_url"=> rex_save_form  sub {
@@ -190,7 +191,7 @@ my $server; $server=usac_server {
 		my $rex=$_[1];
 		my $fields=$_[2];
 		say "save form ",Dumper $fields;
-			rex_reply_simple undef, $rex, HTTP_OK,[], "url form uploaded";
+		rex_reply_simple undef, $rex, HTTP_OK,[], "url form uploaded";
 	};
 
 	usac_route "/cmd"=>sub {

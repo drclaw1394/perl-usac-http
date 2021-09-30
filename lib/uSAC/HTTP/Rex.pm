@@ -161,7 +161,7 @@ sub stream_form_upload {
 			&$multi when /multipart\/form-data/;
 			&$url when 'application/x-www-form-urlencoded';
 			default {
-				reply_simple undef,$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+				reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 			}
 		}
 	}
@@ -258,7 +258,7 @@ sub save_web_form {
 			&$multi when /multipart\/form-data/;
 			&$url when 'application/x-www-form-urlencoded';
 			default {
-				reply_simple undef,$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+				reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 			}
 		}
 	}
@@ -387,8 +387,16 @@ sub reply_simple{
 				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
 			)
 		)
-
 	];
+	#somehow call outerware before rendering?
+	#say Dumper $_[0][4];
+	
+	my $outer=$_[0][4][1];
+	if($outer){
+		&$outer;#{$_[0][4][1]};
+	}
+
+	
 
 	$reply="HTTP/1.1 $_[2]".LF;
 	for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
@@ -397,6 +405,7 @@ sub reply_simple{
 	$reply.=LF.$_[4];
 	$self->[write_]($reply);	#fire and forget
 }
+
 
 #rex, http_code, header, datacb 
 sub reply_chunked{
@@ -458,9 +467,9 @@ sub reply {
 sub static_content {
 	my $static=pop;	#Content is the last item
 	my $ext=$_[0]//"txt";
-	my $headers=
-	[[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)]];
 	sub {
+		my $headers=
+		[[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)]];
 		reply_simple @_, HTTP_OK, $headers, $static; return
 	}
 }

@@ -507,7 +507,7 @@ sub list_dir {
 	#say "Listing dir for $abs_path";
 	stat $abs_path;
 	unless(-d _ and  -r _){
-		rex_reply_simple undef, $rex, HTTP_NOT_FOUND, [],"";
+		rex_reply_simple $line, $rex, HTTP_NOT_FOUND, [],"";
 		return;
 	}
 
@@ -567,7 +567,7 @@ sub send_file_uri_norange_chunked {
 	my $entry=$open_cache->{$abs_path}//open_cache $abs_path;
 
 	unless($entry and stat $abs_path and -r _ and !-d _){
-		rex_reply_simple undef, $rex, HTTP_NOT_FOUND;
+		rex_reply_simple $line, $rex, HTTP_NOT_FOUND;
 		#remove from cache
 		delete $open_cache->{$abs_path};
 		return
@@ -677,14 +677,14 @@ sub send_file_uri_norange_chunked {
 sub send_file_uri_range {
 	use  integer;
 
-	my (undef,$rex,$uri,$sys_root)=@_;
+	my ($route,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	my $abs_path=$sys_root."/".$uri;
 	my $entry;
 	unless($entry=open_cache $abs_path){
-		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		rex_reply_simple $route, $rex, HTTP_NOT_FOUND,[],"";
 		return;
 	}
 	my $in_fh=$entry->[0];
@@ -693,7 +693,7 @@ sub send_file_uri_range {
 	#Do stat on fh instead of path. Path requires resolving and is slower
 	#fh is already resolved and open.
 	unless(-r _ and !-d _){
-		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		rex_reply_simple $route, $rex, HTTP_NOT_FOUND,[],"";
 		#remove from cache
 		delete $open_cache->{$uri};
 		return
