@@ -389,7 +389,6 @@ sub reply_simple{
 		)
 	];
 	#somehow call outerware before rendering?
-	say Dumper $_[0][4];
 	
 	my $outer=$_[0][4][1];
 	&$outer if $outer;
@@ -466,17 +465,6 @@ sub reply {
 	}
 }
 
-#returns a sub which always renders the same content.
-#http code is always
-sub static_content {
-	my $static=pop;	#Content is the last item
-	my $ext=$_[0]//"txt";
-	sub {
-		my $headers=
-		[[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)]];
-		reply_simple @_, HTTP_OK, $headers, $static; return
-	}
-}
 
 
 	 

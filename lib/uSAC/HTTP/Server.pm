@@ -86,7 +86,6 @@ our $DEFAULT_MIME=>"application/octet-stream";
 # Welcome message
 sub usac_welcome {
 	state $data;
-	say " WELCOME";
 	unless($data){
 		local $/=undef;
 		$data=<DATA>;

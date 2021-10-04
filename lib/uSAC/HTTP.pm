@@ -15,7 +15,7 @@ my @redirects=qw<
 	usac_redirect_not_modified
 	>;
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_innerware usac_site_url $Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_innerware usac_site_url usac_static_from usac_static_content usac_cached_file $Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -37,6 +37,8 @@ use uSAC::HTTP::Middler;
 use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
 use Data::Dumper;
+use File::Spec::Functions qw<rel2abs>;
+use File::Basename qw<dirname>;
 #Class attribute keys
 use enum ("server_=0",qw(prefix_ id_ mount_ cors_ middleware_ host_ parent_ unsupported_ built_prefix_));
 
@@ -75,10 +77,12 @@ sub new {
 #specified in the site initialization
 #
 sub add_route {
+	local $,=" ";
+	say " in add_route: ",@_;
 	my $self=shift;
+	my $end=pop @_;
 	my $method_matcher=shift;
 	my $path_matcher=shift;
-	my $end=pop @_;
 	my @inner=@_;
 	unshift @inner, $self->_strip_prefix if $self->[prefix_];	#make strip prefix first of middleware
 	push @inner, $self->[middleware_]->@* if $self->[middleware_];
@@ -330,6 +334,7 @@ sub usac_route {
 		}
 	}
 }
+
 sub usac_id {
 	my $self=$_;
 	$self->[id_]=shift;
@@ -368,5 +373,57 @@ sub usac_innerware {
 sub usac_error_page {
 		
 }
+#returns a sub which always renders the same content.
+#http code is always
+sub usac_static_content {
+	my $static=pop;	#Content is the last item
+	my $ext=$_[0]//"txt";
+	sub {
+		my $headers=
+		[[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)]];
+		rex_reply_simple @_, HTTP_OK, $headers, $static; return
+	}
+}
+
+#Arguments the same as usac_route, however, last item is a file relative path
+sub usac_cached_file {
+	my $self=$_;
+	my $path=pop;
+	#resolve the file relative path or 
+	$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
+	if( stat $path and -r _ and !-d _){
+		say "Adding hot path: $path";
+		my $entry;
+		open my $fh, "<", $path;
+		local $/;
+		$entry->[0]=<$fh>;
+		my $ext=substr $path, rindex($path, ".")+1;
+		$entry->[1]=[ HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
+		$entry->[2]=(stat _)[7];
+		$entry->[3]=(stat _)[9];
+		close $fh;
+
+		#Create a static content endpoint
+		usac_static_content($ext=>$entry->[0]);
+	}
+	else {
+		say "Could not add hot path: $path";
+	}
+}
+
+######################################################################
+# sub usac_favicon {                                                 #
+#         my $path=shift;                                            #
+#                                                                    #
+#         $path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|; #
+#         $path=rel2abs($path);                                      #
+#         say $path;                                                 #
+#         usac_route "/favicon.png" => usac_cached_file $path;       #
+#                                                                    #
+# }                                                                  #
+######################################################################
+
+*usac_static_from = *static_file_from;
+
 
 1;
