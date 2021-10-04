@@ -2,7 +2,7 @@ package uSAC::HTTP::Middleware;
 use strict;
 use warnings;
 use Exporter 'import';
-use feature qw<refaliasing say switch state current_sub>;
+use feature qw<refaliasing say switch state current_sub signatures>;
 no warnings "experimental";
 no feature "indirect";
 use Data::Dumper;
@@ -18,6 +18,8 @@ use Compress::Raw::Zlib;
 
 use MIME::Base64;		
 use Digest::SHA1;
+
+use Crypt::JWT qw<decode_jwt encode_jwt>;
 
 use constant LF => "\015\012";
 
@@ -74,7 +76,7 @@ sub authenticate_simple{
 			#check that cookie value is found and valid in hash
 			unless($cookies->{test}){
 				say "invalid test variable... return forbidden";
-				rex_reply_simple @_, (HTTP_FORBIDDEN, undef, "Go away!");
+				rex_reply_simple @_, (HTTP_FORBIDDEN,[] , "Go away!");
 				return;
 			}
 
@@ -134,6 +136,25 @@ sub state_simple {
                                         ];
 				}
 				#say "setting cookie";
+				&$outer_next;
+			}
+		)
+	}
+}
+
+sub state_jwt {
+	my %options=@_;
+	my $state_cb=$options{on_new}//sub {{new=>1}};
+	sub {
+		my $inner_next=shift;
+		my $outer_next=shift;
+		(
+			#input sub
+			sub ($matcher, $rex){
+				&$inner_next;
+			},
+
+			sub {
 				&$outer_next;
 			}
 		)
@@ -300,12 +321,6 @@ sub make_chunked_writer {
 	->register(\&uSAC::HTTP::Middleware::chunked)
 	->link($session->[uSAC::HTTP::Session::write_]);	#this could be a normal socket writer, orssl type
 	return $entrypoint;
-}
-
-given(\%uSAC::HTTP::Session::make_writer_reg){
-	#$_->{http1_1_static_writer}=\&make_static_file_writer;
-	$_->{http1_1_chunked_writer}=\&make_chunked_writer;
-	$_->{http1_1_chunked_deflate_writer}=\&make_chunked_deflate_writer;
 }
 
 1;

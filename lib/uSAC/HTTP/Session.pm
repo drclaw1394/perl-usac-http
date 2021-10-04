@@ -154,68 +154,11 @@ sub _make_reader {
 		}
 	};
 }
-#############################################
-# sub make_dropper {                        #
-#         my $self=shift;                   #
-#         my $server=$self->[server_];      #
-#         my $sessions=$self->[sessions_];  #
-#         my $zombies=$self->[zombies_];    #
-#         \my $fh=\$self->[fh_];            #
-#         \my $rw=\$self->[rw_];            #
-#         \my $ww=\$self->[ww_];            #
-#         \my $id=\$self->[id_];            #
-#         \my $closeme=\$self->[closeme_];  #
-#         sub {                             #
-#                 say "IN DROPPER";         #
-#                 return unless $closeme;   #
-#                 delete $sessions->{$id};  #
-#                 close $fh;                #
-#                 $rw=undef;                #
-#                 $ww=undef;                #
-#                 $fh=undef;                #
-#                 $id=undef;                #
-#                 $closeme=undef;           #
-#                                           #
-#                 unshift @$zombies, $self; #
-#         }                                 #
-# }                                         #
-#                                           #
-#############################################
-##############################################################################################
-# sub drop {                                                                                 #
-#         #my ($self,$err) = @_;                                                             #
-#         return unless $_[0]->[closeme_];                                                   #
-#         my $r = delete $_[0]->[server_][sessions_]{$_[0]->[id_]}; #remove from server      #
-#         #$_[0]->[server_][uSAC::HTTP::Server::active_connections_]--;                      #
-#                                                                                            #
-#         close $_[0]->[fh_];                                                                #
-#                                                                                            #
-#         $_[0]->[fh_]=undef;                                                                #
-#         $_[0]->@[(rw_,ww_,fh_,id_,closeme_)]=(undef,undef,undef,undef,undef);#(undef) x 5; #
-#                                                                                            #
-#         #$_[0]->[write_stack_]=undef;   #[];#[0]=undef;                                    #
-#         #$_[0]->[read_stack_]=undef;    #[];                                               #
-#         $_[0]->[write_queue_]=[];                                                          #
-#         unshift @{$_[0]->[zombies_]}, $_[0];                                               #
-#         say "DROP COMPLETE...";                                                            #
-# }                                                                                          #
-##############################################################################################
 
 #pluggable interface
 #=====================
 #
 
-#######################################################################################################
-# sub push_reader {                                                                                   #
-#         my ($self,$name,$cb)=@_;                                                                    #
-#                                                                                                     #
-#         $self->[reader_cb_]=$cb;        #set the reader callback                                    #
-#         $self->[read_]=($make_reader_reg{$name}($self));#,@args));                                  #
-#         #$self->[read_]=($self->[reader_cache_]{$name}//=$make_reader_reg{$name}($self));#,@args)); #
-#         push $self->[read_stack_]->@*, $name;                                                       #
-#         #say "reader cb: ", $cb;                                                                    #
-# }                                                                                                   #
-#######################################################################################################
 sub push_reader {
 	push $_[0][read_stack_]->@*, $_[0][read_]=$_[1];
 	#$_[0][reader_cb_]=$_[2];
@@ -224,30 +167,7 @@ sub push_reader {
 sub push_writer {
 	$_[0][write_]=$_[1];
 }
-########################################################################################################
-# sub push_writer {                                                                                    #
-#         my ($self,$name,$cb)=@_;                                                                     #
-#         #$self->[writer_cb_]=$cb;       #cb to call when write needs more data/is complete           #
-#         $self->[write_]=($make_writer_reg{$name}($self));#,@args));                                  #
-#         #$self->[write_]=($self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self));#,@args)); #
-#         #push $self->[write_stack_]->@*, $name;                                                      #
-#         #$self->[reader_cb_]=$cb;                                                                    #
-# }                                                                                                    #
-########################################################################################################
 
-#Reuse the previous reader in the stack
-#Does not attempt to remake it...
-#####################################################################################
-# sub pop_reader {                                                                  #
-#         my ($self)=@_;                                                            #
-#         pop @{$self->[read_stack_]};                    #remove the previous      #
-#         my $name=$self->[read_stack_]->@[$self->[read_stack_]->@*-1];;          # #
-#         $self->[read_]=($make_reader_reg{$name}($self));#,@args));                #
-#         #$self->[read_]=$self->[reader_cache_]{$name};                            #
-#         #//=$make_reader_reg{$name}($self,@args));                                #
-#         #$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];          #
-# }                                                                                 #
-#####################################################################################
 sub pop_reader {
 	pop $_[0][read_stack_]->@*;
 	$_[0][read_]=$_[0][read_stack_][-1];
@@ -261,14 +181,6 @@ sub pop_writer {
 	#$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
 }
 
-###########################################################################
-# sub select_writer{                                                      #
-#         my ($self,$name)=@_;                                            #
-#         #       say "In select writer";                                 #
-#         #say %make_writer_reg;                                          #
-#         $self->[writer_cache_]{$name}//=$make_writer_reg{$name}($self); #
-# }                                                                       #
-###########################################################################
 sub set_writer {
 	$_[0]->[write_]=$_[1];
 }

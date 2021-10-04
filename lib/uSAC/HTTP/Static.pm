@@ -9,7 +9,8 @@ use Errno qw<:POSIX EACCES ENOENT>;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK O_RDONLY);
 use Devel::Peek;
 use File::Spec;
-use File::Basename qw<basename>;
+use File::Basename qw<basename dirname>;
+use Cwd;
 #use IO::AIO;
 use AnyEvent;
 #use AnyEvent::AIO;
@@ -24,7 +25,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<static_file_from static_content send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
+our @EXPORT_OK =qw<usac_file_from static_content send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -875,22 +876,33 @@ sub send_file_uri_range {
 }
 
 
-
-#attempt to load file from memory cache, fall back to loaded from disk and updating cache
-sub send_file_cached {
-
-}
-
-#open a file and map it to memory and use writev?
-sub send_file_mmap {
-
-}
-
 #setup to use send file
 #if $_[2] is defined, it is used as the uri,  the first capture $1 is used
-sub static_file_from {
+#creates a path relative to the caller unless its absolute
+#Similar to http paths
+#
+sub usac_file_from {
 	#my %args=@_;
-	my $root=$_[0];
+	my $root=shift;#$_[0];
+	my %options=@_;
+	my $cache;
+	if($options{cache_size}){
+		$cache={}
+	}
+
+
+	#if the path begins with a "/"  its an absolut path
+	#if it starts with "." it is processed as a relative path from the current wd
+	#otherwise its a relative path relative to the callers file
+		
+	if($root =~ m|^[^/]|){
+		#implicit path
+		#make path relative to callers file
+		my @caller=caller;
+		my $caller_path=$caller[1];
+		$root=dirname($caller_path)."/".$root;
+	}
+
 	sub {
 		my $rex=$_[1];
 		#my $p=$1;
@@ -904,6 +916,7 @@ sub static_file_from {
 		}
 		say "STATIC FILE FROM: ", $p;
 		say @_;
+
 		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 			send_file_uri_range @_, $p, $root;
 			return;

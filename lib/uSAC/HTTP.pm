@@ -124,7 +124,7 @@ sub add_route {
 		}
 		($end,$outer)=$middler->link($end);
 	}
-	#$outer//=sub {@_};
+	$outer//=sub {@_};
 	$self->[server_]->add_end_point($matcher, $end, [$self,$outer]);
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
@@ -156,9 +156,7 @@ sub _strip_prefix {
 				return &$inner_next;
 			},
 
-			sub {
-				&$outer_next;
-			}
+			$outer_next
 		)
 	}
 
@@ -262,8 +260,8 @@ our $ANY_VERS=qr/HTTP.*$/;
 our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS)/;
 
 our $Method=		qr{^([^ ]+)};
-our $Path=		qr{(/[^? ]*)};	#Remainder of path components  in request line
-our $Comp=		qr{/([^/ ]+)};	#Path component
+our $Path=		qr{([^? ]*)};		#Remainder of path components  in request line
+our $Comp=		qr{/([^/ ]+)};		#Path component
 our $Query=		qr{(?:[?]([^# ]+)?)?};
 our $Fragment=		qr{(?:[#]([^ ]+)?)?};
 

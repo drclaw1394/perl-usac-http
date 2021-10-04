@@ -389,12 +389,10 @@ sub reply_simple{
 		)
 	];
 	#somehow call outerware before rendering?
-	#say Dumper $_[0][4];
+	say Dumper $_[0][4];
 	
 	my $outer=$_[0][4][1];
-	if($outer){
-		&$outer;#{$_[0][4][1]};
-	}
+	&$outer if $outer;
 
 	
 
@@ -402,6 +400,7 @@ sub reply_simple{
 	for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
 		$reply.=$h->[0].": ".$h->[1].LF;
 	}
+
 	$reply.=LF.$_[4];
 	$self->[write_]($reply);	#fire and forget
 }
@@ -410,7 +409,7 @@ sub reply_simple{
 #rex, http_code, header, datacb 
 sub reply_chunked{
 	use integer;
-	my (undef, $self, $code, $headers, $cb)=@_;
+	my ($matcher, $self, $code, $headers, $cb)=@_;
 	#create a writer for the session
 	my $session=$self->[session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
@@ -428,14 +427,19 @@ sub reply_chunked{
 		[HTTP_TRANSFER_ENCODING, "chunked"]
 
 	];
+
+	#Execute the filters based on headers
+	&{$_[0][4][1]};
+
 	#render_v1_1_headers($reply, $headers, $self->[static_headers_], $_[3]);
 	for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
 		$reply.=$h->[0].": ".$h->[1].LF;
 	}
 	$reply.=LF;
 
-
-	my $chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
+	require uSAC::HTTP::Middleware;
+	
+	my $chunker=uSAC::HTTP::Session::push_writer $session, uSAC::HTTP::Middleware::make_chunked_writer($session);
 	#write the header, and then do callback to let app write data
 	#use chunker as argument which will be first argument of callback
 	$self->[write_]($reply, $cb, $chunker);
@@ -452,7 +456,7 @@ sub reply {
 			my $chunks=pop;
 			#push @$chunks, "";
 
-			reply_chunked @_ ,sub {
+			reply_chunked @_, sub {
 				$_[0]->($chunks->[$i++], $i != $chunks->@* ? __SUB__:undef);
 			};
 		}
@@ -475,32 +479,6 @@ sub static_content {
 }
 
 
-sub render_v1_1_headers_flat {
-	use integer;
-	\my $buffer=\shift;#$_[0];
-	my $i;
-	for(@_){
-		$i=0;
-		\my @headers=$_//[];
-		while($i<@headers){
-			$buffer.=$headers[$i++].": ".$headers[$i++].LF;
-		}
-	}
-}
-sub render_v1_1_headers_multi {
-	\my $buffer=\shift;#$_[0];
-	for(@_){
-		for my $h (@$_){
-			$buffer.=$h->[0].": ".$h->[1].LF;
-		}
-	}
-}
-sub render_v1_1_headers {
-	\my $buffer=\shift;#$_[0];
-	for my $h (@_){
-		$buffer.=$h->[0].": ".$h->[1].LF;
-	}
-}
 	 
 ##
 #OO Methods
