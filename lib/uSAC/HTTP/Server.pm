@@ -8,6 +8,9 @@ our @Subproducts;#=();		#Global to be provided by applcation
 
 use version;our $VERSION = version->declare('v0.1');
 use feature "refaliasing";
+use feature "isa";
+
+use parent 'uSAC::HTTP';
 
 use uSAC::HTTP;			#site, sub site, and host
 use Hustle::Table;		#dispatching of endpoints
@@ -25,22 +28,27 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN SO_LINGER);
 
 use Time::HiRes qw/gettimeofday/;
-
+use File::Basename qw<dirname>;
 use Carp 'croak';
 
 #use constant MAX_READ_SIZE => 128 * 1024;
 
 #Class attribute keys
 #max_header_size_
+#
+
+use constant KEY_OFFSET=> uSAC::HTTP::KEY_OFFSET+uSAC::HTTP::KEY_COUNT;
+
 use enum (
-	"host_=0",qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ total_requests_>
+	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ total_requests_>
 );
 
+use constant KEY_COUNT=> total_requests_ - host_;
+
 use Exporter qw<import>;
-our @EXPORT_OK=qw<usac_server usac_interface usac_port usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
+our @EXPORT_OK=qw<usac_server usac_include usac_interface usac_port usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
 our @EXPORT=@EXPORT_OK;
 
-use uSAC::HTTP;
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Session;
@@ -67,7 +75,6 @@ use uSAC::HTTP::v1_1_Reader;
 ################################################################
 
 #Add a mechanism for sub classing
-use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>total_requests_-host_+1;
 
 
@@ -108,7 +115,7 @@ sub usac_default_handler {
 
 sub new {
 	my $pkg = shift;
-	my $self = bless [], $pkg;
+	my $self = $pkg->SUPER::new();#bless [], $pkg;
 	my %options=@_;
 	$self->[host_]=$options{host}//"0.0.0.0";
 	$self->[port_]=$options{port}//8080;
@@ -365,9 +372,25 @@ sub add_route {
 	$self->site->add_route(@_);
 }
 
+#Logical or of existing enable_hosts_ flag
+#Sub servers can enable it if needed.
+#Servers not needing host should't have has a host match specified
+#TODO: adding multiple ports and interfaces essentially is adding multiple hosts
+#need to allow for this
 sub usac_hosts  {
 	say "Enabling host support for: ", $_;
-	$_->[enable_hosts_]=$_[0]//0;
+	$_->[enable_hosts_]=$_->[enable_hosts_] or $_[0]//0;
+}
+
+sub find_root {
+	my $self=$_[0];
+	#locates the top level server/group/site in the tree
+	my $parent=$self;
+
+	while($parent->parent_site){
+		$parent=$parent->parent_site;
+	}
+	$parent;
 }
 
 sub rebuild_dispatch {
@@ -424,21 +447,8 @@ sub run {
 	$cv->recv();
 }
 
-sub server {
-	return $_[0];
-}
 
-sub parent_site {
-	return;
-}
 
-sub built_prefix {
-	"";
-}
-
-sub host {
-	"";
-}
 
 sub list_routes {
 	#dump all routes	
@@ -452,10 +462,26 @@ sub usac_listener {
 
 sub usac_server :prototype(&) {
 	my $sub=shift;
-	my $server=uSAC::HTTP::Server->new();
-	$_=$server;
+	my $server=$_;
+	say "\$_ is : ", ref $_;
+	unless(defined and ($_ isa 'uSAC::HTTP'  )) {
+		#only create if one doesn't exist
+		say "Creating new server";
+		$server=uSAC::HTTP::Server->new();
+	}
+	local $_=$server;
 	$sub->();
 	$server;
+}
+
+#include another config file
+sub usac_include {
+	my $path=shift;
+	$path= "./".dirname((caller)[1])."/".$path if m|^[^/]|;
+	say "INCLUDING PATH $path";
+	unless (do $path){
+		say $!;
+	}
 }
 sub usac_interface {
 	my $server=$_;
@@ -473,6 +499,7 @@ sub usac_mime_default{
 
 
 }
+
 
 sub usac_mime_map {
 	\our %MIME=do "./mime.pl";

@@ -50,10 +50,11 @@ use constant LF=>"\015\012";
 
 
 sub new {
+	say @_;
 	my $self=[];
 	my $package=shift//__PACKAGE__;
 	my %options=@_;
-	$self->[server_]=	$options{server};
+	$self->[server_]=	$options{server}//$self;
 	$self->[id_]=		$options{id};
 	$self->[prefix_]=	$options{prefix}//"";
 	$self->[host_]=		$options{host}//"";
@@ -64,7 +65,7 @@ sub new {
 	#die "No server provided" unless $self->[server_];
 	#die "No id provided" unless $self->[id_];
 
-	bless $self, __PACKAGE__;
+	bless $self, $package;
 }
 
 #Adds routes to a servers dispatch table
@@ -85,7 +86,8 @@ sub add_route {
 	my $path_matcher=shift;
 	my @inner=@_;
 	unshift @inner, $self->_strip_prefix if $self->[prefix_];	#make strip prefix first of middleware
-	push @inner, $self->[middleware_]->@* if $self->[middleware_];
+	#push @inner, $self->[middleware_]->@* if $self->[middleware_];
+	push @inner, $self->construct_middleware;
 
 	#die "No Matcher provided " unless $matcher//0;
 	die "No end point provided" unless $end and ref $end eq "CODE";
@@ -143,7 +145,6 @@ sub add_route {
 	#say "Unmatching: $unsupported";	
 	#$self->[server_]->add_end_point($unsupported,$sub, $self);
 	push $self->[unsupported_]->@*, [$unsupported, $sub,[$self,$outer]];
-
 }
 
 #middleware to strip prefix
@@ -190,6 +191,13 @@ sub _strip_prefix {
 sub server {
 	return $_[0][server_];
 }
+sub add_end_point {
+
+}
+
+sub enable_hosts {
+}
+
 sub parent_site {
 	$_[0][parent_];
 }
@@ -199,15 +207,34 @@ sub unsupported {
 
 #returns (and builds if required), the prefixs for this sub site
 sub built_prefix {
-	my $parent;
-	if($_[0][parent_]){
-		$parent=$_[0][parent_]->built_prefix;
+	my $parent_prefix;
+	if($_[0]->parent_site){
+		$parent_prefix=$_[0]->parent_site->built_prefix;
 	}
 	else {
-		$parent="";
+		$parent_prefix="";
 
 	}
-	$_[0]->[built_prefix_]//($_[0]->[built_prefix_]=$parent.$_[0][prefix_]);
+	$_[0][built_prefix_]//($_[0]->set_built_prefix($parent_prefix.$_[0]->prefix));#$_[0][prefix_]);
+}
+
+sub set_built_prefix {
+	$_[0][built_prefix_]=$_[1];
+}
+
+#find the root and unshift middlewares along the way
+sub construct_middleware {
+	my $parent=$_[0];
+	my @middleware;
+	while($parent){
+		unshift @middleware, @{$parent->[middleware_]//[]};
+		$parent=$parent->parent_site;
+	}
+	@middleware;
+}
+
+sub prefix {
+	$_[0]->[prefix_];
 }
 
 sub host {
@@ -361,7 +388,7 @@ sub usac_host {
 
 sub usac_innerware {
 	my $self=$_;
-	
+	say "ADDING MIDDLE WARE";	
 	if(ref($_[0])eq"ARRAY"){
 		$self->[middleware_]=shift;
 	}
