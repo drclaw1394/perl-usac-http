@@ -78,7 +78,7 @@ sub make_reader{
 	my ($method,$uri,$version,$len,$pos, $req);
 	my $line;
 
-	my $ixx = 0;
+	#my $ixx = 0;
 	my %h;		#Define the header storage here, once per connection
 	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 	$r->[uSAC::HTTP::Session::read_]=sub {
@@ -98,13 +98,11 @@ sub make_reader{
 			#	$version => comment
 			#
 			if ($state == 0) {
-				my $pos3=index $buf, LF, $ixx;
-                                $line=substr($buf,$ixx,$pos3);
-				($method,$uri,$version)=split " ",$line;
-				#$version=substr($line,-1,1)eq "1"?"HTTP/1.1":"HTTP/1.0";
+				my $pos3=index $buf, LF;
+				($method,$uri,$version)=split " ", substr($buf,0,$pos3);
 				$uri=uri_decode $uri;
 				
-				#$line=uri_decode substr($buf,$ixx,$pos3-length($version)-1);
+				#$line=uri_decode substr($buf,0,$pos3-length($version)-1);
 				$line="$method $uri";
 				if($pos3>=0){
 					#end of line found
@@ -126,18 +124,12 @@ sub make_reader{
 				}
 			}
 
-			# warn "rw.io.$id.rd $len ($state) -> $pos";
 			elsif ($state == 1) {
 				# headers
 				pos($buf) = $pos;
-				while () {	#TODO: check time out and bytes size to stop tight loop
-					#TODO:
-					#Need to exit loop on error... some type of guard?
-					# Explicit support for multiple cookies. Possibly use seperate cookies list?
-					# Treat all headers as 'list' format for this round of parsing. 
+				while () {
+					#TODO: 
 					# Understand what the continuation is supposed to achieve. Its depricated
-					#  
-					#warn "parse line >'".substr( $buf,pos($buf),index( $buf, "\012", pos($buf) )-pos($buf) )."'";
 
 					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 						\my $e=\$h{uc $1=~tr/-/_/r};
@@ -150,10 +142,10 @@ sub make_reader{
 						last;
 					}
 					elsif($buf =~ /\G [^\012]* \Z/sxogca) {
-						if (length($buf) - $ixx > MAX_READ_SIZE) {
+						if (length($buf) - 0 > MAX_READ_SIZE) {
 							#$self->[uSAC::HTTP::Server::max_header_size_]) {
-							$self->badconn($fh,\substr($buf, pos($buf), $ixx), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
-							return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, $ixx, 32)."...>");
+							$self->badconn($fh,\substr($buf, pos($buf), 0), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
+							return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");
 						}
 						#warn "Need more";
 						#say "need more";
@@ -175,19 +167,16 @@ sub make_reader{
 				#
 				my $host=$h{HOST}//"";
 				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$host, $method, $uri, $uri, $static_headers], 'uSAC::HTTP::Rex' ;
-				#$req = bless [ $version, $r, $method, $uri, \%h, $write, undef,undef,undef, \$self->[uSAC::HTTP::Server::active_requests_], $self, scalar gettimeofday() ,undef,undef,undef,undef], 'uSAC::HTTP::Rex' ;
-
 
 				$pos = pos($buf);
 
-				#$self->[uSAC::HTTP::Server::total_requests_]++;
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{CONNECTION} =~/^Keep-Alive/ );
 
 				#shift buffer
 				$buf=substr $buf,$pos;
 				$pos=0;
-				$ixx=0;
+				#$ixx=0;
 				$state=0;
 				#$self->[uSAC::HTTP::Server::cb_]($line,$req);
 				$line=$host." ".$line if $enable_hosts;
