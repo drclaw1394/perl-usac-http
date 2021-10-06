@@ -50,14 +50,13 @@ use constant LF=>"\015\012";
 
 
 sub new {
-	say @_;
 	my $self=[];
 	my $package=shift//__PACKAGE__;
 	my %options=@_;
 	$self->[server_]=	$options{server}//$self;
 	$self->[id_]=		$options{id};
 	$self->[prefix_]=	$options{prefix}//"";
-	$self->[host_]=		$options{host}//"";
+	$self->[host_]=		$options{host}?[$options{host}]:[];
 	$self->[cors_]=		$options{cors}//"";
 	$self->[middleware_]=	$options{middleware}//[];
 	$self->[unsupported_]=[];
@@ -79,7 +78,6 @@ sub new {
 #
 sub add_route {
 	local $,=" ";
-	say " in add_route: ",@_;
 	my $self=shift;
 	my $end=pop @_;
 	my $method_matcher=shift;
@@ -111,15 +109,22 @@ sub add_route {
 	#my $unsupported;
 	my $bp=$self->built_prefix;
 	if($self->[server_]->enable_hosts){
+		#my @hosts=$self->[host_]->@*;
+		my @hosts=$self->build_hosts;
+		push @hosts, qr{[^ ]+} unless @hosts;
+		my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
 		my $bp=$self->built_prefix;
-		$matcher=qr{^$self->[host_] $method_matcher $bp$path_matcher};
+		$matcher=qr{^$host_match $method_matcher $bp$path_matcher};
+		#$matcher=qr{^$self->[host_] $method_matcher $bp$path_matcher};
 	}
 	else {
 		$matcher=qr{^$method_matcher $bp$path_matcher};
 
-		if($self->[host_]){
-			warn "Server not configured for virtual hosts. Ignoring host specificatoin"
-		}
+                #######################################################################################
+                # if($self->[host_]->@*){                                                             #
+                #         warn "Server not configured for virtual hosts. Ignoring host specificatoin" #
+                # }                                                                                   #
+                #######################################################################################
 	}
 	say "  matching: $matcher";	
 	my $outer;
@@ -136,7 +141,11 @@ sub add_route {
 	my $mre=qr{$tmp};
 	my $unsupported;
 	if($self->[server_]->enable_hosts){
-		$unsupported=qr{^$self->[host_] $mre $bp$path_matcher};
+		my @hosts=$self->build_hosts;
+		#my @hosts=$self->[host_]->@*;
+		push @hosts, qr{[^ ]+} unless @hosts;
+		my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
+		$unsupported=qr{^$host_match $mre $bp$path_matcher};
 		
 	}
 	else {
@@ -195,8 +204,6 @@ sub add_end_point {
 
 }
 
-sub enable_hosts {
-}
 
 sub parent_site {
 	$_[0][parent_];
@@ -220,6 +227,16 @@ sub built_prefix {
 
 sub set_built_prefix {
 	$_[0][built_prefix_]=$_[1];
+}
+
+sub build_hosts {
+	my $parent=$_[0];
+	my @hosts;
+	while($parent->parent_site){
+		push @hosts, $parent->[host_]->@*;	
+		$parent=$parent->parent_site;
+	}
+	@hosts;
 }
 
 #find the root and unshift middlewares along the way
@@ -327,17 +344,24 @@ After the server is set. the C<$_> in localised and set to the new site
 =cut
 
 sub usac_site :prototype(&) {
-	my $server=$_;
-	unless(ref($server)=~/Server/){
-		#Acutal a site
-		$server=$server->server;
-	}
+	my $server=$_->find_root;
 	my $sub=shift;
 	my $self= uSAC::HTTP->new(server=>$server);
 	$self->[parent_]=$_;
-	$self->[host_]=$self->[parent_]->host; #inherit parent host
+	
+	#$self->[host_]=$self->[parent_]->host; #inherit parent host
 	local  $_=$self;
 	$sub->();
+}
+sub find_root {
+	my $self=$_[0];
+	#locates the top level server/group/site in the tree
+	my $parent=$self;
+
+	while($parent->parent_site){
+		$parent=$parent->parent_site;
+	}
+	$parent;
 }
 
 sub usac_route {
@@ -382,8 +406,7 @@ sub usac_prefix {
 
 sub usac_host {
 	my $self=$_;
-	$self->[host_]=shift;
-	#$self->[server_]->set_enable_hosts(1);
+	push $self->[host_]->@*, @_;
 }
 
 sub usac_innerware {
@@ -419,7 +442,6 @@ sub usac_cached_file {
 	#resolve the file relative path or 
 	$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
 	if( stat $path and -r _ and !-d _){
-		say "Adding hot path: $path";
 		my $entry;
 		open my $fh, "<", $path;
 		local $/;

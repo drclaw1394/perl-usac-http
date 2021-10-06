@@ -24,10 +24,9 @@ use AnyEvent::Socket;
 use AnyEvent::Handle;
 use Scalar::Util 'refaddr', 'weaken';
 use Errno qw(EAGAIN EINTR);
-use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
+use AnyEvent::Util qw(WSAEWOULDBLOCK AF_INET6 fh_nonblocking);
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN SO_LINGER);
 
-use Time::HiRes qw/gettimeofday/;
 use File::Basename qw<dirname>;
 use Carp 'croak';
 
@@ -46,7 +45,7 @@ use enum (
 use constant KEY_COUNT=> total_requests_ - host_;
 
 use Exporter qw<import>;
-our @EXPORT_OK=qw<usac_server usac_include usac_interface usac_port usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
+our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
 our @EXPORT=@EXPORT_OK;
 
 use uSAC::HTTP::Code ":constants";
@@ -379,19 +378,11 @@ sub add_route {
 #need to allow for this
 sub usac_hosts  {
 	say "Enabling host support for: ", $_;
-	$_->[enable_hosts_]=$_->[enable_hosts_] or $_[0]//0;
+	say @_;
+	$_->[enable_hosts_]=$_->[enable_hosts_]//$_[0]//0;
+	say "Hosts enabled? ", $_->[enable_hosts_];
 }
 
-sub find_root {
-	my $self=$_[0];
-	#locates the top level server/group/site in the tree
-	my $parent=$self;
-
-	while($parent->parent_site){
-		$parent=$parent->parent_site;
-	}
-	$parent;
-}
 
 sub rebuild_dispatch {
 	my $self=shift;
@@ -455,15 +446,9 @@ sub list_routes {
 }
 
 #declarative setup
-sub usac_listener {
-	#assumes server is $_;
-	#adds listener	
-}
-
 sub usac_server :prototype(&) {
 	my $sub=shift;
 	my $server=$_;
-	say "\$_ is : ", ref $_;
 	unless(defined and ($_ isa 'uSAC::HTTP'  )) {
 		#only create if one doesn't exist
 		say "Creating new server";
@@ -483,13 +468,19 @@ sub usac_include {
 		say $!;
 	}
 }
-sub usac_interface {
-	my $server=$_;
-	$server->[host_]=$_[0];
-}
-sub usac_port {
-	my $server=$_;
-	$server->[port_]=$_[0];
+###################################
+# sub usac_interface {            #
+#         my $server=$_;          #
+#         $server->[host_]=$_[0]; #
+# }                               #
+# sub usac_port {                 #
+#         my $server=$_;          #
+#         $server->[port_]=$_[0]; #
+# }                               #
+###################################
+sub usac_listen {
+	#specify a interface and port number	
+	push $_->[listen_]->@*, @_;
 }
 
 sub usac_mime_default{

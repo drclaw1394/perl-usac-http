@@ -194,7 +194,7 @@ sub open_cache {
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
 	use  integer;
-	my (undef,$rex,$uri,$sys_root)=@_;
+	my ($matcher,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
@@ -203,7 +203,7 @@ sub send_file_uri_norange {
 	
 	#unless($entry=open_cache $abs_path){
 	unless($entry){
-		rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";
+		rex_reply_simple $matcher, $rex, HTTP_NOT_FOUND,[],"";
 		return;
 	}
 	my $in_fh=$entry->[0];
@@ -701,7 +701,7 @@ sub send_file_uri_range {
 #
 sub static_file_from {
 	#my %args=@_;
-	say "static file from ",@_;
+	#say "static file from ",@_;
 	my $root=shift;#$_[0];
 	my %options=@_;
 	my $cache;
