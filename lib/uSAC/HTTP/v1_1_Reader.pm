@@ -192,9 +192,8 @@ sub make_reader{
 				#$self->[uSAC::HTTP::Server::cb_]($line,$req);
 				$line=$host." ".$line if $enable_hosts;
 				$cb->($line,$req);
-				weaken ($req->[1]);
-				#weaken( $req->[8] );
-				weaken( $req->[5] );
+				#weaken ($req->[1]);
+				#weaken( $req->[5] );
 				return;
 
 

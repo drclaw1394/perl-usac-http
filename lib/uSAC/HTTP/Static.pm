@@ -19,7 +19,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<static_file_from send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
+our @EXPORT_OK =qw<usac_static_from send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -358,7 +358,7 @@ sub list_dir {
 	#say "Results ", @results;
 	my $ren=$renderer//_html_dir_list;
 
-	rex_reply_chunked undef, $rex, HTTP_OK,[] , sub {
+	rex_reply_chunked $line, $rex, HTTP_OK,[] , sub {
 		return unless my $writer=$_[0];			#no writer so bye
 
 		##### Start app logic
@@ -699,7 +699,8 @@ sub send_file_uri_range {
 #creates a path relative to the caller unless its absolute
 #Similar to http paths
 #
-sub static_file_from {
+#sub static_file_from {
+sub usac_static_from {
 	#my %args=@_;
 	#say "static file from ",@_;
 	my $root=shift;#$_[0];
@@ -717,12 +718,11 @@ sub static_file_from {
 	if($root =~ m|^[^/]|){
 		#implicit path
 		#make path relative to callers file
-		my @caller=caller;
-		my $caller_path=$caller[1];
-		$root=dirname($caller_path)."/".$root;
+		$root=dirname((caller)[1])."/".$root;
 	}
 
 	sub {
+		say "captures: $1";
 		my $rex=$_[1];
 		#my $p=$1;
 		my $p;

@@ -15,7 +15,7 @@ my @redirects=qw<
 	usac_redirect_not_modified
 	>;
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_innerware usac_site_url usac_static_from usac_static_content usac_cached_file $Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_innerware usac_site_url usac_static_content usac_cached_file $Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -308,7 +308,7 @@ our $ANY_VERS=qr/HTTP.*$/;
 our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS)/;
 
 our $Method=		qr{^([^ ]+)};
-our $Path=		qr{([^? ]*)};		#Remainder of path components  in request line
+our $Path=		qr{(/[^? ]*)};		#Remainder of path components  in request line
 our $Comp=		qr{/([^/ ]+)};		#Path component
 our $Query=		qr{(?:[?]([^# ]+)?)?};
 our $Fragment=		qr{(?:[#]([^ ]+)?)?};
@@ -472,7 +472,7 @@ sub usac_cached_file {
 # }                                                                  #
 ######################################################################
 
-*usac_static_from = *static_file_from;
+#*usac_static_from = *static_file_from;
 
 
 1;
