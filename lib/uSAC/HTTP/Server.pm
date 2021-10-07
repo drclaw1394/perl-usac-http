@@ -407,7 +407,7 @@ sub rebuild_dispatch {
 		}
 	}
 
-	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>$cache);
+	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>undef);#$cache);
 }
 
 sub run {

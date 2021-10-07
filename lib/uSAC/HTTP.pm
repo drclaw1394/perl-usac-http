@@ -428,14 +428,12 @@ sub usac_error_page {
 sub usac_static_content {
 	my $static=pop;	#Content is the last item
 	my $ext=$_[0]//"txt";
+	my $type=[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
 	sub {
-		my $headers=
-		[[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)]];
-		rex_reply_simple @_, HTTP_OK, $headers, $static; return
+		rex_reply_simple @_, HTTP_OK, [$type], $static; return
 	}
 }
 
-#Arguments the same as usac_route, however, last item is a file relative path
 sub usac_cached_file {
 	my $self=$_;
 	my $path=pop;

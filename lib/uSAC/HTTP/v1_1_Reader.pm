@@ -102,25 +102,17 @@ sub make_reader{
 				($method,$uri,$version)=split " ", substr($buf,0,$pos3);
 				$uri=uri_decode $uri;
 				
-				#$line=uri_decode substr($buf,0,$pos3-length($version)-1);
-				$line="$method $uri";
 				if($pos3>=0){
 					#end of line found
 						$state   = 1;
-						#$lastkey = undef;
-						#Reset header information for each request	
 						%h=();
-						#%h = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
 						++$seq;
 
-						#$self->[uSAC::HTTP::Server::active_requests_]++;
 						$pos=$pos3+2;
 						redo;
 				}
 				else {
-					#need more. wait for event
-					#Don't update $pos
-					# could also be an error... need time out
+					#not found error
 				}
 			}
 
@@ -133,7 +125,7 @@ sub make_reader{
 
 					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 						\my $e=\$h{uc $1=~tr/-/_/r};
-						$e = defined $e ? $e.','.$2: $2;
+						$e = $e ? $e.','.$2: $2;
 						#say $e;
 						redo;
 					}
@@ -165,7 +157,7 @@ sub make_reader{
 				}
 				#Done with headers. 
 				#
-				my $host=$h{HOST}//"";
+				my $host=$h{HOST};#//"";
 				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$host, $method, $uri, $uri, $static_headers], 'uSAC::HTTP::Rex' ;
 
 				$pos = pos($buf);
@@ -174,17 +166,16 @@ sub make_reader{
 				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{CONNECTION} =~/^Keep-Alive/ );
 
 				#shift buffer
-				$buf=substr $buf,$pos;
+				$buf=substr $buf, $pos;
 				$pos=0;
-				#$ixx=0;
 				$state=0;
-				#$self->[uSAC::HTTP::Server::cb_]($line,$req);
-				$line=$host." ".$line if $enable_hosts;
-				$cb->($line,$req);
+				$cb->(
+					$enable_hosts?"$host $method $uri":"$method $uri",
+					$req
+				);
 				#weaken ($req->[1]);
 				#weaken( $req->[5] );
 				return;
-
 
 			} # state 1
 			else {
