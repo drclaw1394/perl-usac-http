@@ -15,7 +15,7 @@ my @redirects=qw<
 	usac_redirect_not_modified
 	>;
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_innerware usac_site_url usac_static_content usac_cached_file $Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_innerware usac_site_url usac_static_content usac_cached_file $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -308,9 +308,15 @@ our $ANY_VERS=qr/HTTP.*$/;
 our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS)/;
 
 our $Method=		qr{^([^ ]+)};
-our $Path=		qr{(/[^? ]*)};		#Remainder of path components  in request line
-our $Comp=		qr{/([^/ ]+)};		#Path component
-our $Query=		qr{(?:[?]([^# ]+)?)?};
+our $Path=		qr{(?<=[/])([^?]*)};		#Remainder of path components  in request line
+our $File_Path=		qr{(?<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
+#our $File_Path=		qr{((?:[/]|\w)+)(?<![/])(?=$|[?])};
+#our $File_Path=		qr{(/[^? ]+\w)$};
+our $Dir_Path=		qr{(?<=[/])([^?]*+)(?<=[/])};
+#our $Dir_Path=		qr{((?:/[^? ]+)*/)$};
+
+our $Comp=		qr{([^?/]+)};		#Path component
+our $Query=		qr{(?:([^#]+))?};
 our $Fragment=		qr{(?:[#]([^ ]+)?)?};
 
 sub begins_with {
@@ -374,12 +380,27 @@ sub usac_route {
 			unshift @_, "(?:".join("|", @$a).")";
 			$self->add_route(@_);
 		}
+		when(ref eq "Regexp"){
+			unshift @_, "GET";
+			$self->add_route(@_);
+		}
 		when(m|^/|){
 			#starting with a slash, short cut for GET and head
 			unshift @_, "GET";
 			$self->add_route(@_);
 		}
+		when(!m|^[/]| and !m|^$Any_Method|){
+			say "FIXING PATH MATCHER";
+			#not starting with a forward slash but with a method
+			shift @_;
+			unshift @_, "/".$_;
+			unshift @_, "GET";
+			$self->add_route(@_);
+			
+		}
 		default{
+			say "DEFAULT MATCHING SETUP";
+			say @_;
 			#normal	
 			$self->add_route(@_);
 		}

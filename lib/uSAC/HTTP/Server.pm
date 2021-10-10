@@ -118,7 +118,7 @@ sub new {
 	my %options=@_;
 	$self->[host_]=$options{host}//"0.0.0.0";
 	$self->[port_]=$options{port}//8080;
-	$self->[enable_hosts_]=$options{enable_hosts};
+	$self->[enable_hosts_]=1;#$options{enable_hosts};
 	$self->[table_]=Hustle::Table->new(usac_default_handler);
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];

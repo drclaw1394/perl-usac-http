@@ -156,9 +156,15 @@ sub make_reader{
 					}
 				}
 				#Done with headers. 
-				#
+
+				#($uri,my $query)=split('\?', $uri);
+				my $query_string="";
+				if((my $i=index($uri, "?"))>=0){
+					$query_string=substr $uri, $i+1;
+				}
+				
 				my $host=$h{HOST};#//"";
-				$req = bless [ $version, $r, \%h, $write, undef, $self, 1 ,undef,undef,undef,$host, $method, $uri, $uri, $static_headers], 'uSAC::HTTP::Rex' ;
+				$req = bless [ $version, $r, \%h, $write, undef, $query_string, $self, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, $static_headers], 'uSAC::HTTP::Rex' ;
 
 				$pos = pos($buf);
 
@@ -169,8 +175,10 @@ sub make_reader{
 				$buf=substr $buf, $pos;
 				$pos=0;
 				$state=0;
+				#say "$h{HOST} $method $uri";
 				$cb->(
-					$enable_hosts?"$host $method $uri":"$method $uri",
+					#$enable_hosts?"$host $method $uri":"$method $uri",
+					"$h{HOST} $method $uri",
 					$req
 				);
 				#weaken ($req->[1]);

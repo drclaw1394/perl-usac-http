@@ -19,7 +19,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<usac_static_from send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 list_dir>;
+our @EXPORT_OK =qw<usac_static_from send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_from usac_file_from list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -322,7 +322,7 @@ sub list_dir {
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
-	my $abs_path=$sys_root.$uri;
+	my $abs_path=$sys_root."/".$uri;
 	#say "Listing dir for $abs_path";
 	stat $abs_path;
 	unless(-d _ and  -r _){
@@ -722,7 +722,6 @@ sub usac_static_from {
 	}
 
 	sub {
-		say "captures: $1";
 		my $rex=$_[1];
 		#my $p=$1;
 		my $p;
@@ -747,6 +746,87 @@ sub usac_static_from {
 			send_file_uri_norange @_, $p, $root;
 			return;
 		}
+	}
+}
+sub usac_file_from {
+	#my %args=@_;
+	#say "static file from ",@_;
+	my $root=shift;#$_[0];
+	my %options=@_;
+	my $cache;
+	if($options{cache_size}){
+		$cache={}
+	}
+
+
+	#if the path begins with a "/"  its an absolut path
+	#if it starts with "." it is processed as a relative path from the current wd
+	#otherwise its a relative path relative to the callers file
+		
+	if($root =~ m|^[^/]|){
+		#implicit path
+		#make path relative to callers file
+		$root=dirname((caller)[1])."/".$root;
+	}
+
+	sub {
+		my $rex=$_[1];
+		#my $p=$1;
+		my $p;
+		if($_[2]){
+			$p=$_[2];
+			pop;
+		}	
+		else {
+			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+		}
+
+		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+			send_file_uri_range @_, $p, $root;
+			return;
+		}
+		else{
+			#Send normal
+			send_file_uri_norange @_, $p, $root;
+			return;
+		}
+	}
+}
+
+sub usac_dir_from {
+	#my %args=@_;
+	#say "static file from ",@_;
+	my $root=shift;#$_[0];
+	my $renderer=shift;
+	my %options=@_;
+	my $cache;
+	if($options{cache_size}){
+		$cache={}
+	}
+
+
+	#if the path begins with a "/"  its an absolut path
+	#if it starts with "." it is processed as a relative path from the current wd
+	#otherwise its a relative path relative to the callers file
+		
+	if($root =~ m|^[^/]|){
+		#implicit path
+		#make path relative to callers file
+		$root=dirname((caller)[1])."/".$root;
+	}
+
+	sub {
+		my $rex=$_[1];
+		#my $p=$1;
+		my $p;
+		if($_[2]){
+			$p=$_[2];
+			pop;
+		}	
+		else {
+			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+		}
+		list_dir @_, $p, $root, $renderer;
 	}
 }
 

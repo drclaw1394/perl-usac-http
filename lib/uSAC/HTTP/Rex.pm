@@ -24,7 +24,7 @@ use Exporter 'import';
 use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_handle_upload rex_stream_multipart_upload rex_stream_form_upload rex_stream_urlencoded_upload rex_upload_to_file rex_save_to_file rex_save_form_to_file rex_save_form rex_save_web_form rex_parse_form_params rex_parse_query_params>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_handle_upload rex_stream_multipart_upload rex_stream_form_upload rex_stream_urlencoded_upload rex_upload_to_file rex_save_to_file rex_save_form_to_file rex_save_form rex_save_web_form rex_parse_form_params rex_query_params>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -39,7 +39,7 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ server_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ static_headers_ >
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ server_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ static_headers_ >
 );
 
 #Add a mechanism for sub classing
@@ -351,12 +351,10 @@ sub parse_query_params {
 	my $rex=shift;
 	#NOTE: This should already be decoded so no double decode
 	my $kv={};
-	if(my $i=index($rex->[uri_],"?")){
-		for(map tr/ //dr,split "&", substr($rex->[uri_],$i+1)){
-			my ($key,$value)=split "=";
-			$kv->{$key}=$value;
+	for(map tr/ //dr, split "&", $rex->[query_string_]){
+		my ($key,$value)=split "=";
+		$kv->{$key}=$value;
 
-		}
 	}
 	return $kv;
 }
@@ -481,7 +479,7 @@ sub method {
 }
 
 #Returns parsed query parameters. If they don't exist, they are parse first
-sub query {
+sub query_params {
 	$_[0][query_]//($_[0][query_]=parse_query_params @_);
 }
 
@@ -510,7 +508,7 @@ sub state {
 *rex_stream_form_upload=*stream_form_upload;		#Automatially handles multipart and urlencoded form upload streams
 
 *rex_parse_form_params=*parse_form_params;
-*rex_parse_query_params=*parse_query_params;
+*rex_query_params=*query_params;
 
 #Called when upload is complete
 *rex_save_to_file=*save_to_file;			#save general file
