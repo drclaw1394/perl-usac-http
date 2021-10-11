@@ -24,7 +24,7 @@ use Exporter 'import';
 use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked static_content rex_form_upload rex_urlencoded_upload rex_handle_upload rex_stream_multipart_upload rex_stream_form_upload rex_stream_urlencoded_upload rex_upload_to_file rex_save_to_file rex_save_form_to_file rex_save_form rex_save_web_form rex_parse_form_params rex_query_params>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked rex_form_upload rex_urlencoded_upload rex_handle_upload rex_stream_multipart_upload rex_stream_form_upload rex_stream_urlencoded_upload rex_upload_to_file rex_save_to_file rex_save_form_to_file rex_save_form rex_save_web_form rex_parse_form_params rex_query_params>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -347,7 +347,7 @@ sub parse_form_params {
 }
 
 #Parse the query
-sub parse_query_params {
+sub parse_query_params_old {
 	my $rex=shift;
 	#NOTE: This should already be decoded so no double decode
 	my $kv={};
@@ -358,6 +358,7 @@ sub parse_query_params {
 	}
 	return $kv;
 }
+
 
 #binary data.
 # might have contetn-encoding apply however ie base64, gzip
@@ -371,9 +372,9 @@ sub parse_query_params {
 
 sub reply_simple{
 	use integer;
-	my ($line, $self)=@_;
+	#my ($line, $self)=@_;
 	#create a writer for the session
-	my $session=$self->[session_];
+	my $session=$_[1]->[session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 	#my $content_length=length($_[4])+0;
 	my $headers=[
@@ -394,12 +395,12 @@ sub reply_simple{
 	
 
 	$reply="HTTP/1.1 $_[2]".LF;
-	for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
+	for my $h ($_[1]->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
 		$reply.=$h->[0].": ".$h->[1].LF;
 	}
 
 	$reply.=LF.$_[4];
-	$self->[write_]($reply);	#fire and forget
+	$_[1]->[write_]($reply);	#fire and forget
 }
 
 
@@ -480,7 +481,24 @@ sub method {
 
 #Returns parsed query parameters. If they don't exist, they are parse first
 sub query_params {
-	$_[0][query_]//($_[0][query_]=parse_query_params @_);
+	unless($_[1][query_]){
+		#NOTE: This should already be decoded so no double decode
+		#$_[1][query_]={};
+		given($_[1][query_string_]){
+			tr/ //d;
+
+                        ##############################################
+                        # for my $pair (split "&"){                  #
+                        #         my ($key,$value)=split "=", $pair; #
+                        #         $_[1][query_]{$key}=$value;        #
+                        #                                            #
+                        # }                                          #
+                        ##############################################
+			$_[1][query_]->%*=map ((split /=/a)[0,1], split /&/a);
+		}
+	}
+
+	$_[1][query_];
 }
 
 #returns parsed cookies from headers

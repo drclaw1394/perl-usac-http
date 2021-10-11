@@ -163,26 +163,23 @@ sub make_reader{
 					$query_string=substr $uri, $i+1;
 				}
 				
-				my $host=$h{HOST};#//"";
+				#my $host=$h{HOST};#//"";
 				$req = bless [ $version, $r, \%h, $write, undef, $query_string, $self, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, $static_headers], 'uSAC::HTTP::Rex' ;
 
-				$pos = pos($buf);
+				#$pos = pos($buf);
 
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{CONNECTION} =~/^Keep-Alive/ );
 
 				#shift buffer
-				$buf=substr $buf, $pos;
+				$buf=substr $buf, pos $buf;# $pos;
 				$pos=0;
 				$state=0;
-				#say "$h{HOST} $method $uri";
 				$cb->(
 					#$enable_hosts?"$host $method $uri":"$method $uri",
 					"$h{HOST} $method $uri",
 					$req
 				);
-				#weaken ($req->[1]);
-				#weaken( $req->[5] );
 				return;
 
 			} # state 1

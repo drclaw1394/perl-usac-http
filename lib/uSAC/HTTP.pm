@@ -15,7 +15,7 @@ my @redirects=qw<
 	usac_redirect_not_modified
 	>;
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_innerware usac_site_url usac_static_content usac_cached_file $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_site_url usac_static_content usac_cached_file $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -308,16 +308,17 @@ our $ANY_VERS=qr/HTTP.*$/;
 our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS)/;
 
 our $Method=		qr{^([^ ]+)};
+
+#NOTE Path matching tests for a preceeding /
 our $Path=		qr{(?<=[/])([^?]*)};		#Remainder of path components  in request line
 our $File_Path=		qr{(?<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
-#our $File_Path=		qr{((?:[/]|\w)+)(?<![/])(?=$|[?])};
-#our $File_Path=		qr{(/[^? ]+\w)$};
 our $Dir_Path=		qr{(?<=[/])([^?]*+)(?<=[/])};
-#our $Dir_Path=		qr{((?:/[^? ]+)*/)$};
 
+#NOTE Comp matching only matches between slashes
 our $Comp=		qr{([^?/]+)};		#Path component
-our $Query=		qr{(?:([^#]+))?};
-our $Fragment=		qr{(?:[#]([^ ]+)?)?};
+
+#our $Query=		qr{(?:([^#]+))?};
+#our $Fragment=		qr{(?:[#]([^ ]+)?)?};
 
 sub begins_with {
 	my $test=$_[0];
@@ -430,7 +431,7 @@ sub usac_host {
 	push $self->[host_]->@*, @_;
 }
 
-sub usac_innerware {
+sub usac_middleware {
 	my $self=$_;
 	say "ADDING MIDDLE WARE";	
 	if(ref($_[0])eq"ARRAY"){

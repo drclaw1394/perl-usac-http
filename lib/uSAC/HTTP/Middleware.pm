@@ -23,7 +23,7 @@ use Crypt::JWT qw<decode_jwt encode_jwt>;
 
 use constant LF => "\015\012";
 
-our @EXPORT_OK=qw<log_simple authenticate_simple state_simple make_chunked_writer make_chunked_deflate_writer>;
+our @EXPORT_OK=qw<dummy_mw log_simple authenticate_simple state_simple make_chunked_writer make_chunked_deflate_writer>;
 our @EXPORT=();
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
@@ -31,6 +31,25 @@ our %EXPORT_TAGS=(
 use uSAC::HTTP::Middler;
 #INCOMMING REX PROCESSING
 #
+sub dummy_mw{
+
+	#No configuration used in this logger, so reuse the same sub for each call
+	state $sub=sub {
+		my $inner_next=shift;	#This is the next mw in the chain
+		my $outer_next=shift;
+		(
+			sub {
+				return &$inner_next;	
+			},
+
+			sub {
+				return &$outer_next;
+			}
+		)
+	};
+	$sub;
+}
+
 #log to STDERR
 sub log_simple {
 
@@ -158,6 +177,27 @@ sub state_jwt {
 				&$outer_next;
 			}
 		)
+	}
+}
+
+sub http2_upgrade {
+	my %options=@_;
+	sub {
+		my $inner_next=shift;
+		my $outer_next=shift;
+		(
+				sub {
+					#check for h2 and h2c header.
+					#If h2c is present, send switching protocols
+					#change the session reader to http2
+					#change writer to http2
+					#then let the middleware continue (ie call next)
+
+				},
+				sub {
+					#outgoing really does need to 	anything
+				}
+		);
 	}
 }
 
