@@ -376,8 +376,7 @@ sub reply_simple{
 	#create a writer for the session
 	my $session=$_[1]->[session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
-	#my $content_length=length($_[4])+0;
-	my $headers=[
+	my @headers=(
 		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
 		[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
 		($session->[uSAC::HTTP::Session::closeme_]
@@ -386,7 +385,7 @@ sub reply_simple{
 				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
 			)
 		)
-	];
+	);
 	#somehow call outerware before rendering?
 	
 	my $outer=$_[0][4][1];
@@ -395,12 +394,17 @@ sub reply_simple{
 	
 
 	$reply="HTTP/1.1 $_[2]".LF;
-	for my $h ($_[1]->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
-		$reply.=$h->[0].": ".$h->[1].LF;
-	}
+        ############################################################################
+        # for my $h ($_[1]->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){ #
+        #         $reply.=$h->[0].": ".$h->[1].LF;                                 #
+        # }                                                                        #
+        ############################################################################
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[1]->[static_headers_]->@*; 
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[3]->@* if $_[3];
 
 	$reply.=LF.$_[4];
-	$_[1]->[write_]($reply);	#fire and forget
+	$_[1][write_]($reply);	#fire and forget
 }
 
 
@@ -485,7 +489,7 @@ sub query_params {
 		#NOTE: This should already be decoded so no double decode
 		#$_[1][query_]={};
 		given($_[1][query_string_]){
-			tr/ //d;
+			#tr/ //d;
 
                         ##############################################
                         # for my $pair (split "&"){                  #

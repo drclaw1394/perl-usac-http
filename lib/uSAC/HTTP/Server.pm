@@ -42,7 +42,7 @@ use enum (
 	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ total_requests_>
 );
 
-use constant KEY_COUNT=> total_requests_ - host_;
+use constant KEY_COUNT=> total_requests_ - host_+1;
 
 use Exporter qw<import>;
 our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
@@ -72,9 +72,6 @@ use uSAC::HTTP::v1_1_Reader;
 #         #$_->{websocket}=\&make_websocket_server_writer;     #
 # }                                                            #
 ################################################################
-
-#Add a mechanism for sub classing
-use constant KEY_COUNT=>total_requests_-host_+1;
 
 
 #use constant LF => "\015\012";

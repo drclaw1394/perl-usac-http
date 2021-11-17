@@ -315,7 +315,7 @@ our $File_Path=		qr{(?<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
 our $Dir_Path=		qr{(?<=[/])([^?]*+)(?<=[/])};
 
 #NOTE Comp matching only matches between slashes
-our $Comp=		qr{([^?/]+)};		#Path component
+our $Comp=		qr{([^/?]+)};		#Path component
 
 #our $Query=		qr{(?:([^#]+))?};
 #our $Fragment=		qr{(?:[#]([^ ]+)?)?};
