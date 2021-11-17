@@ -32,7 +32,7 @@ site_route $server => GET=>"/ws"=>sub {
 		$ws=$_[0];
 		$ws->on_message(sub {
 			say "GOT message: $_[0]" if $_[0];
-			$ws->write_text("return data");
+			$ws->write_text_message("return data");
 		});
 		$ws->on_error(sub {
 			say "GOT error$_[0]";

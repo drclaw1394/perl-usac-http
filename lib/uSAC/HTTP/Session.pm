@@ -127,7 +127,6 @@ sub _make_reader {
 	$self->[rw_] = AE::io $fh, 0, sub {
 		$self->[time_]=$Time;	#Update the last access time
 		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
-		#say "BUFFER FROM STREAM:\n";
 		#say $buf;
 		if($len>0){
 			#say "Calling reader: ", $reader;

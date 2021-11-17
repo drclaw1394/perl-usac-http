@@ -30,15 +30,10 @@ my $LF=$uSAC::HTTP::Rex::LF;
 
 use constant LF=>"\015\012";
 
-our $JSON = JSON::XS->new->utf8->convert_blessed;
+use constant DEBUG => 0;
 
-sub time64 () {
-	int( Time::HiRes::time() * 1e6 );
-}
 
-sub DEBUG () { 0 }
-
-use enum ( "writer_=0" ,qw<on_message_ on_close_ on_error_ session_>);
+use enum ( "writer_=0" ,qw<maxframe_ mask_ ping_interval_ ping_id_ pinger_ state_ on_message_ on_close_ on_error_ session_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -58,46 +53,16 @@ use constant {
 	CLOSED       => 4,
 };
 
-our %OP = (
-	CONTINUATION() => 'CONT',
-	TEXT()         => 'TEXT',
-	BINARY()       => 'BINR',
-	CLOSE()        => 'CLOS',
-	PING()         => 'PING',
-	PONG()         => 'PONG',
-);
 
-
-sub onmessage {
-	$_[0]{onmessage} = $_[1];
-}
-
-sub onerror {
-	$_[0]{onerror} = $_[1];
-}
-
-sub onclose {
-	$_[0]{onclose} = $_[1];
-}
-
-sub on_message {
-	$_[0]{on_message_}=$_[1];
-}
-sub on_close {
-	$_[0]{on_close_}=$_[1];
-}
-sub on_error {
-	$_[0]{on_error_}=$_[1];
-}
+use constant {
+		FIN_FLAG =>0b10000000,
+		RSV1_FLAG=>0b01000000,
+		RSV2_FLAG=>0b00100000,
+		RSV3_FLAG=>0b00010000,
+	};
 
 
 
-#must be utf8 encoded prior to calling this
-sub send_utf8{
-	my $self = shift;
-	my $data = shift;
-	$self->send_frame(1, 0, 0, 0, TEXT, $data);
-}
 
 
 #take http1.1 connection and make it websocket
@@ -146,12 +111,6 @@ sub upgrade_to_websocket{
 
 			#write reply	
 			say $reply;
-                        #####################################
-                        # uSAC::HTTP::Session::push_writer  #
-                        #         $session,                 #
-                        #         "http1_1_default_writer", #
-                        #         undef;                    #
-                        #####################################
 			local $/=", ";
 			say $rex->[uSAC::HTTP::Rex::headers_]->%*;
 			given($session->[uSAC::HTTP::Session::write_]){
@@ -193,7 +152,7 @@ sub make_websocket_server_reader {
 	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
 	\my $fh=$session->[uSAC::HTTP::Session::fh_];
 	my $rex=$session->[uSAC::HTTP::Session::rex_];
-	my $writer=$rex->{writer};
+	my $writer=$rex->[uSAC::HTTP::Rex::write_];
 
 	my ($fin, $rsv1, $rsv2, $rsv3,$op, $mask, $len);
 	my $head;
@@ -201,7 +160,7 @@ sub make_websocket_server_reader {
 	my $payload="";
 	my $hlen;
 	my $mode;
-	\my $on_fragment=\$self->{on_message_};#$session->[uSAC::HTTP::Session::reader_cb_];
+	\my $on_fragment=\$self->[on_message_];#$session->[uSAC::HTTP::Session::reader_cb_];
 	say "ON FRAGMENT: ", $on_fragment;
 	sub {
 		say "IN WS READER";
@@ -210,7 +169,7 @@ sub make_websocket_server_reader {
 		while( length $buf> 2){
 			#return if length $buf < 2;	#do
 			my $head = substr $buf, 0, 2;
-			$fin  = (vec($head, 0, 8) & 0b10000000) == 0b10000000 ? 1 : 0;
+			$fin  = (vec($head, 0, 8) & FIN_FLAG) == FIN_FLAG ? 1 : 0;
 			$rsv1 = (vec($head, 0, 8) & 0b01000000) == 0b01000000 ? 1 : 0;
 			#warn "RSV1: $rsv1\n" if DEBUG;
 			$rsv2 = (vec($head, 0, 8) & 0b00100000) == 0b00100000 ? 1 : 0;
@@ -220,7 +179,6 @@ sub make_websocket_server_reader {
 
 			# Opcode
 			$op = vec($head, 0, 8) & 0b00001111;
-			warn "OPCODE: $op ($OP{$op})\n" if DEBUG;
 
 			# Length
 			my $len = vec($head, 1, 8) & 0b01111111;
@@ -265,7 +223,7 @@ sub make_websocket_server_reader {
 
 			# Check if whole packet has arrived
 			#
-			$masked = vec($head, 1, 8) & 0b10000000;
+			$masked = vec($head, 1, 8) & FIN_FLAG ;
 			return if length $buf < ($len + $hlen + ($masked ? 4 : 0));
 
 			#substr $buf, 0, $hlen, '';	#clear the header
@@ -278,128 +236,117 @@ sub make_websocket_server_reader {
 
 			#$payload="" if $op == TEXT or $op == BINARY;
 
-			given($op){
-				when(TEXT){
-					#check payload can be decoded
-					$mode=TEXT;
-					$payload="";
-					if ($masked) {
-						warn "UNMASKING PAYLOAD\n" if DEBUG;
-						my $mask = substr($buf, $hlen, 4);
-						$payload = _xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask);
-						#say xd $payload;
-					}
-
-					else {
-						$payload=$len ? substr($buf, $hlen, $len, '') : '';
-					}
-					substr $buf,0, $hlen+$len,'';
-					if($fin){
-						#decode
-						#do callback
-						$on_fragment->(decode("UTF-8",$payload ));
-						$on_fragment->(undef);
-
-						next;
-					}
-
-
+			if($op == TEXT){
+				#check payload can be decoded
+				$mode=TEXT;
+				$payload="";
+				if ($masked) {
+					warn "UNMASKING PAYLOAD\n" if DEBUG;
+					my $mask = substr($buf, $hlen, 4);
+					$payload = _xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask);
+					#say xd $payload;
 				}
-				when(BINARY){
-					$mode=BINARY;
-					if ($masked) {
-						warn "UNMASKING PAYLOAD\n" if DEBUG;
-						my $mask = substr($buf, $hlen, 4);
-						$on_fragment->(xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask));
-						#say xd $payload;
-					}
 
+				else {
+					$payload=$len ? substr($buf, $hlen, $len, '') : '';
+				}
+				substr $buf,0, $hlen+$len,'';
+				if($fin){
+					#decode
+					#do callback
+					$on_fragment->(decode("UTF-8",$payload ));
+					$on_fragment->(undef);
+
+					next;
+				}
+
+
+			}
+			elsif($op == BINARY){
+				$mode=BINARY;
+				if ($masked) {
+					warn "UNMASKING PAYLOAD\n" if DEBUG;
+					my $mask = substr($buf, $hlen, 4);
+					$on_fragment->(xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask));
+					#say xd $payload;
+				}
+
+				else {
+					$on_fragment->($len ? substr($buf, $hlen, $len, '') : '');
+				}
+				substr $buf,0, $hlen+$len,'';
+				if($fin){
+					$on_fragment->(undef);
+				}
+				next;
+
+
+			}
+			elsif($op == CONTINUATION){
+
+				if ($masked) {
+					warn "UNMASKING PAYLOAD\n" if DEBUG;
+					my $mask = substr($payload, $hlen, 4, '');
+
+					if($mode==TEXT){
+						$payload .= _xor_mask(($len ? substr($buf, $hlen, $len, '') : ''), $mask);
+					}
 					else {
 						$on_fragment->($len ? substr($buf, $hlen, $len, '') : '');
 					}
-					substr $buf,0, $hlen+$len,'';
-					if($fin){
-						$on_fragment->(undef);
-					}
-						next;
-
-
 				}
-				when(CONTINUATION){
 
-					if ($masked) {
-						warn "UNMASKING PAYLOAD\n" if DEBUG;
-						my $mask = substr($payload, $hlen, 4, '');
-
-						if($mode==TEXT){
-							$payload .= _xor_mask(($len ? substr($buf, $hlen, $len, '') : ''), $mask);
-						}
-						else {
-							$on_fragment->($len ? substr($buf, $hlen, $len, '') : '');
-						}
-					}
-
-					substr $buf,0, $hlen+$len,'';
-					if($fin){
-						#decode text
-						$on_fragment->( utf8::decode( $payload )) if $mode== TEXT;
-						$on_fragment->(undef);
-					}
-					next;
-
+				substr $buf,0, $hlen+$len,'';
+				if($fin){
+					#decode text
+					$on_fragment->( utf8::decode( $payload )) if $mode== TEXT;
+					$on_fragment->(undef);
 				}
-				when(PING){
-					#do not change accumulating payload
-					#reply directly with PONG
-					if ($masked) {
-						warn "UNMASKING PAYLOAD\n" if DEBUG;
-						my $mask = substr($buf, $hlen, 4);
-						$writer->(1,0,0,0,xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask));
-						#say xd $payload;
-					}
+				next;
 
-					else {
-						$writer->(1,0,0,0,$len ? substr($buf, $hlen, $len, '') : '');
-					}
-					substr $buf,0, $hlen+$len,'';
-					next;
-
-				}
-				when(PONG){
-					#do not change accumulating payload
-					say "GOT PONG";
-					substr $buf,0, $hlen+$len,'';
-					next;
-				}
-				when(PING){
-					say "GOT PING";
-
-					substr $buf,0, $hlen+$len,'';
-					next;
-				}
-				when(CLOSE){
-					say "GOT CLOSE";
-					substr $buf,0, $hlen+$len,'';
-					#TODO: drop the session, undef any read/write subs
-					$self->{pinger}=undef;
-					$self->{on_close_}->();
-					$session->[uSAC::HTTP::Session::dropper_]->(1);
-					#$session->drop;
-
-				}
-				default{
-				}
 			}
+			elsif($op == PING){
+				#do not change accumulating payload
+				#reply directly with PONG
+				if ($masked) {
+					warn "UNMASKING PAYLOAD\n" if DEBUG;
+					my $mask = substr($buf, $hlen, 4);
+					$writer->(1,0,0,0,xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask));
+					#say xd $payload;
+				}
 
-			#do on message if fin is set
+				else {
+					$writer->(1,0,0,0,$len ? substr($buf, $hlen, $len, '') : '');
+				}
+				substr $buf,0, $hlen+$len,'';
+				next;
 
-			#say "FIN $fin RSV1 $rsv1 RSV2 $rsv2 RSV3 $rsv3 op $op, $payload";
-			#return [$fin, $rsv1, $rsv2, $rsv3, $op, $payload];
+			}
+			elsif($op == PONG){
+				#do not change accumulating payload
+				say "GOT PONG";
+				substr $buf,0, $hlen+$len,'';
+				next;
+			}
+			elsif($op == PING){
+				say "GOT PING";
 
-			#Frame is parsed. So now what do we do?
+				substr $buf,0, $hlen+$len,'';
+				next;
+			}
+			elsif($op == CLOSE){
+				say "GOT CLOSE";
+				substr $buf,0, $hlen+$len,'';
+				#TODO: drop the session, undef any read/write subs
+				$self->[pinger_]=undef;
+				$self->[on_close_]->();
+				$session->[uSAC::HTTP::Session::dropper_]->(1);
+				#$session->drop;
 
-
-
+			}
+			else{
+				#error in protocol. close
+			}
 		}
 	}
 
@@ -410,29 +357,19 @@ sub _websocket_writer {
 
 	sub {
 		#take input data, convert to frame and use normal writer?
-		my ($fin, $rsv1, $rsv2, $rsv3, $op, $payload, $cb,$arg) = @_;
+		#my ($fin, $rsv1, $rsv2, $rsv3, $op, $payload, $cb,$arg) = @_;
+		my ($op_flags, $payload, $cb, $arg)=@_;
 		$cb//=sub {};		#if no callback provided, fire and forget
 		$arg//=__SUB__;		#Use 'self' as argument if none provided
 		warn "BUILDING FRAME\n" if DEBUG;
 
 		# Head
 		my $frame = 0b00000000;
-		say "fin is $fin";
-		say "op is $op";
+		#say "fin is $fin";
+		#say "op is $op";
 
-                #################################################
-                # vec($frame, 0, 8) = $op | 0b10000000 if $fin; #
-                # vec($frame, 0, 8) |= 0b01000000 if $rsv1;     #
-                # vec($frame, 0, 8) |= 0b00100000 if $rsv2;     #
-                # vec($frame, 0, 8) |= 0b00010000 if $rsv3;     #
-                #################################################
 
-		#vec($frame, 0, 8) = 
-		$frame= pack "C", $op 
-		| ($fin && 0b10000000)
-		| ($rsv1 && 0b01000000) 
-		| ($rsv2 && 0b00100000)
-		| ($rsv3 && 0b00010000);
+		$frame= pack "C", $op_flags;
 		say "Frame ",unpack "H*",$frame;
 		#printf "Frame: %X\n",$frame;
 		my $len = length $payload;
@@ -454,20 +391,20 @@ sub _websocket_writer {
 
 		# Small payload
 		if ($len < 126) {
-			vec($prefix, 0, 8) = $masked ? ($len | 0b10000000) : $len;
+			vec($prefix, 0, 8) = $masked ? ($len | FIN_FLAG) : $len;
 			$frame .= $prefix;
 		}
 
 		# Extended payload (16bit)
 		elsif ($len < 65536) {
-			vec($prefix, 0, 8) = $masked ? (126 | 0b10000000) : 126;
+			vec($prefix, 0, 8) = $masked ? (126 | FIN_FLAG) : 126;
 			$frame .= $prefix;
 			$frame .= pack 'n', $len;
 		}
 
 		# Extended payload (64bit)
 		else {
-			vec($prefix, 0, 8) = $masked ? (127 | 0b10000000) : 127;
+			vec($prefix, 0, 8) = $masked ? (127 | FIN_FLAG) : 127;
 			$frame .= $prefix;
 			$frame .=
 			$Config{ivsize} > 4
@@ -477,7 +414,7 @@ sub _websocket_writer {
 
 		if (DEBUG) {
 			warn 'HEAD: ', unpack('B*', $frame), "\n";
-			warn "OPCODE: $op\n";
+			warn "OPCODE: $op_flags\n";
 		}
 
 		# Payload
@@ -509,69 +446,64 @@ sub new {
 	my $session=shift;
 	#my $on_fragment=shift;
 	
-	my %args = @_;
-	my $h = $args{h};
-	my $self = bless {
-		#on_fragment=>$on_fragment,
-		session=>$session,
-		maxframe      => 1024*1024,
-		mask          => 0,
-		ping_interval => 2,
-		state         => OPEN,
-		on_message_ => sub {say "Default on message"},
-		on_error_	=> sub { say "Default on error"},
-		on_close_	=> sub { say "Default on close"},
-		
-		%args,
-	}, $pkg;
+	#my %args = @_;
+        #############################################################
+        # my $h = $args{h};                                         #
+        # my $self = bless {                                        #
+        #         #on_fragment=>$on_fragment,                       #
+        #         session=>$session,                                #
+        #         maxframe      => 1024*1024,                       #
+        #         mask          => 0,                               #
+        #         ping_interval => 2,                               #
+        #         state         => OPEN,                            #
+        #         on_message_ => sub {say "Default on message"},    #
+        #         on_error_       => sub { say "Default on error"}, #
+        #         on_close_       => sub { say "Default on close"}, #
+        #                                                           #
+        #         %args,                                            #
+        # },                                                        #
+        #############################################################
+	my $self=[];
+	$self->[session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_]=($session, 1024**2, 0, 2, OPEN, sub { say "Default on message"}, sub {say "default on error"}, sub {say "Default on close"});
+
+	bless $self, $pkg;
 	$session->[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
 	$session->[uSAC::HTTP::Session::closeme_]=1;	#At the end of the session close the socket
-	$self->{writer_}=make_websocket_server_writer $self, $session;	#create a writer and store in ws
-	say "Created writer: ",$self->{writer_};
+
+	$self->[writer_]=make_websocket_server_writer $self, $session;	#create a writer and store in ws
+	say "Created writer: ",$self->[writer_];
 
 	#the pushed reader now has access to the writer via the session->rex
 	$session->[uSAC::HTTP::Session::read_]=make_websocket_server_reader($self,$session);
 	$session->[uSAC::HTTP::Session::reader_cb_]=undef;
 
 	#setup ping
-	$self->{pinger} = AE::timer 0,$self->{ping_interval}, sub {
+	$self->[pinger_] = AE::timer 0,$self->[ping_interval_], sub {
 		say "Sending ping";
-		$self->{ping_id} = "hello";	#time64();
-		$self->{writer_}->( 1,0,0,0, PING, $self->{ping_id}); #no cb used->dropper defalt
+		$self->[ping_id_] = "hello";	
+		$self->[writer_]->( FIN_FLAG | PING, $self->[ping_id_]); #no cb used->dropper defalt
+		#$self->[writer_]->( 1,0,0,0, PING, $self->[ping_id_]); #no cb used->dropper defalt
 
-		
-                #########################################################
-                # ,sub {                                                #
-                #                 say "WRITER CALLBACK";                #
-                #                 if($_[0]){                            #
-                #                         say "good to go again";       #
-                #                 }                                     #
-                #                 else{                                 #
-                #                         say "ERROR... need to close"; #
-                #                         $self->{pinger}=undef;        #
-                #                         $session->drop;               #
-                #                                                       #
-                #                 }                                     #
-                #         });                                           #
-                #########################################################
-	} if $self->{ping_interval} > 0;
+	} if $self->[ping_interval_] > 0;
+
+	my $old_dropper=$session->[uSAC::HTTP::Session::dropper_];
+	my $dropper=sub {
+		$self->[pinger_]=undef;
+		$self->[writer_]=sub {};
+		$old_dropper->();
+		say "WEBSOCKET CLOSED";
+		$self->[on_close_]->();
+	};
+	$session->[uSAC::HTTP::Session::dropper_]=$dropper;
 
 	return $self;
 }
 
 
-sub destroy {
-	my $self = shift;
-	$self->{h} and (delete $self->{h})->destroy;
-	#delete @{$self}{qw(onmessage onerror onclose)};
-	#clean all except...
-	%$self = (
-		state => $self->{state}
-	);
-}
 
 
 sub _xor_mask($$) {
+	use integer;
 	$_[0] ^
 	(
 		$_[1] x (length($_[0])/length($_[1]) )
@@ -579,237 +511,38 @@ sub _xor_mask($$) {
 	);
 }
 
-sub write_text {
-	$_[0]->{writer_}->(1,0,0,0,TEXT,$_[1]);
+#does an inplace xor
+sub _xor_with_mask {
+		
 }
 
-sub write_binary {
-	$_[0]->{writer_}->(1,0,0,0,BINARY,$_[1]);
+
+#message and connection
+sub write_binary_message {
+	$_[0]->[writer_]->(FIN_FLAG | BINARY, $_[1]);
 
 }
 
-#############################################################################
-# sub parse_frame {                                                         #
-#         my ($self,$rbuf) = @_;                                            #
-#         return if length $$rbuf < 2;                                      #
-#         my $clone = $$rbuf;                                               #
-#         #say "parsing frame: \n".xd "$clone";                             #
-#         my $head = substr $clone, 0, 2;                                   #
-#         my $fin  = (vec($head, 0, 8) & 0b10000000) == 0b10000000 ? 1 : 0; #
-#         my $rsv1 = (vec($head, 0, 8) & 0b01000000) == 0b01000000 ? 1 : 0; #
-#         #warn "RSV1: $rsv1\n" if DEBUG;                                   #
-#         my $rsv2 = (vec($head, 0, 8) & 0b00100000) == 0b00100000 ? 1 : 0; #
-#         #warn "RSV2: $rsv2\n" if DEBUG;                                   #
-#         my $rsv3 = (vec($head, 0, 8) & 0b00010000) == 0b00010000 ? 1 : 0; #
-#         #warn "RSV3: $rsv3\n" if DEBUG;                                   #
-#                                                                           #
-#         # Opcode                                                          #
-#         my $op = vec($head, 0, 8) & 0b00001111;                           #
-#         warn "OPCODE: $op ($OP{$op})\n" if DEBUG;                         #
-#                                                                           #
-#         # Length                                                          #
-#         my $len = vec($head, 1, 8) & 0b01111111;                          #
-#         warn "LENGTH: $len\n" if DEBUG;                                   #
-#                                                                           #
-#         # No payload                                                      #
-#         my $hlen = 2;                                                     #
-#         if ($len == 0) { warn "NOTHING\n" if DEBUG }                      #
-#                                                                           #
-#         # Small payload                                                   #
-#         elsif ($len < 126) { warn "SMALL\n" if DEBUG }                    #
-#                                                                           #
-#         # Extended payload (16bit)                                        #
-#         elsif ($len == 126) {                                             #
-#                 return unless length $clone > 4;                          #
-#                 $hlen = 4;                                                #
-#                 my $ext = substr $clone, 2, 2;                            #
-#                 $len = unpack 'n', $ext;                                  #
-#                 warn "EXTENDED (16bit): $len\n" if DEBUG;                 #
-#         }                                                                 #
-#                                                                           #
-#         # Extended payload (64bit)                                        #
-#         elsif ($len == 127) {                                             #
-#                 return unless length $clone > 10;                         #
-#                 $hlen = 10;                                               #
-#                 my $ext = substr $clone, 2, 8;                            #
-#                 $len =                                                    #
-#                         $Config{ivsize} > 4                               #
-#                         ? unpack('Q>', $ext)                              #
-#                         : unpack('N', substr($ext, 4, 4));                #
-#                 warn "EXTENDED (64bit): $len\n" if DEBUG;                 #
-#         }                                                                 #
-#                                                                           #
-#                                                                           #
-#         # TODO !!!                                                        #
-#         # Check message size                                              #
-#         #$self->finish and return if $len > $self->{maxframe};            #
-#                                                                           #
-#                                                                           #
-#         # Check if whole packet has arrived                               #
-#         my $masked = vec($head, 1, 8) & 0b10000000;                       #
-#         return if length $clone < ($len + $hlen + ($masked ? 4 : 0));     #
-#         substr $clone, 0, $hlen, '';                                      #
-#                                                                           #
-#         # Payload                                                         #
-#         $len += 4 if $masked;                                             #
-#         return if length $clone < $len;                                   #
-#         my $payload = $len ? substr($clone, 0, $len, '') : '';            #
-#                                                                           #
-#         # Unmask payload                                                  #
-#         if ($masked) {                                                    #
-#                 warn "UNMASKING PAYLOAD\n" if DEBUG;                      #
-#                 my $mask = substr($payload, 0, 4, '');                    #
-#                 $payload = _xor_mask($payload, $mask);                    #
-#                 #say xd $payload;                                         #
-#         }                                                                 #
-#         warn "PAYLOAD: $payload\n" if DEBUG;                              #
-#         $$rbuf = $clone;                                                  #
-#                                                                           #
-#         return [$fin, $rsv1, $rsv2, $rsv3, $op, $payload];                #
-# }                                                                         #
-#                                                                           #
-#############################################################################
-##############################################################################
-# sub send_frame {                                                           #
-#         my ($self, $fin, $rsv1, $rsv2, $rsv3, $op, $payload) = @_;         #
-#         $self->{h} or return warn "No handle for sending frame";           #
-#         warn "BUILDING FRAME\n" if DEBUG;                                  #
-#                                                                            #
-#         # Head                                                             #
-#         my $frame = 0b00000000;                                            #
-#         vec($frame, 0, 8) = $op | 0b10000000 if $fin;                      #
-#         vec($frame, 0, 8) |= 0b01000000 if $rsv1;                          #
-#         vec($frame, 0, 8) |= 0b00100000 if $rsv2;                          #
-#         vec($frame, 0, 8) |= 0b00010000 if $rsv3;                          #
-#                                                                            #
-#         my $len = length $payload;                                         #
-#         # Mask payload                                                     #
-#         warn "PAYLOAD: $payload\n" if DEBUG;                               #
-#         my $masked = $self->{mask};                                        #
-#         if ($masked) {                                                     #
-#                 warn "MASKING PAYLOAD\n" if DEBUG;                         #
-#                 my $mask = pack 'N', int(rand( 2**32 ));                   #
-#                 $payload = $mask . _xor_mask($payload, $mask);             #
-#         }                                                                  #
-#                                                                            #
-#         # Length                                                           #
-#         #my $len = length $payload;                                        #
-#         #$len -= 4 if $self->{masked};                                     #
-#                                                                            #
-#         # Empty prefix                                                     #
-#         my $prefix = 0;                                                    #
-#                                                                            #
-#         # Small payload                                                    #
-#         if ($len < 126) {                                                  #
-#                 vec($prefix, 0, 8) = $masked ? ($len | 0b10000000) : $len; #
-#                 $frame .= $prefix;                                         #
-#         }                                                                  #
-#                                                                            #
-#         # Extended payload (16bit)                                         #
-#         elsif ($len < 65536) {                                             #
-#                 vec($prefix, 0, 8) = $masked ? (126 | 0b10000000) : 126;   #
-#                 $frame .= $prefix;                                         #
-#                 $frame .= pack 'n', $len;                                  #
-#         }                                                                  #
-#                                                                            #
-#         # Extended payload (64bit)                                         #
-#         else {                                                             #
-#                 vec($prefix, 0, 8) = $masked ? (127 | 0b10000000) : 127;   #
-#                 $frame .= $prefix;                                         #
-#                 $frame .=                                                  #
-#                         $Config{ivsize} > 4                                #
-#                         ? pack('Q>', $len)                                 #
-#                         : pack('NN', $len >> 32, $len & 0xFFFFFFFF);       #
-#         }                                                                  #
-#                                                                            #
-#         if (DEBUG) {                                                       #
-#                 warn 'HEAD: ', unpack('B*', $frame), "\n";                 #
-#                 warn "OPCODE: $op\n";                                      #
-#         }                                                                  #
-#                                                                            #
-#         # Payload                                                          #
-#         $frame .= $payload;                                                #
-#         print "Built frame = \n".xd( "$frame" ) if DEBUG;                  #
-#                                                                            #
-#         $self->{h}->push_write( $frame );                                  #
-#         return;                                                            #
-# }                                                                          #
-#                                                                            #
-##############################################################################
-##############################################################################
-# sub send : method {                                                        #
-#         my $self = shift;                                                  #
-#         my $data = shift;                                                  #
-#         my $is_text;                                                       #
-#         if (ref $data) {                                                   #
-#                 $is_text = 1;                                              #
-#                 $data = $JSON->encode($data);                              #
-#         }                                                                  #
-#         elsif ( utf8::is_utf8($data) ) {                                   #
-#                 if ( utf8::downgrade($data,1) ) {                          #
-#                                                                            #
-#                 }                                                          #
-#                 else {                                                     #
-#                         $is_text = 1;                                      #
-#                         utf8::encode($data);                               #
-#                 }                                                          #
-#         }                                                                  #
-#         $self->send_frame(1, 0, 0, 0, ($is_text ? TEXT : BINARY ), $data); #
-# }                                                                          #
-##############################################################################
+sub write_text_message {
+	#write as a single complete message. checks utf flag
+	$_[0]->[writer_]->(FIN_FLAG|TEXT, $_[1]);
+}
 
-################################################################################################
-# sub close : method {                                                                         #
-# =for rem                                                                                     #
-#    1000                                                                                      #
-#                                                                                              #
-#       1000 indicates a normal closure, meaning that the purpose for                          #
-#       which the connection was established has been fulfilled.                               #
-# =cut                                                                                         #
-#         my $self = shift;                                                                    #
-#         my $cb = pop;                                                                        #
-#         my $code = shift // 1000;                                                            #
-#         my $msg = shift;                                                                     #
-#         if ($self->{state} == OPEN) {                                                        #
-#                 $self->send_frame(1,0,0,0,CLOSE,pack("na*",$code,$msg));                     #
-#                 $self->{state} = CLOSING;                                                    #
-#                 $self->{close_cb} = shift;                                                   #
-#         }                                                                                    #
-#         elsif ($self->{state} == CLOSING) {                                                  #
-#                 return;                                                                      #
-#         }                                                                                    #
-#         elsif ($self->{state} == CLOSED) {                                                   #
-#                 warn "called close, while already closed from @{[ (caller)[1,2] ]}";         #
-#         }                                                                                    #
-#         else {                                                                               #
-#                 warn "close not possible in state $self->{state} from @{[ (caller)[1,2] ]}"; #
-#         }                                                                                    #
-# }                                                                                            #
-#                                                                                              #
-################################################################################################
-#####################################################################################
-# sub DESTROY {                                                                     #
-#         my $self = shift;                                                         #
-#         my $caller = "@{[ (caller)[1,2] ]}";                                      #
-#         if ($self->{h} and $self->{state} != CLOSED) {                            #
-#                 warn "initiate close by DESTROY";                                 #
-#                 my $copy = bless {%$self}, 'AnyEvent::HTTP::Server::WS::CLOSING'; #
-#                 $copy->close(sub {                                                #
-#                         warn "closed";                                            #
-#                         undef $copy;                                              #
-#                 });                                                               #
-#         }                                                                         #
-#         #warn "Destroy ws $self by $caller";                                      #
-#         %$self = ();                                                              #
-# }                                                                                 #
-#                                                                                   #
-# package AnyEvent::HTTP::Server::WS::CLOSING;                                      #
-#                                                                                   #
-# our @ISA = qw(uSAC::HTTP::Server::WS);                                            #
-#                                                                                   #
-# sub DESTROY {                                                                     #
-#                                                                                   #
-# }                                                                                 #
-#####################################################################################
+sub close {
+	#write a close message
+	$_[0]->[writer_]->(FIN_FLAG|CLOSE,"");
+}
+
+#getter/setters
+sub on_message {
+	$_[0][on_message_]=$_[1]//$_[0][on_message_];
+}
+sub on_close {
+	$_[0][on_close_]=$_[1]//$_[0][on_close_];
+}
+sub on_error {
+	$_[0][on_error_]=$_[1]//$_[0][on_error_];
+}
+
 
 1;
