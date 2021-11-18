@@ -2,6 +2,7 @@ package uSAC::HTTP::Server::WS;
 use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
+use feature "bitwise";
 
 use Exporter 'import';
 use MIME::Base64;		
@@ -30,7 +31,7 @@ my $LF=$uSAC::HTTP::Rex::LF;
 
 use constant LF=>"\015\012";
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 
 
 use enum ( "writer_=0" ,qw<maxframe_ mask_ ping_interval_ ping_id_ pinger_ state_ on_message_ on_close_ on_error_ session_>);
@@ -163,25 +164,35 @@ sub make_websocket_server_reader {
 	\my $on_fragment=\$self->[on_message_];#$session->[uSAC::HTTP::Session::reader_cb_];
 	say "ON FRAGMENT: ", $on_fragment;
 	sub {
-		say "IN WS READER";
 		#do the frame parsing here
-		say $buf;
 		while( length $buf> 2){
-			#return if length $buf < 2;	#do
-			my $head = substr $buf, 0, 2;
-			$fin  = (vec($head, 0, 8) & FIN_FLAG) == FIN_FLAG ? 1 : 0;
-			$rsv1 = (vec($head, 0, 8) & 0b01000000) == 0b01000000 ? 1 : 0;
-			#warn "RSV1: $rsv1\n" if DEBUG;
-			$rsv2 = (vec($head, 0, 8) & 0b00100000) == 0b00100000 ? 1 : 0;
-			#warn "RSV2: $rsv2\n" if DEBUG;
-			$rsv3 = (vec($head, 0, 8) & 0b00010000) == 0b00010000 ? 1 : 0;
-			#warn "RSV3: $rsv3\n" if DEBUG;
-
-			# Opcode
-			$op = vec($head, 0, 8) & 0b00001111;
-
-			# Length
-			my $len = vec($head, 1, 8) & 0b01111111;
+			my ($op,$len)=unpack "CC",$buf;#substr $buf, 0, 2;
+			$fin=($op & FIN_FLAG)!=0;
+			$rsv1=($op & RSV1_FLAG)!=0;
+			$rsv2=($op & RSV2_FLAG)!=0;
+			$rsv3=($op & RSV3_FLAG)!=0;
+			$op&=0x0F;
+			$masked = $len & 0b10000000;#FIN_FLAG ;
+			#inital 7 bits of len
+			$len&=0b01111111;
+			say "fin: $fin, rsv1 $rsv1, rsv2, $rsv2, rsv3 $rsv3, op $op, len $len";
+                        ##################################################################
+                        # #return if length $buf < 2;     #do                            #
+                        # my $head = substr $buf, 0, 2;                                  #
+                        # $fin  = (vec($head, 0, 8) & FIN_FLAG) == FIN_FLAG ? 1 : 0;     #
+                        # $rsv1 = (vec($head, 0, 8) & 0b01000000) == 0b01000000 ? 1 : 0; #
+                        # #warn "RSV1: $rsv1\n" if DEBUG;                                #
+                        # $rsv2 = (vec($head, 0, 8) & 0b00100000) == 0b00100000 ? 1 : 0; #
+                        # #warn "RSV2: $rsv2\n" if DEBUG;                                #
+                        # $rsv3 = (vec($head, 0, 8) & 0b00010000) == 0b00010000 ? 1 : 0; #
+                        # #warn "RSV3: $rsv3\n" if DEBUG;                                #
+                        #                                                                #
+                        # # Opcode                                                       #
+                        # $op = vec($head, 0, 8) & 0b00001111;                           #
+                        #                                                                #
+                        # # Length                                                       #
+                        # my $len = vec($head, 1, 8) & 0b01111111;                       #
+                        ##################################################################
 			warn "LENGTH: $len\n" if DEBUG;
 
 			# No payload
@@ -223,7 +234,7 @@ sub make_websocket_server_reader {
 
 			# Check if whole packet has arrived
 			#
-			$masked = vec($head, 1, 8) & FIN_FLAG ;
+			#$masked = vec($head, 1, 8) & 0b10000000;#FIN_FLAG ;
 			return if length $buf < ($len + $hlen + ($masked ? 4 : 0));
 
 			#substr $buf, 0, $hlen, '';	#clear the header
@@ -243,19 +254,22 @@ sub make_websocket_server_reader {
 				if ($masked) {
 					warn "UNMASKING PAYLOAD\n" if DEBUG;
 					my $mask = substr($buf, $hlen, 4);
-					$payload = _xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask);
+					#$payload = _xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask);
+					_xor_mask_inplace(($len ? substr($buf, $hlen, $len) : ''), $mask);
 					#say xd $payload;
 				}
 
 				else {
+					#$payload=$len ? substr($buf, $hlen, $len, '') : '';
 					$payload=$len ? substr($buf, $hlen, $len, '') : '';
 				}
-				substr $buf,0, $hlen+$len,'';
 				if($fin){
 					#decode
 					#do callback
-					$on_fragment->(decode("UTF-8",$payload ));
+					#$on_fragment->(decode("UTF-8",$payload ));
+					$on_fragment->(decode("UTF-8",substr $buf, $hlen, $len));
 					$on_fragment->(undef);
+					substr $buf,0, $hlen+$len,'';
 
 					next;
 				}
@@ -311,12 +325,12 @@ sub make_websocket_server_reader {
 				if ($masked) {
 					warn "UNMASKING PAYLOAD\n" if DEBUG;
 					my $mask = substr($buf, $hlen, 4);
-					$writer->(1,0,0,0,xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask));
+					$self->[writer_]->(FIN_FLAG|PONG,xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask));
 					#say xd $payload;
 				}
 
 				else {
-					$writer->(1,0,0,0,$len ? substr($buf, $hlen, $len, '') : '');
+					$self->[writer_]->(FIN_FLAG|PONG,$len ? substr($buf, $hlen, $len, '') : '');
 				}
 				substr $buf,0, $hlen+$len,'';
 				next;
@@ -370,7 +384,7 @@ sub _websocket_writer {
 
 
 		$frame= pack "C", $op_flags;
-		say "Frame ",unpack "H*",$frame;
+		say "Frame ",unpack "H*",$frame if DEBUG;
 		#printf "Frame: %X\n",$frame;
 		my $len = length $payload;
 		# Mask payload
@@ -419,10 +433,11 @@ sub _websocket_writer {
 
 		# Payload
 		$frame .= $payload;
-		print "Built frame = \n".xd( "$frame" ) if DEBUG;
+		if(DEBUG){
 
-		say "FRAME TO SEND ",$frame;
-		say "NEXT is : ", $next;
+			say "FRAME TO SEND ",$frame;
+			say "NEXT is : ", $next;
+		}
 		$next->($frame,$cb,$arg);
 		return;
 	}
@@ -504,16 +519,22 @@ sub new {
 
 sub _xor_mask($$) {
 	use integer;
-	$_[0] ^
+	$_[0] ^.
 	(
 		$_[1] x (length($_[0])/length($_[1]) )
 		. substr($_[1],0,length($_[0]) % length($_[1]))
 	);
 }
 
-#does an inplace xor
-sub _xor_with_mask {
-		
+
+sub _xor_mask_inplace($$) {
+	my ($a,$b)=(length($_[0]), length($_[1]));
+	$_[0] ^.=
+	(
+		$_[1] x ($a/$b) 
+		. substr($_[1],0, $a % $b)
+	);
+	return
 }
 
 

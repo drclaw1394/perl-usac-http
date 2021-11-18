@@ -525,9 +525,7 @@ sub make_socket_writer{
 		#say "preview: ", substr($buf ,0 , 10),"length: ", length $_[0];
 		if(!$ww){	#no write watcher so try synchronous write
 			#say "No watcher";
-			say Dumper $fh;
 			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
-			say "AFTER SYSWRITE";
 			$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
 			$offset+=$w;
 			if($offset==length $buf){
