@@ -1,6 +1,5 @@
 package uSAC::HTTP::Server; 
 use common::sense;
-use Data::Dumper;
 use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";

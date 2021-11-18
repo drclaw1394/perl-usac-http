@@ -6,8 +6,6 @@ no warnings "experimental";
 use Exporter 'import';
 use Encode qw<decode encode decode_utf8>;
 
-use Data::Dumper;
-#$Data::Dumper::Deparse=1;
 our @EXPORT_OK=qw<
 		make_reader
 		make_form_data_reader

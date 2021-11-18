@@ -36,7 +36,6 @@ use uSAC::HTTP::Server::WS;
 use uSAC::HTTP::Middler;
 use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
-use Data::Dumper;
 use File::Spec::Functions qw<rel2abs>;
 use File::Basename qw<dirname>;
 #Class attribute keys

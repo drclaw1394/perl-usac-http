@@ -5,7 +5,6 @@ use Exporter 'import';
 use feature qw<refaliasing say switch state current_sub signatures>;
 no warnings "experimental";
 no feature "indirect";
-use Data::Dumper;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Code qw<:constants>;

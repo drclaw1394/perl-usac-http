@@ -6,7 +6,6 @@ use common::sense;
 use feature qw<refaliasing switch state>;
 our $UPLOAD_LIMIT=10_000_000;
 
-use Data::Dumper;
 
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;

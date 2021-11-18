@@ -1,6 +1,5 @@
 package uSAC::HTTP::Session;
 use common::sense;
-use Data::Dumper;
 use feature "refaliasing";
 no warnings "experimental";
 use Scalar::Util 'openhandle','refaddr', 'weaken';
@@ -8,7 +7,6 @@ use Scalar::Util 'openhandle','refaddr', 'weaken';
 #require uSAC::HTTP::Server;
 use EV;
 use AnyEvent;
-use Data::Dumper;
 #use uSAC::HTTP::Server;
 
 use Errno qw(EAGAIN EINTR);

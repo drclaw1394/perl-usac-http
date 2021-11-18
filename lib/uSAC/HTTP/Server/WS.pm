@@ -1,5 +1,6 @@
 package uSAC::HTTP::Server::WS;
-use common::sense;
+use feature "say";
+use feature "switch";
 use feature "refaliasing";
 no warnings "experimental";
 use feature "bitwise";
@@ -14,7 +15,7 @@ our @EXPORT_OK=qw<upgrade_to_websocket>;
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
-use Config;
+#use Config;
 
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
@@ -157,231 +158,245 @@ sub make_websocket_server_reader {
 	my $payload="";
 	my $hlen;
 	my $mode;
+	my $state=0;	#0 header, 1 body
 	\my $on_fragment=\$self->[on_message_];#$session->[uSAC::HTTP::Session::reader_cb_];
 	say "ON FRAGMENT: ", $on_fragment;
+
 	sub {
+		#say "reader";
 		#do the frame parsing here
-		while( length $buf> 2){
-			my ($op,$len)=unpack "CC",$buf;#substr $buf, 0, 2;
-			$fin=($op & FIN_FLAG)!=0;
-			$rsv1=($op & RSV1_FLAG)!=0;
-			$rsv2=($op & RSV2_FLAG)!=0;
-			$rsv3=($op & RSV3_FLAG)!=0;
-			$op&=0x0F;
-			$masked = ($len & 0b10000000)>0;#FIN_FLAG ;
-			#inital 7 bits of len
-			$len&=0b01111111;
-			warn "LENGTH: $len\n" if DEBUG;
+		while($buf){
+			#say "INput buffer: ", unpack "H*", $buf;
+			if($state==0){
+				#say "parsing header";
+				#header
+				return if length $buf<2;
+				($op,$len)=unpack "CC",$buf;#substr $buf, 0, 2;
+				$fin=($op & FIN_FLAG)!=0;
+				$rsv1=($op & RSV1_FLAG)!=0;
+				$rsv2=($op & RSV2_FLAG)!=0;
+				$rsv3=($op & RSV3_FLAG)!=0;
+				$op&=0x0F;
+				$masked = ($len & 0b10000000)>0;#FIN_FLAG ;
+				#inital 7 bits of len
+				$len&=0b01111111;
+				warn "LENGTH: $len\n" if DEBUG;
 
-			# No payload
-			given($len){
-				when (0) {
-					$hlen = 2;
-					warn "NOTHING\n" if DEBUG;
-				}
-				when($_< 126){
-					$hlen = 2;
-					warn "SMALL\n" if DEBUG;
-				}
-				when(126){
-					# 16 bit extended payload length
-					return unless length $buf > 4;
-					$hlen = 4;
-					my $ext = substr $buf, 2, 2;
-					$len = unpack 'n', $ext;
-					warn "EXTENDED (16bit): $len\n" if DEBUG;
-				}
-				when(127){
-
-					# Extended payload (64bit)
-					return unless length $buf > 10;
-					$hlen = 10;
-					my $ext = substr $buf, 2, 8;
-					$len =
-					$Config{ivsize} > 4
-					? unpack('Q>', $ext)
-					: unpack('N', substr($ext, 4, 4));
-					warn "EXTENDED (64bit): $len\n" if DEBUG;
-				}
-				default {
-					#error if here
-				}
-			}
-
-
-
-			# Check if whole packet has arrived
-			return if length $buf < ($len + $hlen + ($masked ? 4 : 0));
-
-
-			substr $buf,0, $hlen, "";
-
-			
-			return if length $buf < $len;
-
-			if($op == TEXT){
-				#check payload can be decoded
-				$mode=TEXT;
-				say "masked: $masked";
-				my $target=($masked<<1) | $fin;
-				say "Target: $target";
-				if ($target==3) {
-					#masked and fin
-					warn "UNMASKING PAYLOAD\n" if DEBUG;
-					$mask = substr($buf, 0, 4,'');
-					#$payload = _xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask);
-					_xor_mask_inplace(substr($buf, 0, $len), $mask);
-					$on_fragment->(decode("UTF-8",substr $buf, 0, $len,''));
-					$on_fragment->(undef);
-				}
-				elsif($target ==2 ){
-					#masked only... not fin
-					$mask = substr($buf, 0, 4,'');
-					#append to payload.. 
-					$payload=_xor_mask(substr($buf,0, $len, ''), $mask);
-
-				}
-				elsif($target ==1 ){
-					#not masked, but fin
-					$on_fragment->(substr ($buf, 0, $len, ''));
-					$on_fragment->(undef);
-				}
-				else{
-					#not masked and not fin
-					$payload=substr($buf,0,$len,'');
-				}
-
-
-				next;
-
-			}
-
-			elsif($op == BINARY){
-				$mode=BINARY;
-				say "masked: $masked";
-				my $target=($masked<<1) | $fin;
-				say "Target: $target";
-				if ($target== 3) {
-					#masked and fin
-					warn "UNMASKING PAYLOAD\n" if DEBUG;
-					$mask = substr($buf, 0, 4, '');
-					$on_fragment->(xor_mask(substr($buf, 0, $len,''), $mask));
-					$on_fragment->(undef);
-				}
-				elsif($target == 2){
-					#masked only. no fin
-					$mask = substr($buf, 0, 4, '');
-					$payload=xor_mask(substr($buf, 0, $len,''), $mask);
-				}
-				elsif($target == 1){
-					#not masked but fin
-					$on_fragment->(substr($buf, 0, $len,''), $mask);
-					$on_fragment->(undef);
-				}
-				else{
-					#not masked and not fin
-					$payload=substr($buf, 0, $len,'');
-
-				}
-				next;
-
-
-			}
-
-			elsif($op == CONTINUATION){
-				#FIXME
-				#
-				#
-				say "masked: $masked";
-				my $target=($masked<<1) | $fin;
-				say "Target: $target";
-				
-				if ($target==3) {
-					#masked and fin
-					warn "UNMASKING PAYLOAD\n" if DEBUG;
-					$mask = substr($buf, 0, 4, '');
-
-					$payload .= _xor_mask(substr($buf, 0, $len, ''), $mask);
-					if($mode==TEXT){
-						$on_fragment->(decode("UTF-8",$payload));
-						$on_fragment->(undef);
+				given($len){
+					when (0) {
+						$hlen = 2;
+						warn "NOTHING\n" if DEBUG;
 					}
-					else {
-						$on_fragment->($payload);
-						$on_fragment->(undef);
+					when($_< 126){
+						$hlen = 2;
+						warn "SMALL\n" if DEBUG;
+					}
+					when(126){
+						# 16 bit extended payload length
+						return unless length $buf > 4;
+						$hlen = 4;
+						my $ext = substr $buf, 2, 2;
+						$len = unpack 'n', $ext;
+						warn "EXTENDED (16bit): $len\n" if DEBUG;
+					}
+					when(127){
+
+						# Extended payload (64bit)
+						return unless length $buf > 10;
+						$hlen = 10;
+						my $ext = substr $buf, 2, 8;
+						$len= unpack('Q>', $ext);
+                                                ######################################
+                                                # $len =                             #
+                                                # $Config{ivsize} > 4                #
+                                                # ? unpack('Q>', $ext)               #
+                                                # : unpack('N', substr($ext, 4, 4)); #
+                                                ######################################
+						warn "EXTENDED (64bit): $len\n" if DEBUG;
+					}
+					default {
+						#error if here
 					}
 				}
-				elsif($target==2){
-					#masked  but not fin
-					$mask = substr($buf, 0, 4, '');
 
-					$payload .= _xor_mask(substr($buf, 0, $len, ''), $mask);
-				}
-				elsif($target==1){
-					#no mask but fin
-					$payload .= substr($buf, 0, $len, '');
-					if($mode==TEXT){
-						$on_fragment->(decode("UTF-8",$payload));
-						$on_fragment->(undef);
-					}
-					else {
-						$on_fragment->($payload);
-						$on_fragment->(undef);
-					}
-				}
-				else{
-					#no mask, not fin
-					$payload .= substr($buf, 0, $len, '');
-				}
-				next;
 
-			}
-			elsif($op == PING){
-				#do not change accumulating payload
-				#reply directly with PONG
-				if ($masked) {
-					warn "UNMASKING PAYLOAD\n" if DEBUG;
-					my $mask = substr($buf, 0, 4,'');
-					$self->[writer_]->(FIN_FLAG|PONG,xor_mask(substr($buf, 0, $len,''), $mask));
-				}
-
-				else {
-					$self->[writer_]->(FIN_FLAG|PONG, substr($buf, 0, $len, ''));
-				}
-				substr $buf,0, $len,'';
-				next;
-
-			}
-			elsif($op == PONG){
-				#assumes a fin flag
-				say "GOT PONG";
 				if($masked){	
-					$mask = substr($buf, 0, 4,'');
-					#do not change accumulating payload
-					substr $buf,0, $len,'';
+					$mask = substr($buf, $hlen, 4);
+					$hlen+=4;
 				}
-				next;
-			}
-			elsif($op == CLOSE){
-				#TODO: break out reason code and description
-				say "GOT CLOSE";
-				if($masked){
-					$mask = substr($buf, 0, 4, '');
-					_xor_mask(substr($buf, 0, $len, ''),$mask);
+				else{
+					$mask=0;
 				}
-				else {
-					substr $buf, 0, $len, '';
-				}
-				
-				#TODO: drop the session, undef any read/write subs
-				$self->[pinger_]=undef;
-				$self->[on_close_]->();
-				$session->[uSAC::HTTP::Session::dropper_]->(1);
-				next;
 
+				#say "header len was $hlen";	
+				substr $buf, 0, $hlen, "";
+				#say "buf after header: ", unpack "H*", $buf;
+				$state=1;
+				next;
 			}
-			else{
-				#error in protocol. close
+
+			elsif($state==1){
+				#say "Parsing body with op:" , $op;
+				#do body	
+				return if length $buf < $len;
+				if($op == TEXT){
+					#check payload can be decoded
+					$mode=TEXT;
+					my $target=($masked<<1) | $fin;
+					if ($target==3) {
+						#masked and fin
+						warn "UNMASKING PAYLOAD\n" if DEBUG;
+						#$mask = substr($buf, 0, 4,'');
+						#$payload = _xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask);
+						_xor_mask_inplace(substr($buf, 0, $len), $mask);
+						$on_fragment->(decode("UTF-8",substr $buf, 0, $len,''));
+						$on_fragment->(undef);
+					}
+					elsif($target ==2 ){
+						#masked only... not fin
+						$mask = substr($buf, 0, 4,'');
+						#append to payload.. 
+						$payload=_xor_mask(substr($buf,0, $len, ''), $mask);
+
+					}
+					elsif($target ==1 ){
+						#not masked, but fin
+						$on_fragment->(substr ($buf, 0, $len, ''));
+						$on_fragment->(undef);
+					}
+					else{
+						#not masked and not fin
+						$payload=substr($buf,0,$len,'');
+					}
+
+					#say "buffer after body: ", unpack "H*", $buf;
+
+				}
+
+				elsif($op == BINARY){
+					$mode=BINARY;
+					say "masked: $masked";
+					my $target=($masked<<1) | $fin;
+					say "Target: $target";
+					if ($target== 3) {
+						#masked and fin
+						warn "UNMASKING PAYLOAD\n" if DEBUG;
+						$mask = substr($buf, 0, 4, '');
+						$on_fragment->(xor_mask(substr($buf, 0, $len,''), $mask));
+						$on_fragment->(undef);
+					}
+					elsif($target == 2){
+						#masked only. no fin
+						$mask = substr($buf, 0, 4, '');
+						$payload=xor_mask(substr($buf, 0, $len,''), $mask);
+					}
+					elsif($target == 1){
+						#not masked but fin
+						$on_fragment->(substr($buf, 0, $len,''), $mask);
+						$on_fragment->(undef);
+					}
+					else{
+						#not masked and not fin
+						$payload=substr($buf, 0, $len,'');
+
+					}
+
+
+				}
+
+				elsif($op == CONTINUATION){
+					#FIXME
+					#
+					#
+					say "masked: $masked";
+					my $target=($masked<<1) | $fin;
+					say "Target: $target";
+
+					if ($target==3) {
+						#masked and fin
+						warn "UNMASKING PAYLOAD\n" if DEBUG;
+						$mask = substr($buf, 0, 4, '');
+
+						$payload .= _xor_mask(substr($buf, 0, $len, ''), $mask);
+						if($mode==TEXT){
+							$on_fragment->(decode("UTF-8",$payload));
+							$on_fragment->(undef);
+						}
+						else {
+							$on_fragment->($payload);
+							$on_fragment->(undef);
+						}
+					}
+					elsif($target==2){
+						#masked  but not fin
+						$mask = substr($buf, 0, 4, '');
+
+						$payload .= _xor_mask(substr($buf, 0, $len, ''), $mask);
+					}
+					elsif($target==1){
+						#no mask but fin
+						$payload .= substr($buf, 0, $len, '');
+						if($mode==TEXT){
+							$on_fragment->(decode("UTF-8",$payload));
+							$on_fragment->(undef);
+						}
+						else {
+							$on_fragment->($payload);
+							$on_fragment->(undef);
+						}
+					}
+					else{
+						#no mask, not fin
+						$payload .= substr($buf, 0, $len, '');
+					}
+
+				}
+				elsif($op == PING){
+					#do not change accumulating payload
+					#reply directly with PONG
+					if ($masked) {
+						warn "UNMASKING PAYLOAD\n" if DEBUG;
+						my $mask = substr($buf, 0, 4,'');
+						$self->[writer_]->(FIN_FLAG|PONG,xor_mask(substr($buf, 0, $len,''), $mask));
+					}
+
+					else {
+						$self->[writer_]->(FIN_FLAG|PONG, substr($buf, 0, $len, ''));
+					}
+					substr $buf,0, $len,'';
+
+				}
+				elsif($op == PONG){
+					#assumes a fin flag
+					say "GOT PONG";
+					if($masked){	
+						$mask = substr($buf, 0, 4,'');
+						#do not change accumulating payload
+						substr $buf,0, $len,'';
+					}
+				}
+				elsif($op == CLOSE){
+					#TODO: break out reason code and description
+					say "GOT CLOSE";
+					if($masked){
+						$mask = substr($buf, 0, 4, '');
+						_xor_mask(substr($buf, 0, $len, ''),$mask);
+					}
+					else {
+						substr $buf, 0, $len, '';
+					}
+
+					#TODO: drop the session, undef any read/write subs
+					$self->[pinger_]=undef;
+					$self->[on_close_]->();
+					$session->[uSAC::HTTP::Session::dropper_]->(1);
+
+				}
+				else{
+					#error in protocol. close
+				}
+				$state=0;
+				next;
 			}
 		}
 	}
@@ -440,10 +455,13 @@ sub _websocket_writer {
 		else {
 			vec($prefix, 0, 8) = $masked ? (127 | FIN_FLAG) : 127;
 			$frame .= $prefix;
-			$frame .=
-			$Config{ivsize} > 4
-			? pack('Q>', $len)
-			: pack('NN', $len >> 32, $len & 0xFFFFFFFF);
+			$frame .= pack('Q>', $len);
+                        ################################################
+                        # $frame .=                                    #
+                        # $Config{ivsize} > 4                          #
+                        # ? pack('Q>', $len)                           #
+                        # : pack('NN', $len >> 32, $len & 0xFFFFFFFF); #
+                        ################################################
 		}
 
 		if (DEBUG) {
@@ -481,7 +499,7 @@ sub new {
 	my $session=shift;
 	
 	my $self=[];
-	$self->@[(session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_)]=($session, 1024**2, 0, 2, OPEN, sub { say "Default on message"}, sub {say "default on error"}, sub {say "Default on close"});
+	$self->@[(session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_)]=($session, 1024**2, 0, 0, OPEN, sub { say "Default on message"}, sub {say "default on error"}, sub {say "Default on close"});
 
 	bless $self, $pkg;
 	$session->[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket

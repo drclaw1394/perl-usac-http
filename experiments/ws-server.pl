@@ -81,17 +81,17 @@ __DATA__
 
 			ws.onopen=function(event){
 				console.log("websocket open");
-				ws.send("Hello");
+				ws.send("hello");
 			};
 
 			ws.onmessage= function(msg){
-				console.log("websocket message",msg);
+				console.log("websocket message",msg.data);
 				};
 			ws.onerror= function(msg){
 				console.log("websocket error",msg);
 			};
 			setInterval(function(){
-				ws.send("from client");
+				ws.send("hello");
 			},1000);
 		</script>
 
