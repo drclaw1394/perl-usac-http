@@ -242,149 +242,46 @@ sub make_websocket_server_reader {
 				if($op == TEXT){
 					#check payload can be decoded
 					$mode=TEXT;
-					my $target=($masked<<1) | $fin;
-					if ($target==3) {
-						#masked and fin
-						warn "UNMASKING PAYLOAD\n" if DEBUG;
-						#$mask = substr($buf, 0, 4,'');
-						#$payload = _xor_mask(($len ? substr($buf, $hlen, $len) : ''), $mask);
-						_xor_mask_inplace(substr($buf, 0, $len), $mask);
-						$on_fragment->(decode("UTF-8",substr $buf, 0, $len,''));
-						$on_fragment->(undef);
-					}
-					elsif($target ==2 ){
-						#masked only... not fin
-						$mask = substr($buf, 0, 4,'');
-						#append to payload.. 
-						$payload=_xor_mask(substr($buf,0, $len, ''), $mask);
-
-					}
-					elsif($target ==1 ){
-						#not masked, but fin
-						$on_fragment->(substr ($buf, 0, $len, ''));
-						$on_fragment->(undef);
-					}
-					else{
-						#not masked and not fin
-						$payload=substr($buf,0,$len,'');
-					}
-
+					#masked and fin
+					warn "UNMASKING PAYLOAD\n" if DEBUG;
+					_xor_mask_inplace(substr($buf, 0, $len), $mask);
+					$on_fragment->(decode("UTF-8",substr $buf, 0, $len,''),$fin);
 					#say "buffer after body: ", unpack "H*", $buf;
 
 				}
 
 				elsif($op == BINARY){
 					$mode=BINARY;
-					say "masked: $masked";
-					my $target=($masked<<1) | $fin;
-					say "Target: $target";
-					if ($target== 3) {
-						#masked and fin
-						warn "UNMASKING PAYLOAD\n" if DEBUG;
-						$mask = substr($buf, 0, 4, '');
-						$on_fragment->(xor_mask(substr($buf, 0, $len,''), $mask));
-						$on_fragment->(undef);
-					}
-					elsif($target == 2){
-						#masked only. no fin
-						$mask = substr($buf, 0, 4, '');
-						$payload=xor_mask(substr($buf, 0, $len,''), $mask);
-					}
-					elsif($target == 1){
-						#not masked but fin
-						$on_fragment->(substr($buf, 0, $len,''), $mask);
-						$on_fragment->(undef);
-					}
-					else{
-						#not masked and not fin
-						$payload=substr($buf, 0, $len,'');
-
-					}
-
-
+					$on_fragment->(xor_mask(substr($buf, 0, $len,''), $mask), $fin);
 				}
 
 				elsif($op == CONTINUATION){
-					#FIXME
-					#
-					#
-					say "masked: $masked";
-					my $target=($masked<<1) | $fin;
-					say "Target: $target";
-
-					if ($target==3) {
-						#masked and fin
-						warn "UNMASKING PAYLOAD\n" if DEBUG;
-						$mask = substr($buf, 0, 4, '');
-
-						$payload .= _xor_mask(substr($buf, 0, $len, ''), $mask);
 						if($mode==TEXT){
-							$on_fragment->(decode("UTF-8",$payload));
-							$on_fragment->(undef);
+							_xor_mask_inplace(substr($buf, 0, $len), $mask);
+							$on_fragment->(decode("UTF-8",substr $buf, 0, $len,''),$fin);
 						}
 						else {
-							$on_fragment->($payload);
-							$on_fragment->(undef);
+							$on_fragment->(_xor_mask(substr($buf, 0, $len, ''), $mask), $fin);
 						}
-					}
-					elsif($target==2){
-						#masked  but not fin
-						$mask = substr($buf, 0, 4, '');
-
-						$payload .= _xor_mask(substr($buf, 0, $len, ''), $mask);
-					}
-					elsif($target==1){
-						#no mask but fin
-						$payload .= substr($buf, 0, $len, '');
-						if($mode==TEXT){
-							$on_fragment->(decode("UTF-8",$payload));
-							$on_fragment->(undef);
-						}
-						else {
-							$on_fragment->($payload);
-							$on_fragment->(undef);
-						}
-					}
-					else{
-						#no mask, not fin
-						$payload .= substr($buf, 0, $len, '');
-					}
-
 				}
 				elsif($op == PING){
 					#do not change accumulating payload
 					#reply directly with PONG
-					if ($masked) {
-						warn "UNMASKING PAYLOAD\n" if DEBUG;
-						my $mask = substr($buf, 0, 4,'');
-						$self->[writer_]->(FIN_FLAG|PONG,xor_mask(substr($buf, 0, $len,''), $mask));
-					}
-
-					else {
-						$self->[writer_]->(FIN_FLAG|PONG, substr($buf, 0, $len, ''));
-					}
+					warn "UNMASKING PAYLOAD\n" if DEBUG;
+					$self->[writer_]->(FIN_FLAG|PONG, xor_mask(substr($buf, 0, $len,''), $mask));
 					substr $buf,0, $len,'';
 
 				}
 				elsif($op == PONG){
 					#assumes a fin flag
 					say "GOT PONG";
-					if($masked){	
-						$mask = substr($buf, 0, 4,'');
-						#do not change accumulating payload
-						substr $buf,0, $len,'';
-					}
+					#do not change accumulating payload
+					substr $buf,0, $len,'';
 				}
 				elsif($op == CLOSE){
 					#TODO: break out reason code and description
 					say "GOT CLOSE";
-					if($masked){
-						$mask = substr($buf, 0, 4, '');
-						_xor_mask(substr($buf, 0, $len, ''),$mask);
-					}
-					else {
-						substr $buf, 0, $len, '';
-					}
+					_xor_mask(substr($buf, 0, $len, ''),$mask);
 
 					#TODO: drop the session, undef any read/write subs
 					$self->[pinger_]=undef;
@@ -499,7 +396,7 @@ sub new {
 	my $session=shift;
 	
 	my $self=[];
-	$self->@[(session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_)]=($session, 1024**2, 0, 0, OPEN, sub { say "Default on message"}, sub {say "default on error"}, sub {say "Default on close"});
+	$self->@[(session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_)]=($session, 1024**2, 0, 5, OPEN, sub { say "Default on message"}, sub {say "default on error"}, sub {say "Default on close"});
 
 	bless $self, $pkg;
 	$session->[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
@@ -540,6 +437,7 @@ sub new {
 
 sub _xor_mask($$) {
 	use integer;
+	return $_[0] unless $_[1];
 	$_[0] ^.
 	(
 		$_[1] x (length($_[0])/length($_[1]) )
@@ -549,6 +447,7 @@ sub _xor_mask($$) {
 
 
 sub _xor_mask_inplace($$) {
+	return unless $_[1];
 	my ($a,$b)=(length($_[0]), length($_[1]));
 	$_[0] ^.=
 	(
@@ -561,18 +460,20 @@ sub _xor_mask_inplace($$) {
 
 #message and connection
 sub write_binary_message {
-	$_[0]->[writer_]->(FIN_FLAG | BINARY, $_[1]);
+	my $self=splice @_,0, 1, FIN_FLAG|BINARY;
+	&{$self->[writer_]};
 
 }
 
 sub write_text_message {
 	#write as a single complete message. checks utf flag
-	$_[0]->[writer_]->(FIN_FLAG|TEXT, $_[1]);
+	my $self=splice @_,0, 1, FIN_FLAG|TEXT;
+	&{$self->[writer_]};
 }
 
 sub close {
-	#write a close message
-	$_[0]->[writer_]->(FIN_FLAG|CLOSE,"");
+	my $self=splice @_,0, 1, FIN_FLAG|CLOSE;
+	&{$self->[writer_]};
 }
 
 #getter/setters
