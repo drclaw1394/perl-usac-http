@@ -1,0 +1,9 @@
+sub {
+	my $out=$_[1]; $$out.=<<~EOF;
+	<div class="body">
+		<div id="my content">
+		</div>
+	</div>
+	EOF
+	1;
+}

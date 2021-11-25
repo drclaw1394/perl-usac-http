@@ -1,0 +1,6 @@
+sub {
+	my $out=$_[1];
+	include "./experiments/header.plate", @_;
+	include "./experiments/body.plate", @_;
+	include "./experiments/footer.plate", @_;
+}

@@ -1,0 +1,7 @@
+sub {
+	my $out=$_[1];
+	$$out.=<<~EOF
+	<div class="footer"></div>
+	EOF
+	1;
+}

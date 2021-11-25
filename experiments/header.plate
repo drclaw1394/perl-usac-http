@@ -1,0 +1,6 @@
+sub {
+	my $out=$_[1];
+	$$out.=<<~EOF;
+	<div class="header"></div>
+	EOF
+}
