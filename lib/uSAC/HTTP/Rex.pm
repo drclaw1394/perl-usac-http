@@ -429,13 +429,15 @@ sub reply_chunked{
 
 	];
 
-	#Execute the filters based on headers
-	&{$_[0][4][1]};
 
 	#render_v1_1_headers($reply, $headers, $self->[static_headers_], $_[3]);
 	for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
 		$reply.=$h->[0].": ".$h->[1].LF;
 	}
+
+	#Execute the filters based on headers
+	#&{$_[0][4][1]};
+	#
 	$reply.=LF;
 
 	require uSAC::HTTP::Middleware;

@@ -517,7 +517,6 @@ sub make_socket_writer{
 		my $cb= $_[1]//$dropper;		#when no cb provided, use dropper
 		my $arg=$_[2]//__SUB__;			#is this sub unless provided
 
-
 		$offset=0;# if $pre_buffer!=$_[0];	#do offset reset if need beo
 		#$pre_buffer=$_[0];
 		#say "preview: ", substr($buf ,0 , 10),"length: ", length $_[0];

@@ -54,7 +54,7 @@ sub new {
 	#$self->[read_stack_]=[];
 	#$self->[reader_cache_]={};
 
-	#$self->[write_stack_]=[];
+	$self->[write_stack_]=[];
 	#$self->[writer_cache_]={};
 
 	$self->[write_queue_]=[];
@@ -70,8 +70,9 @@ sub new {
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
-		#say "Close me: $closeme";
-
+		$self->[wbuf_]="";
+		#reset write stack
+		$self->[write_]=pop $self->[write_stack_]->@*;
 		return unless $closeme||$_[0];
 		delete $sessions->{$id};
 		close $fh;
@@ -106,6 +107,7 @@ sub revive {
 	$self->[rbuf_]="";
 	$self->[rex_]=undef;
 	$self->[write_queue_]->@*=();
+	$self->[write_stack_]=[];
 
 	
 	#$self->_make_reader;
@@ -162,6 +164,7 @@ sub push_reader {
 }
 
 sub push_writer {
+	push $_[0][write_stack_]->@*, $_[0][write_];
 	$_[0][write_]=$_[1];
 }
 

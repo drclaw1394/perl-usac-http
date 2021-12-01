@@ -360,10 +360,9 @@ sub list_dir {
 
 	rex_reply_chunked $line, $rex, HTTP_OK,[] , sub {
 		return unless my $writer=$_[0];			#no writer so bye
-
 		##### Start app logic
 		state $first=1;
-		$reply="";					#Reset buffer
+		my $reply="";					#Reset buffer
 		$ren->(\$reply, $first?$labels : undef, \@results);	#Render to output
 		$first=0;
 

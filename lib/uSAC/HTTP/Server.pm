@@ -38,7 +38,7 @@ use Carp 'croak';
 use constant KEY_OFFSET=> uSAC::HTTP::KEY_OFFSET+uSAC::HTTP::KEY_COUNT;
 
 use enum (
-	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ total_requests_>
+	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ total_requests_>
 );
 
 use constant KEY_COUNT=> total_requests_ - host_+1;
@@ -481,7 +481,6 @@ sub usac_listen {
 
 sub usac_mime_default{
 	my $server=$_;
-	$server->[port_]=$_[0];
 	$DEFAULT_MIME=>$_[0]//"application/octet-stream";
 
 
