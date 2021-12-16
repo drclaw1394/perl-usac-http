@@ -10,8 +10,10 @@ WriteMakefile(
 		'Digest::SHA1' 	=> 0,
 		'JSON::XS'     	=> 0,
 		enum	    	=> 0,
-		"Hustle::Table" => 0,
-		"common::sense" => 0
+		"Hustle::Table" => "0.3.0",
+		"common::sense" => 0,
+
+		"Crypt::JWT"	=> 0,
 	},
 	ABSTRACT_FROM     => 'lib/uSAC/HTTP/Server.pm', # retrieve abstract from module
 	AUTHOR            => 'Ruben Westerberg',
