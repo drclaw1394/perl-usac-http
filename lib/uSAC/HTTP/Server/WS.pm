@@ -286,7 +286,8 @@ sub make_websocket_server_reader {
 					#TODO: drop the session, undef any read/write subs
 					$self->[pinger_]=undef;
 					$self->[on_close_]->();
-					$session->[uSAC::HTTP::Session::dropper_]->(1);
+					$session->[uSAC::HTTP::Session::closeme_]=1;
+					$session->[uSAC::HTTP::Session::dropper_]->();
 
 				}
 				else{

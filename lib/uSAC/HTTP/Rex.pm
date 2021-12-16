@@ -45,6 +45,7 @@ use enum (
 use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>static_headers_-version_+1;
 
+require uSAC::HTTP::Middleware;
 sub uri_decode {
 	my $octets= shift;
 	$octets=~ s/\+/ /sg;
@@ -387,8 +388,8 @@ sub reply_simple{
 	);
 	#somehow call outerware before rendering?
 	
-	my $outer=$_[0][4][1];
-	&$outer if $outer;
+	#my $outer=$_[0][4][1];
+	#&$outer if $outer;
 
 	
 
@@ -403,7 +404,7 @@ sub reply_simple{
 	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[3]->@* if $_[3];
 
 	$reply.=LF.$_[4];
-	$_[1][write_]($reply);	#fire and forget
+	$_[1][write_]($reply,$session->[uSAC::HTTP::Session::dropper_]);	#fire and forget
 }
 
 
@@ -417,7 +418,7 @@ sub reply_chunked{
 
 	#my $content_length=length($_[4])+0;
 	$reply= "HTTP/1.1 $code".LF;
-	my $headers=[
+	my @headers=(
 		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
 		($session->[uSAC::HTTP::Session::closeme_]
 			?[HTTP_CONNECTION,	"close"]
@@ -427,25 +428,26 @@ sub reply_chunked{
 		),
 		[HTTP_TRANSFER_ENCODING, "chunked"]
 
-	];
+	);
 
 
-	#render_v1_1_headers($reply, $headers, $self->[static_headers_], $_[3]);
-	for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){
-		$reply.=$h->[0].": ".$h->[1].LF;
-	}
+        ############################################################################
+        # #render_v1_1_headers($reply, $headers, $self->[static_headers_], $_[3]); #
+        # for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){ #
+        #         $reply.=$h->[0].": ".$h->[1].LF;                                 #
+        # }                                                                        #
+        ############################################################################
+	#
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[1]->[static_headers_]->@*; 
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[3]->@* if $_[3];
 
 	#Execute the filters based on headers
 	#&{$_[0][4][1]};
 	#
+	#
 	$reply.=LF;
-
-	require uSAC::HTTP::Middleware;
-	
-	my $chunker=uSAC::HTTP::Session::push_writer $session, uSAC::HTTP::Middleware::make_chunked_writer($session);
-	#write the header, and then do callback to let app write data
-	#use chunker as argument which will be first argument of callback
-	$self->[write_]($reply, $cb, $chunker);
+	$self->[write_]($reply, $cb, uSAC::HTTP::Middleware::make_chunked_writer($session));
 }
 
 sub reply {

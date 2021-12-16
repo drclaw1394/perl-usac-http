@@ -366,9 +366,10 @@ sub list_dir {
 		$ren->(\$reply, $first?$labels : undef, \@results);	#Render to output
 		$first=0;
 
-		@results=();					#mark as done		
 		###### End app logic
-		$writer->($reply,@results? __SUB__ : undef);	#
+		#$session->[uSAC::HTTP::Session::closeme_]=1;
+		$writer->($reply);#$session->[uSAC::HTTP::Session::dropper_]);
+		$writer->("", $session->[uSAC::HTTP::Session::dropper_]);
 
 	};
 }

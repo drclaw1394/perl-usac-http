@@ -168,6 +168,7 @@ sub make_reader{
 
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{CONNECTION} =~/^Keep-Alive/ );
+				$r->[uSAC::HTTP::Session::closeme_]||=	$h{CONNECTION}=~/close/i;
 
 				#shift buffer
 				$buf=substr $buf, pos $buf;# $pos;
@@ -397,99 +398,6 @@ sub make_form_urlencoded_reader {
 	}
 }
 
-#lowest level of the stream stack
-#Inputs are buffer, callback, callback arg
-#if callback is not provided, the 'dropper' for the session is used.
-#in when the write is complete, the callback is called with the argument.
-#if an error occored the callback is called with undef.
-#
-sub make_socket_writer_append{
-	#take a session and alias the variables to lexicals
-	my $ido=shift;
-	weaken $ido;
-	my $wbuf;# $$wbuf="";# buffer is for this sub only \$ido->[uSAC::HTTP::Session::wbuf_];
-	\my $ww=\$ido->[uSAC::HTTP::Session::ww_];
-	\my $fh=\$ido->[uSAC::HTTP::Session::fh_]; #reference to file handle.
-	weaken $fh;
-	my $w;
-	my $offset=0;
-	say  "++Making socket writer";
-
-	#Arguments are buffer and callback.
-	#do not call again until callback is called
-	#if no callback is provided, the session dropper is called.
-	#
-	sub {
-		use integer;
-
-		($_[0]//0) or return;		#undefined input. was a stack reset
-
-		\my $buf=\$_[0];		#give the input a name
-
-		my $cb= $_[1]//$ido->[uSAC::HTTP::Session::dropper_];#sub {};			#give the callback a name
-		
-		#say "writer cb is: ", Dumper $cb;
-		my $arg=$_[2]//__SUB__;
-		$offset=0;# if $pre_buffer!=$_[0];	#do offset reset if need beo
-		#$pre_buffer=$_[0];
-
-		if(!$ww){	#no write watcher so try synchronous write
-			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
-			$offset+=$w;
-			if($offset==length $buf){
-				#say "FULL WRITE NO APPEND";
-				#say "writer cb is: $cb";
-				$cb->($arg);
-				#$cb->($ido);
-				return;
-			}
-			elsif(defined $w){# and length($buf)> $w){
-				#say "PARITAL WRITE NO APPEND: wanted". length($buf). "got $w";
-				#say "making watcher";
-				#$wbuf=\$buf;
-				$ww = AE::io $fh, 1, sub {
-					$ido or return;
-					$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
-
-					$offset+=$w;
-					if($offset==length $buf) {
-						#say "FULL async write";
-						undef $ww;
-						$cb->($arg);# if defined $cb;
-					}
-					elsif(defined $w){
-						say "partial async write";
-						#$$cb->((length ($buf) - $offset) ) if defined $$cb;
-					}
-					else{
-						#error
-						return if $! == EAGAIN or $! == EINTR;#or $! == WSAEWOULDBLOCK){
-						$ww=undef;
-						$cb->(undef);
-						#uSAC::HTTP::Session::drop $ido, "$!";
-						return;
-					}
-				};
-				return
-
-			}
-			else {
-				unless( $! == EAGAIN or $! == EINTR){
-
-					say "ERROR IN WRITE NO APPEND";
-					say $!;
-					#actual error		
-					$ww=undef;
-					$cb->(undef);
-					#uSAC::HTTP::Session::drop $ido, "$!";
-					return;
-				}
-			}
-
-		}
-		return
-	};
-}
 sub make_socket_writer{
 	#take a session and alias the variables to lexicals
 	my $session=shift;
@@ -504,17 +412,26 @@ sub make_socket_writer{
 	#do not call again until callback is called
 	#if no callback is provided, the session dropper is called.
 	#
-	\my @queue=$session->[uSAC::HTTP::Session::write_queue_]; # data, offset, cb, arg
+	#\my @queue=$session->[uSAC::HTTP::Session::write_queue_]; # data, offset, cb, arg
+	my @queue;
+	my $dropper=$session->[uSAC::HTTP::Session::dropper_];	#default callback
+	\my $time= \$session->[uSAC::HTTP::Session::time_];#=$uSAC::HTTP::Session::Time;
 
+
+	#Stack interface
+	#Buffer:	Defined with length: write data, defined no data: flush,  undef: reset
+	#callback	Defined: call when write is done, undefined: call dropper/default when write is done
+	#		If no cb specified, no more data to be written 
+	#
+	#arg		Defined: Use as argument to callback, undefined: use current sub as argument
 	$session->[uSAC::HTTP::Session::write_]=sub {
 		use integer;
 
-		$_[0]//return;		#undefined input. was a stack reset
+		$_[0]//(@queue=()) && return;		#undefined input. was a stack reset
 		
 		\my $buf=\$_[0];		#give the input a name
 
-		my $dropper=$session->[uSAC::HTTP::Session::dropper_];	#default callback
-		my $cb= $_[1]//$dropper;		#when no cb provided, use dropper
+		my $cb= $_[1];#//$dropper;		#when no cb provided, use dropper
 		my $arg=$_[2]//__SUB__;			#is this sub unless provided
 
 		$offset=0;# if $pre_buffer!=$_[0];	#do offset reset if need beo
@@ -523,23 +440,14 @@ sub make_socket_writer{
 		if(!$ww){	#no write watcher so try synchronous write
 			#say "No watcher";
 			$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
-			$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
+			#$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
+			$time=$uSAC::HTTP::Session::Time;
+
 			$offset+=$w;
 			if($offset==length $buf){
 				#say "FULL WRITE NO APPEND";
 				#say "writer cb is: $cb";
-				if($dropper == $cb){
-					$cb->();
-				}
-				else {
-					$cb->($arg);
-                                        ###############################################
-                                        # my $timer; $timer=AE::timer 0.0, 0.0, sub { #
-                                        #         $cb->($arg);                        #
-                                        #         $timer=undef;                       #
-                                        # };                                          #
-                                        ###############################################
-				}
+				$cb->($arg) if $cb;
 				return;
 			}
 			#else{
@@ -552,8 +460,9 @@ sub make_socket_writer{
 					#actual error		
 					$ww=undef;
 					@queue=();	#reset queue for session reuse
-					$cb->(undef);
-					$dropper->(1);
+					$cb->(undef) if $cb;
+					$session->[uSAC::HTTP::Session::closeme_]=1;
+					$dropper->();
 					#uSAC::HTTP::Session::drop $session, "$!";
 					return;
 				}
@@ -574,26 +483,15 @@ sub make_socket_writer{
 					\my $cb=\$entry->[2];
 					\my $arg=\$entry->[3];
 					$w = syswrite( $fh, $buf, length($buf)-$offset, $offset);
-					$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
+					#$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;
+					$time=$uSAC::HTTP::Session::Time;
 
 					$offset+=$w;
 					if($offset==length $buf) {
 						#say "FULL async write";
 						shift @queue;
 						undef $ww unless @queue;
-						#$cb->($arg);# if defined $cb;
-						if($dropper == $cb){
-							$cb->();
-						}
-						else {
-								$cb->($arg);
-                                                        ###############################################
-                                                        # my $timer; $timer=AE::timer 0.0, 0.0, sub { #
-                                                        #         $cb->($arg);                        #
-                                                        #         $timer=undef;                       #
-                                                        # };                                          #
-                                                        ###############################################
-						}
+						$cb->($arg) if $cb;
 						return;
 					}
 
@@ -604,8 +502,9 @@ sub make_socket_writer{
 						#actual error		
 						$ww=undef;
 						@queue=();	#reset queue for session reuse
-						$cb->(undef);
-						$dropper->(1);
+						$cb->(undef) if $cb;
+						$session->[uSAC::HTTP::Session::closeme_]=1;
+						$dropper->();
 						#uSAC::HTTP::Session::drop $session, "$!";
 						return;
 					}

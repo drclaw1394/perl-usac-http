@@ -57,7 +57,7 @@ sub new {
 	$self->[write_stack_]=[];
 	#$self->[writer_cache_]={};
 
-	$self->[write_queue_]=[];
+	#$self->[write_queue_]=[];
 	$self->[on_body_]=undef;	#allocate all the storage now
 	#$self->[dropper_]=make_dropper($self);
 	#
@@ -70,10 +70,11 @@ sub new {
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
-		$self->[wbuf_]="";
+		#$self->[wbuf_]="";
 		#reset write stack
-		$self->[write_]=pop $self->[write_stack_]->@*;
-		return unless $closeme||$_[0];
+		#$self->[write_]=pop $self->[write_stack_]->@*;
+		#say "in dropper: ", $closeme, " ", caller;
+		return unless $closeme;#||$_[0];
 		delete $sessions->{$id};
 		close $fh;
 		$rw=undef;
@@ -81,7 +82,7 @@ sub new {
 		$fh=undef;
 		$id=undef;
 		$closeme=undef;
-		$self->[write_queue_]->@*=();
+		#$self->[write_queue_]->@*=();
 		unshift @{$self->[zombies_]}, $self;
 		#say caller;
 		#say "DROP COMPLETE...";
@@ -106,7 +107,7 @@ sub revive {
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
 	$self->[rex_]=undef;
-	$self->[write_queue_]->@*=();
+	#$self->[write_queue_]->@*=();
 	$self->[write_stack_]=[];
 
 	

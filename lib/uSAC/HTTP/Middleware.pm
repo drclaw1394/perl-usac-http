@@ -219,9 +219,6 @@ sub chunked{
 		$_[2]//= __SUB__ ;		#argument to callback is self unless one is provided
 		return &$next unless defined $_[0];	#reset stack if requested. pass it on
 		$scratch=sprintf("%02X".LF,length $_[0]).$_[0].LF;
-		$scratch.="0000".LF.LF unless $_[1];
-		#say length $scratch;
-		#say caller;
 		shift;
 		$next->($scratch, @_);
 	}
