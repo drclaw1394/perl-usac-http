@@ -163,7 +163,6 @@ sub enable_cache {
 
 sub open_cache {
 	my $abs_path=shift;
-	say "OPEN CACHE";
 	#$open_cache->{$abs_path}//do {
 	#do {
 		my $in_fh;

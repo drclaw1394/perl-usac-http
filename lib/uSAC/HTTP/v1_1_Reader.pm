@@ -44,6 +44,12 @@ sub uri_decode {
 	return decode_utf8($octets);
 	#return decode("utf8", $octets);
 }
+sub uri_decode_inplace {
+	$_[0]=~ s/\+/ /sg;
+	$_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
+	decode_utf8($_[0]);
+	#return decode("utf8", $octets);
+}
 
 sub parse_form {
 	map { (split "=", $_)} split "&", $_[0] =~ tr/ //dr;
@@ -98,7 +104,8 @@ sub make_reader{
 			if ($state == 0) {
 				my $pos3=index $buf, LF;
 				($method,$uri,$version)=split " ", substr($buf,0,$pos3);
-				$uri=uri_decode $uri;
+				#$uri=uri_decode $uri;
+				uri_decode_inplace $uri;
 				
 				if($pos3>=0){
 					#end of line found

@@ -53,6 +53,12 @@ sub uri_decode {
 	return decode_utf8($octets);
 	#return decode("utf8", $octets);
 }
+sub uri_decode_inplace {
+	$_[0]=~ s/\+/ /sg;
+	$_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
+	decode_utf8($_[0]);
+	#return decode("utf8", $octets);
+}
 		
 sub reply_simple;
 		
