@@ -1,19 +1,18 @@
 package uSAC::HTTP::Server; 
-use common::sense;
-use IO::Handle;
+#use strict;
+#use warnings;
+#use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
 our @Subproducts;#=();		#Global to be provided by applcation
 
 use version;our $VERSION = version->declare('v0.1');
-use feature "refaliasing";
-use feature "isa";
+#use  v5.24;
+use feature qw<isa refaliasing say state>;
+no warnings "experimental";
+use parent 'uSAC::HTTP::Site';
 
-use parent 'uSAC::HTTP';
-
-use uSAC::HTTP;			#site, sub site, and host
 use Hustle::Table;		#dispatching of endpoints
-use uSAC::HTTP::Rex;		#subs for replying
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
@@ -35,7 +34,7 @@ use Carp 'croak';
 #max_header_size_
 #
 
-use constant KEY_OFFSET=> uSAC::HTTP::KEY_OFFSET+uSAC::HTTP::KEY_COUNT;
+use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
 	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ total_requests_>
@@ -43,15 +42,16 @@ use enum (
 
 use constant KEY_COUNT=> total_requests_ - host_+1;
 
-use Exporter qw<import>;
-our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
-our @EXPORT=@EXPORT_OK;
-
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Session;
-use uSAC::HTTP::v1_1;
+#use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
+use uSAC::HTTP::Rex;
+use Exporter 'import';
+
+our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
+our @EXPORT=@EXPORT_OK;
 
 
 ###################################################################
@@ -77,7 +77,7 @@ use uSAC::HTTP::v1_1_Reader;
 
 #Server Global values
 #our $Date;	#For date header
-our $DEFAULT_MIME=>"application/octet-stream";
+our $DEFAULT_MIME="application/octet-stream";
 
 #our $ERROR_PAGE=>
 \our %MIME=do "./mime.pl";
@@ -119,7 +119,7 @@ sub new {
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
 	$self->[static_headers_]=[];#STATIC_HEADERS;
-	register_site($self, uSAC::HTTP->new(id=>"default",host=>'[^ ]+'));
+	register_site($self, uSAC::HTTP::Site->new(id=>"default",host=>'[^ ]+'));
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	#$self->[max_header_size_]=MAX_READ_SIZE;
@@ -342,8 +342,9 @@ sub add_end_point{
 sub register_site {
 	my $self=shift;
 	my $site=shift;
-	$site->[uSAC::HTTP::server_]=$self;
-	my $name=$site->[uSAC::HTTP::id_];
+	#$site->[uSAC::HTTP::server_]=$self;
+	$site->server=$self;
+	my $name=$site->id;#$site->[uSAC::HTTP::id_];
 	$self->[sites_]{$name}=$site;
 	$site;
 }
@@ -386,7 +387,7 @@ sub rebuild_dispatch {
 	keys %$cache=512;
 	#The dispatcher always has a default. If we only have 1 entry in the dispatch table (ie the default)
 	if($self->[table_]->@*==1 or keys $self->[sites_]->%* > 1){
-		site_route $self=>'GET'=>qr{.*}=>()=>usac_welcome;
+		site_route($self,'GET', qr{.*}=>()=>usac_welcome);
 	}
 
 	#here we add the unsupported methods to the table before building it
@@ -445,7 +446,7 @@ sub list_routes {
 sub usac_server :prototype(&) {
 	my $sub=shift;
 	my $server=$_;
-	unless(defined and ($_ isa 'uSAC::HTTP'  )) {
+	unless(defined and ($_ isa 'uSAC::HTTP::Site'  )) {
 		#only create if one doesn't exist
 		say "Creating new server";
 		$server=uSAC::HTTP::Server->new();

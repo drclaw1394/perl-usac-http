@@ -3,7 +3,7 @@ use warnings;
 use feature ":all";
 
 use Data::Dumper;
-use uSAC::HTTP;
+use uSAC::HTTP::Site;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Static;
 use uSAC::HTTP::Middleware qw<log_simple>;

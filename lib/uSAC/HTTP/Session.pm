@@ -10,7 +10,6 @@ use AnyEvent;
 #use uSAC::HTTP::Server;
 
 use Errno qw(EAGAIN EINTR);
-use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
 #Session represents a logical connection. could be tcp or application defined UDP
 #
 #
