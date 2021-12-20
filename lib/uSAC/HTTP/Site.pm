@@ -108,23 +108,17 @@ sub add_route {
 	my $matcher;
 	#my $unsupported;
 	my $bp=$self->built_prefix;
+	say  "Building hosts";
 	if($self->[server_]->enable_hosts){
-		#my @hosts=$self->[host_]->@*;
 		my @hosts=$self->build_hosts;
+		say @hosts;
 		push @hosts, qr{[^ ]+} unless @hosts;
 		my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
 		my $bp=$self->built_prefix;
 		$matcher=qr{^$host_match $method_matcher $bp$path_matcher};
-		#$matcher=qr{^$self->[host_] $method_matcher $bp$path_matcher};
 	}
 	else {
 		$matcher=qr{^$method_matcher $bp$path_matcher};
-
-                #######################################################################################
-                # if($self->[host_]->@*){                                                             #
-                #         warn "Server not configured for virtual hosts. Ignoring host specificatoin" #
-                # }                                                                                   #
-                #######################################################################################
 	}
 	say "  matching: $matcher";	
 	my $outer;
@@ -142,7 +136,6 @@ sub add_route {
 	my $unsupported;
 	if($self->[server_]->enable_hosts){
 		my @hosts=$self->build_hosts;
-		#my @hosts=$self->[host_]->@*;
 		push @hosts, qr{[^ ]+} unless @hosts;
 		my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
 		$unsupported=qr{^$host_match $mre $bp$path_matcher};
@@ -235,8 +228,9 @@ sub set_built_prefix {
 sub build_hosts {
 	my $parent=$_[0];
 	my @hosts;
-	while($parent->parent_site){
-		push @hosts, $parent->[host_]->@*;	
+	while($parent) {
+		push @hosts, $parent->host->@*;	
+		last if @hosts;		#Stop if next level specified a host
 		$parent=$parent->parent_site;
 	}
 	@hosts;
@@ -359,7 +353,6 @@ sub usac_site :prototype(&) {
 	my $self= uSAC::HTTP::Site->new(server=>$server);
 	$self->[parent_]=$_;
 	
-	#$self->[host_]=$self->[parent_]->host; #inherit parent host
 	local  $_=$self;
 	$sub->();
 }
@@ -430,9 +423,15 @@ sub usac_prefix {
         }
 }
 
+
 sub usac_host {
 	my $self=$_;
+	if (defined and ($_ isa 'uSAC::HTTP::Server'  )) {
+		push $self->site->host->@*, @_;
+		return
+	}
 	push $self->[host_]->@*, @_;
+
 }
 
 sub usac_middleware {

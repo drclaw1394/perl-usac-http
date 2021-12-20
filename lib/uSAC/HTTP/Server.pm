@@ -91,6 +91,9 @@ sub usac_welcome {
 	unless($data){
 		local $/=undef;
 		$data=<DATA>;
+
+		#execute template
+
 	}
 
 	state $sub=sub {
@@ -119,7 +122,7 @@ sub new {
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
 	$self->[static_headers_]=[];#STATIC_HEADERS;
-	register_site($self, uSAC::HTTP::Site->new(id=>"default",host=>'[^ ]+'));
+	register_site($self, uSAC::HTTP::Site->new(id=>"default"));#,host=>'[^ ]+'));
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	#$self->[max_header_size_]=MAX_READ_SIZE;
@@ -368,6 +371,7 @@ sub add_route {
 	$self->site->add_route(@_);
 }
 
+
 #Logical or of existing enable_hosts_ flag
 #Sub servers can enable it if needed.
 #Servers not needing host should't have has a host match specified
@@ -379,15 +383,18 @@ sub usac_hosts  {
 	$_->[enable_hosts_]=$_->[enable_hosts_]//$_[0]//0;
 	say "Hosts enabled? ", $_->[enable_hosts_];
 }
+sub host {
+	return $_[0]->site->host;
+}
 
 
 sub rebuild_dispatch {
 	my $self=shift;
 	my $cache={};
 	keys %$cache=512;
-	#The dispatcher always has a default. If we only have 1 entry in the dispatch table (ie the default)
+	#The dispatcher always has a default. Thus if we only have 1 entry in the dispatch table add explicit 
 	if($self->[table_]->@*==1 or keys $self->[sites_]->%* > 1){
-		site_route($self,'GET', qr{.*}=>()=>usac_welcome);
+		$self->site_route('GET', qr{.*}=>()=>usac_welcome);
 	}
 
 	#here we add the unsupported methods to the table before building it
@@ -500,61 +507,31 @@ sub usac_sub_product {
 }
 
 
-#########################################################################################
-# sub peer_info {                                                                       #
-#         my $fh = shift;                                                               #
-#         #my ($port, $host) = AnyEvent::Socket::unpack_sockaddr getpeername($fh);      #
-#         #return AnyEvent::Socket::format_address($host).':'.$port;                    #
-# }                                                                                     #
-#                                                                                       #
-#                                                                                       #
-# sub req_wbuf_len {                                                                    #
-#         my $self = shift;                                                             #
-#         my $req = shift;                                                              #
-#         return undef unless exists $self->{ $req->headers->{INTERNAL_REQUEST_ID} };   #
-#         return 0 unless exists $self->{ $req->headers->{INTERNAL_REQUEST_ID} }{wbuf}; #
-#         return length ${ $self->{ $req->headers->{INTERNAL_REQUEST_ID} }{wbuf} };     #
-# }                                                                                     #
-#                                                                                       #
-# sub badconn {                                                                         #
-#         my ($self,$fh,$rbuf,$msg) = @_;                                               #
-#         my $outbuf = (length $$rbuf > 2048) ?                                         #
-#                 substr($$rbuf,0,2045).'...' :                                         #
-#                 "$$rbuf";                                                             #
-#         $outbuf =~ s{(\p{C}|\\)}{ sprintf "\\%03o", ord $1 }sge;                      #
-#         my $remote = peer_info($fh);                                                  #
-#         my $fileno = fileno $fh;                                                      #
-#         warn "$msg from $remote (fd:$fileno) <$outbuf>\n";                            #
-# }                                                                                     #
-#                                                                                       #
-#                                                                                       #
-# sub ws_close {                                                                        #
-#         my $self = shift;                                                             #
-#         for (values %{ $self->{wss} }) {                                              #
-#                 $_ && $_->close();                                                    #
-#         }                                                                             #
-#         warn "$self->[active_requests_] / $self->[active_connections_]";              #
-# }                                                                                     #
-#                                                                                       #
-# sub graceful {                                                                        #
-#         my $self = shift;                                                             #
-#         my $cb = pop;                                                                 #
-#         delete $self->[aws_];                                                         #
-#         close $_ for values %{ $self->[fhs_] };                                       #
-#         if ($self->[active_requests_] == 0 or $self->[active_connections_] == 0) {    #
-#                 $cb->();                                                              #
-#         } else {                                                                      #
-#                 $self->[graceful_] = $cb;                                             #
-#                 $self->ws_close();                                                    #
-#         }                                                                             #
-# }                                                                                     #
-#                                                                                       #
-#########################################################################################
 
 1; 
 __DATA__
+<!doctype html>
 <html>
-	<body>
-		Welcome to uSAC
-	</body>
+<head>
+		<title>Welcome to uSAC HTTP Server</title>
+		<style>
+			html, body, div {
+				display: flex;
+				flex:1;
+				align-content: center;
+				align-items: center;
+			}
+			html {
+				height: 100%;
+
+			}
+
+		</style>
+	</head>
+	<body style="height: 100%;">
+		<div style="flex-direction: column;"> 
+			Welcome to uSAC HTTP Server</div>
+	
+
+</body>
 </html>
