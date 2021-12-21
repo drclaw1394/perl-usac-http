@@ -13,7 +13,7 @@ my $server; $server=usac_server {
 		usac_host "127.0.0.1:8080";
 		usac_host "localhost:8080";
 
-		#usac_middleware log_simple;
+		usac_middleware log_simple;
 
 		usac_route "/favicon.png"   => usac_cached_file "images/favicon.png";
 		usac_route "/static/hot.txt" =>	usac_cached_file "static/hot.txt";

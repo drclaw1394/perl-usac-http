@@ -37,7 +37,7 @@ use Carp 'croak';
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ total_requests_>
+	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ total_requests_>
 );
 
 use constant KEY_COUNT=> total_requests_ - host_+1;
@@ -125,6 +125,7 @@ sub new {
 	register_site($self, uSAC::HTTP::Site->new(id=>"default"));#,host=>'[^ ]+'));
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
+	$self->[workers_]=1;
 	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
 	return $self;
@@ -151,17 +152,21 @@ sub listen {
 		socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";
 		
 		if ($af == AF_INET || $af == AF_INET6) {
+			if($self->[workers_]>1){
 			setsockopt $fh, SOL_SOCKET, SO_REUSEADDR, 1
 				or Carp::croak "listen/so_reuseaddr: $!"
-					unless AnyEvent::WIN32; # work around windows bug
-
+					unless AnyEvent::WIN32; 
 			setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, 1
 				or Carp::croak "listen/so_reuseport: $!"
-					unless AnyEvent::WIN32; # work around windows bug
+					unless AnyEvent::WIN32; 
+			}
+			else {
+				say STDERR "Socket reuse not enabled. (ie only 1 worker)";
+			}
 
 			setsockopt $fh, 6, TCP_NODELAY, 1
 				or Carp::croak "listen/so_nodelay $!"
-					unless AnyEvent::WIN32; # work around windows bug
+					unless AnyEvent::WIN32; 
 			
 			unless ($service =~ /^\d*$/) {
 				$service = (getservbyname $service, "tcp")[2]
@@ -170,7 +175,7 @@ sub listen {
 		} elsif ($af == AF_UNIX) {
 			unlink $service;
 		}
-		
+		say "Service: $service, host $host, ipn ". length $ipn;
 		bind $fh, AnyEvent::Socket::pack_sockaddr( $service, $ipn )
 			or Carp::croak "listen/bind on ".eval{Socket::inet_ntoa($ipn)}.":$service: $!";
 		
@@ -485,6 +490,10 @@ sub usac_include {
 sub usac_listen {
 	#specify a interface and port number	
 	push $_->[listen_]->@*, @_;
+}
+
+sub usac_workers {
+	$_->[workers_]=shift;
 }
 
 sub usac_mime_default{
