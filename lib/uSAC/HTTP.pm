@@ -19,8 +19,10 @@ sub import {
 	my $caller=caller;
 	strict->import;
 	warnings->import;
-	feature->import(qw<say state refaliasing>);
+	feature->import(qw<say state refaliasing >);
+	feature->unimport(qw<indirect>);
 	utf8->import;
+
 
 	#Anything sub with usac or rex prefix is rexported
 	#Also http constants and headers are rexported

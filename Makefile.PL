@@ -8,10 +8,10 @@ WriteMakefile(
 		EV		=> 0,
 		AnyEvent 	=> 0,
 		'Digest::SHA1' 	=> 0,
+		JSON		=> 0,
 		'JSON::XS'     	=> 0,
 		enum	    	=> 0,
 		"Hustle::Table" => "0.3.0",
-		"common::sense" => 0,
 
 		"Crypt::JWT"	=> 0,
 	},

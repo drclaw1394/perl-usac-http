@@ -15,7 +15,7 @@ my @redirects=qw<
 	usac_redirect_not_modified
 	>;
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_site_url usac_static_content usac_cached_file $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_site_url usac_static_content usac_cached_file usac_mime_db usac_mime_default $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -39,8 +39,10 @@ use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
 use File::Spec::Functions qw<rel2abs>;
 use File::Basename qw<dirname>;
+
+use Data::Dumper;
 #Class attribute keys
-use enum ("server_=0",qw(prefix_ id_ mount_ cors_ middleware_ host_ parent_ unsupported_ built_prefix_));
+use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ middleware_ host_ parent_ unsupported_ built_prefix_));
 
 use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	built_prefix_-server_+1;
@@ -451,9 +453,11 @@ sub usac_error_page {
 #returns a sub which always renders the same content.
 #http code is always
 sub usac_static_content {
-	my $static=pop;	#Content is the last item
-	my $ext=$_[0]//"txt";
-	my $type=[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
+	my $self=$_;
+	my $static=shift;	#Content is the last item
+	my %options=@_;
+	my $mime=$options{mime}//$self->resolve_mime_default;
+	my $type=[HTTP_CONTENT_TYPE, $mime];
 	sub {
 		rex_reply_simple @_, HTTP_OK, [$type], $static; return
 	}
@@ -464,23 +468,92 @@ sub usac_cached_file {
 	my $path=pop;
 	#resolve the file relative path or 
 	$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
+
+	my %options=@_;
+	my $mime=$options{mime};
+	my $type;
+	if($mime){
+		#manually specified mime type
+		$type=$mime;
+	}
+	else{
+		my $ext=substr $path, rindex($path, ".")+1;
+		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
+		say "performing ext to mime lookup: $ext => $type";
+	}
+
 	if( stat $path and -r _ and !-d _){
 		my $entry;
 		open my $fh, "<", $path;
 		local $/;
 		$entry->[0]=<$fh>;
-		my $ext=substr $path, rindex($path, ".")+1;
-		$entry->[1]=[ HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
+		$entry->[1]=[ HTTP_CONTENT_TYPE, $type];
 		$entry->[2]=(stat _)[7];
 		$entry->[3]=(stat _)[9];
 		close $fh;
 
 		#Create a static content endpoint
-		usac_static_content($ext=>$entry->[0]);
+		usac_static_content($entry->[0], mime=>$type);
 	}
 	else {
 		say "Could not add hot path: $path";
 	}
+}
+#accessor
+sub mime_default : lvalue {
+	$_[0]->[mime_default_];
+}
+
+#accessor 
+sub mime_db: lvalue {
+	$_[0]->[mime_db_];
+}
+sub mime_lookup: lvalue {
+	$_[0]->[mime_lookup_];
+}
+
+#set the default mime for this level
+sub usac_mime_default{
+	my $self=$_;
+	$self->mime_default=$_[0]//"application/octet-stream";
+}
+
+#Set the mime db for this level
+#TODO should argument be a path to a file?
+sub usac_mime_db{
+	my $self=$_;
+	$self->mime_db=$_[0];
+	($self->mime_lookup)=$self->mime_db->index;
+}
+
+
+
+
+#Resolves the ext to mime table the hierarchy. Checks self first, then parent
+sub resolve_mime_lookup {
+	my $parent=$_[0];
+	my $db;;
+	while($parent) {
+		$db=$parent->mime_db;
+		say "looking up mime db in : ",$parent;
+		last if $db;
+		$parent=$parent->parent_site;
+	}
+		
+	$db?($db->index)[0]:{};
+}
+
+#Resolves the default mime in the hierarchy. Checks self first, then parent
+sub resolve_mime_default {
+	my $parent=$_[0];
+	my $default;
+	while($parent) {
+		$default=$parent->mime_default;
+		last if $default;
+		$parent=$parent->parent_site;
+	}
+		
+	$default?$default:"applcation/octet-stream";
 }
 
 ######################################################################

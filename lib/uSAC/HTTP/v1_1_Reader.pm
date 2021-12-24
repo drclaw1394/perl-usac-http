@@ -1,6 +1,5 @@
 package uSAC::HTTP::v1_1_Reader;
-use common::sense;
-use feature qw<refaliasing say switch>;
+use feature qw<current_sub refaliasing say switch>;
 no warnings "experimental";
 
 use Exporter 'import';

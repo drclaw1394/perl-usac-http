@@ -1,6 +1,5 @@
 package uSAC::HTTP::Session;
-use common::sense;
-use feature "refaliasing";
+use feature qw<say state refaliasing>;
 no warnings "experimental";
 use Scalar::Util 'openhandle','refaddr', 'weaken';
 

@@ -48,6 +48,7 @@ use uSAC::HTTP::Session;
 #use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Rex;
+use uSAC::MIME;
 use Exporter 'import';
 
 our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
@@ -75,12 +76,7 @@ our @EXPORT=@EXPORT_OK;
 
 #use constant LF => "\015\012";
 
-#Server Global values
-#our $Date;	#For date header
-our $DEFAULT_MIME="application/octet-stream";
 
-#our $ERROR_PAGE=>
-\our %MIME=do "./mime.pl";
 
 
 # Basic handlers
@@ -128,6 +124,10 @@ sub new {
 	$self->[workers_]=1;
 	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
+
+	$self->mime_db=uSAC::MIME->new;
+	$self->mime_default=="application/octet-stream";
+	$self->[mime_lookup_]=$self->mime_db->index;
 	return $self;
 }
 
@@ -496,18 +496,17 @@ sub usac_workers {
 	$_->[workers_]=shift;
 }
 
-sub usac_mime_default{
-	my $server=$_;
-	$DEFAULT_MIME=>$_[0]//"application/octet-stream";
-
-
+sub mime_default: lvalue {
+	$_[0]->site->mime_default;
+}
+sub mime_db: lvalue {
+	$_[0]->site->mime_db;
+}
+sub mime_lookup: lvalue {
+	$_[0]->site->mime_lookup;
 }
 
 
-sub usac_mime_map {
-	\our %MIME=do "./mime.pl";
-
-}
 sub usac_sub_product {
 		my $server=$_;
 		my $sub_product=$_[0];

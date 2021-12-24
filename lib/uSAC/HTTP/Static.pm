@@ -1,7 +1,7 @@
 package uSAC::HTTP::Static;
 
-use common::sense;
-use feature "refaliasing";
+use JSON;
+use feature qw<say  refaliasing state>;
 no warnings "experimental";
 use Scalar::Util qw<weaken>;
 use Devel::Peek qw<SvREFCNT>;
@@ -19,7 +19,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<usac_static_from send_file send_file_uri send_file_uri_range send_file_uri_norange  send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_from usac_file_from list_dir>;
+our @EXPORT_OK =qw<usac_static_from send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_under usac_file_under list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -27,6 +27,10 @@ my $path_ext=	qr{\.([^.]*)$}ao;
 
 my $read_size=4096*16;
 my %stat_cache;
+use constant KEY_OFFSET=>0;
+
+use enum ("mime_=".KEY_OFFSET, qw<default_mime_ root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ end_>);
+use constant KET_COUNT=>end_-mime_+1;
 
 ################################################
 # Server: nginx/1.21.0                         #
@@ -39,6 +43,22 @@ my %stat_cache;
 # Accept-Ranges: bytes                         #
 ################################################
 
+sub new {
+	my $package=shift//__PACKAGE__;
+	my $self=[];	
+	my %options=@_;
+	$self->[root_]=$options{root};
+	$self->[mime_]=$options{mime}//{};		#A mime lookup hash
+	$self->[default_mime_]=$options{default_mime}//"";		#A mime type
+	$self->[cache_]={};#$options{mime_lookup}//{};		#A mime lookup hash
+	$self->[cache_sweep_size_]=$options{cache_sweep_size}//100;
+	$self->[cache_timer_]=undef;
+	$self->[cache_size_]=$options{cache_size};
+	bless $self, $package;
+	$self->enable_cache;
+	$self;
+}
+
 
 #TODO:
 #add directory listing option?
@@ -47,13 +67,13 @@ sub _check_ranges{
 	my ($rex, $length)=@_;
 	#check for ranges in the header
 	my @ranges;
-	given($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-		when(undef){
+	for($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+		if(!defined){
 			#this should be and error
 			#no ranges specified but create default
 			@ranges=([0,$length-1]);#$stat->[7]-1]);
 		}
-		default {
+		else {
 			#check the If-Range
 			my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF_RANGE"};
 
@@ -65,7 +85,7 @@ sub _check_ranges{
 			my $i=0;
 			my $pos;	
 			my $size=$length;
-			given(tr/ //dr){				#Remove whitespace
+			for(tr/ //dr){				#Remove whitespace
 				#exract unit
 				$pos=index $_, "=";
 				$unit= substr $_, 0, $pos++;
@@ -133,27 +153,26 @@ sub _check_ranges{
 # 	Replacing a file?
 #
 
-my $open_cache ={};
-my $cache_timer;
-my $sweep_size=100;
 
 sub disable_cache {
+	my $self=shift;
 	#delete all keys
-	for (keys %$open_cache){
-		delete $open_cache->{$_};
+	for (keys $self->[cache_]->%*){
+		delete $self->[cache_]{$_};
 	}
-	$cache_timer=undef;
+	#stop timer
+	$self->[cache_timer_]=undef;
 	
 }
 
 sub enable_cache {
-	unless ($cache_timer){
-		$cache_timer=AE::timer 0,10,sub {
+	my $self=shift;
+	unless ($self->[cache_timer_]){
+		$self->[cache_timer_]=AE::timer 0,10,sub {
 			my $i;
-			for(keys %$open_cache){
-				delete $open_cache->{$_} if SvREFCNT $open_cache->{$_}[0]==1;
-				last if ++$i >= $sweep_size;
-
+			for(keys $self->[cache_]->%*){
+				delete $self->[cache_]{$_} if SvREFCNT $self->[cache_]{$_}[0]==1;
+				last if ++$i >= $self->[cache_sweep_size_];
 			}
 		};
 
@@ -162,6 +181,7 @@ sub enable_cache {
 }
 
 sub open_cache {
+	my $self=shift;
 	my $abs_path=shift;
 	#$open_cache->{$abs_path}//do {
 	#do {
@@ -179,11 +199,12 @@ sub open_cache {
 			#
 			my $ext=substr $abs_path, rindex($abs_path, ".")+1;
 			my @entry;
-			$entry[1]=[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
+			$entry[1]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
+			#$entry[1]=[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
 			$entry[0]=$in_fh;
 			$entry[2]=(stat _)[7];
 			$entry[3]=(stat _)[9];
-			$open_cache->{$abs_path}=\@entry;
+			$self->[cache_]{$abs_path}=\@entry;
 		}
 		#};
 }
@@ -191,111 +212,108 @@ sub open_cache {
 
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
-sub send_file_uri_norange {
-	use  integer;
-	my ($matcher,$rex,$uri,$sys_root)=@_;
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
+sub make_send_file_uri_norange {
 
-	my $abs_path=$sys_root."/".$uri;
-	my $entry=$open_cache->{$abs_path}//open_cache $abs_path;
-	
-	#unless($entry=open_cache $abs_path){
-	unless($entry){
-		rex_reply_simple $matcher, $rex, HTTP_NOT_FOUND,[],"";
-		return;
-	}
-	my $in_fh=$entry->[0];
+	#return a sub with cache an sysroot aliased
+	my $self=shift;
 
-	#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh; 
-
-	my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
-        #########################################################################
-        # my ($content_length, $mod_time)=(stat $in_fh)[7,9];                   #
-        #                                                                       #
-        # #Do stat on fh instead of path. Path requires resolving and is slower #
-        # #fh is already resolved and open.                                     #
-        # unless(-r _ and !-d _){                                               #
-        #         rex_reply_simple undef, $rex, HTTP_NOT_FOUND,[],"";           #
-        #         #remove from cache                                            #
-        #         delete $open_cache->{$abs_path};                              #
-        #         return                                                        #
-        # }                                                                     #
-        #########################################################################
-
-
-	#my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
-	
-	$reply= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF;
-	my $headers=[
-		[HTTP_DATE, $uSAC::HTTP::Session::Date],
-        	($session->[uSAC::HTTP::Session::closeme_]?
-			[HTTP_CONNECTION, "close"]
-			:([HTTP_CONNECTION, "Keep-Alive"],
-			[HTTP_KEEP_ALIVE,"timeout=10, max=1000"]
-			)
-		),
-		$entry->[1],
-		[HTTP_CONTENT_LENGTH, $content_length],			#need to be length of multipart
-		#.HTTP_TRANSFER_ENCODING.": chunked".LF
-		[HTTP_ETAG,"\"$mod_time-$content_length\""],
-		[HTTP_ACCEPT_RANGES,"bytes"]
-	];
-
-	for my $h ($rex->[uSAC::HTTP::Rex::static_headers_]->@*, $headers->@*){
-		$reply.=$h->[0].": ".$h->[1].LF;
-	}
-	$reply.=LF;
-
-
-	if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
-		$session->[uSAC::HTTP::Session::write_]->($reply);
-		return;
-	}
-
-	my $offset=length($reply);
-	my $rc;
-	my $total=0;
+	\my $sys_root=\$self->[root_];
+	\my %cache=$self->[cache_];
 
 	sub {
-		seek $in_fh,$total,0;
-		$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
+		use  integer;
+		my ($matcher,$rex,$uri)=@_;
+		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
-		$offset=0;
-		#non zero read length.. do the write	
-		if($total==$content_length){	#end of file
+		my $abs_path=$sys_root."/".$uri;
+		my $entry=$cache{$abs_path}//$self->open_cache($abs_path);
+
+		#unless($entry=self->[cache_] $abs_path){
+		unless($entry){
+			rex_reply_simple $matcher, $rex, HTTP_NOT_FOUND,[],"";
+			return;
+		}
+		my $in_fh=$entry->[0];
+
+		#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh; 
+
+		my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
+
+
+		#my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
+
+		$reply= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF;
+		my $headers=[
+			[HTTP_DATE, $uSAC::HTTP::Session::Date],
+			($session->[uSAC::HTTP::Session::closeme_]?
+				[HTTP_CONNECTION, "close"]
+				:([HTTP_CONNECTION, "Keep-Alive"],
+					[HTTP_KEEP_ALIVE,"timeout=10, max=1000"]
+				)
+			),
+			$entry->[1],
+			[HTTP_CONTENT_LENGTH, $content_length],			#need to be length of multipart
+			#.HTTP_TRANSFER_ENCODING.": chunked".LF
+			[HTTP_ETAG,"\"$mod_time-$content_length\""],
+			[HTTP_ACCEPT_RANGES,"bytes"]
+		];
+
+		for my $h ($rex->[uSAC::HTTP::Rex::static_headers_]->@*, $headers->@*){
+			$reply.=$h->[0].": ".$h->[1].LF;
+		}
+
+		$reply.=LF;
+
+
+		if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
 			$session->[uSAC::HTTP::Session::write_]->($reply);
 			return;
 		}
 
-		elsif($rc){
-			$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
-			return;
-		}
-		elsif( $! != EAGAIN and  $! != EINTR){
+		my $offset=length($reply);
+		my $rc;
+		my $total=0;
+
+		sub {
+			seek $in_fh,$total,0;
+			$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
+
+			$offset=0;
+			#non zero read length.. do the write	
+			if($total==$content_length){	#end of file
+				$session->[uSAC::HTTP::Session::write_]->($reply);
+				return;
+			}
+
+			elsif($rc){
+				$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
+				return;
+			}
+			elsif( $! != EAGAIN and  $! != EINTR){
 				say "READ ERROR from file";
 				#say $rc;
 				say $!;
-				delete $open_cache->{$abs_path};
+				delete $cache{$abs_path};
 				close $in_fh;
 				$session->[uSAC::HTTP::Session::dropper_]->();
 				return;
-		}
+			}
 
-		#else {  EAGAIN }
+			#else {  EAGAIN }
 
-	}->();
+		}->();
+	}
 
 }
 
 sub _html_dir_list {
 	sub {
-		\my $output=$_[0];
 		my $headers=$_[1];
 		my $entries=$_[2];
 
 		if($headers){
-			$output.=
+			$_[0].=
 			"<table>\n"
 			."    <tr>\n"
 			."        <th>".join("</th><th>",@$headers)."</th>\n"
@@ -304,90 +322,127 @@ sub _html_dir_list {
 		}
 		if(ref $entries eq "ARRAY"){
 			for my $row(@$entries){
-				$output.=
+				my ($url,$label)=splice @$row,0,2;
+				unshift @$row, qq|<a href="$url">$label</a>|;
+				$_[0].=
 				"    <tr>\n"
 				."        <td>".join("</td><td>",@$row)."</td>\n"
 				."    </tr>\n"
 				;
 			}
 		}
-		$output.="</table>";
+		$_[0].="</table>";
 	}
 }
-
-sub list_dir {
-	my ($line,$rex,$uri,$sys_root,$renderer)=@_;
-
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
-
-	my $abs_path=$sys_root."/".$uri;
-	#say "Listing dir for $abs_path";
-	stat $abs_path;
-	unless(-d _ and  -r _){
-		rex_reply_simple $line, $rex, HTTP_NOT_FOUND, [],"";
-		return;
+sub _json_dir_list {
+	sub {
+		state  $headers;
+		if($_[1]){
+			$headers=$_[1];
+		}
+		#build up tuples of key=value pairs
+		my @tuples;
+		for my $row ($_[2]->@*){
+			my $trow={};
+			for my $index (0..@$row-1){
+				$trow->{$headers->[$index]}=$row->[$index];	
+			}
+			push @tuples, $trow;
+		}
+		$_[0].=encode_json \@tuples
 	}
 
-	#build uri from sysroot
-	my @fs_paths;
-	if($abs_path eq "$sys_root/"){
+}
+
+sub make_list_dir {
+	my $self=shift;
+
+	\my $sys_root=\$self->[root_];
+	\my %cache=$self->[cache_];
+	my %options=@_;
+	my $renderer=$options{renderer};
+	#resolve renderer
+	$renderer=
+	lc $renderer eq "html"? _html_dir_list:
+	lc $renderer eq "json"? _json_dir_list:
+	!defined $renderer? _html_dir_list: $renderer;
 	
-		@fs_paths=<$abs_path*>;	
-	}
-	else{
-		@fs_paths=<$abs_path.* $abs_path*>;	
-	}
+	sub{
+		my ($line,$rex,$uri)=@_;
+		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
-	state $labels=[qw<name dev inode mode nlink uid gid rdev size access_time modification_time change_time block_size blocks>];
-	my @results=map {
-		#say "WORKING ON PATH: $_";
-		if(-r){			#only list items we can read
-			s|^$sys_root/||;			#strip out sys_root
-			my $base=(split "/")[-1].(-d _ ? "/":"");
+		my $abs_path=$sys_root."/".$uri;
+		#say "Listing dir for $abs_path";
+		stat $abs_path;
+		unless(-d _ and  -r _){
+			rex_reply_simple $line, $rex, HTTP_NOT_FOUND, [],"";
+			return;
+		}
 
-			[qq|<a href="$rex->[uSAC::HTTP::Rex::uri_]$base">$base</a>|,stat _];
+		#build uri from sysroot
+		my @fs_paths;
+		if($abs_path eq "$sys_root/"){
+
+			@fs_paths=<$abs_path*>;	
 		}
 		else{
-			();
+			@fs_paths=<$abs_path.* $abs_path*>;	
 		}
+
+		state $labels=[qw<name dev inode mode nlink uid gid rdev size access_time modification_time change_time block_size blocks>];
+		my @results=map {
+			#say "WORKING ON PATH: $_";
+			#if(-r){			#only list items we can read
+				s|^$sys_root/||;			#strip out sys_root
+				my $base=(split "/")[-1].(-d _ ? "/":"");
+
+				#[qq|<a href="$rex->[uSAC::HTTP::Rex::uri_]$base">$base</a>|,stat _];
+				["$rex->[uSAC::HTTP::Rex::uri_]$base", $base, stat _]
+				#}
+                        ###############
+                        # else{       #
+                        #         (); #
+                        # }           #
+                        ###############
+		}
+
+		@fs_paths;
+		#say "Results ", @results;
+		my $ren=$renderer//_html_dir_list;
+
+		rex_reply_chunked $line, $rex, HTTP_OK,[] , sub {
+			return unless my $writer=$_[0];			#no writer so bye
+			##### Start app logic
+			state $first=1;
+			my $reply="";					#Reset buffer
+			$ren->($reply, $first?$labels : undef, \@results);	#Render to output
+			$first=0;
+
+			###### End app logic
+			#$session->[uSAC::HTTP::Session::closeme_]=1;
+			$writer->($reply);#$session->[uSAC::HTTP::Session::dropper_]);
+			$writer->("", $session->[uSAC::HTTP::Session::dropper_]);
+
+		};
 	}
-
-	@fs_paths;
-	#say "Results ", @results;
-	my $ren=$renderer//_html_dir_list;
-
-	rex_reply_chunked $line, $rex, HTTP_OK,[] , sub {
-		return unless my $writer=$_[0];			#no writer so bye
-		##### Start app logic
-		state $first=1;
-		my $reply="";					#Reset buffer
-		$ren->(\$reply, $first?$labels : undef, \@results);	#Render to output
-		$first=0;
-
-		###### End app logic
-		#$session->[uSAC::HTTP::Session::closeme_]=1;
-		$writer->($reply);#$session->[uSAC::HTTP::Session::dropper_]);
-		$writer->("", $session->[uSAC::HTTP::Session::dropper_]);
-
-	};
 }
 
 sub send_file_uri_norange_chunked {
 	use  integer;
 
-	my ($line,$rex,$uri,$sys_root)=@_;
+	my ($self, $line,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	my $abs_path=$sys_root."/".$uri;
 
-	my $entry=$open_cache->{$abs_path}//open_cache $abs_path;
+	my $entry=$self->[cache_]->{$abs_path}//$self->open_cache($abs_path);
 
 	unless($entry and stat $abs_path and -r _ and !-d _){
 		rex_reply_simple $line, $rex, HTTP_NOT_FOUND;
 		#remove from cache
-		delete $open_cache->{$abs_path};
+		delete $self->[cache_]{$abs_path};
 		return
 	}
 	my $in_fh=$entry->[0];
@@ -456,7 +511,7 @@ sub send_file_uri_norange_chunked {
 			say "READ ERROR from file";
 			say $rc;
 			say $!;
-			delete $open_cache->{$abs_path};
+			delete $self->[cache_]{$abs_path};
 			close $in_fh;
 			$reader=undef;
 			#$chunker=undef;
@@ -492,69 +547,65 @@ sub send_file_uri_norange_chunked {
 }
 
 
-sub send_file_uri_range {
-	use  integer;
+sub make_send_file_uri_range {
+	my $self=shift;
 
-	my ($route,$rex,$uri,$sys_root)=@_;
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
+	\my $sys_root=\$self->[root_];
+	\my %cache=$self->[cache_];
+	sub {
+		use  integer;
 
-	my $abs_path=$sys_root."/".$uri;
-	my $entry;
-	unless($entry=open_cache $abs_path){
-		rex_reply_simple $route, $rex, HTTP_NOT_FOUND,[],"";
-		return;
-	}
-	my $in_fh=$entry->[0];
+		my ($route,$rex,$uri)=@_;
+		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
-	my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];	#reuses stat from check_access 
-	#Do stat on fh instead of path. Path requires resolving and is slower
-	#fh is already resolved and open.
-	unless(-r _ and !-d _){
-		rex_reply_simple $route, $rex, HTTP_NOT_FOUND,[],"";
-		#remove from cache
-		delete $open_cache->{$uri};
-		return
-	}
+		my $abs_path=$sys_root."/".$uri;
+		my $entry=$cache{$abs_path}//$self->open_cache($abs_path);
+		unless($entry=$self->open_cache($abs_path)){
+			rex_reply_simple $route, $rex, HTTP_NOT_FOUND,[],"";
+			return;
+		}
+		my $in_fh=$entry->[0];
+
+		my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
+		#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];	#reuses stat from check_access 
 
 
-	
+		#say "CONTENT Length: $content_length";
 
-	#say "CONTENT Length: $content_length";
+		my @ranges=_check_ranges $rex, $content_length;
+		#$,=", ";
 
-        my @ranges=_check_ranges $rex, $content_length;
-	#$,=", ";
-
-	#say "Ranges : ",$ranges[0]->@*;
-        if(@ranges==0){
-                my $response=
-                        "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_RANGE_NOT_SATISFIABLE.LF
-                        .$reply
-                	.HTTP_CONTENT_RANGE.": */$content_length".LF           #TODO: Multipart had this in each part, not main header
+		#say "Ranges : ",$ranges[0]->@*;
+		if(@ranges==0){
+			my $response=
+			"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_RANGE_NOT_SATISFIABLE.LF
+			.$reply
+			.HTTP_CONTENT_RANGE.": */$content_length".LF           #TODO: Multipart had this in each part, not main header
 			.HTTP_CONNECTION.": close".LF
 			.LF;
 			$session->[uSAC::HTTP::Session::closeme_]=1;
 			$session->[uSAC::HTTP::Session::write_]->($response);
-                return;
-        }
+			return;
+		}
 
 
-	#calculate total length from ranges
-	my $total_length=0;
-	$total_length+=($_->[1]-$_->[0]+1) for @ranges;
+		#calculate total length from ranges
+		my $total_length=0;
+		$total_length+=($_->[1]-$_->[0]+1) for @ranges;
 
 
-	#$uri=~$path_ext;        #match results in $1;
+		#$uri=~$path_ext;        #match results in $1;
 
-	my $boundary="THIS_IS THE BOUNDARY";
-	$reply=
+		my $boundary="THIS_IS THE BOUNDARY";
+		$reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_PARTIAL_CONTENT.LF
 		#.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
-        	.($session->[uSAC::HTTP::Session::closeme_]?
+		.($session->[uSAC::HTTP::Session::closeme_]?
 			HTTP_CONNECTION.": close".LF
 			:(HTTP_CONNECTION.": Keep-Alive".LF
-			.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
+				.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
 			)
 		)
 		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
@@ -573,123 +624,124 @@ sub send_file_uri_range {
 			}
 		}
 		;
-	#TODO:
-	#
-	# Need to implement the chunked transfer mechanism or precalculate the
-	# entire multipart length (including headers, LF etc)
-	#
-	# Currently only a single byte range is supported (ie no multipart)
+		#TODO:
+		#
+		# Need to implement the chunked transfer mechanism or precalculate the
+		# entire multipart length (including headers, LF etc)
+		#
+		# Currently only a single byte range is supported (ie no multipart)
 
 
-        #setup write watcher
-        my $session=$rex->[uSAC::HTTP::Rex::session_];
-        \my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
-	
-	my $state=0;#=@ranges==1?1:0;	#0 single header,1 multi header,2 data
-	my $rc;
+		#setup write watcher
+		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
 
-	my $index=-1;#=0;#index of current range
-        my $offset;#+=length $reply; #total length
-	my ($start,$end, $chunk_offset, $pos, $length);
+		my $state=0;#=@ranges==1?1:0;	#0 single header,1 multi header,2 data
+		my $rc;
 
-	my $reader;$reader= sub {
-		while(1){
-			given($state){
-				when(0){
-					#say "";
-					#say "Updating state"; 
-					#update 
-					$index++;
-					$start=	$ranges[$index][0];
-					$end=	$ranges[$index][1];
-					$chunk_offset=0;
-					$length=$end-$start+1;
-					$pos=$start;
+		my $index=-1;#=0;#index of current range
+		my $offset;#+=length $reply; #total length
+		my ($start,$end, $chunk_offset, $pos, $length);
 
-					#say "doing header";
-					#normal header
-					#we need to write headers
-					$reply="" if $index; #reset the reply to empty stirng
-					if(@ranges>1){
-						$reply.=
-						LF."--".$boundary.LF
-						.HTTP_CONTENT_RANGE.": $ranges[$index][0]-$ranges[$index][1]/$content_length".LF
-						.$entry->[1]
-						.LF
+		my $reader;$reader= sub {
+			while(1){
+				for($state){
+					if($_ eq 0){
+						#say "";
+						#say "Updating state"; 
+						#update 
+						$index++;
+						$start=	$ranges[$index][0];
+						$end=	$ranges[$index][1];
+						$chunk_offset=0;
+						$length=$end-$start+1;
+						$pos=$start;
+
+						#say "doing header";
+						#normal header
+						#we need to write headers
+						$reply="" if $index; #reset the reply to empty stirng
+						if(@ranges>1){
+							$reply.=
+							LF."--".$boundary.LF
+							.HTTP_CONTENT_RANGE.": $ranges[$index][0]-$ranges[$index][1]/$content_length".LF
+							.$entry->[1]
+							.LF
+						}
+						else {
+							$reply.=LF;
+						}
+						$offset=length $reply;
+						$state=1;
+						redo;
 					}
-					else {
-						$reply.=LF;
-					}
-					$offset=length $reply;
-					$state=1;
-					redo;
-				}
 
-				when(1){
-					#do data
-					#say "doing data";
-					seek $in_fh,$pos,0 or say "Couldnot seek";
-					$chunk_offset+=$rc=sysread $in_fh, $reply, $length-$chunk_offset, $offset;
-					$pos+=$rc;
-					#say "Range start: $start";
-					#say "Range end: $end";
-					#say "Range offset: $chunk_offset";
-					#say "File pos: $pos";
-					#say "Range length: $length";
+					elsif($_ == 1){
+						#do data
+						#say "doing data";
+						seek $in_fh,$pos,0 or say "Couldnot seek";
+						$chunk_offset+=$rc=sysread $in_fh, $reply, $length-$chunk_offset, $offset;
+						$pos+=$rc;
+						#say "Range start: $start";
+						#say "Range end: $end";
+						#say "Range offset: $chunk_offset";
+						#say "File pos: $pos";
+						#say "Range length: $length";
 
-					unless($rc//0 or $! == EAGAIN or $! == EINTR){
-						say "READ ERROR from file";
-						#say $rc;
-						say $!;
-						delete $open_cache->{$uri};
-						close $in_fh;
-						$reader=undef;
-						#uSAC::HTTP::Session::drop $session;
-						$session->[uSAC::HTTP::Session::dropper_]->();
-						return;
-					}
-					$offset=0;
-					#non zero read length.. do the write	
-					if($chunk_offset==$length){	#end of file
-						#add boundary
-						if(@ranges==1){
-							$session->[uSAC::HTTP::Session::write_]->($reply);
+						unless($rc//0 or $! == EAGAIN or $! == EINTR){
+							say "READ ERROR from file";
+							#say $rc;
+							say $!;
+							delete $self->[cache_]{$uri};
+							close $in_fh;
+							$reader=undef;
+							#uSAC::HTTP::Session::drop $session;
+							$session->[uSAC::HTTP::Session::dropper_]->();
 							return;
 						}
-						if($index==@ranges-1){
-							#that was the last read of data .. finish
-							#say "Last range, writing last boundary also";
-							$reply.=LF."--".$boundary."--".LF;
-							$state=0;
-							$session->[uSAC::HTTP::Session::write_]->($reply);
-							$reader=undef;
+						$offset=0;
+						#non zero read length.. do the write	
+						if($chunk_offset==$length){	#end of file
+							#add boundary
+							if(@ranges==1){
+								$session->[uSAC::HTTP::Session::write_]->($reply);
+								return;
+							}
+							if($index==@ranges-1){
+								#that was the last read of data .. finish
+								#say "Last range, writing last boundary also";
+								$reply.=LF."--".$boundary."--".LF;
+								$state=0;
+								$session->[uSAC::HTTP::Session::write_]->($reply);
+								$reader=undef;
+							}
+							else{
+								#more ranges to follow
+								#say "End of range. writing boundary";
+								#$reply=LF;#."--".$boundary.LF;
+								$state=0;
+								$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
+							}
+
+							last;
 						}
+
 						else{
-							#more ranges to follow
-							#say "End of range. writing boundary";
-							#$reply=LF;#."--".$boundary.LF;
-							$state=0;
 							$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
+							last;
 						}
-
-						last;
 					}
-
 					else{
-						$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
-						last;
-					}
-				}
-				default {
 
+					}
 				}
 			}
-		}
 
 
-	};
+		};
 
-	&$reader;#->();
+		&$reader;#->();
+	}
 }
 
 
@@ -733,21 +785,71 @@ sub usac_static_from {
 		}
 
 		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-			send_file_uri_range @_, $p, $root;
+			#send_file_uri_range @_, $p, $root;
 			return;
 		}
 		elsif($p=~m|/$|){
-			list_dir @_, $p, $root;
+			#list_dir @_, $p, $root;
 			return;
 		}
 		else{
 			#Send normal
-			send_file_uri_norange @_, $p, $root;
+			#send_file_uri_norange @_, $p, $root;
 			return;
 		}
 	}
 }
-sub usac_file_from {
+
+sub usac_file_under {
+	#create a new static file object
+	my $parent=$_;
+	my $root=shift;
+
+	if($root =~ m|^[^/]|){
+		#implicit path
+		#make path relative to callers file
+		$root=dirname((caller)[1])."/".$root;
+	}
+
+	my %options=@_;
+	$options{mime}=$parent->resolve_mime_lookup;
+	$options{default_mime}=$parent->resolve_mime_default;
+	my $static=uSAC::HTTP::Static->new(root=>$root,%options);
+	#check for mime type in parent 
+	my $sfunr=$static->make_send_file_uri_norange();
+	my $sfur=$static->make_send_file_uri_range();
+	
+	#create the sub to use the static files here
+	sub {
+		#matcher, rex, uri if not in $_
+		my $rex=$_[1];
+		#my $p=$1;
+		my $p;
+		if($_[2]){
+			$p=$_[2];
+			pop;
+		}	
+		else {
+			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+		}
+
+		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+			#send_file_uri_range @_, $p, $root, $cache;
+			$sfur->(@_,$p);
+			return;
+		}
+		else{
+			#Send normal
+			#$static->send_file_uri_norange(@_, $p, $root);
+			$sfunr->(@_,$p);
+			return;
+		}
+	}
+
+	
+}
+
+sub usac_file_from_old {
 	#my %args=@_;
 	#say "static file from ",@_;
 	my $root=shift;#$_[0];
@@ -781,38 +883,34 @@ sub usac_file_from {
 		}
 
 		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-			send_file_uri_range @_, $p, $root;
+			#send_file_uri_range @_, $p, $root;
 			return;
 		}
 		else{
 			#Send normal
-			send_file_uri_norange @_, $p, $root;
+			#send_file_uri_norange @_, $p, $root;
 			return;
 		}
 	}
 }
 
-sub usac_dir_from {
+sub usac_dir_under {
 	#my %args=@_;
 	#say "static file from ",@_;
 	my $root=shift;#$_[0];
-	my $renderer=shift;
-	my %options=@_;
-	my $cache;
-	if($options{cache_size}){
-		$cache={}
-	}
 
-
-	#if the path begins with a "/"  its an absolut path
-	#if it starts with "." it is processed as a relative path from the current wd
-	#otherwise its a relative path relative to the callers file
-		
 	if($root =~ m|^[^/]|){
 		#implicit path
 		#make path relative to callers file
 		$root=dirname((caller)[1])."/".$root;
 	}
+
+	my %options=@_;
+	say "Options: %options";
+	my $static=uSAC::HTTP::Static->new(root=>$root,%options);
+
+	my $list_dir=$static->make_list_dir(%options);
+		
 
 	sub {
 		my $rex=$_[1];
@@ -825,7 +923,8 @@ sub usac_dir_from {
 		else {
 			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
 		}
-		list_dir @_, $p, $root, $renderer;
+		#list_dir @_, $p, $root, $renderer;
+		$list_dir->(@_, $p);
 	}
 }
 
@@ -833,16 +932,16 @@ sub send_file {
 		my $rex=$_[1];
 		#test for ranges
 		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-			send_file_uri_range @_;
+			#send_file_uri_range @_;
 			return;
 		}
 		elsif($_[2]=~m|/$|){
-			list_dir @_;
+			#list_dir @_;
 			return;
 		}
 		else{
 			#Send normal
-			send_file_uri_norange @_;
+			#send_file_uri_norange @_;
 			return;
 		}
 	}

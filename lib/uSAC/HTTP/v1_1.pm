@@ -1,5 +1,4 @@
 package uSAC::HTTP::v1_1;
-use common::sense;
 use feature "refaliasing";
 no warnings "experimental";
 #each subroutine excepts a session argument

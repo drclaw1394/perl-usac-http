@@ -2,8 +2,8 @@
 
 package uSAC::HTTP::Rex;
 use version; our $VERSION = version->declare('v0.1');
-use common::sense;
-use feature qw<refaliasing switch state>;
+use feature qw<current_sub say refaliasing switch state>;
+no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
 
 
@@ -118,23 +118,22 @@ sub stream_upload {
 		say "CONTENT TYPE ON UPLOAD:", $rex->[headers_]{'CONTENT_TYPE'};
 		say $mime;
 		my @err_res;
-		given($rex->[headers_]){
-			when($_->{'CONTENT_TYPE'}!~/$mime/){
+		for($rex->[headers_]){
+			if($_->{'CONTENT_TYPE'}!~/$mime/){
 				@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
 			}
 
-			when($_->{'CONTENT_LENGTH'} > $upload_limit){
+			elsif($_->{'CONTENT_LENGTH'} > $upload_limit){
 				@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $UPLOAD_LIMIT");
 			}
 
-			default{
+			else{
 
 				uSAC::HTTP::Session::push_reader
 				$session,
 				make_form_urlencoded_reader @_, $session, $cb ;
 
 				#check for expects header and send 100 before trying to read
-				#given($rex->[uSAC::HTTP::Rex::headers_]){
 				if(defined($_->{EXPECTS})){
 					#issue a continue response	
 					say "writing continue";
@@ -163,12 +162,10 @@ sub stream_form_upload {
 	my $multi= stream_multipart_upload @_;
 	my $url=stream_urlencoded_upload @_;
 	sub{
-		given ($_[1][headers_]{CONTENT_TYPE}){
-			&$multi when /multipart\/form-data/;
-			&$url when 'application/x-www-form-urlencoded';
-			default {
-				reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
-			}
+		for ($_[1][headers_]{CONTENT_TYPE}){
+			&$multi and return if /multipart\/form-data/;
+			&$url and return if 'application/x-www-form-urlencoded';
+			reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 		}
 	}
 }
@@ -260,12 +257,10 @@ sub save_web_form {
 	my $multi= save_form_to_file @_;
 	my $url=save_form @_;
 	sub{
-		given ($_[1][headers_]{CONTENT_TYPE}){
-			&$multi when /multipart\/form-data/;
-			&$url when 'application/x-www-form-urlencoded';
-			default {
-				reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
-			}
+		for ($_[1][headers_]{CONTENT_TYPE}){
+			&$multi and return if /multipart\/form-data/;
+			&$url and return  if 'application/x-www-form-urlencoded';
+			reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 		}
 	}
 }
@@ -326,8 +321,8 @@ sub parse_form_params {
 	#3=>section header
 	#
 	#parse the fields	
-	given($rex->[headers_]{CONTENT_TYPE}){
-		when(/multipart\/form-data/){
+	for ($rex->[headers_]{CONTENT_TYPE}){
+		if(/multipart\/form-data/){
 			#parse content disposition (name, filename etc)
 			my $kv={};
 			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
@@ -336,7 +331,7 @@ sub parse_form_params {
 			}
 			return $kv;
 		}
-		when('application/x-www-form-urlencoded'){
+		elsif('application/x-www-form-urlencoded'){
 			my $kv={};
 			for(split "&", uri_decode $_[2]){
 				my ($key,$value)=split "=";
@@ -345,7 +340,7 @@ sub parse_form_params {
 			return $kv;
 		}
 
-		default {
+		else{
 			return {};
 		}
 
@@ -457,21 +452,23 @@ sub reply_chunked{
 }
 
 sub reply {
+	my ($matcher, $self)=@_;#, $code, $headers, $cb)=@_;
+	my $session=$self->[session_];
 	#wrapper for simple and chunked
 	# if the body element is a code ref, or array ref, then chunked is used
-	given(ref $_[4]){
-		reply_chunked @_ when "CODE";
-		when("ARRAY"){
+	for (ref $_[4]){
+		reply_chunked @_ and return if $_ eq "CODE";
+		if($_ eq "ARRAY"){
 			#send each element of array as a chunk
 			my $i=0;
 			my $chunks=pop;
 			#push @$chunks, "";
 
 			reply_chunked @_, sub {
-				$_[0]->($chunks->[$i++], $i != $chunks->@* ? __SUB__:undef);
+				$_[0]->($chunks->[$i++]//"", $i <= $chunks->@* ? __SUB__:$session->[uSAC::HTTP::Session::dropper_]);
 			};
 		}
-		default {
+		else{
 			reply_simple @_;
 		}
 	}
@@ -497,7 +494,7 @@ sub query_params {
 	unless($_[1][query_]){
 		#NOTE: This should already be decoded so no double decode
 		#$_[1][query_]={};
-		given($_[1][query_string_]){
+		for ($_[1][query_string_]){
 			#tr/ //d;
 
                         ##############################################
