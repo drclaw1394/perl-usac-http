@@ -208,6 +208,8 @@ sub http2_upgrade {
 #TRANFER ENCODINGS OUTPUTS
 #
 #Takes input and makes chunks and writes to next
+#Last write must be an empty string
+#
 sub chunked{
 	my $next=shift;
 	my $scratch="";

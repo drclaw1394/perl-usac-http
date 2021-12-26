@@ -3,6 +3,7 @@ package uSAC::HTTP::Static;
 use JSON;
 use feature qw<say  refaliasing state>;
 no warnings "experimental";
+#no feature "indirect";
 use Scalar::Util qw<weaken>;
 use Devel::Peek qw<SvREFCNT>;
 use Errno qw<:POSIX EACCES ENOENT>;
@@ -225,23 +226,17 @@ sub make_send_file_uri_norange {
 		my ($matcher,$rex,$uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
-
 		my $abs_path=$sys_root."/".$uri;
+
 		my $entry=$cache{$abs_path}//$self->open_cache($abs_path);
 
-		#unless($entry=self->[cache_] $abs_path){
 		unless($entry){
 			rex_reply_simple $matcher, $rex, HTTP_NOT_FOUND,[],"";
 			return;
 		}
 		my $in_fh=$entry->[0];
 
-		#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh; 
-
 		my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
-
-
-		#my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
 
 		$reply= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF;
 		my $headers=[
@@ -282,7 +277,7 @@ sub make_send_file_uri_norange {
 			$offset=0;
 			#non zero read length.. do the write	
 			if($total==$content_length){	#end of file
-				$session->[uSAC::HTTP::Session::write_]->($reply);
+				$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
 				return;
 			}
 
@@ -821,7 +816,7 @@ sub usac_file_under {
 	
 	#create the sub to use the static files here
 	sub {
-		#matcher, rex, uri if not in $_
+		#matcher, rex, code, headers, uri if not in $_
 		my $rex=$_[1];
 		#my $p=$1;
 		my $p;
@@ -928,6 +923,7 @@ sub usac_dir_under {
 	}
 }
 
+
 sub send_file {
 		my $rex=$_[1];
 		#test for ranges
@@ -946,6 +942,6 @@ sub send_file {
 		}
 	}
 
-enable_cache;
+	#enable_cache;
 
 1;

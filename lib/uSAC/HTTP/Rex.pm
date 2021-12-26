@@ -7,6 +7,8 @@ no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
 
 
+use File::Basename qw<basename dirname>;
+use File::Spec::Functions qw<rel2abs>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::v1_1_Reader;
@@ -18,6 +20,7 @@ use uSAC::HTTP::Session;
 #use uSAC::HTTP::Server;
 use uSAC::HTTP::Cookie qw<:all>;
 
+#use uSAC::HTTP::Static;
 use AnyEvent;
 use Exporter 'import';
 use File::Temp qw<tempfile>;
@@ -474,6 +477,33 @@ sub reply {
 	}
 }
 
+########################################################################
+# #reply with static content from specified path                       #
+# sub reply_file {                                                     #
+#         require uSAC::HTTP::Static;                                  #
+#         my ($matcher, $self, $code, $headers, $path)=@_;             #
+#         my $session=$self->[session_];                               #
+#         local $_=$session->[uSAC::HTTP::Session::server_];           #
+#         say Dumper $_;                                               #
+#         my $root=dirname((caller)[1]);                               #
+#         say "Root $root";                                            #
+#         $root=rel2abs($root);                                        #
+#                                                                      #
+#         state $static=uSAC::HTTP::Static->new(root=>$root,%options); #
+#         state $static=uSAC::HTTP::Static::usac_file_under($root);    #
+#         \my $reply=\$session->[uSAC::HTTP::Session::wbuf_];          #
+#         if($path =~ m|^[^/]|){                                       #
+#                                                                      #
+#                 #implicit path                                       #
+#                 #make path relative to callers file                  #
+#                 $path=dirname((caller)[1])."/".$path;                #
+#         }                                                            #
+#         say "Path $path";                                            #
+#         $static->($matcher, $rex,   $path);                          #
+#                                                                      #
+# }                                                                    #
+########################################################################
+
 
 
 	 
@@ -543,5 +573,4 @@ sub state {
 *rex_save_form_to_file=*save_form_to_file;		#save multipart files to disk
 *rex_save_form=*save_form;				#process form when complete ready
 *rex_save_web_form=*save_web_form;
-
 1;

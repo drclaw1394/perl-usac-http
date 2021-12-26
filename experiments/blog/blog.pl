@@ -13,7 +13,7 @@ my $server; $server=usac_server {
 	#usac_listen "192.168.1.104";
 	usac_sub_product "blog";
 	#usac_middleware log_simple;
-	usac_site {
+	my $site;$site=usac_site {
 		usac_id "blog";
 		usac_host "127.0.0.1:8080";
 		usac_host "localhost:8080";
@@ -39,8 +39,24 @@ my $server; $server=usac_server {
 		usac_route "test3/$File_Path" => sub {
 			my $q=&rex_query_params;
 			#say Dumper rex_query_params $rex;
-			rex_reply @_, HTTP_OK,[], [$1, Dumper $q];	#"Test3 Comp3 $1, Comp ${\$rex->query_params}";
+			rex_reply @_, HTTP_OK, [], [$1, Dumper $q];	#"Test3 Comp3 $1, Comp ${\$rex->query_params}";
 		};
+		
+                usac_route "file/$File_Path" => sub {
+			state $static;
+
+			local $_=$_[0][4] and $static= usac_file_under "static" unless $static;
+
+                        #test file
+                        if($1 eq "test.txt"){
+				push @_, "test.txt";
+				&$static;#->(@_, "test.txt");
+                        }
+                        else {
+				say "not found";
+                                rex_reply_simple @_, HTTP_NOT_FOUND, [], "";
+                        }
+                };
 
 		usac_include "admin/usac.pl";
 	};

@@ -132,7 +132,7 @@ sub add_route {
 		($end,$outer)=$middler->link($end);
 	}
 	$outer//=sub {@_};
-	$self->[server_]->add_end_point($matcher, $end, [$self,$outer]);
+	$self->[server_]->add_end_point($matcher, $end, $self);#[$self,$outer]);
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
 	my $unsupported;
@@ -148,7 +148,7 @@ sub add_route {
 	}
 	#say "Unmatching: $unsupported";	
 	#$self->[server_]->add_end_point($unsupported,$sub, $self);
-	push $self->[unsupported_]->@*, [$unsupported, $sub,[$self,$outer]];
+	push $self->[unsupported_]->@*, [$unsupported, $sub,$self];#[$self,$outer]];
 }
 
 #middleware to strip prefix
@@ -357,7 +357,9 @@ sub usac_site :prototype(&) {
 	
 	local  $_=$self;
 	$sub->();
+	$self;
 }
+
 sub find_root {
 	my $self=$_[0];
 	#locates the top level server/group/site in the tree

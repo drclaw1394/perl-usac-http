@@ -152,7 +152,7 @@ sub listen {
 		socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";
 		
 		if ($af == AF_INET || $af == AF_INET6) {
-			if($self->[workers_]>1){
+			if($self->[workers_]>1 or 1){
 			setsockopt $fh, SOL_SOCKET, SO_REUSEADDR, 1
 				or Carp::croak "listen/so_reuseaddr: $!"
 					unless AnyEvent::WIN32; 
