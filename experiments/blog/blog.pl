@@ -44,7 +44,6 @@ my $server; $server=usac_server {
 		
                 usac_route "file/$File_Path" => sub {
 			state $static;
-
 			local $_=$_[0][4] and $static= usac_file_under "static" unless $static;
 
                         #test file

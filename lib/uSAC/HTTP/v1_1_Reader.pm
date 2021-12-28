@@ -12,6 +12,8 @@ our @EXPORT_OK=qw<
 		make_socket_writer
 		uri_decode
 		parse_form
+		MODE_SERVER
+		MODE_CLIENT
 		>;
 
 our @EXPORT=@EXPORT_OK;
@@ -61,11 +63,15 @@ sub parse_form {
 #	-method could contain data => push a dedicated reader to the read stack
 #
 #
-
+use enum (qw<MODE_SERVER MODE_CLIENT>);
+use enum (qw<STATE_REQUEST STATE_RESPONSE STATE_HEADERS>);
 sub make_reader{
 	#say "MAKING BASE HTTP1.1 reader";
 	#take a session and alias the variables to lexicals
 	my $r=shift;
+	my $mode=shift; #Client or server
+	#default is server mode to handle client requests
+	my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
 
 	my $self=$r->[uSAC::HTTP::Session::server_];
 	\my $buf=\$r->[uSAC::HTTP::Session::rbuf_];
@@ -77,7 +83,7 @@ sub make_reader{
 	my $cb=$self->current_cb;#$self->[uSAC::HTTP::Server::cb_];
 	my $enable_hosts=$self->enable_hosts;
 	my $static_headers=$self->static_headers;
-	my ($state,$seq) = (0,0);
+	my ($state,$seq) = ($start_state, 0);
 	my ($method,$uri,$version,$len,$pos, $req);
 	my $line;
 
@@ -100,7 +106,7 @@ sub make_reader{
 			#	$url=> status code
 			#	$version => comment
 			#
-			if ($state == 0) {
+			if ($state == STATE_REQUEST) {
 				my $pos3=index $buf, LF;
 				($method,$uri,$version)=split " ", substr($buf,0,$pos3);
 				#$uri=uri_decode $uri;
@@ -108,7 +114,7 @@ sub make_reader{
 				
 				if($pos3>=0){
 					#end of line found
-						$state   = 1;
+						$state   = STATE_HEADERS;
 						%h=();
 						++$seq;
 
@@ -120,7 +126,7 @@ sub make_reader{
 				}
 			}
 
-			elsif ($state == 1) {
+			elsif ($state == STATE_HEADERS) {
 				# headers
 				pos($buf) = $pos;
 				while () {
@@ -179,7 +185,7 @@ sub make_reader{
 				#shift buffer
 				$buf=substr $buf, pos $buf;# $pos;
 				$pos=0;
-				$state=0;
+				$state=$start_state;;
 				$cb->(
 					#$enable_hosts?"$host $method $uri":"$method $uri",
 					"$h{HOST} $method $uri",
@@ -187,7 +193,7 @@ sub make_reader{
 				);
 				return;
 
-			} # state 1
+			}
 			else {
 			}
 		} # while read
