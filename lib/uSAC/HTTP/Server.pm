@@ -295,8 +295,9 @@ sub accept {
 				$session=pop @zombies;
 				if($session){
 					uSAC::HTTP::Session::revive $session, $id, $fh;
-					#uSAC::HTTP::Session::set_writer $session, make_socket_writer $session;
 					make_socket_writer $session;
+					uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+					#uSAC::HTTP::Session::set_writer $session, make_socket_writer $session;
                                         ####################################
                                         # uSAC::HTTP::Session::push_writer #
                                         #         $session,                #
@@ -315,12 +316,13 @@ sub accept {
                                         #         "http1_1_socket_writer",                       #
                                         #         undef;                                         #
                                         ##########################################################
+					uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 				}
 
+				#uSAC::HTTP::Session::_make_reader $session;	#conditional
 				#uSAC::HTTP::Session::push_reader $session,"http1_1_base",undef; 
-				uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+				#uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 				#initiate read
-				uSAC::HTTP::Session::_make_reader $session;
 				$sessions{ $id } = $session;
 				$active_connections++;
 				$total_connections++;

@@ -36,7 +36,7 @@ our $LF = "\015\012";
 
 #my $HEADER_QR=> qr/\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca;
 use constant LF=>"\015\012";
-use enum (qw<STATE_REQ_LINE STATE_RES_LINE STATE_HEADERS STATE_ERROR>);
+#use enum (qw<STATE_REQ_LINE STATE_RES_LINE STATE_HEADERS STATE_ERROR>);
 
 sub uri_decode {
 	my $octets= shift;
@@ -73,27 +73,49 @@ sub make_reader{
 	#default is server mode to handle client requests
 	my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
 
+	#find existing sub in session
+	#
+	my $sub_id="http1_1". ($mode==MODE_CLIENT?"client":"server");
+	my $sub=$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id};
+	if($sub){
+		#reset
+		$sub->(undef, undef, undef);
+		return $sub;
+	}
+
 	my $self=$r->[uSAC::HTTP::Session::server_];
-	\my $buf=\$r->[uSAC::HTTP::Session::rbuf_];
-	my $fh=$r->[uSAC::HTTP::Session::fh_];
-	my $write=$r->[uSAC::HTTP::Session::write_];
+	#\my $buf=\$r->[uSAC::HTTP::Session::rbuf_];
+	#my $fh=$r->[uSAC::HTTP::Session::fh_];
+	
+	#my $write=$r->[uSAC::HTTP::Session::write_];
 	#weaken $write;
 	weaken $r;
 
 	my $cb=$self->current_cb;#$self->[uSAC::HTTP::Server::cb_];
-	my $enable_hosts=$self->enable_hosts;
 	my $static_headers=$self->static_headers;
+	
 	my ($state,$seq) = ($start_state, 0);
 	my ($method,$uri,$version,$len,$pos, $req);
 	my $line;
 
 	#my $ixx = 0;
 	my %h;		#Define the header storage here, once per connection
-	# = ( INTERNAL_REQUEST_ID => $id, defined $rhost ? ( Remote => $rhost, RemotePort => $rport ) : () );
-	$r->[uSAC::HTTP::Session::read_]=sub {
+	
+	#ctx, buffer, flags 
+	$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id}= sub {
+		\my $buf=\$_[1];	#\$r->[uSAC::HTTP::Session::rbuf_];
+		unless($_[0]){
+			$r->[uSAC::HTTP::Session::sr_]->buffer="";
+
+			$state=$start_state;
+			return;
+		}
+
+		my $write=$r->[uSAC::HTTP::Session::write_];
 		use integer;
-		#$self and $r or return;
+		#say "in base reader";
 		$len=length $buf;
+		#say $len;
 		while ( $len ) {
 			#Dual mode variables:
 			#	server:
@@ -145,8 +167,6 @@ sub make_reader{
 					}
 					elsif($buf =~ /\G [^\012]* \Z/sxogca) {
 						if (length($buf) - 0 > MAX_READ_SIZE) {
-							#$self->[uSAC::HTTP::Server::max_header_size_]) {
-							$self->badconn($fh,\substr($buf, pos($buf), 0), "Header overflow at offset ".$pos."+".(length($buf)-$pos));
 							return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");
 						}
 						#warn "Need more";
@@ -156,8 +176,6 @@ sub make_reader{
 					}
 					else {
 						my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;
-						#$self->[uSAC::HTTP::Server::active_requests_]--;
-						$self->badconn($fh,\$line, "Bad header for <$method $uri>+{@{[ %h ]}}");
 						my $content = 'Bad request headers';
 						my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
 						$write->($str);
@@ -187,7 +205,6 @@ sub make_reader{
 				$pos=0;
 				$state=$start_state;;
 				$cb->(
-					#$enable_hosts?"$host $method $uri":"$method $uri",
 					"$h{HOST} $method $uri",
 					$req
 				);
@@ -198,11 +215,12 @@ sub make_reader{
 			}
 		} # while read
 	}; # io
+
 }
 
 
 #HTML FORM readers
-#
+
 #This reads http1/1.1 post type 
 #Body is multiple parts  seperated by a boundary. ie no length
 #

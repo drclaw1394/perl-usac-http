@@ -2,6 +2,9 @@ package uSAC::HTTP::Session;
 use feature qw<say state refaliasing>;
 no warnings "experimental";
 use Scalar::Util 'openhandle','refaddr', 'weaken';
+use uSAC::SReader;
+use uSAC::SWriter;
+use Data::Dumper;
 
 #require uSAC::HTTP::Server;
 use EV;
@@ -13,7 +16,7 @@ use Errno qw(EAGAIN EINTR);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<time_ fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ write_queue_ on_body_>);
+use enum ( "id_=0" ,qw<time_ fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ write_queue_ sr_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -35,6 +38,7 @@ sub _make_reader;
 sub drop;
 
 sub new {
+	say "new session";
 	my $package=shift//__PACKAGE__;
 	
 	my $self=[];
@@ -50,7 +54,7 @@ sub new {
 	$self->[wbuf_]="";
 	$self->[rbuf_]="";
 	#$self->[read_stack_]=[];
-	#$self->[reader_cache_]={};
+	$self->[reader_cache_]={};
 
 	$self->[write_stack_]=[];
 	#$self->[writer_cache_]={};
@@ -74,6 +78,7 @@ sub new {
 		#say "in dropper: ", $closeme, " ", caller;
 		return unless $closeme;#||$_[0];
 		delete $sessions->{$id};
+		#$self->[sr_]->pause;
 		close $fh;
 		$rw=undef;
 		$ww=undef;
@@ -87,17 +92,26 @@ sub new {
 
 
 	};
+	#make reader
+	my $sr=uSAC::SReader->new($self,$self->[fh_]);
+	$sr->max_read_size=4096*16;
+	$sr->on_read=\$self->[read_];
+	$sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]->()};
+	$sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
+	$self->[sr_]=$sr;
+	#\$self->[rbuf_]=\$sr->buffer;
+	uSAC::SReader::start $sr;
+	#$sr->start;
 
-	
+
 	bless $self,$package;
 	#make entry on the write stack
-	#$self->_make_reader;
-	#_make_reader $self;	
 	$self;
 }
 
 #take a zombie session and revive it
 sub revive {
+	#say "revive  session";
 	my $self=shift;
 	$self->[id_]=$_[0];	
 	$self->[time_]=$Time;
@@ -107,15 +121,33 @@ sub revive {
 	$self->[rex_]=undef;
 	#$self->[write_queue_]->@*=();
 	$self->[write_stack_]=[];
-
-	
-	#$self->_make_reader;
-	#_make_reader $self;
-
+	#$self->[sr_]->start($self->[fh_]);
+	uSAC::SReader::start $self->[sr_], $self->[fh_];
 	return $self;
 }
 
-sub _make_reader {
+#################################################################################
+# #actual socket reader each session will need one of these                     #
+# sub _make_reader {                                                            #
+#         my $self=shift;                                                       #
+#         unless($self->[sr_]){                                                 #
+#                 my $sr=uSAC::SReader->new($self,$self->[fh_]);                #
+#                 $sr->max_read_size=4096*16;                                   #
+#                 $sr->on_read=\$self->[read_];                                 #
+#                 $sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]};   #
+#                 $sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]}; #
+#                 $self->[sr_]=$sr;                                             #
+#                 #\$self->[rbuf_]=\$sr->buffer;                                #
+#                 $sr->start;                                                   #
+#         }                                                                     #
+#         else{                                                                 #
+#                 $self->[sr_]->on_read=$self->[read_];                         #
+#                 $self->[sr_]->start($self->[fh_]);                            #
+#         }                                                                     #
+# }                                                                             #
+#################################################################################
+
+sub _make_reader_old {
 	my $self=shift;
 	weaken $self;
 	my $fh=$self->[fh_];
@@ -159,6 +191,7 @@ sub _make_reader {
 
 sub push_reader {
 	push $_[0][read_stack_]->@*, $_[0][read_]=$_[1];
+	$_[0][sr_]->on_read=$_[1];
 	#$_[0][reader_cb_]=$_[2];
 }
 
