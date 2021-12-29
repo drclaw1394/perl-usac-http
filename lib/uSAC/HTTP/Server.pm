@@ -291,31 +291,13 @@ sub accept {
 				#setsockopt($fh, SOL_SOCKET, SO_LINGER, pack ("ll",1,0));
 				$id = ++$seq;
 
-
 				$session=pop @zombies;
 				if($session){
 					uSAC::HTTP::Session::revive $session, $id, $fh;
-					make_socket_writer $session;
 					uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
-					#uSAC::HTTP::Session::set_writer $session, make_socket_writer $session;
-                                        ####################################
-                                        # uSAC::HTTP::Session::push_writer #
-                                        #         $session,                #
-                                        #         "http1_1_socket_writer", #
-                                        #         undef;                   #
-                                        ####################################
 				}
 				else {
 					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self);
-					#uSAC::HTTP::Session::set_writer $session, make_socket_writer $session;
-					make_socket_writer $session;
-                                        ##########################################################
-                                        # #TODO: push correct writer ie, ssl  for other sessions #
-                                        # uSAC::HTTP::Session::push_writer                       #
-                                        #         $session,                                      #
-                                        #         "http1_1_socket_writer",                       #
-                                        #         undef;                                         #
-                                        ##########################################################
 					uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 				}
 

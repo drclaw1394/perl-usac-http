@@ -16,7 +16,7 @@ use Errno qw(EAGAIN EINTR);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<time_ fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ write_queue_ sr_ on_body_>);
+use enum ( "id_=0" ,qw<time_ fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ write_queue_ sr_ sw_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -38,7 +38,6 @@ sub _make_reader;
 sub drop;
 
 sub new {
-	say "new session";
 	my $package=shift//__PACKAGE__;
 	
 	my $self=[];
@@ -52,7 +51,6 @@ sub new {
 
 	$self->[wbuf_]="x"x(4096*16);
 	$self->[wbuf_]="";
-	$self->[rbuf_]="";
 	#$self->[read_stack_]=[];
 	$self->[reader_cache_]={};
 
@@ -67,8 +65,6 @@ sub new {
 	my $sessions=$self->[sessions_];
 	#my $zombies=$self->[zombies_];
 	\my $fh=\$self->[fh_];
-	\my $rw=\$self->[rw_];
-	\my $ww=\$self->[ww_];
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
@@ -78,17 +74,14 @@ sub new {
 		#say "in dropper: ", $closeme, " ", caller;
 		return unless $closeme;#||$_[0];
 		delete $sessions->{$id};
-		#$self->[sr_]->pause;
+		$self->[sr_]->pause;
+		$self->[sw_]->cancel;
 		close $fh;
-		$rw=undef;
-		$ww=undef;
 		$fh=undef;
 		$id=undef;
 		$closeme=undef;
 		#$self->[write_queue_]->@*=();
-		unshift @{$self->[zombies_]}, $self;
-		#say caller;
-		#say "DROP COMPLETE...";
+		#unshift @{$self->[zombies_]}, $self;
 
 
 	};
@@ -102,6 +95,11 @@ sub new {
 	#\$self->[rbuf_]=\$sr->buffer;
 	uSAC::SReader::start $sr;
 	#$sr->start;
+
+	#make writer
+	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
+	$self->[sw_]->on_error=$self->[dropper_];
+	$self->[write_]=$self->[sw_]->writer;
 
 
 	bless $self,$package;
@@ -123,6 +121,12 @@ sub revive {
 	$self->[write_stack_]=[];
 	#$self->[sr_]->start($self->[fh_]);
 	uSAC::SReader::start $self->[sr_], $self->[fh_];
+	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
+
+	#make writer
+	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
+	$self->[sw_]->on_error=$self->[dropper_];
+	$self->[write_]=$self->[sw_]->writer;
 	return $self;
 }
 
@@ -147,43 +151,45 @@ sub revive {
 # }                                                                             #
 #################################################################################
 
-sub _make_reader_old {
-	my $self=shift;
-	weaken $self;
-	my $fh=$self->[fh_];
-	\my $buf=\$self->[rbuf_];
-	my $len;
-	\my $reader=\$self->[read_];
-
-	$self->[rw_] = AE::io $fh, 0, sub {
-		$self->[time_]=$Time;	#Update the last access time
-		$len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf );
-		#say $buf;
-		if($len>0){
-			#say "Calling reader: ", $reader;
-			$reader->();
-		}
-		#when(0){
-		elsif($len==0){
-			#say "read len is zero";
-                        #End of file
-			#say "END OF  READER";
-			$self->[closeme_]=1;
-			$self->[rw_]=undef;
-			$self->[dropper_]->();
-		}
-		#when(undef){
-		else {
-			#potential error
-			#say "ERROR";
-			return if $! == EAGAIN or $! == EINTR;
-			say "ERROR IN READER";
-			$self->[closeme_]=1;
-			$self->[dropper_]->();
-			$self->[rw_]=undef;
-		}
-	};
-}
+############################################################################
+# sub _make_reader_old {                                                   #
+#         my $self=shift;                                                  #
+#         weaken $self;                                                    #
+#         my $fh=$self->[fh_];                                             #
+#         \my $buf=\$self->[rbuf_];                                        #
+#         my $len;                                                         #
+#         \my $reader=\$self->[read_];                                     #
+#                                                                          #
+#         $self->[rw_] = AE::io $fh, 0, sub {                              #
+#                 $self->[time_]=$Time;   #Update the last access time     #
+#                 $len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf ); #
+#                 #say $buf;                                               #
+#                 if($len>0){                                              #
+#                         #say "Calling reader: ", $reader;                #
+#                         $reader->();                                     #
+#                 }                                                        #
+#                 #when(0){                                                #
+#                 elsif($len==0){                                          #
+#                         #say "read len is zero";                         #
+#                         #End of file                                     #
+#                         #say "END OF  READER";                           #
+#                         $self->[closeme_]=1;                             #
+#                         $self->[rw_]=undef;                              #
+#                         $self->[dropper_]->();                           #
+#                 }                                                        #
+#                 #when(undef){                                            #
+#                 else {                                                   #
+#                         #potential error                                 #
+#                         #say "ERROR";                                    #
+#                         return if $! == EAGAIN or $! == EINTR;           #
+#                         say "ERROR IN READER";                           #
+#                         $self->[closeme_]=1;                             #
+#                         $self->[dropper_]->();                           #
+#                         $self->[rw_]=undef;                              #
+#                 }                                                        #
+#         };                                                               #
+# }                                                                        #
+############################################################################
 
 #pluggable interface
 #=====================

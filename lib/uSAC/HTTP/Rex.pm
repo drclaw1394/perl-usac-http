@@ -41,7 +41,7 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ server_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ static_headers_ >
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ static_headers_ >
 );
 
 #Add a mechanism for sub classing
