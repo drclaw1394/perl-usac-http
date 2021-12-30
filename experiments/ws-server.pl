@@ -1,11 +1,8 @@
 use strict;
 use warnings;
-use feature qw<state say>;
+use feature qw<state say signatures>;
 
 use uSAC::HTTP;
-use uSAC::HTTP::Code qw<:constants>;
-use uSAC::HTTP::Rex;
-use uSAC::HTTP::Server;
 use uSAC::HTTP::Server::WS;
 use AnyEvent;
 
@@ -13,44 +10,44 @@ use AnyEvent;
 my $server=uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",
 	port=>8080,
-	#cb=>sub{}
 );
 
 $server->add_route('GET'=>"/\$"=>sub {
-	local $/=undef;
-	state $data;
-	$data=<DATA> unless $data;	#TODO: bug. <> operator not working with state
-	#say "WILL SEND DATA: ", $data;
+	local $/=undef; state $data; $data=<DATA> unless $data;	
+
+	#TODO: bug. <> operator not working with state
+	
 	rex_reply_simple(@_, HTTP_OK, [], $data);
 	return;
 });
 
-$server->add_route(GET=>"/ws"=>sub {
-	say "Websocket upgrade";
-	my $ws;
-	upgrade_to_websocket @_, sub {
-		$ws=$_[0];
-		my $timer; $timer=AE::timer 0, 1, sub {
-			say "in timer";
-			$ws->write_text_message("hello",sub {
+$server->add_route(GET=>"/ws"=> usac_websocket sub($ws){
+		my $timer;
+		$ws->on_open=sub {
+			 $timer=AE::timer 0, 1, sub {
+				$ws->send_text_message("hello",sub {
 					say "CALLBACK";
 				});
-			my $temp=$timer;
+			};
 		};
 
-		$ws->on_message(sub {
-			say "GOT message: $_[0]" if $_[0];
-			$ws->write_text_message("return data");
-		});
-		$ws->on_error(sub {
-			say "GOT error$_[0]";
-		});
-		$ws->on_close(sub {
-			say "GOT close";
-		});
+		$ws->on_message=sub {
+				say "GOT message: $_[0]" if $_[0];
+				$ws->send_text_message("return data");
+			};
+
+		$ws->on_error=sub {
+				say "GOT error$_[0]";
+			};
+
+		$ws->on_close=sub {
+				say "GOT close";
+				undef $timer;
+			};
+
 		say "GOT WEBSOCKET ", $_[0];
-	};
-});
+	}
+);
 
 $server->add_route("GET"=>"/large"=>()=>sub {
 	state $data= "x"x(4096*4096);
@@ -89,7 +86,10 @@ __DATA__
 
 			ws.onopen=function(event){
 				console.log("websocket open");
-				ws.send("hello");
+				//ws.send("hello");
+				setInterval(function(){
+					ws.send("hello");
+				},1000);
 			};
 
 			ws.onmessage= function(msg){
@@ -98,9 +98,6 @@ __DATA__
 			ws.onerror= function(msg){
 				console.log("websocket error",msg);
 			};
-			setInterval(function(){
-				ws.send("hello");
-			},1000);
 		</script>
 
 	</body>

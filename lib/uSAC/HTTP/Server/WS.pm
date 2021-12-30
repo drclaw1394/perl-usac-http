@@ -11,7 +11,7 @@ use Digest::SHA1;
 use Encode qw<decode encode>;
 #use Compress::Raw::Zlib qw(Z_SYNC_FLUSH);
 
-our @EXPORT_OK=qw<upgrade_to_websocket>;
+our @EXPORT_OK=qw<usac_websocket>;
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
@@ -28,10 +28,10 @@ my $LF=$uSAC::HTTP::Rex::LF;
 
 use constant LF=>"\015\012";
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 
 
-use enum ( "writer_=0" ,qw<maxframe_ mask_ ping_interval_ ping_id_ pinger_ state_ on_message_ on_close_ on_error_ session_>);
+use enum ( "writer_=0" ,qw<maxframe_ mask_ ping_interval_ ping_id_ pinger_ state_ on_open_ on_message_ on_close_ on_error_ session_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -59,85 +59,91 @@ use constant {
 		RSV3_FLAG=>0b00010000,
 	};
 
-
-
+use enum qw<STATE_HEADER STATE_BODY>;
 
 
 #take http1.1 connection and make it websocket
 #does the handshake
-sub upgrade_to_websocket{
-	DEBUG && say  "Testing for websocket";
-	my $line=shift;
-	my $rex=shift;
-	#my $uri=shift;
-	my $cb=shift;
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	#attempt to do the match
-	for ($rex->[uSAC::HTTP::Rex::headers_]){
-		if(
-				$_->{CONNECTION} =~ /upgrade/i	#required
-				and  $_->{UPGRADE} =~ /websocket/i	#required
-				and  $_->{'SEC_WEBSOCKET_VERSION'} ==13	#required
-				and  exists $_->{'SEC_WEBSOCKET_KEY'}	#required
-				and  $_->{'SEC_WEBsOCKET_PROTOCOL'} =~ /.*/  #sub proto
-		){
+	#sub upgrade_to_websocket{
+	sub usac_websocket {
+		my $parent=$_;
+		my $cb=shift;
 
-			#TODO:  origin testing, externsions,
-			# mangle the key
-			my $key=MIME::Base64::encode_base64 
-				Digest::SHA1::sha1( $_->{'SEC_WEBSOCKET_KEY'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
-				"";
-			#
-			#reply
-			my $reply=
-				"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS.LF
-				.HTTP_CONNECTION.": Upgrade".LF
-				.HTTP_UPGRADE.": websocket".LF
-				.HTTP_SEC_WEBSOCKET_ACCEPT.": $key".LF
-				;
-			#support the permessage deflate
-			my $deflate_flag;
-			for($_->{'SEC_WEBSOCKET_EXTENSIONS'}){
-				if(/permessage-deflate/){
-					say "Permessage deflate";
-					#$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
-					#$deflate_flag=1;
+		#}
+		sub {
+			DEBUG && say  "Testing for websocket";
+			my $line=shift;
+			my $rex=shift;
+			#my $uri=shift;
+			#my $cb=shift;
+			my $session=$rex->[uSAC::HTTP::Rex::session_];
+			#attempt to do the match
+			for ($rex->[uSAC::HTTP::Rex::headers_]){
+				if(
+					$_->{CONNECTION} =~ /upgrade/i	#required
+						and  $_->{UPGRADE} =~ /websocket/i	#required
+						and  $_->{'SEC_WEBSOCKET_VERSION'} ==13	#required
+						and  exists $_->{'SEC_WEBSOCKET_KEY'}	#required
+						and  $_->{'SEC_WEBsOCKET_PROTOCOL'} =~ /.*/  #sub proto
+				){
+
+					#TODO:  origin testing, externsions,
+					# mangle the key
+					my $key=MIME::Base64::encode_base64 
+					Digest::SHA1::sha1( $_->{'SEC_WEBSOCKET_KEY'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
+					"";
+					#
+					#reply
+					my $reply=
+					"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS.LF
+					.HTTP_CONNECTION.": Upgrade".LF
+					.HTTP_UPGRADE.": websocket".LF
+					.HTTP_SEC_WEBSOCKET_ACCEPT.": $key".LF
+					;
+					#support the permessage deflate
+					my $deflate_flag;
+					for($_->{'SEC_WEBSOCKET_EXTENSIONS'}){
+						if(/permessage-deflate/){
+							say "Permessage deflate";
+							#$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
+							#$deflate_flag=1;
+						}
+						else{
+						}
+					}
+
+					#write reply	
+					say $reply;
+					local $/=", ";
+					say $rex->[uSAC::HTTP::Rex::headers_]->%*;
+					for($session->[uSAC::HTTP::Session::write_]){
+						say "Writer is: ", $_;
+						$_->($reply.LF , sub {
+
+								say "handshake written out";
+								my $ws=uSAC::HTTP::Server::WS->new($session);
+								$cb->($ws);
+								#defer the open callback
+								AnyEvent::postpone {$ws->[on_open_]->()};
+
+								#read and write setup create a new ws with just the session
+								#uSAC::HTTP::Server::WS->new($_);
+								$_=undef;
+							});
+					}
 				}
+
 				else{
+					DEBUG && say "Websocket did not match";
+					#reply
+					say "NO WEBSOCKET ALLOWED";
+					$session->[uSAC::HTTP::Session::closeme_]=1;
+					uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_FORBIDDEN, undef,"";
+					return;
 				}
 			}
-
-			#write reply	
-			say $reply;
-			local $/=", ";
-			say $rex->[uSAC::HTTP::Rex::headers_]->%*;
-			for($session->[uSAC::HTTP::Session::write_]){
-				say "Writer is: ", $_;
-				$_->($reply.LF , sub {
-
-						say "handshake written out";
-						my $ws=uSAC::HTTP::Server::WS->new($session);
-						$cb->($ws);
-
-						#read and write setup create a new ws with just the session
-						#uSAC::HTTP::Server::WS->new($_);
-
-						$_=undef;
-					});
-			}
-
-		}
-
-		else{
-			DEBUG && say "Websocket did not match";
-			#reply
-			say "NO WEBSOCKET ALLOWED";
-			$session->[uSAC::HTTP::Session::closeme_]=1;
-			uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_FORBIDDEN, undef,"";
-			return;
 		}
 	}
-}
 
 
 #This is called by the session reader. Data is in the scalar ref $buf
@@ -146,7 +152,6 @@ sub  make_websocket_server_reader {
 	my $session=shift;	#session
 	#my $ws=shift;		#websocket
 
-	my $buf="";#=\$session->[uSAC::HTTP::Session::rbuf_];
 	\my $fh=$session->[uSAC::HTTP::Session::fh_];
 	my $rex=$session->[uSAC::HTTP::Session::rex_];
 	my $writer=$rex->[uSAC::HTTP::Rex::write_];
@@ -157,16 +162,17 @@ sub  make_websocket_server_reader {
 	my $payload="";
 	my $hlen;
 	my $mode;
-	my $state=0;	#0 header, 1 body
+	my $state=STATE_HEADER;	#0 header, 1 body
 	\my $on_fragment=\$self->[on_message_];#$session->[uSAC::HTTP::Session::reader_cb_];
 	say "ON FRAGMENT: ", $on_fragment;
 
 	sub {
+		\my $buf=\$_[1];
 		#say "reader";
 		#do the frame parsing here
 		while($buf){
-			say "INput buffer: ", unpack "H*", $buf;
-			if($state==0){
+			#say "Input buffer: ", unpack "H*", $buf;
+			if($state==STATE_HEADER){
 				#say "parsing header";
 				#header
 				return if length $buf<2;
@@ -230,11 +236,11 @@ sub  make_websocket_server_reader {
 				#say "header len was $hlen";	
 				substr $buf, 0, $hlen, "";
 				#say "buf after header: ", unpack "H*", $buf;
-				$state=1;
+				$state=STATE_BODY;
 				next;
 			}
 
-			elsif($state==1){
+			elsif($state==STATE_BODY){
 				#say "Parsing body with op:" , $op;
 				#do body	
 				return if length $buf < $len;
@@ -267,7 +273,7 @@ sub  make_websocket_server_reader {
 					#do not change accumulating payload
 					#reply directly with PONG
 					warn "UNMASKING PAYLOAD\n" if DEBUG;
-					$self->[writer_]->(FIN_FLAG|PONG, xor_mask(substr($buf, 0, $len,''), $mask));
+					$self->[writer_]->(FIN_FLAG|PONG, _xor_mask(substr($buf, 0, $len,''), $mask));
 					substr $buf,0, $len,'';
 
 				}
@@ -292,7 +298,7 @@ sub  make_websocket_server_reader {
 				else{
 					#error in protocol. close
 				}
-				$state=0;
+				$state=STATE_HEADER;
 				next;
 			}
 		}
@@ -396,7 +402,7 @@ sub new {
 	my $session=shift;
 	
 	my $self=[];
-	$self->@[(session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_)]=($session, 1024**2, 0, 5, OPEN, sub { say "Default on message"}, sub {say "default on error"}, sub {say "Default on close"});
+	$self->@[(session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_, on_open_)]=($session, 1024**2, 0, 5, OPEN, sub {}, sub {}, sub {}, sub{});
 
 	bless $self, $pkg;
 	$session->[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
@@ -406,17 +412,11 @@ sub new {
 	say "Created writer: ",$self->[writer_];
 
 	#the pushed reader now has access to the writer via the session->rex
-	$session->[uSAC::HTTP::Session::read_]=make_websocket_server_reader($self,$session);
+	#$session->[uSAC::HTTP::Session::read_]=make_websocket_server_reader($self,$session);
 	$session->push_reader(make_websocket_server_reader($self,$session));
 
 	#setup ping
-	$self->[pinger_] = AE::timer(0, $self->[ping_interval_], sub {
-		say "Sending ping";
-		$self->[ping_id_] = "hello";	
-		$self->[writer_]->( FIN_FLAG | PING, $self->[ping_id_]); #no cb used->dropper defalt
-		#TODO: Add client ping support? (ie masking)
-
-	} ) if $self->[ping_interval_] > 0;
+	$self->ping_interval($self->[ping_interval_]);
 
 	#override dropper
 	my $old_dropper=$session->[uSAC::HTTP::Session::dropper_];
@@ -459,14 +459,15 @@ sub _xor_mask_inplace($$) {
 
 
 #message and connection
-sub write_binary_message {
+sub send_binary_message {
 	my $self=splice @_,0, 1, FIN_FLAG|BINARY;
 	&{$self->[writer_]};
 
 }
 
+
 #Write text message and do optional callback
-sub write_text_message {
+sub send_text_message {
 	#write as a single complete message. checks utf flag
 	my $self=splice @_, 0, 1, FIN_FLAG|TEXT;
 	&{$self->[writer_]};
@@ -478,14 +479,32 @@ sub close {
 }
 
 #getter/setters
-sub on_message {
-	$_[0][on_message_]=$_[1]//$_[0][on_message_];
+sub on_message: lvalue {
+	$_[0][on_message_];
 }
-sub on_close {
-	$_[0][on_close_]=$_[1]//$_[0][on_close_];
+sub on_close: lvalue {
+	$_[0][on_close_];
 }
-sub on_error {
-	$_[0][on_error_]=$_[1]//$_[0][on_error_];
+sub on_error: lvalue {
+	$_[0][on_error_];
+}
+sub on_open: lvalue {
+	$_[0][on_open_];	
+}
+sub ping_interval {
+	my ($self, $new)=@_;
+	return $self->[ping_interval_] unless defined $new;
+	
+	undef $self->[pinger_];
+	$self->[ping_interval_]=$new;
+	$self->[pinger_] = AE::timer(0, $self->[ping_interval_], sub {
+		say "Sending ping\n\n\n\n";
+		$self->[ping_id_] = "hello";	
+		$self->[writer_]->( FIN_FLAG | PING, $self->[ping_id_]); #no cb used->dropper defalt
+		#TODO: Add client ping support? (ie masking)
+
+	} ) if $self->[ping_interval_] > 0;
+	return $self->[ping_interval_];
 }
 
 

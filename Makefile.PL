@@ -12,6 +12,7 @@ WriteMakefile(
 		'JSON::XS'     	=> 0,
 		enum	    	=> 0,
 		"Hustle::Table" => "0.3.0",
+		"uSAC::SIO"	=> 0,
 
 		"Crypt::JWT"	=> 0,
 	},
