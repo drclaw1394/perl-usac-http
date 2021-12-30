@@ -7,7 +7,7 @@ use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Server::WS;
-use feature "current_sub";
+use AnyEvent;
 
 
 my $server=uSAC::HTTP::Server->new(
@@ -16,20 +16,28 @@ my $server=uSAC::HTTP::Server->new(
 	#cb=>sub{}
 );
 
-site_route $server =>'GET'=>"/\$"=>sub {
+$server->add_route('GET'=>"/\$"=>sub {
 	local $/=undef;
 	state $data;
 	$data=<DATA> unless $data;	#TODO: bug. <> operator not working with state
 	#say "WILL SEND DATA: ", $data;
-	rex_reply_simple(@_, HTTP_OK, undef, $data);
+	rex_reply_simple(@_, HTTP_OK, [], $data);
 	return;
-};
+});
 
-site_route $server => GET=>"/ws"=>sub {
+$server->add_route(GET=>"/ws"=>sub {
 	say "Websocket upgrade";
 	my $ws;
-	upgrade_to_websocket @_	,sub {
+	upgrade_to_websocket @_, sub {
 		$ws=$_[0];
+		my $timer; $timer=AE::timer 0, 1, sub {
+			say "in timer";
+			$ws->write_text_message("hello",sub {
+					say "CALLBACK";
+				});
+			my $temp=$timer;
+		};
+
 		$ws->on_message(sub {
 			say "GOT message: $_[0]" if $_[0];
 			$ws->write_text_message("return data");
@@ -42,14 +50,14 @@ site_route $server => GET=>"/ws"=>sub {
 		});
 		say "GOT WEBSOCKET ", $_[0];
 	};
-};
+});
 
-site_route $server=>"GET"=>"/large"=>()=>sub {
+$server->add_route("GET"=>"/large"=>()=>sub {
 	state $data= "x"x(4096*4096);
 	rex_reply_simple @_,HTTP_OK,undef,$data;
-};
+});
 
-site_route $server=>"GET"=>"/chunks"=>()=>sub {
+$server->add_route("GET"=>"/chunks"=>()=>sub {
 	state $data= "x" x (4096*4096);
 	my $size=4096*128;
 	my $offset=0;#-$size;;
@@ -61,11 +69,11 @@ site_route $server=>"GET"=>"/chunks"=>()=>sub {
 		
 		$_[0]->($d, $offset<length $data?__SUB__:undef);	#send substr
 	};
-};
+});
 
-site_route $server=>"GET"=>"/array"=>()=>sub {
+$server->add_route("GET"=>"/array"=>()=>sub {
 	rex_reply @_, HTTP_OK, undef, [qw<this is a set of data>];
-};
+});
 
 $server->run;
 

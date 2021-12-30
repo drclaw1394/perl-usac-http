@@ -379,7 +379,6 @@ sub reply_simple{
 	#my ($line, $self)=@_;
 	#create a writer for the session
 	my $session=$_[1]->[session_];
-	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 	my @headers=(
 		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
 		[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
@@ -397,7 +396,7 @@ sub reply_simple{
 
 	
 
-	$reply="HTTP/1.1 $_[2]".LF;
+	my $reply="HTTP/1.1 $_[2]".LF;
         ############################################################################
         # for my $h ($_[1]->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){ #
         #         $reply.=$h->[0].": ".$h->[1].LF;                                 #
@@ -418,10 +417,9 @@ sub reply_chunked{
 	my ($matcher, $self, $code, $headers, $cb)=@_;
 	#create a writer for the session
 	my $session=$self->[session_];
-	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	#my $content_length=length($_[4])+0;
-	$reply= "HTTP/1.1 $code".LF;
+	my $reply= "HTTP/1.1 $code".LF;
 	my @headers=(
 		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
 		($session->[uSAC::HTTP::Session::closeme_]

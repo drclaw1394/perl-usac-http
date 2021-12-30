@@ -73,8 +73,8 @@ sub upgrade_to_websocket{
 	my $cb=shift;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	#attempt to do the match
-	given ($rex->[uSAC::HTTP::Rex::headers_]){
-		when (
+	for ($rex->[uSAC::HTTP::Rex::headers_]){
+		if(
 				$_->{CONNECTION} =~ /upgrade/i	#required
 				and  $_->{UPGRADE} =~ /websocket/i	#required
 				and  $_->{'SEC_WEBSOCKET_VERSION'} ==13	#required
@@ -97,13 +97,13 @@ sub upgrade_to_websocket{
 				;
 			#support the permessage deflate
 			my $deflate_flag;
-			given($_->{'SEC_WEBSOCKET_EXTENSIONS'}){
-				when(/permessage-deflate/){
+			for($_->{'SEC_WEBSOCKET_EXTENSIONS'}){
+				if(/permessage-deflate/){
 					say "Permessage deflate";
 					#$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
 					#$deflate_flag=1;
 				}
-				default {
+				else{
 				}
 			}
 
@@ -111,9 +111,9 @@ sub upgrade_to_websocket{
 			say $reply;
 			local $/=", ";
 			say $rex->[uSAC::HTTP::Rex::headers_]->%*;
-			given($session->[uSAC::HTTP::Session::write_]){
+			for($session->[uSAC::HTTP::Session::write_]){
 				say "Writer is: ", $_;
-				$_->( $reply.LF , sub {
+				$_->($reply.LF , sub {
 
 						say "handshake written out";
 						my $ws=uSAC::HTTP::Server::WS->new($session);
@@ -122,14 +122,13 @@ sub upgrade_to_websocket{
 						#read and write setup create a new ws with just the session
 						#uSAC::HTTP::Server::WS->new($_);
 
-
 						$_=undef;
 					});
 			}
 
 		}
 
-		default {
+		else{
 			DEBUG && say "Websocket did not match";
 			#reply
 			say "NO WEBSOCKET ALLOWED";
@@ -142,12 +141,12 @@ sub upgrade_to_websocket{
 
 
 #This is called by the session reader. Data is in the scalar ref $buf
-sub make_websocket_server_reader {
+sub  make_websocket_server_reader {
 	my $self=shift;
 	my $session=shift;	#session
 	#my $ws=shift;		#websocket
 
-	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
+	my $buf="";#=\$session->[uSAC::HTTP::Session::rbuf_];
 	\my $fh=$session->[uSAC::HTTP::Session::fh_];
 	my $rex=$session->[uSAC::HTTP::Session::rex_];
 	my $writer=$rex->[uSAC::HTTP::Rex::write_];
@@ -166,7 +165,7 @@ sub make_websocket_server_reader {
 		#say "reader";
 		#do the frame parsing here
 		while($buf){
-			#say "INput buffer: ", unpack "H*", $buf;
+			say "INput buffer: ", unpack "H*", $buf;
 			if($state==0){
 				#say "parsing header";
 				#header
@@ -182,16 +181,16 @@ sub make_websocket_server_reader {
 				$len&=0b01111111;
 				warn "LENGTH: $len\n" if DEBUG;
 
-				given($len){
-					when (0) {
+				for($len){
+					if($_==0) {
 						$hlen = 2;
 						warn "NOTHING\n" if DEBUG;
 					}
-					when($_< 126){
+					elsif($_< 126){
 						$hlen = 2;
 						warn "SMALL\n" if DEBUG;
 					}
-					when(126){
+					elsif($_==126){
 						# 16 bit extended payload length
 						return unless length $buf > 4;
 						$hlen = 4;
@@ -199,7 +198,7 @@ sub make_websocket_server_reader {
 						$len = unpack 'n', $ext;
 						warn "EXTENDED (16bit): $len\n" if DEBUG;
 					}
-					when(127){
+					elsif($_==127){
 
 						# Extended payload (64bit)
 						return unless length $buf > 10;
@@ -214,7 +213,7 @@ sub make_websocket_server_reader {
                                                 ######################################
 						warn "EXTENDED (64bit): $len\n" if DEBUG;
 					}
-					default {
+					else{
 						#error if here
 					}
 				}
@@ -408,7 +407,7 @@ sub new {
 
 	#the pushed reader now has access to the writer via the session->rex
 	$session->[uSAC::HTTP::Session::read_]=make_websocket_server_reader($self,$session);
-	$session->[uSAC::HTTP::Session::reader_cb_]=undef;
+	$session->push_reader(make_websocket_server_reader($self,$session));
 
 	#setup ping
 	$self->[pinger_] = AE::timer(0, $self->[ping_interval_], sub {
@@ -466,9 +465,10 @@ sub write_binary_message {
 
 }
 
+#Write text message and do optional callback
 sub write_text_message {
 	#write as a single complete message. checks utf flag
-	my $self=splice @_,0, 1, FIN_FLAG|TEXT;
+	my $self=splice @_, 0, 1, FIN_FLAG|TEXT;
 	&{$self->[writer_]};
 }
 

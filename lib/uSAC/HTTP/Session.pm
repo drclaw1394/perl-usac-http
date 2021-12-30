@@ -16,7 +16,7 @@ use Errno qw(EAGAIN EINTR);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<time_ fh_ closeme_ rw_ rbuf_ ww_ wbuf_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ reader_cb_ writer_cb_ dropper_ write_queue_ sr_ sw_ on_body_>);
+use enum ( "id_=0" ,qw<time_ fh_ closeme_ rw_ ww_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ dropper_ write_queue_ sr_ sw_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -49,8 +49,6 @@ sub new {
 	$self->[zombies_]=$_[3];	
 	$self->[server_]=$_[4];
 
-	$self->[wbuf_]="x"x(4096*16);
-	$self->[wbuf_]="";
 	#$self->[read_stack_]=[];
 	$self->[reader_cache_]={};
 
@@ -68,14 +66,13 @@ sub new {
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
-		#$self->[wbuf_]="";
 		#reset write stack
 		#$self->[write_]=pop $self->[write_stack_]->@*;
 		#say "in dropper: ", $closeme, " ", caller;
 		return unless $closeme;#||$_[0];
 		delete $sessions->{$id};
 		$self->[sr_]->pause;
-		$self->[sw_]->cancel;
+		$self->[sw_]->pause;;
 		close $fh;
 		$fh=undef;
 		$id=undef;
@@ -92,13 +89,13 @@ sub new {
 	$sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]->()};
 	$sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
 	$self->[sr_]=$sr;
-	#\$self->[rbuf_]=\$sr->buffer;
 	uSAC::SReader::start $sr;
 	#$sr->start;
 
 	#make writer
 	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
 	$self->[sw_]->on_error=$self->[dropper_];
+	$self->[sw_]->timing(\$self->[time_], \$Time);
 	$self->[write_]=$self->[sw_]->writer;
 
 
@@ -114,8 +111,6 @@ sub revive {
 	$self->[id_]=$_[0];	
 	$self->[time_]=$Time;
 	$self->[fh_]=$_[1];	
-	$self->[wbuf_]="";
-	$self->[rbuf_]="";
 	$self->[rex_]=undef;
 	#$self->[write_queue_]->@*=();
 	$self->[write_stack_]=[];
@@ -130,66 +125,7 @@ sub revive {
 	return $self;
 }
 
-#################################################################################
-# #actual socket reader each session will need one of these                     #
-# sub _make_reader {                                                            #
-#         my $self=shift;                                                       #
-#         unless($self->[sr_]){                                                 #
-#                 my $sr=uSAC::SReader->new($self,$self->[fh_]);                #
-#                 $sr->max_read_size=4096*16;                                   #
-#                 $sr->on_read=\$self->[read_];                                 #
-#                 $sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]};   #
-#                 $sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]}; #
-#                 $self->[sr_]=$sr;                                             #
-#                 #\$self->[rbuf_]=\$sr->buffer;                                #
-#                 $sr->start;                                                   #
-#         }                                                                     #
-#         else{                                                                 #
-#                 $self->[sr_]->on_read=$self->[read_];                         #
-#                 $self->[sr_]->start($self->[fh_]);                            #
-#         }                                                                     #
-# }                                                                             #
-#################################################################################
 
-############################################################################
-# sub _make_reader_old {                                                   #
-#         my $self=shift;                                                  #
-#         weaken $self;                                                    #
-#         my $fh=$self->[fh_];                                             #
-#         \my $buf=\$self->[rbuf_];                                        #
-#         my $len;                                                         #
-#         \my $reader=\$self->[read_];                                     #
-#                                                                          #
-#         $self->[rw_] = AE::io $fh, 0, sub {                              #
-#                 $self->[time_]=$Time;   #Update the last access time     #
-#                 $len = sysread( $fh, $buf, MAX_READ_SIZE, length $buf ); #
-#                 #say $buf;                                               #
-#                 if($len>0){                                              #
-#                         #say "Calling reader: ", $reader;                #
-#                         $reader->();                                     #
-#                 }                                                        #
-#                 #when(0){                                                #
-#                 elsif($len==0){                                          #
-#                         #say "read len is zero";                         #
-#                         #End of file                                     #
-#                         #say "END OF  READER";                           #
-#                         $self->[closeme_]=1;                             #
-#                         $self->[rw_]=undef;                              #
-#                         $self->[dropper_]->();                           #
-#                 }                                                        #
-#                 #when(undef){                                            #
-#                 else {                                                   #
-#                         #potential error                                 #
-#                         #say "ERROR";                                    #
-#                         return if $! == EAGAIN or $! == EINTR;           #
-#                         say "ERROR IN READER";                           #
-#                         $self->[closeme_]=1;                             #
-#                         $self->[dropper_]->();                           #
-#                         $self->[rw_]=undef;                              #
-#                 }                                                        #
-#         };                                                               #
-# }                                                                        #
-############################################################################
 
 #pluggable interface
 #=====================
@@ -198,7 +134,6 @@ sub revive {
 sub push_reader {
 	push $_[0][read_stack_]->@*, $_[0][read_]=$_[1];
 	$_[0][sr_]->on_read=$_[1];
-	#$_[0][reader_cb_]=$_[2];
 }
 
 sub push_writer {

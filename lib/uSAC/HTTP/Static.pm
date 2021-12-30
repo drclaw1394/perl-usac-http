@@ -225,7 +225,6 @@ sub make_send_file_uri_norange {
 		use  integer;
 		my ($matcher,$rex,$uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
-		\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 		my $abs_path=$sys_root."/".$uri;
 
 		my $entry=$cache{$abs_path}//$self->open_cache($abs_path);
@@ -238,7 +237,7 @@ sub make_send_file_uri_norange {
 
 		my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
 
-		$reply= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF;
+		my $reply= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF;
 		my $headers=[
 			[HTTP_DATE, $uSAC::HTTP::Session::Date],
 			($session->[uSAC::HTTP::Session::closeme_]?
@@ -365,7 +364,6 @@ sub make_list_dir {
 	sub{
 		my ($line,$rex,$uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
-		\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 		my $abs_path=$sys_root."/".$uri;
 		#say "Listing dir for $abs_path";
@@ -428,7 +426,6 @@ sub send_file_uri_norange_chunked {
 
 	my ($self, $line,$rex,$uri,$sys_root)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 	my $abs_path=$sys_root."/".$uri;
 
@@ -445,7 +442,7 @@ sub send_file_uri_norange_chunked {
 
 	my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
 	
-	$reply=
+	my $reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
 		#.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
@@ -552,7 +549,6 @@ sub make_send_file_uri_range {
 
 		my ($route,$rex,$uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
-		\my $reply=\$session->[uSAC::HTTP::Session::wbuf_];
 
 		my $abs_path=$sys_root."/".$uri;
 		my $entry=$cache{$abs_path}//$self->open_cache($abs_path);
@@ -593,7 +589,7 @@ sub make_send_file_uri_range {
 		#$uri=~$path_ext;        #match results in $1;
 
 		my $boundary="THIS_IS THE BOUNDARY";
-		$reply=
+		my $reply=
 		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_PARTIAL_CONTENT.LF
 		#.uSAC::HTTP::Rex::STATIC_HEADERS
 		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF

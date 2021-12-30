@@ -73,15 +73,17 @@ sub make_reader{
 	#default is server mode to handle client requests
 	my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
 
-	#find existing sub in session
-	#
-	my $sub_id="http1_1". ($mode==MODE_CLIENT?"client":"server");
-	my $sub=$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id};
-	if($sub){
-		#reset
-		$sub->(undef, undef, undef);
-		return $sub;
-	}
+        #################################################################
+        # #find existing sub in session                                 #
+        # #                                                             #
+        # my $sub_id="http1_1". ($mode==MODE_CLIENT?"client":"server"); #
+        # my $sub=$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id};    #
+        # if($sub){                                                     #
+        #         #reset                                                #
+        #         $sub->(undef, undef, undef);                          #
+        #         return $sub;                                          #
+        # }                                                             #
+        #################################################################
 
 	my $self=$r->[uSAC::HTTP::Session::server_];
 	#\my $buf=\$r->[uSAC::HTTP::Session::rbuf_];
@@ -102,15 +104,18 @@ sub make_reader{
 	my %h;		#Define the header storage here, once per connection
 	
 	#ctx, buffer, flags 
-	$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id}= sub {
+	#	$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id}= 
+	sub {
 		\my $buf=\$_[1];	#\$r->[uSAC::HTTP::Session::rbuf_];
-		unless($_[0]){
-			$r->[uSAC::HTTP::Session::sr_]->buffer="";
-
-			$state=$start_state;
-			return;
-		}
-
+                ######################################################
+                # unless($_[0]){                                     #
+                #         $r->[uSAC::HTTP::Session::sr_]->buffer=""; #
+                #                                                    #
+                #         $state=$start_state;                       #
+                #         return;                                    #
+                # }                                                  #
+                #                                                    #
+                ######################################################
 		my $write=$r->[uSAC::HTTP::Session::write_];
 		use integer;
 		#say "in base reader";
@@ -235,7 +240,7 @@ sub make_form_data_reader {
 
 	my ($usac,$rex,$session,$cb)=@_;	
 	#my $session=shift;
-	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
+	#\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
 	#my $cb=shift;#\$session->[uSAC::HTTP::Session::reader_cb_];
 	my $rex=$session->[uSAC::HTTP::Session::rex_];
 
@@ -246,7 +251,7 @@ sub make_form_data_reader {
 	my $form_headers={};
 
 	sub {
-		#\my $buf=shift;#buffer from io loop
+		\my $buf=$_[1];
 		#my $rex=shift;
 		#my $cb=$session->[uSAC::HTTP::Session::reader_cb_];
 		my $processed=0;
@@ -388,13 +393,13 @@ sub make_form_urlencoded_reader {
 	#
 	my ($usac,$rex,$session,$cb)=@_;	
 	#my $session=shift;
-	\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];	#Alias buffer (not a reference)
 	#my $cb=shift;#$_[1];#=$session->[uSAC::HTTP::Session::reader_cb_]=$_[1];	#Alias reference to current cb
 	my $rex=$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
 	my $processed=0;					#stateful position in buffer
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
+		\my $buf=\$_[1];
 		
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];	#
 		my $len =
@@ -428,128 +433,4 @@ sub make_form_urlencoded_reader {
 	}
 }
 
-################################################################################################################
-# sub make_socket_writer{                                                                                      #
-#         #take a session and alias the variables to lexicals                                                  #
-#         my $session=shift;                                                                                   #
-#         weaken $session;                                                                                     #
-#         my $wbuf;# $$wbuf="";# buffer is for this sub only \$ido->[uSAC::HTTP::Session::wbuf_];              #
-#         my $ww=$session->[uSAC::HTTP::Session::ww_];                                                         #
-#         my $fh=$session->[uSAC::HTTP::Session::fh_]; #reference to file handle.                              #
-#         weaken $fh;                                                                                          #
-#         my $w;                                                                                               #
-#         my $offset=0;                                                                                        #
-#         #Arguments are buffer and callback.                                                                  #
-#         #do not call again until callback is called                                                          #
-#         #if no callback is provided, the session dropper is called.                                          #
-#         #                                                                                                    #
-#         #\my @queue=$session->[uSAC::HTTP::Session::write_queue_]; # data, offset, cb, arg                   #
-#         my @queue;                                                                                           #
-#         my $dropper=$session->[uSAC::HTTP::Session::dropper_];  #default callback                            #
-#         \my $time= \$session->[uSAC::HTTP::Session::time_];#=$uSAC::HTTP::Session::Time;                     #
-#                                                                                                              #
-#                                                                                                              #
-#         #Stack interface                                                                                     #
-#         #Buffer:        Defined with length: write data, defined no data: flush,  undef: reset               #
-#         #callback       Defined: call when write is done, undefined: call dropper/default when write is done #
-#         #               If no cb specified, no more data to be written                                       #
-#         #                                                                                                    #
-#         #arg            Defined: Use as argument to callback, undefined: use current sub as argument         #
-#         $session->[uSAC::HTTP::Session::write_]=sub {                                                        #
-#                 use integer;                                                                                 #
-#                                                                                                              #
-#                 $_[0]//(@queue=()) && return;           #undefined input. was a stack reset                  #
-#                                                                                                              #
-#                 \my $buf=\$_[0];                #give the input a name                                       #
-#                                                                                                              #
-#                 my $cb= $_[1];#//$dropper;              #when no cb provided, use dropper                    #
-#                 my $arg=$_[2]//__SUB__;                 #is this sub unless provided                         #
-#                                                                                                              #
-#                 $offset=0;# if $pre_buffer!=$_[0];      #do offset reset if need beo                         #
-#                 #$pre_buffer=$_[0];                                                                          #
-#                 #say "preview: ", substr($buf ,0 , 10),"length: ", length $_[0];                             #
-#                 if(!$ww){       #no write watcher so try synchronous write                                   #
-#                         #say "No watcher";                                                                   #
-#                         $w = syswrite( $fh, $buf, length($buf)-$offset, $offset);                            #
-#                         #$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;                  #
-#                         $time=$uSAC::HTTP::Session::Time;                                                    #
-#                                                                                                              #
-#                         $offset+=$w;                                                                         #
-#                         if($offset==length $buf){                                                            #
-#                                 #say "FULL WRITE NO APPEND";                                                 #
-#                                 #say "writer cb is: $cb";                                                    #
-#                                 $cb->($arg) if $cb;                                                          #
-#                                 return;                                                                      #
-#                         }                                                                                    #
-#                         #else{                                                                               #
-#                                                                                                              #
-#                                 #say "w is $w";                                                              #
-#                                 if(!defined($w) and $! != EAGAIN and $! != EINTR){                           #
-#                                         #this is actual error                                                #
-#                                         say "ERROR IN WRITE NO APPEND";                                      #
-#                                         say $!;                                                              #
-#                                         #actual error                                                        #
-#                                         $ww=undef;                                                           #
-#                                         @queue=();      #reset queue for session reuse                       #
-#                                         $cb->(undef) if $cb;                                                 #
-#                                         $session->[uSAC::HTTP::Session::closeme_]=1;                         #
-#                                         $dropper->();                                                        #
-#                                         #uSAC::HTTP::Session::drop $session, "$!";                           #
-#                                         return;                                                              #
-#                                 }                                                                            #
-#                                                                                                              #
-#                                 #either a partial write or an EAGAIN situation                               #
-#                                                                                                              #
-#                                 #say "EAGAIN or partial write";                                              #
-#                                 #If the write was only partial, or had a async 'error'                       #
-#                                 #push the buffer to setup events                                             #
-#                                 push @queue,[$buf,$offset,$cb,$arg];                                         #
-#                                 #say "PARTIAL WRITE Synchronous";                                            #
-#                                 my $entry;                                                                   #
-#                                 $ww = AE::io $fh, 1, sub {                                                   #
-#                                         $session or return;                                                  #
-#                                         $entry=$queue[0];                                                    #
-#                                         \my $buf=\$entry->[0];                                               #
-#                                         \my $offset=\$entry->[1];                                            #
-#                                         \my $cb=\$entry->[2];                                                #
-#                                         \my $arg=\$entry->[3];                                               #
-#                                         $w = syswrite( $fh, $buf, length($buf)-$offset, $offset);            #
-#                                         #$session->[uSAC::HTTP::Session::time_]=$uSAC::HTTP::Session::Time;  #
-#                                         $time=$uSAC::HTTP::Session::Time;                                    #
-#                                                                                                              #
-#                                         $offset+=$w;                                                         #
-#                                         if($offset==length $buf) {                                           #
-#                                                 #say "FULL async write";                                     #
-#                                                 shift @queue;                                                #
-#                                                 undef $ww unless @queue;                                     #
-#                                                 $cb->($arg) if $cb;                                          #
-#                                                 return;                                                      #
-#                                         }                                                                    #
-#                                                                                                              #
-#                                         if(!defined($w) and $! != EAGAIN and $! != EINTR){                   #
-#                                                 #this is actual error                                        #
-#                                                 say "ERROR IN EVENT WRITE";                                  #
-#                                                 say $!;                                                      #
-#                                                 #actual error                                                #
-#                                                 $ww=undef;                                                   #
-#                                                 @queue=();      #reset queue for session reuse               #
-#                                                 $cb->(undef) if $cb;                                         #
-#                                                 $session->[uSAC::HTTP::Session::closeme_]=1;                 #
-#                                                 $dropper->();                                                #
-#                                                 #uSAC::HTTP::Session::drop $session, "$!";                   #
-#                                                 return;                                                      #
-#                                         }                                                                    #
-#                                 };                                                                           #
-#                                                                                                              #
-#                                 return                                                                       #
-#                 }                                                                                            #
-#                 else {                                                                                       #
-#                         #watcher existing, add to queue                                                      #
-#                         #say "Watcher exists, pushing to queue+++";                                          #
-#                         push @queue, [$buf,0,$cb,$arg];                                                      #
-#                 }                                                                                            #
-#                 return                                                                                       #
-#         };                                                                                                   #
-# }                                                                                                            #
-################################################################################################################
 1;
