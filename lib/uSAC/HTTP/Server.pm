@@ -208,7 +208,7 @@ sub prepare {
 	#setup timer for constructing date header once a second
 	my ($self)=shift;
 	my $interval=1;
-	my $timeout=10;
+	my $timeout=20;
 	$self->[server_clock_]=time;	
 
 	$self->[stream_timer_]=AE::timer 0,$interval, sub {

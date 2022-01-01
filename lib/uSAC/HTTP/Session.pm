@@ -88,6 +88,7 @@ sub new {
 	$sr->on_read=\$self->[read_];
 	$sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]->()};
 	$sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
+	$sr->timing(\$self->[time_], \$Time);
 	$self->[sr_]=$sr;
 	uSAC::SReader::start $sr;
 	#$sr->start;

@@ -6,6 +6,9 @@ use uSAC::HTTP;
 use uSAC::HTTP::Server::WS;
 use AnyEvent;
 
+my %clients;
+
+
 
 my $server=uSAC::HTTP::Server->new(
 	host=>"0.0.0.0",
@@ -23,17 +26,23 @@ $server->add_route('GET'=>"/\$"=>sub {
 
 $server->add_route(GET=>"/ws"=> usac_websocket sub($ws){
 		my $timer;
+		$ws->ping_interval(0);
 		$ws->on_open=sub {
-			 $timer=AE::timer 0, 1, sub {
-				$ws->send_text_message("hello",sub {
-					say "CALLBACK";
-				});
-			};
+			$clients{$_[1]}=$_[0];
+                        ################################################
+                        #  $timer=AE::timer 0, 1, sub {                #
+                        #         $ws->send_text_message("hello",sub { #
+                        #                 say "CALLBACK";              #
+                        #         });                                  #
+                        # };                                           #
+                        ################################################
 		};
 
 		$ws->on_message=sub {
-				say "GOT message: $_[0]" if $_[0];
-				$ws->send_text_message("return data");
+				say "GOT message: $_[2]";
+				while(my($id,$client)=each  %clients){
+					$client->send_text_message($_[2]) unless $id==$_[1];
+				}
 			};
 
 		$ws->on_error=sub {
@@ -83,13 +92,13 @@ __DATA__
 		<script >
 			
 			var ws=new WebSocket("ws://"+location.host+"/ws","chat");
-
+			var id=Date.now();
 			ws.onopen=function(event){
 				console.log("websocket open");
 				//ws.send("hello");
 				setInterval(function(){
-					ws.send("hello");
-				},1000);
+					ws.send(id+" hello");
+				},100);
 			};
 
 			ws.onmessage= function(msg){
