@@ -20,7 +20,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<usac_static_from send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_under usac_file_under list_dir>;
+our @EXPORT_OK =qw<usac_static_from send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_under usac_file_under usac_index_under list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -213,26 +213,13 @@ sub open_cache {
 
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
-sub make_send_file_uri_norange {
+sub send_file_uri_norange {
 
 	#return a sub with cache an sysroot aliased
-	my $self=shift;
-
-	\my $sys_root=\$self->[root_];
-	\my %cache=$self->[cache_];
-
-	sub {
 		use  integer;
-		my ($matcher,$rex,$uri)=@_;
+		my ($matcher,$rex,$entry)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
-		my $abs_path=$sys_root."/".$uri;
 
-		my $entry=$cache{$abs_path}//$self->open_cache($abs_path);
-
-		unless($entry){
-			rex_reply_simple $matcher, $rex, HTTP_NOT_FOUND,[],"";
-			return;
-		}
 		my $in_fh=$entry->[0];
 
 		my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
@@ -296,8 +283,7 @@ sub make_send_file_uri_norange {
 
 			#else {  EAGAIN }
 
-		}->();
-	}
+	}->();
 
 }
 
@@ -539,23 +525,12 @@ sub send_file_uri_norange_chunked {
 }
 
 
-sub make_send_file_uri_range {
-	my $self=shift;
-
-	\my $sys_root=\$self->[root_];
-	\my %cache=$self->[cache_];
-	sub {
+sub send_file_uri_range {
 		use  integer;
 
-		my ($route,$rex,$uri)=@_;
+		my ($route,$rex,$entry)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
-		my $abs_path=$sys_root."/".$uri;
-		my $entry=$cache{$abs_path}//$self->open_cache($abs_path);
-		unless($entry=$self->open_cache($abs_path)){
-			rex_reply_simple $route, $rex, HTTP_NOT_FOUND,[],"";
-			return;
-		}
 		my $in_fh=$entry->[0];
 
 		my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
@@ -605,8 +580,8 @@ sub make_send_file_uri_range {
 			if(@ranges==1){
 				HTTP_CONTENT_RANGE.": $ranges[0][0]-$ranges[0][1]/$content_length".LF
 				.HTTP_CONTENT_LENGTH.": ".$total_length.LF			#need to be length of multipart
-				.$entry->[1]
-				#.LF
+				.HTTP_CONTENT_TYPE.":".$entry->[1][1]
+				.LF
 			}
 			else {
 				HTTP_CONTENT_TYPE.": multipart/byteranges; boundary=$boundary".LF
@@ -695,7 +670,7 @@ sub make_send_file_uri_range {
 						if($chunk_offset==$length){	#end of file
 							#add boundary
 							if(@ranges==1){
-								$session->[uSAC::HTTP::Session::write_]->($reply);
+								$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
 								return;
 							}
 							if($index==@ranges-1){
@@ -727,12 +702,8 @@ sub make_send_file_uri_range {
 					}
 				}
 			}
-
-
 		};
-
 		&$reader;#->();
-	}
 }
 
 
@@ -791,24 +762,26 @@ sub usac_static_from {
 	}
 }
 
-sub usac_file_under {
+#Serve index files for dirs
+sub usac_index_under {
 	#create a new static file object
 	my $parent=$_;
 	my $root=shift;
-
+	my %options=@_;
+	$options{mime}=$parent->resolve_mime_lookup;
+	$options{default_mime}=$parent->resolve_mime_default;
+	\my @indexes=$options{indexes}//[];
 	if($root =~ m|^[^/]|){
 		#implicit path
 		#make path relative to callers file
 		$root=dirname((caller)[1])."/".$root;
 	}
-
-	my %options=@_;
-	$options{mime}=$parent->resolve_mime_lookup;
-	$options{default_mime}=$parent->resolve_mime_default;
 	my $static=uSAC::HTTP::Static->new(root=>$root,%options);
 	#check for mime type in parent 
-	my $sfunr=$static->make_send_file_uri_norange();
-	my $sfur=$static->make_send_file_uri_range();
+	#my $sfunr=$static->make_send_file_uri_norange();
+	#my $sfur=$static->make_send_file_uri_range();
+	my $cache=$static->[cache_];
+	my $sys_root=$static->[root_];
 	
 	#create the sub to use the static files here
 	sub {
@@ -824,20 +797,90 @@ sub usac_file_under {
 			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
 		}
 
-		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-			#send_file_uri_range @_, $p, $root, $cache;
-			$sfur->(@_,$p);
-			return;
+		#attempt to locate the index files in sequence
+		my $entry;
+		for(@indexes){
+
+			my $path=$sys_root."/".$p.$_;
+			#say "PATH: $path";
+			$entry=$cache->{$path}//$static->open_cache($path);
+			next unless $entry;
+			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+				send_file_uri_range @_, $entry;
+				return;
+			}
+			else{
+				#Send normal
+				#$static->send_file_uri_norange(@_, $p, $root);
+				send_file_uri_norange @_, $entry;
+				return;
+			}
 		}
-		else{
-			#Send normal
-			#$static->send_file_uri_norange(@_, $p, $root);
-			$sfunr->(@_,$p);
+
+		#no valid index found so 404
+		rex_reply_simple @_, HTTP_NOT_FOUND,[],"";
+		return;
+	}
+
+
+}
+
+sub usac_file_under {
+	#create a new static file object
+	my $parent=$_;
+	my $root=shift;
+
+	if($root =~ m|^[^/]|){
+		#implicit path
+		#make path relative to callers file
+		$root=dirname((caller)[1])."/".$root;
+	}
+
+	my %options=@_;
+	$options{mime}=$parent->resolve_mime_lookup;
+	$options{default_mime}=$parent->resolve_mime_default;
+	my $static=uSAC::HTTP::Static->new(root=>$root,%options);
+
+	my $cache=$static->[cache_];
+	my $sys_root=$static->[root_];
+
+	#check for mime type in parent 
+
+	#create the sub to use the static files here
+	sub {
+		#matcher, rex, code, headers, uri if not in $_
+		my $rex=$_[1];
+		#my $p=$1;
+		my $p;
+		if($_[2]){
+			$p=$_[2];
+			pop;
+		}	
+		else {
+			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+		}
+
+
+		my $path=$sys_root."/".$p;
+		my $entry=$cache->{$path}//$static->open_cache($path);
+		if($entry){
+			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+				send_file_uri_range @_, $entry;
+				return;
+			}
+			else{
+				send_file_uri_norange @_, $entry;
+				return;
+			}
+		}
+		else {
+			#no valid index found so 404
+			rex_reply_simple @_, HTTP_NOT_FOUND,[],"";
 			return;
 		}
 	}
 
-	
+
 }
 
 sub usac_file_from_old {

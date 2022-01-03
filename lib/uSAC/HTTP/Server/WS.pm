@@ -167,8 +167,8 @@ sub  _make_websocket_server_reader {
 		#say "reader";
 		#do the frame parsing here
 		while($buf){
-			say "";
-			say "Input buffer: ", unpack "H*", $buf;
+			#say "";
+			#say "Input buffer: ", unpack "H*", $buf;
 			if($state==STATE_HEADER){
 				#say "parsing header";
 				#header
@@ -186,7 +186,7 @@ sub  _make_websocket_server_reader {
 				#inital 7 bits of len
 				$len&=0b01111111;
 				warn "LENGTH: $len\n" if DEBUG;
-				say "op code: $op";
+				#say "op code: $op";
 				for($len){
 					if($_==0) {
 						$hlen = 2;
@@ -223,7 +223,7 @@ sub  _make_websocket_server_reader {
 						#error if here
 					}
 				}
-				say "valid length: $len";
+				#say "valid length: $len";
 
 
 				if($masked){	

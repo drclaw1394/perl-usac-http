@@ -37,7 +37,7 @@ use Carp 'croak';
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ total_requests_>
+	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
 );
 
 use constant KEY_COUNT=> total_requests_ - host_+1;
@@ -404,10 +404,18 @@ sub rebuild_dispatch {
 	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>undef);#$cache);
 }
 
+sub stop {
+	my $self=shift;
+	$self->[cv_]->send;
+}
 sub run {
 	my $self=shift;
 	my $cv=AE::cv;
-
+	$self->[cv_]=$cv;
+	my $sig; $sig=AE::signal(INT=>sub {
+		$self->stop;
+		$sig=undef;
+	});
 	if (exists $self->[listen_]) {
 		$self->[listen_] = [ $self->[listen_] ] unless ref $self->[listen_];
 		my %dup;

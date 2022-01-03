@@ -3,8 +3,7 @@ use feature qw<current_sub refaliasing say switch>;
 no warnings "experimental";
 
 use Exporter 'import';
-use Encode qw<decode encode decode_utf8>;
-
+use Encode qw<find_encoding decode encode decode_utf8>;
 our @EXPORT_OK=qw<
 		make_reader
 		make_form_data_reader
@@ -18,37 +17,35 @@ our @EXPORT_OK=qw<
 
 our @EXPORT=@EXPORT_OK;
 
-use constant MAX_READ_SIZE => 128 * 1024;
 
-use Errno qw(EAGAIN EINTR);
-use AnyEvent::Util qw(WSAEWOULDBLOCK guard AF_INET6 fh_nonblocking);
+#Package global for decoding utf8. Faster than using decode_utf8 function.
+our $UTF_8=find_encoding "utf-8";
+
+
 use Time::HiRes qw/gettimeofday/;
 use Scalar::Util 'refaddr', 'weaken';
 
-#use uSAC::HTTP::Server;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Rex;
 use constant MAX_READ_SIZE => 128 * 1024;
 
-our $MIME;
-sub DEBUG () { 0 }
 our $LF = "\015\012";
 
-#my $HEADER_QR=> qr/\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca;
 use constant LF=>"\015\012";
-#use enum (qw<STATE_REQ_LINE STATE_RES_LINE STATE_HEADERS STATE_ERROR>);
 
 sub uri_decode {
 	my $octets= shift;
 	$octets=~ s/\+/ /sg;
 	$octets=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
-	return decode_utf8($octets);
+	return $UTF_8->decode($octets); #decode_utf8 calls this internally?
+	#return decode_utf8($octets);
 	#return decode("utf8", $octets);
 }
 sub uri_decode_inplace {
 	$_[0]=~ s/\+/ /sg;
 	$_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
-	decode_utf8($_[0]);
+	return $UTF_8->decode($octets);
+	#decode_utf8($_[0]);
 	#return decode("utf8", $octets);
 }
 
