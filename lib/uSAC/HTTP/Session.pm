@@ -159,6 +159,10 @@ sub set_writer {
 	$_[0]->[write_]=$_[1];
 }
 
+sub pump_reader {
+	$_[0][sr_]->pump;
+}
+
 #timer for generating timestamps. 1 second resolution for HTTP date
 our $timer=AE::timer 0,1, sub {
 	state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);

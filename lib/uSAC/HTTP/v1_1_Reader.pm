@@ -248,7 +248,7 @@ sub make_form_data_reader {
 	my $form_headers={};
 
 	sub {
-		\my $buf=$_[1];
+		\my $buf=\$_[1];
 		#my $rex=shift;
 		#my $cb=$session->[uSAC::HTTP::Session::reader_cb_];
 		my $processed=0;

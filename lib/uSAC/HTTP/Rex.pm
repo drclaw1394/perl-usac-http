@@ -26,7 +26,20 @@ use Exporter 'import';
 use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked rex_form_upload rex_urlencoded_upload rex_handle_upload rex_stream_multipart_upload rex_stream_form_upload rex_stream_urlencoded_upload rex_upload_to_file rex_save_to_file rex_save_form_to_file rex_save_form rex_save_web_form rex_parse_form_params rex_query_params>;
+our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked 
+
+usac_data_stream
+usac_multipart_stream
+usac_urlencoded_stream
+usac_form_stream
+
+usac_data_slurp
+usac_multipart_slurp
+usac_urlencoded_slurp
+usac_form_slurp
+
+rex_parse_form_params 
+rex_query_params>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -80,8 +93,8 @@ sub reply_DEFLATE {
 
 #multipart for type.
 #Sub parts can be of different types and possible content encodings?
-sub stream_multipart_upload{
-		my $cb=shift;
+sub usac_multipart_stream {
+		my $cb=pop;
 	sub {
 		my $line=$_[0];#shift;
 		my $rex=$_[1];#shift;
@@ -97,8 +110,7 @@ sub stream_multipart_upload{
 		uSAC::HTTP::Session::push_reader
 		$session,
 		make_form_data_reader @_, $session, $cb ;
-		$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
-		#$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex) if $session->[uSAC::HTTP::Session::rbuf_];
+		$session->pump_reader;
 		return;
 	}
 }
@@ -108,10 +120,11 @@ sub stream_multipart_upload{
 #checks mime types are as specified (any type is default)
 #runs callback with parts of data
 #
-sub stream_upload {
-	my $mime=shift//".*";#application/x-www-form-urlencoded';
-	my $upload_limit=$UPLOAD_LIMIT;
-	my $cb=shift;	#cb for parts
+sub usac_data_stream{
+	my $cb=pop;	#cb for parts
+	my %options=@_;
+	my $mime=$options{mime}//".*";	#application/x-www-form-urlencoded';
+	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
 
 	sub {
 		#my $line=shift;
@@ -126,8 +139,8 @@ sub stream_upload {
 				@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
 			}
 
-			elsif($_->{'CONTENT_LENGTH'} > $upload_limit){
-				@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $UPLOAD_LIMIT");
+			elsif(defined $upload_limit  and $_->{'CONTENT_LENGTH'} > $upload_limit){
+				@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
 			}
 
 			else{
@@ -137,14 +150,12 @@ sub stream_upload {
 				make_form_urlencoded_reader @_, $session, $cb ;
 
 				#check for expects header and send 100 before trying to read
-				if(defined($_->{EXPECTS})){
+				if(defined($_->{EXPECT})){
 					#issue a continue response	
-					say "writing continue";
 					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
 					$rex->[uSAC::HTTP::Rex::write_]->($reply);
 				}
-
-				$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex) if $session->[uSAC::HTTP::Session::rbuf_];
+				$session->pump_reader;
 				return;
 			}
 		}
@@ -154,16 +165,19 @@ sub stream_upload {
 	}
 }
 
-sub stream_urlencoded_upload {
-	stream_upload "application/x-www-form-urlencoded", shift;
+sub usac_urlencoded_stream {
+	my $cb=pop;;
+	my %options=@_;
+	$options{mime}="application/x-www-form-urlencoded";
+	usac_data_stream %options, $cb;
 }
 
-#uses handle_upload or stream_multipart_upload setup for
+#uses handle_upload or  usac_multipart_stream setup for
 #html forms
-sub stream_form_upload {
-	my ($cb)=@_;
-	my $multi= stream_multipart_upload @_;
-	my $url=stream_urlencoded_upload @_;
+sub usac_form_stream {
+	#my ($cb)=@_;
+	my $multi=  usac_multipart_stream @_;
+	my $url= usac_urlencoded_stream @_;
 	sub{
 		for ($_[1][headers_]{CONTENT_TYPE}){
 			&$multi and return if /multipart\/form-data/;
@@ -176,12 +190,12 @@ sub stream_form_upload {
 #process urlencoded form
 #Return a set of kv pairs
 #Last item is $cb
-sub save_form {
+sub usac_urlencoded_slurp{
 	my $cb=pop;
 	#The actual sub called
 	#Expected inputs
 	#	line, rex, data, part header, completeflag
-	stream_urlencoded_upload sub {
+	usac_urlencoded_stream sub {
 		my $usac=$_[0];
 		my $rex=$_[1];
 		state $part_header=0;
@@ -206,13 +220,13 @@ sub save_form {
 
 #Writes any file attachments to temp files 
 #NOTE only form-data/multipart
-sub save_form_to_file {
+sub usac_multipart_slurp{
 	my $cb=pop;
 	my %options=@_;
         my $tmp_dir=$options{dir}//"uploads";	#temp dir to save file to
         my $prefix=$options{prefix}//"uSAC";
 	#The actual sub called
-	stream_multipart_upload sub {
+	 usac_multipart_stream sub {
 		my $usac=$_[0];
 		my $rex=$_[1];
 		state $part_header=0;
@@ -254,11 +268,11 @@ sub save_form_to_file {
 #Handles either multipart or urlencoded body forms
 #Callback is last argument and is called  on complete upload of all data
 #Expected inputs to sub ref:
-#	line, rex, data, part header, completeflag
-sub save_web_form {
+#line, rex, data, part header, completeflag
+sub usac_form_slurp{
 	my ($cb)=@_;
-	my $multi= save_form_to_file @_;
-	my $url=save_form @_;
+	my $multi= usac_multipart_slurp @_;
+	my $url=usac_urlencoded_slurp @_;
 	sub{
 		for ($_[1][headers_]{CONTENT_TYPE}){
 			&$multi and return if /multipart\/form-data/;
@@ -270,7 +284,7 @@ sub save_web_form {
 #Returns a sub which writes the streaming data to file. Callback is called when file is
 #completely downloaded
 #
-sub save_to_file {
+sub usac_data_slurp{
 	my $cb=pop;
 	my %options=@_;
 	
@@ -281,7 +295,7 @@ sub save_to_file {
 
 	make_path $tmp_dir unless $path;
 
-	stream_upload $mime, sub {
+	usac_data_stream %options, sub {
 		my $rex=$_[1];
 		#handle_upload @_, $mime, sub {
 			state $header=0;
@@ -557,18 +571,9 @@ sub state {
 *rex_reply_chunked=*reply_chunked;
 *rex_reply=*reply;
 
-#Streamed with octets as they become available
-*rex_stream_upload=*stream_upload;			#normal file	
-*rex_stream_multipart_upload=*stream_multipart_upload;	#multipart 
-*rex_stream_urlencoded_upload=*stream_urlencoded_upload;#like normal but forced mime type
-*rex_stream_form_upload=*stream_form_upload;		#Automatially handles multipart and urlencoded form upload streams
 
 *rex_parse_form_params=*parse_form_params;
 *rex_query_params=*query_params;
 
-#Called when upload is complete
-*rex_save_to_file=*save_to_file;			#save general file
-*rex_save_form_to_file=*save_form_to_file;		#save multipart files to disk
-*rex_save_form=*save_form;				#process form when complete ready
-*rex_save_web_form=*save_web_form;
+
 1;

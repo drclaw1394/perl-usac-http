@@ -1,0 +1,28 @@
+<html>
+	<head>
+		<title>WS test </title>
+	</head>
+	<body>
+		<script >
+			
+			var ws=new WebSocket("ws://"+location.host+"/ws","chat");
+			var id=Date.now();
+			ws.onopen=function(event){
+				console.log("websocket open");
+				//ws.send("hello");
+				setInterval(function(){
+					ws.send(id+" hello");
+				},100);
+			};
+
+			ws.onmessage= function(msg){
+				console.log("websocket message",msg.data);
+				};
+			ws.onerror= function(msg){
+				console.log("websocket error",msg);
+			};
+		</script>
+
+	</body>
+<html>
+

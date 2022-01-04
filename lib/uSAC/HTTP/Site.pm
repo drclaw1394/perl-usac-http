@@ -456,7 +456,7 @@ sub usac_error_page {
 #http code is always
 sub usac_static_content {
 	my $self=$_;
-	my $static=shift;	#Content is the last item
+	my $static=pop;	#Content is the last item
 	my %options=@_;
 	my $mime=$options{mime}//$self->resolve_mime_default;
 	my $type=[HTTP_CONTENT_TYPE, $mime];

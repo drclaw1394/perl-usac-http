@@ -828,7 +828,7 @@ sub usac_index_under {
 sub usac_file_under {
 	#create a new static file object
 	my $parent=$_;
-	my $root=shift;
+	my $root=pop;
 
 	if($root =~ m|^[^/]|){
 		#implicit path
@@ -931,7 +931,7 @@ sub usac_file_from_old {
 sub usac_dir_under {
 	#my %args=@_;
 	#say "static file from ",@_;
-	my $root=shift;#$_[0];
+	my $root=pop;#$_[0];
 
 	if($root =~ m|^[^/]|){
 		#implicit path
