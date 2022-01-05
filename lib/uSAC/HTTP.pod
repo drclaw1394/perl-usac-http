@@ -7,26 +7,24 @@ uSAC::HTTP Micro Swiss Army Chainsaw Web server
 
 =head1 DESCRIPTION
 
-uSAC::HTTP is a webserver implementing HTTP/1.1. It utilises persistant connections and a fast dispatching system to achieve solid performance in vanilla Perl.
+uSAC::HTTP is a webserver implementing HTTP/1.1. It utilises persistant connections and a fast dispatching system to achieve solid performance in vanilla Perl with AnyEvent.
 
 Your program can be sperated into multiple files, and grouped together in a syntax not unlike nginx config files. As each sub file is accessed relative to the current 'config' file, it is very easy to build up complex sites across multiple targed files.
 
 Features include:
 	
+
 =over
 
 =item *Solid performance
 
-approx 40k reqs/sec on my laptop for a cached simple file
-approx 30k parsing a request with query parameters
-
 =item *Declaritive structure
 
-A uSAC program is made of only a few statments which emulate appearance of nginx config files.
+A uSAC program is made of only a few statments which are normal perl code, however have similarities with nginx config files
 
 =item *Concise mapping
 
-A single entry can specify a method type, url, fields to capture, middleware and target endpoint. Many of these are optional too.
+A single entry can specify a HTTP method , URL, fields to capture, middleware and target endpoint. Many of these are optional too.
 
 =item *Simple static file, caching and middleware
 
@@ -38,8 +36,6 @@ Parameter parsing and uploads can either be processed after a complete upload, o
 The callback structure is the same making it easy to do either
 
 
-
 =end
-
 
 

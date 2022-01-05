@@ -77,6 +77,32 @@ my $server;$server=usac_server{
 		};
 		#create a socket connection to a host
 	};
+
+	usac_route GET=>"/form1"=>sub {
+		#render a form
+		my $form=qq|
+		<html>
+		<body>
+			<form action="/form1" method="post" enctype="multipart/form-data">
+				<input type="hidden" name="token" value="hello"></input>
+				<input type="text" name="field1"></input>
+				<input type="file" name="field2"></input>
+				<input type="submit" name="submit">
+			</form>
+		</body>
+		</html>
+		|;
+		rex_reply_simple @_, HTTP_OK,[],$form;
+		
+	};
+
+	usac_route POST=>"/form1"=>usac_form_slurp sub{
+		my ($matcher, $rex, $data, $headers, $end)=@_;
+		say Dumper $data;
+		rex_reply_simple $matcher, $rex,  HTTP_OK, [], "GOT A FORM";
+		
+	};
+
 	usac_route GET=>"/hot/$File_Path"=>		usac_static_content "Hello there";
 	usac_route GET=>"/$File_Path"=>			usac_file_under "static";
 	usac_route GET=>"/$Dir_Path"=>			usac_index_under indexes=>[qw<index.html>],  "static";

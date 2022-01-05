@@ -1,6 +1,6 @@
-#package AnyEvent::HTTP::Server::Form;
-
 package uSAC::HTTP::Rex;
+use warnings;
+use strict;
 use version; our $VERSION = version->declare('v0.1');
 use feature qw<current_sub say refaliasing switch state>;
 no warnings "experimental";
@@ -180,8 +180,8 @@ sub usac_form_stream {
 	my $url= usac_urlencoded_stream @_;
 	sub{
 		for ($_[1][headers_]{CONTENT_TYPE}){
-			&$multi and return if /multipart\/form-data/;
-			&$url and return if 'application/x-www-form-urlencoded';
+			&$multi and say "DOING MULTI" and return if /multipart\/form-data/;
+			&$url and say "DOING URLENC" and return if 'application/x-www-form-urlencoded';
 			reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 		}
 	}
@@ -224,6 +224,11 @@ sub usac_multipart_slurp{
 	my $cb=pop;
 	my %options=@_;
         my $tmp_dir=$options{dir}//"uploads";	#temp dir to save file to
+	if($tmp_dir=~ m|^[^/]|){
+		#implicit path
+		#make path relative to callers file
+		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
+	}
         my $prefix=$options{prefix}//"uSAC";
 	#The actual sub called
 	 usac_multipart_stream sub {
@@ -270,14 +275,35 @@ sub usac_multipart_slurp{
 #Expected inputs to sub ref:
 #line, rex, data, part header, completeflag
 sub usac_form_slurp{
-	my ($cb)=@_;
-	my $multi= usac_multipart_slurp @_;
-	my $url=usac_urlencoded_slurp @_;
+	my ($cb)=pop;
+	my %options=@_;
+	my $tmp_dir=$options{dir}//"uploads";
+	if($tmp_dir=~ m|^[^/]|){
+		#implicit path
+		#make path relative to callers file
+		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
+	}
+	#convert to abs path to prevent double resolving
+	$options{dir}=rel2abs($tmp_dir);
+	
+	my $multi= usac_multipart_slurp %options, $cb;
+	my $url=usac_urlencoded_slurp %options, $cb;
 	sub{
+		say "TESTINg CONTENT TYPE: ",$_[1][headers_]{CONTENT_TYPE};
 		for ($_[1][headers_]{CONTENT_TYPE}){
-			&$multi and return if /multipart\/form-data/;
-			&$url and return  if 'application/x-www-form-urlencoded';
-			reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+			if(index($_, "multipart/form-data")>=0){
+				#we do a regex match inste
+				&$multi;
+				return
+			}
+			elsif($_ eq 'application/x-www-form-urlencoded'){
+				say "URL ENCODED DISPATCH SLURP";
+				&$url;
+				return
+			}
+			else{
+				reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+			}
 		}
 	}
 }
@@ -289,6 +315,11 @@ sub usac_data_slurp{
 	my %options=@_;
 	
         my $tmp_dir=$options{dir}//"uploads";	#temp dir to save file to
+	if($tmp_dir=~ m|^[^/]|){
+		#implicit path
+		#make path relative to callers file
+		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
+	}
         my $prefix=$options{prefix}//"uSAC";
 	my $mime=$options{mime};#//"application/x-www-form-urlencoded";
 	my $path=$options{path};
