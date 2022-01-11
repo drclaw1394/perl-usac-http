@@ -436,6 +436,8 @@ sub reply_simple{
 	);
 	#somehow call outerware before rendering?
 	
+	#use route instance with outerware to filter headers, and also process 
+	
 	#my $outer=$_[0][4][1];
 	#&$outer if $outer;
 
@@ -452,7 +454,7 @@ sub reply_simple{
 	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[3]->@* if $_[3];
 
 	$reply.=LF.$_[4];
-	$_[1][write_]($reply,$session->[uSAC::HTTP::Session::dropper_]);	#fire and forget
+	$_[1][write_]($reply, $session->[uSAC::HTTP::Session::dropper_]);	#fire and forget
 }
 
 
@@ -587,14 +589,14 @@ sub query_params {
 #returns parsed cookies from headers
 #Only parses if the internal field is undefined
 #otherwise uses pre parsed values
-sub cookies {
-	$_[0][cookies_]//($_[0][cookies_]=usac_parse_cookie $_[0][headers_]{COOKIE});
+#Read only
+sub cookies :lvalue {
+	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE});
 }
 
-sub state {
-	$_[0][state_]=$_[1] if $_[1];
-	$_[0][state_];
-}
+#RW accessor
+#Returns the current state information for the rex
+sub state :lvalue { $_[0][state_] }
 
 
 *rex_headers=*headers;

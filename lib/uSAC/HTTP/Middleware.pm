@@ -97,68 +97,11 @@ sub authenticate_simple{
 				rex_reply_simple @_, (HTTP_FORBIDDEN,[] , "Go away!");
 				return;
 			}
-
 			return &$next;		#alway call next. this is just loggin
 		}
 	}
 }
 
-#configure basic session management
-sub state_simple {
-	#given a hash ref to store the state
-	state $defualt_store={};
-	my %options=@_;
-	my $states=$options{store}//$defualt_store;
-	my $state_cb=$options{on_new}//sub {{new=>1}};
-	sub {
-		my $inner_next=shift;
-		my $outer_next=shift;
-		(
-			#input sub
-			sub {
-				state $i;
-				my $rex=$_[1];
-				my $state_key;
-				my $state;
-				$state_key=$rex->cookies->{USAC_STATE_ID};	
-				if($state_key){
-					$state=$states->{$state_key};
-					#existing state
-					#say "EXISTING STATE";
-				}
-				else {
-					#create a new state
-					$state=&$state_cb;
-					#create the state_key
-					unless ($state->{key}){	
-						$state->{key}= unpack "H*", Digest::SHA1::sha1(time+$i++)
-					}
-					$states->{$state->{key}}=$state;
-				}
-
-				#set the state for rex
-				$rex->state($state);
-				#say Dumper $state;
-				&$inner_next;
-			},
-
-			sub {
-				my $rex=$_[1];
-				#Add Set cookie to the headers, if state is defined
-				if(my $state=$rex->state){
-                                       push $_[3]->@*,
-				       #[DUMMY=>"HEADER"]
-                                        [HTTP_SET_COOKIE,
-                                                usac_new_cookie(USAC_STATE_ID=>$state->{key})
-                                                ->serialize_set_cookie
-                                        ];
-				}
-				#say "setting cookie";
-				&$outer_next;
-			}
-		)
-	}
-}
 
 sub state_jwt {
 	my %options=@_;

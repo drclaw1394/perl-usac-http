@@ -1,4 +1,6 @@
 package uSAC::HTTP::Cookie;
+#use strict;
+#use warnings;
 use Exporter 'import';
 
 #Please refer to rfc6265 HTTP State Management Mechanism
@@ -14,15 +16,19 @@ BEGIN {
 		Path
 		Secure
 		HTTPOnly
+		SameSite
 	>;
 	our @values= 0 .. @names-1;
 
-	our %const_names=map { (("COOKIE_".uc $names[$_])=~tr/-'/_/r, $values[$_]) } 0..@names-1;
-	#our @const_list=%const_names;
+	my @same_site=qw<Lax Strict None>;
+	my @pairs=
+		(map { (("COOKIE_".uc $names[$_])=~tr/-'/_/r, $values[$_]) } 0..@names-1),	#elements
+		(map {("SAME_SITE_".uc, $_)} @same_site)						#same site vals
+	;						
+
+	our %const_names=@pairs;
 }
 
-use feature qw<switch say>;
-no warnings "experimental";
 
 use constant \%const_names;
 
@@ -30,7 +36,7 @@ our %reverse; @reverse{@names}=@values;
 $reverse{undef}=0;			#catching
 
 
-our @EXPORT_OK= (usac_parse_cookie, usac_new_cookie, usac_expire_cookies, keys %const_names);
+our @EXPORT_OK= (parse_cookie, new_cookie, expire_cookies, keys %const_names);
 our %EXPORT_TAGS=(
 	constants=> [keys %const_names],
 	all=>		[@EXPORT_OK]
@@ -57,7 +63,11 @@ sub new {
 	$self;
 }
 
-sub usac_new_cookie {
+#Create a new cookie without package
+#First 2 arguements are name=>value
+#Remaining arguments are key=>value
+#keys must be valled exported ones
+sub new_cookie {
 	my $package=__PACKAGE__;
 	my $self=bless [], $package;
 	$self->[COOKIE_HTTPONLY]=undef;	#allocate storage
@@ -74,8 +84,11 @@ sub usac_new_cookie {
 	$self;
 
 }
+
+###SERVER SIDE
 #expires a list of cookies by name
-sub usac_expire_cookies {
+#Creates a list of new cookes with the name set and expiry set to before current time
+sub expire_cookies {
 	my $package=__PACKAGE__;
 	map {
 		my $self=bless [], $package;
@@ -88,8 +101,31 @@ sub usac_expire_cookies {
 	} @_;
 }
 
+#used server side to render a set cookie value
+sub serialize_set_cookie{
+	my $self=shift;
+	my $cookie= "$self->[COOKIE_NAME]=$self->[COOKIE_VALUE]";			#Do value
+	for my $index (COOKIE_MAX_AGE, COOKIE_DOMAIN, COOKIE_PATH, COOKIE_SAMESITE){	#Do Attributes
+		for($self->[$index]){
+			$cookie.="; $names[$index]=$_" if defined;			#Only defined attribues are added
+		}
+	}
+	
+	for($self->[COOKIE_EXPIRES]){
+		if(defined){
+			my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime $self->[COOKIE_EXPIRES];
+			$cookie.="; Expires=$days[$wday], $mday $months[$mon] ".($year+1900) ." $hour:$min:$sec GMT";
+		}
+	}
+	$cookie.="; Secure" if defined $self->[COOKIE_SECURE];				#Do flag attributes
+	$cookie.="; HTTPOnly" if defined $self->[COOKIE_HTTPONLY];
+
+	$cookie;
+}
+
 #Parse cookie string from client into key value pairs.
-sub usac_parse_cookie {
+#Used server side on incoming request
+sub parse_cookie {
 	my %values;
 	for(split ";", $_[0]=~tr/ //dr){
 		($key,$value)= split "=";
@@ -99,8 +135,10 @@ sub usac_parse_cookie {
 }
 
 
-
+##CLIENT SIDE
+#
 #Parse the key value and attributes from a servers set-cookie header
+#Used client side on incoming response
 sub parse_set_cookie {
 	my $key;
 	my $value;
@@ -115,7 +153,7 @@ sub parse_set_cookie {
 		}
 		else {
 			($key,$value)= split "=";
-			say "key $key, value $value";
+			#say "key $key, value $value";
 			$values[$reverse{$key}]=$value//1;
 		}
 
@@ -123,24 +161,17 @@ sub parse_set_cookie {
 	bless \@values, __PACKAGE__;
 }
 
-sub serialize_set_cookie{
-	my $self=shift;
-	my $cookie= "$self->[COOKIE_NAME]=$self->[COOKIE_VALUE]";			#Do value
-	for my $index (COOKIE_MAX_AGE, COOKIE_DOMAIN, COOKIE_PATH){	#Do Attributes
-		given($self->[$index]){
-			$cookie.="; $names[$index]=$_" when defined;			#Only defined attribues are added
-		}
-	}
-	
-	given($self->[COOKIE_EXPIRES]){
-		when(defined){
-			my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =gmtime $self->[COOKIE_EXPIRES];
-			$cookie.="; Expires=$days[$wday], $mday $months[$mon] ".($year+1900) ." $hour:$min:$sec GMT";
-		}
-	}
-	$cookie.="; Secure" if defined $self->[COOKIE_SECURE];				#Do flag attributes
-	$cookie.="; HTTPOnly" if defined $self->[COOKIE_HTTPONLY];
 
-	$cookie;
-}
+
+##Accessors methods
+#
+sub  name : lvalue { $_[0][COOKIE_NAME] }
+sub  value : lvalue { $_[0][COOKIE_VALUE] }
+sub  domain : lvalue{ $_[0][COOKIE_DOMAIN] }
+sub  http_only: lvalue{ $_[0][COOKIE_HTTPONLY] }
+sub  expires :lvalue{ $_[0][COOKIE_EXPIRES] }
+sub  max_age :lvalue{ $_[0][COOKIE_MAX_AGE] }
+sub  path :lvalue{ $_[0][COOKIE_PATH] }
+sub  secure :lvalue{ $_[0][COOKIE_SECURE] }
+
 1;

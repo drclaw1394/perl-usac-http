@@ -1,3 +1,4 @@
+package uSAC::HTTP::PSGI;
 use strict;
 use warnings;
 use feature qw<switch say refaliasing state>;
@@ -8,14 +9,33 @@ use uSAC::HTTP;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
 
+use constant KEY_OFFSET=>0;
+use enum ("entries_=".KEY_OFFSET, qw<end_>);
+use constant KEY_COUNT= end_-entries_+1;
+
+sub new {
+	
+}
+
+#read needs to be converted from push to pull
+#Buffer reads
+sub read {
+	my ($self,undef,$length, $offset)=@_;
+	\my $buf=\$_[1];	#alias buffer
+
+}
+
+
+sub write {
+	my ($self)=@_;
+}
+
 #Driver to interface with PSGI based applications
 #this acts as either middleware or an end point
-
 sub psgi_adaptor {
 
 	sub {
-		my $line=shift;
-		my $rex=shift;
+		my ($route, $rex)=@_;
 
 		state $psgi_version=[1,1];
 
