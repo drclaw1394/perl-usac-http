@@ -1,5 +1,5 @@
 package uSAC::HTTP::v1_1_Reader;
-use feature qw<current_sub refaliasing say switch>;
+use feature qw<current_sub refaliasing say>;
 no warnings "experimental";
 
 use Exporter 'import';
@@ -205,8 +205,7 @@ sub make_reader{
 				#shift buffer
 				$buf=substr $buf, pos $buf;# $pos;
 				$pos=0;
-				$state=$start_state;;
-				say "DISPATCHING TO: , $h{HOST} $method $uri",
+				$state=$start_state;
 				$cb->(
 					"$h{HOST} $method $uri",
 					$req
@@ -260,114 +259,110 @@ sub make_form_data_reader {
 		my $boundary="--".(split("=", $type))[1];
 		my $b_len=length $boundary;
 		while($processed < length $buf){
-			given($state){
-				when(0){
-					#say "STATE $state. Looking for boundary";
-					#%h=();
-					#Attempt to match boundary
-					my $index=index($buf,$boundary,$processed);
-					if($index>=0){
-						
-
-						#say "FOUND boundary and index: $index first: $first";
-						#send partial data to callback
-						my $len=($index-2)-$processed;	#-2 for LF
+			if($state==0){
+				#say "STATE $state. Looking for boundary";
+				#%h=();
+				#Attempt to match boundary
+				my $index=index($buf,$boundary,$processed);
+				if($index>=0){
 
 
+					#say "FOUND boundary and index: $index first: $first";
+					#send partial data to callback
+					my $len=($index-2)-$processed;	#-2 for LF
 
-						#test if last
-						my $offset=$index+$b_len;
-						if(substr($buf,$offset,2)eq LF){
-							#not last
-							$cb->($usac, $rex, substr($buf,$processed,$len),$form_headers) unless $first;
-							$first=0;
-							#move past data and boundary
-							$processed+=$offset+2;
-							$buf=substr $buf, $processed;
-							$processed=0;
-							$state=1;
-							$form_headers={};
-							redo;
 
-						}
-						elsif(substr($buf,$offset,4) eq "--".LF){
-							#say "END BOUNDARD FOUND";
-							$first=1;	#reset first;
-							$cb->($usac, $rex, substr($buf,$processed,$len),$form_headers,1);
-							$processed+=$offset+4;
-							$buf=substr $buf, $processed;
-							$processed=0;
-							uSAC::HTTP::Session::pop_reader($session);
-							return;
-						}
-						else{
-							#need more
-							#say "need more";
-							return
-						}
 
-					}
-
-					else {
-						#say "NOT FOUND boundary and index: $index";
-						# Full boundary not found, send partial, upto boundary length
-						my $len=length($buf)-$b_len;		#don't send boundary
-						$cb->($usac, $rex, substr($buf, $processed, $len),$form_headers);#$form_headers);
-						$processed+=$len;
+					#test if last
+					my $offset=$index+$b_len;
+					if(substr($buf,$offset,2)eq LF){
+						#not last
+						$cb->($usac, $rex, substr($buf,$processed,$len),$form_headers) unless $first;
+						$first=0;
+						#move past data and boundary
+						$processed+=$offset+2;
 						$buf=substr $buf, $processed;
 						$processed=0;
-						#wait for next read now
+						$state=1;
+						$form_headers={};
+						redo;
+
+					}
+					elsif(substr($buf,$offset,4) eq "--".LF){
+						#say "END BOUNDARD FOUND";
+						$first=1;	#reset first;
+						$cb->($usac, $rex, substr($buf,$processed,$len),$form_headers,1);
+						$processed+=$offset+4;
+						$buf=substr $buf, $processed;
+						$processed=0;
+						uSAC::HTTP::Session::pop_reader($session);
 						return;
 					}
-
-					#attempt to match extra hyphons
-					#next line after boundary is content disposition
-
-				}
-
-				when(1){
-					#read any headers
-					#say "State  $state. READING HEADERS";
-					pos($buf)=$processed;
-
-					while (){
-						if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
-							\my $e=\$form_headers->{uc $1=~tr/-/_/r};
-							$e = defined $e ? $e.','.$2: $2;
-							#say "Got header: $e";
-
-							#need to split to isolate name and filename
-							redo;
-						}
-						elsif ($buf =~ /\G\015\012/sxogca) {
-							#say "HEADERS DONE";
-							$processed=pos($buf);
-
-							#readjust the buffer no
-							$buf=substr $buf,$processed;
-							$processed=0;
-
-							#say "Buffer:",$buf;
-							#headers done. setup
-
-							#go back to state 0 and look for boundary
-							$state=0;
-							last;
-						}
-						else {
-
-						}
+					else{
+						#need more
+						#say "need more";
+						return
 					}
 
-					#update the offset
-					$processed=pos $buf;
-
 				}
 
-				default {
-					#say "DEFAULT";
-
+				else {
+					#say "NOT FOUND boundary and index: $index";
+					# Full boundary not found, send partial, upto boundary length
+					my $len=length($buf)-$b_len;		#don't send boundary
+					$cb->($usac, $rex, substr($buf, $processed, $len),$form_headers);#$form_headers);
+					$processed+=$len;
+					$buf=substr $buf, $processed;
+					$processed=0;
+					#wait for next read now
+					return;
 				}
+
+				#attempt to match extra hyphons
+				#next line after boundary is content disposition
+
+			}
+			elsif($state==1){
+				#read any headers
+				#say "State  $state. READING HEADERS";
+				pos($buf)=$processed;
+
+				while (){
+					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
+						\my $e=\$form_headers->{uc $1=~tr/-/_/r};
+						$e = defined $e ? $e.','.$2: $2;
+						#say "Got header: $e";
+
+						#need to split to isolate name and filename
+						redo;
+					}
+					elsif ($buf =~ /\G\015\012/sxogca) {
+						#say "HEADERS DONE";
+						$processed=pos($buf);
+
+						#readjust the buffer no
+						$buf=substr $buf,$processed;
+						$processed=0;
+
+						#say "Buffer:",$buf;
+						#headers done. setup
+
+						#go back to state 0 and look for boundary
+						$state=0;
+						last;
+					}
+					else {
+
+					}
+				}
+
+				#update the offset
+				$processed=pos $buf;
+
+			}
+			else{
+				#say "DEFAULT";
+
 			}
 			#say "End of while";
 		}
@@ -413,7 +408,6 @@ sub make_form_urlencoded_reader {
 
 		#when the remaining length is 0, pop this sub from the stack
 		if($processed==$len){
-			say "+++++++Processed $len bytes. urlencoded_reader";
 			$cb->($usac, $rex, substr($buf,0,$new,""),$header,1);		#send to cb and shift buffer down
 			$header={};
 			#$cb->(undef,undef);#$form_headers);
@@ -425,7 +419,6 @@ sub make_form_urlencoded_reader {
 			#$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 		}
 		else {
-			say "++++MORE DATA EXPECTED urlencoded_reader";
 			#keep on stack until done
 			$cb->($usac, $rex, substr($buf,0,$new,""),$header);		#send to cb and shift buffer down
 		}
