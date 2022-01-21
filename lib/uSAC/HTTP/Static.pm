@@ -1,7 +1,7 @@
 package uSAC::HTTP::Static;
 
 use JSON;
-use feature qw<say  refaliasing state>;
+use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
 #no feature "indirect";
 use Scalar::Util qw<weaken>;
