@@ -15,6 +15,7 @@ use constant KEY_COUNT= end_-entries_+1;
 
 sub new {
 	
+	
 }
 
 #read needs to be converted from push to pull
@@ -22,6 +23,8 @@ sub new {
 sub read {
 	my ($self,undef,$length, $offset)=@_;
 	\my $buf=\$_[1];	#alias buffer
+
+	#if no entries in the queue we need to
 
 }
 

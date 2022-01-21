@@ -206,6 +206,7 @@ sub make_reader{
 				$buf=substr $buf, pos $buf;# $pos;
 				$pos=0;
 				$state=$start_state;;
+				say "DISPATCHING TO: , $h{HOST} $method $uri",
 				$cb->(
 					"$h{HOST} $method $uri",
 					$req
@@ -412,6 +413,7 @@ sub make_form_urlencoded_reader {
 
 		#when the remaining length is 0, pop this sub from the stack
 		if($processed==$len){
+			say "+++++++Processed $len bytes. urlencoded_reader";
 			$cb->($usac, $rex, substr($buf,0,$new,""),$header,1);		#send to cb and shift buffer down
 			$header={};
 			#$cb->(undef,undef);#$form_headers);
@@ -423,6 +425,7 @@ sub make_form_urlencoded_reader {
 			#$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 		}
 		else {
+			say "++++MORE DATA EXPECTED urlencoded_reader";
 			#keep on stack until done
 			$cb->($usac, $rex, substr($buf,0,$new,""),$header);		#send to cb and shift buffer down
 		}

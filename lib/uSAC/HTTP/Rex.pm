@@ -96,6 +96,7 @@ sub reply_DEFLATE {
 sub usac_multipart_stream {
 		my $cb=pop;
 	sub {
+	say "Multipart stream";
 		my $line=$_[0];#shift;
 		my $rex=$_[1];#shift;
 		#shift;		#remove place holder for mime
@@ -121,12 +122,14 @@ sub usac_multipart_stream {
 #runs callback with parts of data
 #
 sub usac_data_stream{
+
 	my $cb=pop;	#cb for parts
 	my %options=@_;
 	my $mime=$options{mime}//".*";	#application/x-www-form-urlencoded';
 	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
 
 	sub {
+		say "DATA STREAM";
 		#my $line=shift;
 		my $rex=$_[1];#shift;	#rex object
 
@@ -179,6 +182,7 @@ sub usac_form_stream {
 	my $multi=  usac_multipart_stream @_;
 	my $url= usac_urlencoded_stream @_;
 	sub{
+		say "FORM STREAM_,,";
 		for ($_[1][headers_]{CONTENT_TYPE}){
 			&$multi and say "DOING MULTI" and return if /multipart\/form-data/;
 			&$url and say "DOING URLENC" and return if 'application/x-www-form-urlencoded';
@@ -562,6 +566,12 @@ sub headers {
 }
 sub method {
 	$_[0][method_];
+}
+sub uri{
+	$_[0][uri_];
+}
+sub uri_stripped {
+	$_[0][uri_stripped_];
 }
 
 #Returns parsed query parameters. If they don't exist, they are parse first

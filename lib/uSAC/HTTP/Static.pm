@@ -611,6 +611,7 @@ sub send_file_uri_range {
 
 		my $reader;$reader= sub {
 			while(1){
+				say "Static loop";
 				for($state){
 					if($_ eq 0){
 						#say "";

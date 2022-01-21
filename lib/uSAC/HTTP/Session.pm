@@ -144,8 +144,9 @@ sub push_writer {
 
 sub pop_reader {
 	pop $_[0][read_stack_]->@*;
-	$_[0][read_]=$_[0][read_stack_][-1];
+	$_[0][sr_]->on_read= $_[0][read_]=$_[0][read_stack_][-1];
 }
+
 sub pop_writer {
 	my ($self)=@_;
 	pop @{$self->[write_stack_]};			#remove the previous
