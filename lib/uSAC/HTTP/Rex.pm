@@ -62,19 +62,21 @@ use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>static_headers_-version_+1;
 
 require uSAC::HTTP::Middleware;
-sub uri_decode {
-	my $octets= shift;
-	$octets=~ s/\+/ /sg;
-	$octets=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
-	return decode_utf8($octets);
-	#return decode("utf8", $octets);
-}
-sub uri_decode_inplace {
-	$_[0]=~ s/\+/ /sg;
-	$_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
-	decode_utf8($_[0]);
-	#return decode("utf8", $octets);
-}
+###########################################################
+# sub uri_decode {                                        #
+#         my $octets= shift;                              #
+#         $octets=~ s/\+/ /sg;                            #
+#         $octets=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge; #
+#         return decode_utf8($octets);                    #
+#         #return decode("utf8", $octets);                #
+# }                                                       #
+# sub uri_decode_inplace {                                #
+#         $_[0]=~ s/\+/ /sg;                              #
+#         $_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;   #
+#         decode_utf8($_[0]);                             #
+#         #return decode("utf8", $octets);                #
+# }                                                       #
+###########################################################
 		
 sub reply_simple;
 		

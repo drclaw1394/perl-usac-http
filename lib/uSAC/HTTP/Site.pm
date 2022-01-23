@@ -19,7 +19,7 @@ our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_h
 
 our @EXPORT=@EXPORT_OK;
 
-use AnyEvent;
+#use AnyEvent;
 
 #use uSAC::HTTP::Server;
 
@@ -110,10 +110,8 @@ sub add_route {
 	my $matcher;
 	#my $unsupported;
 	my $bp=$self->built_prefix;
-	say  "Building hosts";
 	if($self->[server_]->enable_hosts){
 		my @hosts=$self->build_hosts;
-		say @hosts;
 		push @hosts, qr{[^ ]+} unless @hosts;
 		my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
 		my $bp=$self->built_prefix;
@@ -170,34 +168,15 @@ sub _strip_prefix {
 	}
 
 }
-##################################################################################################
-# sub _cors {                                                                                    #
-#         my $self=shift;                                                                        #
-#         my $prefix=$self->[prefix_];                                                           #
-#         sub {                                                                                  #
-#                 my $next=shift;                                                                #
-#                 say "making strip prefix";                                                     #
-#                 sub {                                                                          #
-#                         #Do a cors test on request                                             #
-#                         {                                                                      #
-#                                 ($_[1][uSAC::HTTP::Rex::headers_]{orign}//"*"=~$self->[cors_]) #
-#                                                                                                #
-#                         }                                                                      #
-#                                                                                                #
-#                         return &$next;                                                         #
-#                 }                                                                              #
-#         }                                                                                      #
-#                                                                                                #
-# }                                                                                              #
-#                                                                                                #
-##################################################################################################
 
 sub server: lvalue {
 	return $_[0][server_];
 }
+
 sub id: lvalue {
 	return $_[0][id_];
 }
+
 sub add_end_point {
 
 }
@@ -360,7 +339,7 @@ sub resolve_mime_lookup {
 	my $db;;
 	while($parent) {
 		$db=$parent->mime_db;
-		say "looking up mime db in : ",$parent;
+		#say "looking up mime db in : ",$parent;
 		last if $db;
 		$parent=$parent->parent_site;
 	}
@@ -440,7 +419,7 @@ sub usac_route {
 		$self->add_route(@_);
 	}
 	elsif(!($_[0]=~m|^[/]|) and !($_[0]=~m|^$Any_Method|)){
-		say "FIXING PATH MATCHER";
+		#say "FIXING PATH MATCHER";
 		#not starting with a forward slash but with a method
 		my $url=shift @_;
 		unshift @_, "/".$url;
@@ -454,7 +433,7 @@ sub usac_route {
 		ref($_[1]) ne "Regexp"
 	){
 		#Method specified but route missing a leading slash
-		say "Fixing leading slash for: $_[1]";
+		#say "Fixing leading slash for: $_[1]";
 		my $method=shift;
 		my $url=shift;
 		$url="/".$url;
@@ -496,8 +475,14 @@ sub usac_host {
 	my $host=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
-	
-	push $self->[host_]->@*, @_;
+	if(ref($host) eq "ARRAY"){
+
+		push $self->[host_]->@*, @$host;
+	}
+	else{
+		push $self->[host_]->@*, $host;
+	}
+
 }
 
 sub usac_middleware {
@@ -547,7 +532,6 @@ sub usac_cached_file {
 	else{
 		my $ext=substr $path, rindex($path, ".")+1;
 		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
-		say "performing ext to mime lookup: $ext => $type";
 	}
 
 	if( stat $path and -r _ and !-d _){

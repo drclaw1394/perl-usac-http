@@ -1,6 +1,6 @@
 package uSAC::HTTP::Server; 
-#use strict;
-#use warnings;
+use strict;
+use warnings;
 #use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
@@ -104,8 +104,8 @@ sub new {
 	$self->[sessions_]={};
 
 	$self->mime_db=uSAC::MIME->new;
-	$self->mime_default=="application/octet-stream";
-	$self->[mime_lookup_]=$self->mime_db->index;
+	$self->mime_default="application/octet-stream";
+	#$self->[mime_lookup_]=$self->mime_db->index;
 	return $self;
 }
 
@@ -459,19 +459,17 @@ sub usac_server :prototype(&) {
 		say "Creating new server";
 		$server=uSAC::HTTP::Server->new();
 	}
-	#local $_=$server;
+	#Push the server as the lastest 'site'
 	local $uSAC::HTTP::Site=$server;
-	$sub->();
+	$sub->();		#run the configuration for the server
 	$server;
 }
 
 #include another config file
 sub usac_include {
 	my $path=shift;
-	say "caller dir: ",dirname((caller)[1]);
-	$path= dirname((caller)[1])."/".$path if $path=~m|^[^/]|;
-	say "$path";
-	$path=rel2abs $path;
+	$path= "./".dirname((caller)[1])."/".$path if $path=~m|^[^/]|;
+	#$path=rel2abs $path;
 	say "INCLUDING PATH $path";
 	unless (do $path){
 		

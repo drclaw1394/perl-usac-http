@@ -945,7 +945,6 @@ sub usac_dir_under {
 		$root=dirname((caller)[1])."/".$root;
 	}
 
-	say "Options: %options";
 	my $static=uSAC::HTTP::Static->new(root=>$root,%options);
 
 	my $list_dir=$static->make_list_dir(%options);
