@@ -1,8 +1,9 @@
 package uSAC::HTTP::Static;
 
-use JSON;
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
+use strict;
+use JSON;
 #no feature "indirect";
 use Scalar::Util qw<weaken>;
 use Devel::Peek qw<SvREFCNT>;
@@ -275,7 +276,7 @@ sub send_file_uri_norange {
 				say "READ ERROR from file";
 				#say $rc;
 				say $!;
-				delete $cache{$abs_path};
+				#delete $cache{$abs_path};
 				close $in_fh;
 				$session->[uSAC::HTTP::Session::dropper_]->();
 				return;
@@ -546,7 +547,7 @@ sub send_file_uri_range {
 		if(@ranges==0){
 			my $response=
 			"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_RANGE_NOT_SATISFIABLE.LF
-			.$reply
+			#.$reply
 			.HTTP_CONTENT_RANGE.": */$content_length".LF           #TODO: Multipart had this in each part, not main header
 			.HTTP_CONNECTION.": close".LF
 			.LF;
@@ -659,7 +660,7 @@ sub send_file_uri_range {
 							say "READ ERROR from file";
 							#say $rc;
 							say $!;
-							delete $self->[cache_]{$uri};
+							#delete $self->[cache_]{$uri};
 							close $in_fh;
 							$reader=undef;
 							#uSAC::HTTP::Session::drop $session;
@@ -826,10 +827,13 @@ sub usac_index_under {
 
 }
 
+#Server static files under the specified root dir
 sub usac_file_under {
 	#create a new static file object
-	my $parent=$_;
+	#my $parent=$_;
 	my $root=pop;
+	my %options=@_;
+	my $parent=$options{parent}//$uSAC::HTTP::Site;
 
 	if($root =~ m|^[^/]|){
 		#implicit path
@@ -837,7 +841,6 @@ sub usac_file_under {
 		$root=dirname((caller)[1])."/".$root;
 	}
 
-	my %options=@_;
 	$options{mime}=$parent->resolve_mime_lookup;
 	$options{default_mime}=$parent->resolve_mime_default;
 	my $static=uSAC::HTTP::Static->new(root=>$root,%options);
@@ -933,6 +936,8 @@ sub usac_dir_under {
 	#my %args=@_;
 	#say "static file from ",@_;
 	my $root=pop;#$_[0];
+	my %options=@_;
+	my $parent=$options{parent}//$uSAC::HTTP::Site;
 
 	if($root =~ m|^[^/]|){
 		#implicit path
@@ -940,7 +945,6 @@ sub usac_dir_under {
 		$root=dirname((caller)[1])."/".$root;
 	}
 
-	my %options=@_;
 	say "Options: %options";
 	my $static=uSAC::HTTP::Static->new(root=>$root,%options);
 

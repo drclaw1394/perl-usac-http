@@ -13,7 +13,7 @@ use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Method ":constants";
 
-
+our $Site;
 #use Exporter "import";
 sub import {
 	my $caller=caller;

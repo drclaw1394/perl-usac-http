@@ -337,170 +337,6 @@ sub site_route {
 	my $self=shift;
 	$self->add_route(@_);
 }
-
-=over 
-
-=item C<usac_site>
-
-Creates a new site and sets the server to the C<$_> dynamic variable
-After the server is set. the C<$_> in localised and set to the new site
-
-=back
-
-=cut
-
-sub usac_site :prototype(&) {
-	my $server=$_->find_root;
-	my $sub=shift;
-	my $self= uSAC::HTTP::Site->new(server=>$server);
-	$self->[parent_]=$_;
-	
-	local  $_=$self;
-	$sub->();
-	$self;
-}
-
-sub find_root {
-	my $self=$_[0];
-	#locates the top level server/group/site in the tree
-	my $parent=$self;
-
-	while($parent->parent_site){
-		$parent=$parent->parent_site;
-	}
-	$parent;
-}
-
-
-sub usac_route {
-	my $self=$_;	#The site to use
-	#first element is tested for short cut get use
-	given($_[0]){
-		when(ref eq "ARRAY"){
-			#Methods specified as an array ref
-			my $a=shift;
-			unshift @_, "(?:".join("|", @$a).")";
-			$self->add_route(@_);
-		}
-		when(ref eq "Regexp"){
-			unshift @_, "GET";
-			$self->add_route(@_);
-		}
-		when(m|^/|){
-			#starting with a slash, short cut for GET and head
-			unshift @_, "GET";
-			$self->add_route(@_);
-		}
-		when(!m|^[/]| and !m|^$Any_Method|){
-			say "FIXING PATH MATCHER";
-			#not starting with a forward slash but with a method
-			shift @_;
-			unshift @_, "/".$_;
-			unshift @_, "GET";
-			$self->add_route(@_);
-			
-		}
-		default{
-			say "DEFAULT MATCHING SETUP";
-			say @_;
-			#normal	
-			$self->add_route(@_);
-		}
-	}
-}
-
-sub usac_id {
-	my $self=$_;
-	$self->[id_]=shift;
-}
-
-sub usac_prefix {
-	my $self=$_;
-        given(my $prefix=shift){
-                unless(m|^/|){
-                        warn "Prefix '$_' needs to start with a '/'. Fixing";
-                        $_="/".$_;
-                }
-		$self->[prefix_]=$_;
-		$self->[built_prefix_]=undef;	#force rebuilding
-		$self->built_prefix;		#build abs prefix
-        }
-}
-
-
-sub usac_host {
-	my $self=$_;
-	if (defined and ($_ isa 'uSAC::HTTP::Server'  )) {
-		push $self->site->host->@*, @_;
-		return
-	}
-	push $self->[host_]->@*, @_;
-
-}
-
-sub usac_middleware {
-	my $self=$_;
-	say "ADDING MIDDLE WARE";	
-	if(ref($_[0])eq"ARRAY"){
-		$self->[middleware_]=shift;
-	}
-	else{
-		$self->[middleware_]=[@_];
-	}
-}
-
-sub usac_error_page {
-		
-}
-#returns a sub which always renders the same content.
-#http code is always
-sub usac_static_content {
-	my $self=$_;
-	my $static=pop;	#Content is the last item
-	my %options=@_;
-	my $mime=$options{mime}//$self->resolve_mime_default;
-	my $type=[HTTP_CONTENT_TYPE, $mime];
-	sub {
-		rex_reply_simple @_, HTTP_OK, [$type], $static; return
-	}
-}
-
-sub usac_cached_file {
-	my $self=$_;
-	my $path=pop;
-	#resolve the file relative path or 
-	$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
-
-	my %options=@_;
-	my $mime=$options{mime};
-	my $type;
-	if($mime){
-		#manually specified mime type
-		$type=$mime;
-	}
-	else{
-		my $ext=substr $path, rindex($path, ".")+1;
-		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
-		say "performing ext to mime lookup: $ext => $type";
-	}
-
-	if( stat $path and -r _ and !-d _){
-		my $entry;
-		open my $fh, "<", $path;
-		local $/;
-		$entry->[0]=<$fh>;
-		$entry->[1]=[ HTTP_CONTENT_TYPE, $type];
-		$entry->[2]=(stat _)[7];
-		$entry->[3]=(stat _)[9];
-		close $fh;
-
-		#Create a static content endpoint
-		usac_static_content($entry->[0], mime=>$type);
-	}
-	else {
-		say "Could not add hot path: $path";
-	}
-}
 #accessor
 sub mime_default : lvalue {
 	$_[0]->[mime_default_];
@@ -514,19 +350,6 @@ sub mime_lookup: lvalue {
 	$_[0]->[mime_lookup_];
 }
 
-#set the default mime for this level
-sub usac_mime_default{
-	my $self=$_;
-	$self->mime_default=$_[0]//"application/octet-stream";
-}
-
-#Set the mime db for this level
-#TODO should argument be a path to a file?
-sub usac_mime_db{
-	my $self=$_;
-	$self->mime_db=$_[0];
-	($self->mime_lookup)=$self->mime_db->index;
-}
 
 
 
@@ -558,19 +381,207 @@ sub resolve_mime_default {
 	$default?$default:"applcation/octet-stream";
 }
 
-######################################################################
-# sub usac_favicon {                                                 #
-#         my $path=shift;                                            #
-#                                                                    #
-#         $path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|; #
-#         $path=rel2abs($path);                                      #
-#         say $path;                                                 #
-#         usac_route "/favicon.png" => usac_cached_file $path;       #
-#                                                                    #
-# }                                                                  #
-######################################################################
+=over 
 
-#*usac_static_from = *static_file_from;
+=item C<usac_site>
+
+Creates a new site and sets the server to the C<$_> dynamic variable
+After the server is set. the C<$_> in localised and set to the new site
+
+=back
+
+=cut
+
+sub usac_site :prototype(&) {
+	#my $server=$_->find_root;
+	my $server=$uSAC::HTTP::Site->find_root;
+	my $sub=shift;
+	my $self= uSAC::HTTP::Site->new(server=>$server);
+	$self->[parent_]=$uSAC::HTTP::Site;
+	#$self->[parent_]=$_;
+	
+	local  $uSAC::HTTP::Site=$self;
+	#local  $_=$self;
+	$sub->();
+	$self;
+}
+
+sub find_root {
+	my $self=$_[0];
+	#locates the top level server/group/site in the tree
+	my $parent=$self;
+
+	while($parent->parent_site){
+		$parent=$parent->parent_site;
+	}
+	$parent;
+}
+
+#Fixes missing slashes in urls
+#As it is likely that the url is a constant, @_ is shifted/unshifted
+#to create new variables for the things we need to correct
+sub usac_route {
+	#my $self=$_;	#The site to use
+	my $self=$uSAC::HTTP::Site;
+	#first element is tested for short cut get use
+	if(ref($_[0]) eq "ARRAY"){
+		#Methods specified as an array ref
+		my $a=shift;
+		unshift @_, "(?:".join("|", @$a).")";
+		$self->add_route(@_);
+	}
+	elsif(ref($_[0]) eq "Regexp"){
+		unshift @_, "GET";
+		$self->add_route(@_);
+	}
+	elsif($_[0]=~m|^/|){
+		#starting with a slash, short cut for GET and head
+		unshift @_, "GET";
+		$self->add_route(@_);
+	}
+	elsif(!($_[0]=~m|^[/]|) and !($_[0]=~m|^$Any_Method|)){
+		say "FIXING PATH MATCHER";
+		#not starting with a forward slash but with a method
+		my $url=shift @_;
+		unshift @_, "/".$url;
+		unshift @_, "GET";
+		$self->add_route(@_);
+
+	}
+	elsif(
+		$_[0]=~m|^$Any_Method| and
+		$_[1]=~m|^[^/]| and
+		ref($_[1]) ne "Regexp"
+	){
+		#Method specified but route missing a leading slash
+		say "Fixing leading slash for: $_[1]";
+		my $method=shift;
+		my $url=shift;
+		$url="/".$url;
+		unshift @_, $method, $url;
+
+		say "inputs: ",Dumper $_[0],$_[1];
+		$self->add_route(@_);
+	}
+	else{
+		say "DEFAULT MATCHING SETUP";
+		say @_;
+		#normal	
+		$self->add_route(@_);
+	}
+}
+
+sub usac_id {
+	my $self=$uSAC::HTTP::Site;
+	#my $self=$_;
+	$self->[id_]=shift;
+}
+
+sub usac_prefix {
+	my $self=$uSAC::HTTP::Site;
+	#my $self=$_;
+        my $prefix=shift;
+	unless($prefix=~m|^/|){
+		warn "Prefix '$prefix' needs to start with a '/'. Fixing";
+		$prefix="/".$prefix;
+	}
+	#$self->[prefix_]=$_;
+	$self->[prefix_]=$uSAC::HTTP::Site;
+	$self->[built_prefix_]=undef;	#force rebuilding
+	$self->built_prefix;		#build abs prefix
+}
 
 
+sub usac_host {
+	my $host=pop;	#Content is the last item
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	
+	push $self->[host_]->@*, @_;
+}
+
+sub usac_middleware {
+	#my $self=$_;
+	my $mw=pop;	#Content is the last item
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	say "ADDING MIDDLE WARE";	
+	if(ref($mw)eq"ARRAY"){
+		push $self->[middleware_]->@*, @$mw;
+	}
+	else{
+		push $self->[middleware_]->@*, $mw;
+	}
+}
+
+sub usac_error_page {
+		
+}
+#returns a sub which always renders the same content.
+#http code is always
+sub usac_static_content {
+	my $static=pop;	#Content is the last item
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	my $mime=$options{mime}//$self->resolve_mime_default;
+	my $type=[HTTP_CONTENT_TYPE, $mime];
+	sub {
+		rex_reply_simple @_, HTTP_OK, [$type], $static; return
+	}
+}
+
+sub usac_cached_file {
+	#my $self=$_;
+	my $path=pop;
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	#resolve the file relative path or 
+	$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
+
+	my $mime=$options{mime};
+	my $type;
+	if($mime){
+		#manually specified mime type
+		$type=$mime;
+	}
+	else{
+		my $ext=substr $path, rindex($path, ".")+1;
+		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
+		say "performing ext to mime lookup: $ext => $type";
+	}
+
+	if( stat $path and -r _ and !-d _){
+		my $entry;
+		open my $fh, "<", $path;
+		local $/;
+		$entry->[0]=<$fh>;
+		$entry->[1]=[ HTTP_CONTENT_TYPE, $type];
+		$entry->[2]=(stat _)[7];
+		$entry->[3]=(stat _)[9];
+		close $fh;
+
+		#Create a static content endpoint
+		usac_static_content($entry->[0], mime=>$type);
+	}
+	else {
+		say "Could not add hot path: $path";
+	}
+}
+#set the default mime for this level
+sub usac_mime_default{
+	my $default=pop;
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	$self->mime_default=$default//"application/octet-stream";
+}
+
+#Set the mime db for this level
+#TODO should argument be a path to a file?
+sub usac_mime_db{
+	my $db=pop;
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	$self->mime_db=$db;
+	($self->mime_lookup)=$self->mime_db->index;
+}
 1;

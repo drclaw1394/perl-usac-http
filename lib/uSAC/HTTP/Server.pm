@@ -26,6 +26,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK AF_INET6 fh_nonblocking);
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN SO_LINGER);
 
 use File::Basename qw<dirname>;
+use File::Spec::Functions qw<rel2abs>;
 use Carp 'croak';
 
 #use constant MAX_READ_SIZE => 128 * 1024;
@@ -55,34 +56,11 @@ our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_d
 our @EXPORT=@EXPORT_OK;
 
 
-###################################################################
-# given(\%uSAC::HTTP::Session::make_reader_reg){                  #
-#         $_->{http1_1_base}=\&make_reader;                       #
-#         $_->{http1_1_form_data}=\&make_form_data_reader;        #
-#         $_->{http1_1_urlencoded}=\&make_form_urlencoded_reader; #
-#         #$_->{http1_1_default_writer}=\&make_default_writer;    #
-#         $_->{websocket}=\&make_websocket_reader;                #
-# }                                                               #
-###################################################################
-
-################################################################
-# given(\%uSAC::HTTP::Session::make_writer_reg){               #
-#         #$_->{http1_1_default_writer}=\&make_default_writer; #
-#         #$_->{http1_1_socket_writer}=\&make_socket_writer;   #
-#         #$_->{websocket}=\&make_websocket_server_writer;     #
-# }                                                            #
-################################################################
-
-
-#use constant LF => "\015\012";
-
-
-
 
 # Basic handlers
 #
 # Welcome message
-sub usac_welcome {
+sub _welcome {
 	state $data;
 	unless($data){
 		local $/=undef;
@@ -99,7 +77,7 @@ sub usac_welcome {
 }
 
 #if nothing else on this server matches, this will run
-sub usac_default_handler {
+sub _default_handler {
 		#my ($line,$rex)=@_;
 		state $sub=sub {
 			rex_reply_simple @_, HTTP_NOT_FOUND,undef,"Not found";
@@ -114,7 +92,7 @@ sub new {
 	$self->[host_]=$options{host}//"0.0.0.0";
 	$self->[port_]=$options{port}//8080;
 	$self->[enable_hosts_]=1;#$options{enable_hosts};
-	$self->[table_]=Hustle::Table->new(usac_default_handler);
+	$self->[table_]=Hustle::Table->new(_default_handler);
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
 	$self->[static_headers_]=[];#STATIC_HEADERS;
@@ -362,17 +340,7 @@ sub add_route {
 }
 
 
-#Logical or of existing enable_hosts_ flag
-#Sub servers can enable it if needed.
-#Servers not needing host should't have has a host match specified
-#TODO: adding multiple ports and interfaces essentially is adding multiple hosts
-#need to allow for this
-sub usac_hosts  {
-	say "Enabling host support for: ", $_;
-	say @_;
-	$_->[enable_hosts_]=$_->[enable_hosts_]//$_[0]//0;
-	say "Hosts enabled? ", $_->[enable_hosts_];
-}
+
 sub host {
 	return $_[0]->site->host;
 }
@@ -384,7 +352,7 @@ sub rebuild_dispatch {
 	keys %$cache=512;
 	#The dispatcher always has a default. Thus if we only have 1 entry in the dispatch table add explicit 
 	if($self->[table_]->@*==1 or keys $self->[sites_]->%* > 1){
-		$self->site_route('GET', qr{.*}=>()=>usac_welcome);
+		$self->site_route('GET', qr{.*}=>()=>_welcome);
 	}
 
 	#here we add the unsupported methods to the table before building it
@@ -447,16 +415,52 @@ sub list_routes {
 	#dump all routes	
 }
 
+sub mime_default: lvalue {
+	$_[0]->site->mime_default;
+}
+sub mime_db: lvalue {
+	$_[0]->site->mime_db;
+}
+sub mime_lookup: lvalue {
+	$_[0]->site->mime_lookup;
+}
+
 #declarative setup
+
+#Logical or of existing enable_hosts_ flag
+#Sub servers can enable it if needed.
+#Servers not needing host should't have has a host match specified
+#TODO: adding multiple ports and interfaces essentially is adding multiple hosts
+#need to allow for this
+sub usac_hosts  {
+	say "Enabling host support for: ", $uSAC::HTTP::Site;
+	say @_;
+	$uSAC::HTTP::Site->[enable_hosts_]=$uSAC::HTTP::Site->[enable_hosts_]//$_[0]//0;
+	say "Hosts enabled? ", $uSAC::HTTP::Site->[enable_hosts_];
+}
+
+sub usac_host {
+	my $host=pop;	#Content is the last item
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	push $self->site->host->@*, @_;
+}
+
 sub usac_server :prototype(&) {
-	my $sub=shift;
-	my $server=$_;
-	unless(defined and ($_ isa 'uSAC::HTTP::Site'  )) {
+	#my $sub=shift;
+	#my $server=$_;
+	my $sub=pop;	#Content is the last item
+	my %options=@_;
+	my $server=$options{parent}//$uSAC::HTTP::Site;
+
+	#my $server=$uSAC::HTTP::Site;
+	unless(defined $server and ($server isa 'uSAC::HTTP::Site'  )) {
 		#only create if one doesn't exist
 		say "Creating new server";
 		$server=uSAC::HTTP::Server->new();
 	}
-	local $_=$server;
+	#local $_=$server;
+	local $uSAC::HTTP::Site=$server;
 	$sub->();
 	$server;
 }
@@ -464,9 +468,13 @@ sub usac_server :prototype(&) {
 #include another config file
 sub usac_include {
 	my $path=shift;
-	$path= "./".dirname((caller)[1])."/".$path if m|^[^/]|;
+	say "caller dir: ",dirname((caller)[1]);
+	$path= dirname((caller)[1])."/".$path if $path=~m|^[^/]|;
+	say "$path";
+	$path=rel2abs $path;
 	say "INCLUDING PATH $path";
 	unless (do $path){
+		
 		say $!;
 	}
 }
@@ -482,28 +490,33 @@ sub usac_include {
 ###################################
 sub usac_listen {
 	#specify a interface and port number	
-	push $_->[listen_]->@*, @_;
+	my $pairs=pop;	#Content is the last item
+	my %options=@_;
+	my $site=$options{parent}//$uSAC::HTTP::Site;
+	if(ref($pairs) eq "ARRAY"){
+
+		push $site->[listen_]->@*, @$pairs;
+	}
+	else {
+		push $site->[listen_]->@*, $pairs;
+	}
 }
 
 sub usac_workers {
-	$_->[workers_]=shift;
-}
+	my $workers=pop;	#Content is the last item
+	my %options=@_;
+	my $site=$options{parent}//$uSAC::HTTP::Site;
 
-sub mime_default: lvalue {
-	$_[0]->site->mime_default;
-}
-sub mime_db: lvalue {
-	$_[0]->site->mime_db;
-}
-sub mime_lookup: lvalue {
-	$_[0]->site->mime_lookup;
+	#FIXME
+	$site->[workers_]=$workers;
 }
 
 
 sub usac_sub_product {
-		my $server=$_;
-		my $sub_product=$_[0];
-		$server->[static_headers_]=[
+	my $sub_product=pop;	#Content is the last item
+	my %options=@_;
+	my $server=$options{parent}//$uSAC::HTTP::Site;
+	$server->[static_headers_]=[
 	[HTTP_SERVER,	uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) ]];
 }
 

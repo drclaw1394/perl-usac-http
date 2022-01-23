@@ -24,6 +24,7 @@ BEGIN {
 		Content-MD5
 		Content-Range
 		Content-Type
+		Content-Disposition
 		Date
 		ETag
 		Expect
