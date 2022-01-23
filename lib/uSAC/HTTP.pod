@@ -1,8 +1,6 @@
 =head1 NAME
 
-uSAC::HTTP Micro Swiss Army Chainsaw Web server
-
-=head1 SYNOPSIS
+uSAC::HTTP  - Micro Swiss Army Chainsaw HTTP
 
 
 =head1 DESCRIPTION
