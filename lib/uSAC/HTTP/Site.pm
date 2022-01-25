@@ -130,7 +130,10 @@ sub add_route {
 		($end,$outer)=$middler->link($end);
 	}
 	$outer//=sub {@_};
-	$self->[server_]->add_end_point($matcher, $end, $self);#[$self,$outer]);
+	$self->[server_]->add_end_point($matcher, $end, [$self,$outer]);
+	# first argument is a 'route' object
+	# 		0 site
+	# 		1 outerware to execute
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
 	my $unsupported;

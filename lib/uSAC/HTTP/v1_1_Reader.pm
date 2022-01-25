@@ -194,7 +194,7 @@ sub make_reader{
 				}
 				
 				#my $host=$h{HOST};#//"";
-				$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, $static_headers], 'uSAC::HTTP::Rex' ;
+				$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, {}, $static_headers], 'uSAC::HTTP::Rex' ;
 
 				#$pos = pos($buf);
 

@@ -444,7 +444,7 @@ sub reply_simple{
 	
 	#use route instance with outerware to filter headers, and also process 
 	
-	#my $outer=$_[0][4][1];
+	my $outer=$_[0][1];
 	#&$outer if $outer;
 
 	
@@ -511,7 +511,9 @@ sub reply {
 	#wrapper for simple and chunked
 	# if the body element is a code ref, or array ref, then chunked is used
 	for (ref $_[4]){
-		reply_chunked @_ and return if $_ eq "CODE";
+		say "$_";
+		&reply_simple and return unless $_;
+		&reply_chunked and return if $_ eq "CODE";
 		if($_ eq "ARRAY"){
 			#send each element of array as a chunk
 			my $i=0;
@@ -523,7 +525,6 @@ sub reply {
 			};
 		}
 		else{
-			reply_simple @_;
 		}
 	}
 }

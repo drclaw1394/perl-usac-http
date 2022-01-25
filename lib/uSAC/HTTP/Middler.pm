@@ -60,7 +60,7 @@ sub link {
 	for my $i (reverse 0..@middleware-1){
 		my $maker=$middleware[$i];
 		my $innerware_next=($i==@middleware-1)?$dispatcher:$innerware[$i+1];	
-		my $outerware_next=($i==@middleware-1)?$renderer:$outerware[$i+1];
+		my $outerware_next=($i==0)?$renderer:$outerware[@middleware-1-$i-1];
 		
 		#my $next_target=($i==@middleware-1)?$dispatcher:$mw[$i+1];
 
