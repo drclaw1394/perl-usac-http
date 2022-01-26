@@ -494,10 +494,10 @@ sub usac_host {
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	if(ref($host) eq "ARRAY"){
 
-		push $self->[host_]->@*, @$host;
+		push $self->host->@*, @$host;
 	}
 	else{
-		push $self->[host_]->@*, $host;
+		push $self->host->@*, $host;
 	}
 
 }

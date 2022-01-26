@@ -439,12 +439,14 @@ sub usac_hosts  {
 	say "Hosts enabled? ", $uSAC::HTTP::Site->[enable_hosts_];
 }
 
-sub usac_host {
-	my $host=pop;	#Content is the last item
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	push $self->site->host->@*, @_;
-}
+#########################################################
+# sub usac_host {                                       #
+#         my $host=pop;   #Content is the last item     #
+#         my %options=@_;                               #
+#         my $self=$options{parent}//$uSAC::HTTP::Site; #
+#         push $self->site->host->@*, @_;               #
+# }                                                     #
+#########################################################
 
 sub usac_server :prototype(&) {
 	#my $sub=shift;
