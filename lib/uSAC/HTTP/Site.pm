@@ -42,7 +42,7 @@ use File::Basename qw<dirname>;
 
 use Data::Dumper;
 #Class attribute keys
-use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ middleware_ outerware_ host_ parent_ unsupported_ built_prefix_));
+use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_));
 
 use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	built_prefix_-server_+1;
@@ -60,7 +60,7 @@ sub new {
 	$self->[prefix_]=	$options{prefix}//"";
 	$self->[host_]=		$options{host}?[$options{host}]:[];
 	$self->[cors_]=		$options{cors}//"";
-	$self->[middleware_]=	$options{middleware}//[];
+	$self->[innerware_]=	$options{middleware}//[];
 	$self->[outerware_]=	$options{outerware}//[];
 	$self->[unsupported_]=[];
 
@@ -230,7 +230,7 @@ sub construct_middleware {
 	my $parent=$_[0];
 	my @middleware;
 	while($parent){
-		unshift @middleware, @{$parent->[middleware_]//[]};
+		unshift @middleware, @{$parent->innerware//[]};
 		$parent=$parent->parent_site;
 	}
 	@middleware;
@@ -240,7 +240,7 @@ sub construct_outerware {
 	my $parent=$_[0];
 	my @outerware;
 	while($parent){
-		unshift @outerware, @{$parent->[outerware_]//[]};
+		unshift @outerware, @{$parent->outerware//[]};
 		$parent=$parent->parent_site;
 	}
 	@outerware;
@@ -347,6 +347,12 @@ sub mime_lookup: lvalue {
 	$_[0]->[mime_lookup_];
 }
 
+sub innerware {
+	$_[0]->[innerware_];
+}
+sub outerware{
+	$_[0]->[outerware_];
+}
 
 
 
@@ -507,9 +513,12 @@ sub usac_middleware {
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
-	say "ADDING MIDDLE WARE";	
-	push $self->[middleware_]->@*, $mw->[0];
-	push $self->[outerware_]->@*, $mw->[1];
+	say "ADDING MIDDLEWARE";	
+	#my $d=Data::Dumper->new($mw);
+	#$d->Deparse(1);
+	#say $d->Dump;
+	push $self->innerware->@*, $mw->[0];
+	push $self->outerware->@*, $mw->[1];
 }
 sub usac_innerware{
 	#my $self=$_;
@@ -518,10 +527,10 @@ sub usac_innerware{
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	say "ADDING INNERWARE";	
 	if(ref($mw)eq"ARRAY"){
-		push $self->[middleware_]->@*, @$mw;
+		push $self->innerware->@*, @$mw;
 	}
 	else{
-		push $self->[middleware_]->@*, $mw;
+		push $self->innerware->@*, $mw;
 	}
 }
 sub usac_outerware {
@@ -531,10 +540,10 @@ sub usac_outerware {
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	say "ADDING OUTERWARE";	
 	if(ref($mw)eq"ARRAY"){
-		push $self->[outerware_]->@*, @$mw;
+		push $self->outerware->@*, @$mw;
 	}
 	else{
-		push $self->[outerware_]->@*, $mw;
+		push $self->outerware->@*, $mw;
 	}
 }
 

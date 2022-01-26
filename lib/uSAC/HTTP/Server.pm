@@ -344,6 +344,12 @@ sub add_route {
 sub host {
 	return $_[0]->site->host;
 }
+sub innerware {
+	$_[0]->site->innerware;
+}
+sub outerware{
+	$_[0]->site->outerware;
+}
 
 
 sub rebuild_dispatch {

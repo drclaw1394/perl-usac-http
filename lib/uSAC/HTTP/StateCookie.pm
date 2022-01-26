@@ -1,4 +1,4 @@
-package uSAC::HTTP::State;
+package uSAC::HTTP::StateCookie;
 use strict;
 use warnings;
 use Exporter 'import';
