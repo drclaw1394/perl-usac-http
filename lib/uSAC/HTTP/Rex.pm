@@ -26,6 +26,8 @@ use Exporter 'import';
 use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
+use Data::Dumper;
+
 our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked 
 
 usac_data_stream
@@ -444,9 +446,9 @@ sub reply_simple{
 	
 	#use route instance with outerware to filter headers, and also process 
 	
-	my $outer=$_[0][1];
-	#&$outer if $outer;
-
+	my $outer=$_[0][4][1];
+	&$outer if $outer;
+	
 	
 
 	my $reply="HTTP/1.1 $_[2]".LF;
@@ -485,6 +487,9 @@ sub reply_chunked{
 
 	);
 
+	my $outer=$_[0][4][1];
+	&$outer if $outer;
+
 
         ############################################################################
         # #render_v1_1_headers($reply, $headers, $self->[static_headers_], $_[3]); #
@@ -500,7 +505,8 @@ sub reply_chunked{
 	#Execute the filters based on headers
 	#&{$_[0][4][1]};
 	#
-	#
+	
+
 	$reply.=LF;
 	$self->[write_]($reply, $cb, uSAC::HTTP::Middleware::make_chunked_writer($session));
 }
@@ -511,7 +517,6 @@ sub reply {
 	#wrapper for simple and chunked
 	# if the body element is a code ref, or array ref, then chunked is used
 	for (ref $_[4]){
-		say "$_";
 		&reply_simple and return unless $_;
 		&reply_chunked and return if $_ eq "CODE";
 		if($_ eq "ARRAY"){

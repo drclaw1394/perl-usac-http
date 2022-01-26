@@ -15,7 +15,7 @@ my @redirects=qw<
 	usac_redirect_not_modified
 	>;
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_site_url usac_static_content usac_cached_file usac_mime_db usac_mime_default $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_site_url usac_static_content usac_cached_file usac_mime_db usac_mime_default $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -42,7 +42,7 @@ use File::Basename qw<dirname>;
 
 use Data::Dumper;
 #Class attribute keys
-use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ middleware_ host_ parent_ unsupported_ built_prefix_));
+use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ middleware_ outerware_ host_ parent_ unsupported_ built_prefix_));
 
 use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	built_prefix_-server_+1;
@@ -61,6 +61,7 @@ sub new {
 	$self->[host_]=		$options{host}?[$options{host}]:[];
 	$self->[cors_]=		$options{cors}//"";
 	$self->[middleware_]=	$options{middleware}//[];
+	$self->[outerware_]=	$options{outerware}//[];
 	$self->[unsupported_]=[];
 
 	#die "No server provided" unless $self->[server_];
@@ -85,9 +86,10 @@ sub add_route {
 	my $method_matcher=shift;
 	my $path_matcher=shift;
 	my @inner=@_;
+	my @outer;
 	unshift @inner, $self->_strip_prefix if $self->[prefix_];	#make strip prefix first of middleware
-	#push @inner, $self->[middleware_]->@* if $self->[middleware_];
 	push @inner, $self->construct_middleware;
+	push @outer, $self->construct_outerware;
 
 	#die "No Matcher provided " unless $matcher//0;
 	die "No end point provided" unless $end and ref $end eq "CODE";
@@ -127,9 +129,16 @@ sub add_route {
 		for(@inner){
 			$middler->register($_);
 		}
-		($end,$outer)=$middler->link($end);
+		$end=$middler->link($end);
 	}
-	$outer//=sub {@_};
+	if(@outer){
+		my $middler=uSAC::HTTP::Middler->new();
+		for(@outer){
+			$middler->register($_);
+		}
+		$outer=$middler->link(sub{});
+	}
+
 	$self->[server_]->add_end_point($matcher, $end, [$self,$outer]);
 	# first argument is a 'route' object
 	# 		0 site
@@ -149,7 +158,7 @@ sub add_route {
 	}
 	#say "Unmatching: $unsupported";	
 	#$self->[server_]->add_end_point($unsupported,$sub, $self);
-	push $self->[unsupported_]->@*, [$unsupported, $sub,$self];#[$self,$outer]];
+	push $self->[unsupported_]->@*, [$unsupported, $sub,[$self,$outer]];
 }
 
 #middleware to strip prefix
@@ -159,15 +168,11 @@ sub _strip_prefix {
 	my $len=length $prefix;
 	sub {
 		my $inner_next=shift;
-		my $outer_next=shift;
-		(
-			sub {
-				$_[1]->[uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len);
-				return &$inner_next;
-			},
+		sub {
+			$_[1]->[uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len);
+			return &$inner_next;
+		},
 
-			$outer_next
-		)
 	}
 
 }
@@ -229,6 +234,16 @@ sub construct_middleware {
 		$parent=$parent->parent_site;
 	}
 	@middleware;
+}
+
+sub construct_outerware {
+	my $parent=$_[0];
+	my @outerware;
+	while($parent){
+		unshift @outerware, @{$parent->[outerware_]//[]};
+		$parent=$parent->parent_site;
+	}
+	@outerware;
 }
 
 sub prefix {
@@ -442,7 +457,6 @@ sub usac_route {
 		$url="/".$url;
 		unshift @_, $method, $url;
 
-		say "inputs: ",Dumper $_[0],$_[1];
 		$self->add_route(@_);
 	}
 	else{
@@ -494,11 +508,33 @@ sub usac_middleware {
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	say "ADDING MIDDLE WARE";	
+	push $self->[middleware_]->@*, $mw->[0];
+	push $self->[outerware_]->@*, $mw->[1];
+}
+sub usac_innerware{
+	#my $self=$_;
+	my $mw=pop;	#Content is the last item
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	say "ADDING INNERWARE";	
 	if(ref($mw)eq"ARRAY"){
 		push $self->[middleware_]->@*, @$mw;
 	}
 	else{
 		push $self->[middleware_]->@*, $mw;
+	}
+}
+sub usac_outerware {
+	#my $self=$_;
+	my $mw=pop;	#Content is the last item
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	say "ADDING OUTERWARE";	
+	if(ref($mw)eq"ARRAY"){
+		push $self->[outerware_]->@*, @$mw;
+	}
+	else{
+		push $self->[outerware_]->@*, $mw;
 	}
 }
 

@@ -22,7 +22,7 @@ use Crypt::JWT qw<decode_jwt encode_jwt>;
 
 use constant LF => "\015\012";
 
-our @EXPORT_OK=qw<dummy_mw log_simple authenticate_simple state_simple make_chunked_writer make_chunked_deflate_writer>;
+our @EXPORT_OK=qw<dummy_mw log_simple log_simple_in log_simple_out authenticate_simple state_simple make_chunked_writer make_chunked_deflate_writer>;
 our @EXPORT=();
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
@@ -49,31 +49,41 @@ sub dummy_mw{
 	$sub;
 }
 
-#log to STDERR
+#log to STDERR	
 sub log_simple {
+	[log_simple_in(), log_simple_out()]
+}
+
+sub log_simple_in {
 
 	#No configuration used in this logger, so reuse the same sub for each call
 	state $sub=sub {
 		my $inner_next=shift;	#This is the next mw in the chain
+		sub {
+			say STDERR "\n";
+			say STDERR time;
+			say STDERR " Host: 		$_[1][uSAC::HTTP::Rex::host_]";
+			say STDERR " Original URI: 	$_[1][uSAC::HTTP::Rex::uri_]";
+			say STDERR " Matcher URI:	$_[1][uSAC::HTTP::Rex::uri_stripped_]";
+			say STDERR " Hit counter:		", $_[0][3];
+			return &$inner_next;		#alway call next. this is just loggin
+		}
+	};
+	$sub;
+}
+
+sub log_simple_out {
+
+	#No configuration used in this logger, so reuse the same sub for each call
+	state $sub=sub {
 		my $outer_next=shift;
-		(
-			sub {
-				say STDERR "\n";
-				say STDERR time;
-				say STDERR " Host: 		$_[1][uSAC::HTTP::Rex::host_]";
-				say STDERR " Original URI: 	$_[1][uSAC::HTTP::Rex::uri_]";
-				say STDERR " Matcher URI:	$_[1][uSAC::HTTP::Rex::uri_stripped_]";
-				say STDERR " Hit counter:		", $_[0][3];
-				return &$inner_next;		#alway call next. this is just loggin
-			},
-			sub {
-				say STDERR "\n";
-				say STDERR time;
-				say STDERR " Logging on the way out";
-				say STDERR " Renered";
-				return &$outer_next;
-			}
-		)
+		sub {
+			say STDERR "\n";
+			say STDERR time;
+			say STDERR " Logging on the way out";
+			say STDERR " Renered";
+			return &$outer_next;
+		}
 	};
 	$sub;
 }
