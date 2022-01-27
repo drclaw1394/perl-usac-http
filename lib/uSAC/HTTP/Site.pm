@@ -482,13 +482,13 @@ sub usac_id {
 sub usac_prefix {
 	my $self=$uSAC::HTTP::Site;
 	#my $self=$_;
-        my $prefix=shift;
+        my $prefix=pop;
 	unless($prefix=~m|^/|){
 		warn "Prefix '$prefix' needs to start with a '/'. Fixing";
 		$prefix="/".$prefix;
 	}
 	#$self->[prefix_]=$_;
-	$self->[prefix_]=$uSAC::HTTP::Site;
+	$self->[prefix_]=$prefix;#$uSAC::HTTP::Site;
 	$self->[built_prefix_]=undef;	#force rebuilding
 	$self->built_prefix;		#build abs prefix
 }

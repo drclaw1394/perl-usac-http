@@ -127,12 +127,20 @@ sub state_cookie_out {
 				#Add Set cookie to the headers, if state is defined
 				#Returns undef on error or if no change in state
 				#TODO: only encode cookie if the state has changed
-				if(my $encoded=encode_base64url $state_encode->($rex->state->{$state_field})){
-                                       push $_[3]->@*,
-                                        [HTTP_SET_COOKIE,
-                                                new_cookie($state_name=>$encoded)
-                                                ->serialize_set_cookie
-                                        ];
+				if($rex->state->{$state_field}){
+					#defined or non empty string 
+					if(my $encoded=encode_base64url $state_encode->($rex->state->{$state_field})){
+						push $_[3]->@*,
+						[HTTP_SET_COOKIE,
+							new_cookie($state_name=>$encoded)
+							->serialize_set_cookie
+						];
+					}
+				}
+				else{
+					push $_[3]->@*,
+						#expire the cookie
+						map [HTTP_SET_COOKIE, $_->serialize_set_cookie], expire_cookies $state_name;
 				}
 				&$outer_next;
 			}
