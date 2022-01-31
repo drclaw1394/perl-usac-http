@@ -237,6 +237,8 @@ sub usac_multipart_slurp{
 		#make path relative to callers file
 		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
 	}
+	#Attempt open the dir or die
+	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
         my $prefix=$options{prefix}//"uSAC";
 	#The actual sub called
 	 usac_multipart_stream sub {
@@ -292,6 +294,7 @@ sub usac_form_slurp{
 		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
 	}
 	#convert to abs path to prevent double resolving
+	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
 	$options{dir}=rel2abs($tmp_dir);
 	
 	my $multi= usac_multipart_slurp %options, $cb;
@@ -329,6 +332,7 @@ sub usac_data_slurp{
 		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
 	}
         my $prefix=$options{prefix}//"uSAC";
+	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
 	my $mime=$options{mime};#//"application/x-www-form-urlencoded";
 	my $path=$options{path};
 
