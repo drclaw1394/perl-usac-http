@@ -387,7 +387,7 @@ sub parse_form_params {
 			my $kv={};
 			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
-				$kv->{$key}=$value;
+				$kv->{$key}=$value=~tr/"//dr;
 			}
 			return $kv;
 		}
