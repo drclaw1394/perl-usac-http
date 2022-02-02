@@ -221,6 +221,8 @@ sub usac_urlencoded_slurp{
 		if($_[4]){
 			#that was the last part
 			$cb->($usac, $rex, $fields,1);
+			$part_header=0;
+			$fields={};	#reset 
 		}
 	}
 
@@ -245,8 +247,10 @@ sub usac_multipart_slurp{
 		my $usac=$_[0];
 		my $rex=$_[1];
 		state $part_header=0;
-		state $kv;
-		state $fields={};
+
+		state $kv;		#Stateful for multiple calls
+		state $fields={};	#
+
 		state ($handle,$name);
 
 		if($part_header != $_[3]){
@@ -276,6 +280,9 @@ sub usac_multipart_slurp{
 		if($_[4]){
 			#that was the last part
 			$cb->($usac, $rex, $fields,1);
+			$part_header=0;
+			$fields={};	#Reset after callback
+			$kv={};		#Reset after callback
 		}
 	}
 }
@@ -360,8 +367,11 @@ sub usac_data_slurp{
 			$wc=syswrite $handle, $_[2];
 			#TODO: error checking and drop connection on write error
 			if($_[4]){
-				$header=0;
 				$cb->(undef, $rex, $name,1);
+				$header=0;
+				$name=undef;
+				$handle=undef;
+				
 			}
 
 			#}
@@ -387,7 +397,8 @@ sub parse_form_params {
 			my $kv={};
 			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
-				$kv->{$key}=$value=~tr/"//dr;
+				say "key: $key, value: $value";
+				$kv->{$key}=defined($value)?$value=~tr/"//dr : undef;
 			}
 			return $kv;
 		}
