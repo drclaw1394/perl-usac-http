@@ -14,8 +14,11 @@ my @redirects=qw<
 	usac_redirect_temporary
 	usac_redirect_not_modified
 	>;
+
+my @errors=qw<
+>;	
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_site_url usac_static_content usac_cached_file usac_mime_db usac_mime_default $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -254,46 +257,8 @@ sub host {
 	$_[0]->[host_];
 }
 
-#makes a url to with in the site
-#match entry
-#rex
-#partial url
-sub usac_site_url {
-	#match_entry->context->built_prefix
-	$_[0][4][built_prefix_].pop;		
-}
 
 
-#redirect to within site
-#match entry
-#rex
-#partial url
-#code
-sub usac_redirect_see_other{
-	my $url=usac_site_url @_;
-	splice @_, 2;
-	rex_reply_simple @_, HTTP_SEE_OTHER,[[HTTP_LOCATION, $url]],"";
-}
-
-sub usac_redirect_found {
-	my $url=usac_site_url @_;
-	splice @_, 2;
-	rex_reply_simple @_, HTTP_FOUND,[[HTTP_LOCATION, $url]],"";
-	
-}
-
-sub usac_redirect_temporary {
-	my $url=usac_site_url @_;
-	splice @_, 2;
-	rex_reply_simple @_, HTTP_TEMPORARY_REDIRECT,[[HTTP_LOCATION, $url]],"";
-	
-}
-sub usac_redirect_not_modified {
-	my $url=usac_site_url @_;
-	splice @_, 2;
-	rex_reply_simple @_, HTTP_NOT_MODIFIED,[[HTTP_LOCATION, $url]],"";
-	
-}
 
 
 #Take matcher, list of innerware and endpoint sub

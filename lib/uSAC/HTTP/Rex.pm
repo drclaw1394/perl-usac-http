@@ -6,7 +6,7 @@ use feature qw<current_sub say refaliasing switch state>;
 no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
 
-
+use Carp qw<carp>;
 use File::Basename qw<basename dirname>;
 use File::Spec::Functions qw<rel2abs>;
 use uSAC::HTTP::Code qw<:constants>;
@@ -41,7 +41,17 @@ usac_urlencoded_slurp
 usac_form_slurp
 
 rex_parse_form_params 
-rex_query_params>;
+rex_query_params
+
+rex_site_url
+
+rex_redirect_see_other
+rex_redirect_found
+rex_redirect_temporary
+rex_redirect_not_modified
+
+rex_redirect_internal
+>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -617,6 +627,73 @@ sub query_params {
 	}
 
 	$_[1][query_];
+}
+
+#Builds a url based on the url of the current site/group
+#match, rex, partial url
+sub rex_site_url {
+	#match_entry->context->site->built_prefix
+	$_[0][4][0]->built_prefix."/".pop;		
+}
+
+#redirect to within site
+#match entry
+#rex
+#partial url
+#code
+sub rex_redirect_see_other{
+	my ($url)=splice @_, 2;
+	rex_reply_simple(@_, HTTP_SEE_OTHER,[[HTTP_LOCATION, $url]],"");
+}
+
+sub rex_redirect_found {
+	my ($url)=splice @_, 2;
+	rex_reply_simple(@_, HTTP_FOUND,[[HTTP_LOCATION, $url]],"");
+	
+}
+
+sub rex_redirect_temporary {
+
+	my ($url)=splice @_, 2;
+	rex_reply_simple(@_, HTTP_TEMPORARY_REDIRECT,[[HTTP_LOCATION, $url]],"");
+	
+}
+sub rex_redirect_not_modified {
+	my ($url)=splice @_, 2;
+	rex_reply_simple(@_, HTTP_NOT_MODIFIED,[[HTTP_LOCATION, $url]],"");
+	
+}
+
+
+#Rewrites the uri and matches through the dispatcher
+#TODO: recursion limit
+sub rex_redirect_internal {
+
+	my ($matcher, $rex, $uri)=@_;
+	state $previous_rex=$rex;
+	state $counter=0;
+	if(substr($uri,0,1) ne "/"){
+		$uri="/".$uri;	
+	}
+	$rex->[uri_]=$uri;
+	$rex->[uri_stripped_]=$uri;
+	if($rex==$previous_rex){
+		$counter++;
+	}
+	else {
+		$previous_rex=$rex;
+	}
+	if($counter>10){
+		$counter=0;
+		carp "Redirections loop detected for $uri";
+		rex_reply($matcher, $rex, HTTP_LOOP_DETECTED, [],"");
+		return;
+	}
+
+	$rex->[session_]->server->current_cb->(
+		join(" ", $rex->@[host_, method_, uri_]),
+		$rex
+	);
 }
 
 #returns parsed cookies from headers

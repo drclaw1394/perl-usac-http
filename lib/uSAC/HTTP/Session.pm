@@ -126,6 +126,11 @@ sub revive {
 	return $self;
 }
 
+#Accessors
+sub server {
+	$_[0][server_];
+}
+
 
 
 #pluggable interface
@@ -178,6 +183,7 @@ our $timer=AE::timer 0,1, sub {
 	#say scalar $self->[zombies_]->@*;
 	#say "Session count : ",scalar keys $self->[sessions_]->%*;
 };
+
 
 
 1;
