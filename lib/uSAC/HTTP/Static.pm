@@ -21,7 +21,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR>;
 use Exporter 'import';
-our @EXPORT_OK =qw<usac_static_from send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_under usac_file_under usac_index_under list_dir>;
+our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_under usac_file_under usac_index_under list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -215,7 +215,6 @@ sub open_cache {
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
-
 	#return a sub with cache an sysroot aliased
 		use  integer;
 		my ($matcher,$rex,$entry)=@_;
@@ -260,7 +259,6 @@ sub send_file_uri_norange {
 		sub {
 			seek $in_fh,$total,0;
 			$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
-
 			$offset=0;
 			#non zero read length.. do the write	
 			if($total==$content_length){	#end of file
@@ -715,61 +713,64 @@ sub send_file_uri_range {
 #Similar to http paths
 #
 #sub static_file_from {
-sub usac_static_from {
-	#my %args=@_;
-	#say "static file from ",@_;
-	my $root=shift;#$_[0];
-	my %options=@_;
-	my $cache;
-	if($options{cache_size}){
-		$cache={}
-	}
-
-
-	#if the path begins with a "/"  its an absolut path
-	#if it starts with "." it is processed as a relative path from the current wd
-	#otherwise its a relative path relative to the callers file
-		
-	if($root =~ m|^[^/]|){
-		#implicit path
-		#make path relative to callers file
-		$root=dirname((caller)[1])."/".$root;
-	}
-
-	sub {
-		my $rex=$_[1];
-		#my $p=$1;
-		my $p;
-		if($_[2]){
-			$p=$_[2];
-			pop;
-		}	
-		else {
-			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
-		}
-
-		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-			#send_file_uri_range @_, $p, $root;
-			return;
-		}
-		elsif($p=~m|/$|){
-			#list_dir @_, $p, $root;
-			return;
-		}
-		else{
-			#Send normal
-			#send_file_uri_norange @_, $p, $root;
-			return;
-		}
-	}
-}
+#########################################################################################
+# sub usac_static_from {                                                                #
+#         #my %args=@_;                                                                 #
+#         #say "static file from ",@_;                                                  #
+#         my $root=shift;#$_[0];                                                        #
+#         my %options=@_;                                                               #
+#         my $cache;                                                                    #
+#         if($options{cache_size}){                                                     #
+#                 $cache={}                                                             #
+#         }                                                                             #
+#                                                                                       #
+#                                                                                       #
+#         #if the path begins with a "/"  its an absolut path                           #
+#         #if it starts with "." it is processed as a relative path from the current wd #
+#         #otherwise its a relative path relative to the callers file                   #
+#                                                                                       #
+#         if($root =~ m|^[^/]|){                                                        #
+#                 #implicit path                                                        #
+#                 #make path relative to callers file                                   #
+#                 $root=dirname((caller)[1])."/".$root;                                 #
+#         }                                                                             #
+#                                                                                       #
+#         sub {                                                                         #
+#                 my $rex=$_[1];                                                        #
+#                 #my $p=$1;                                                            #
+#                 my $p;                                                                #
+#                 if($_[2]){                                                            #
+#                         $p=$_[2];                                                     #
+#                         pop;                                                          #
+#                 }                                                                     #
+#                 else {                                                                #
+#                         $p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];              #
+#                 }                                                                     #
+#                                                                                       #
+#                 if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){                         #
+#                         #send_file_uri_range @_, $p, $root;                           #
+#                         return;                                                       #
+#                 }                                                                     #
+#                 elsif($p=~m|/$|){                                                     #
+#                         #list_dir @_, $p, $root;                                      #
+#                         return;                                                       #
+#                 }                                                                     #
+#                 else{                                                                 #
+#                         #Send normal                                                  #
+#                         #send_file_uri_norange @_, $p, $root;                         #
+#                         return;                                                       #
+#                 }                                                                     #
+#         }                                                                             #
+# }                                                                                     #
+#########################################################################################
 
 #Serve index files for dirs
 sub usac_index_under {
 	#create a new static file object
-	my $parent=$_;
-	my $root=shift;
+	my $root=pop;
 	my %options=@_;
+	my $parent=$options{parent}//$uSAC::HTTP::Site;
+
 	$options{mime}=$parent->resolve_mime_lookup;
 	$options{default_mime}=$parent->resolve_mime_default;
 	\my @indexes=$options{indexes}//[];
@@ -887,50 +888,6 @@ sub usac_file_under {
 
 }
 
-sub usac_file_from_old {
-	#my %args=@_;
-	#say "static file from ",@_;
-	my $root=shift;#$_[0];
-	my %options=@_;
-	my $cache;
-	if($options{cache_size}){
-		$cache={}
-	}
-
-
-	#if the path begins with a "/"  its an absolut path
-	#if it starts with "." it is processed as a relative path from the current wd
-	#otherwise its a relative path relative to the callers file
-		
-	if($root =~ m|^[^/]|){
-		#implicit path
-		#make path relative to callers file
-		$root=dirname((caller)[1])."/".$root;
-	}
-
-	sub {
-		my $rex=$_[1];
-		#my $p=$1;
-		my $p;
-		if($_[2]){
-			$p=$_[2];
-			pop;
-		}	
-		else {
-			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
-		}
-
-		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-			#send_file_uri_range @_, $p, $root;
-			return;
-		}
-		else{
-			#Send normal
-			#send_file_uri_norange @_, $p, $root;
-			return;
-		}
-	}
-}
 
 sub usac_dir_under {
 	#my %args=@_;

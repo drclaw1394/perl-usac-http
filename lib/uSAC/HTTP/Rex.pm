@@ -44,11 +44,14 @@ rex_parse_form_params
 rex_query_params
 
 rex_site_url
+rex_site
 
 rex_redirect_see_other
 rex_redirect_found
 rex_redirect_temporary
 rex_redirect_not_modified
+
+rex_error_not_found
 
 rex_redirect_internal
 >;
@@ -488,6 +491,8 @@ sub reply_simple{
 
 	$reply.=LF.$_[4];
 	$_[1][write_]($reply, $session->[uSAC::HTTP::Session::dropper_]);	#fire and forget
+
+	1;
 }
 
 
@@ -534,6 +539,8 @@ sub reply_chunked{
 
 	$reply.=LF;
 	$self->[write_]($reply, $cb, uSAC::HTTP::Middleware::make_chunked_writer($session));
+
+	1;
 }
 
 sub reply {
@@ -542,8 +549,8 @@ sub reply {
 	#wrapper for simple and chunked
 	# if the body element is a code ref, or array ref, then chunked is used
 	for (ref $_[4]){
-		&reply_simple and return unless $_;
-		&reply_chunked and return if $_ eq "CODE";
+		&reply_simple and return 1 unless $_;
+		&reply_chunked and return 1 if $_ eq "CODE";
 		if($_ eq "ARRAY"){
 			#send each element of array as a chunk
 			my $i=0;
@@ -557,6 +564,7 @@ sub reply {
 		else{
 		}
 	}
+	1;
 }
 
 ########################################################################
@@ -636,6 +644,12 @@ sub rex_site_url {
 	$_[0][4][0]->built_prefix."/".pop;		
 }
 
+#returns the site object associate with this request
+#match, rex, na
+sub rex_site {
+	$_[0][4][0];	
+}
+
 #redirect to within site
 #match entry
 #rex
@@ -664,6 +678,11 @@ sub rex_redirect_not_modified {
 	
 }
 
+sub rex_error_not_found {
+	my ($url)=splice @_, 2;
+	rex_reply_simple(@_, HTTP_NOT_FOUND, [], '');
+}
+
 
 #Rewrites the uri and matches through the dispatcher
 #TODO: recursion limit
@@ -689,11 +708,12 @@ sub rex_redirect_internal {
 		rex_reply($matcher, $rex, HTTP_LOOP_DETECTED, [],"");
 		return;
 	}
-
+	undef $_[0];
 	$rex->[session_]->server->current_cb->(
 		join(" ", $rex->@[host_, method_, uri_]),
 		$rex
 	);
+	1;
 }
 
 #returns parsed cookies from headers
