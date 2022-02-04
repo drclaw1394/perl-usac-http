@@ -45,6 +45,7 @@ rex_query_params
 
 rex_site_url
 rex_site
+rex_state
 
 rex_redirect_see_other
 rex_redirect_found
@@ -650,6 +651,10 @@ sub rex_site {
 	$_[0][4][0];	
 }
 
+sub rex_state :lvalue{
+	$_[1][state_];
+}
+
 #redirect to within site
 #match entry
 #rex
@@ -727,7 +732,6 @@ sub cookies :lvalue {
 #RW accessor
 #Returns the current state information for the rex
 sub state :lvalue { $_[0][state_] }
-
 
 *rex_headers=*headers;
 *rex_reply_simple=*reply_simple;

@@ -8,41 +8,43 @@ no warnings "experimental";
 no feature "indirect";
 
 use Time::HiRes qw<time>;
+use Data::UUID;
 use uSAC::HTTP::StateCookie qw<state_cookie>;
 
 use Data::Dumper;
 
-our @EXPORT_OK=qw<state_uuid state_uuid_new state_uuid_data>;
+our @EXPORT_OK=qw<state_uuid rex_state_uuid_data state_uuid_new state_uuid_data>;
 our @EXPORT=();
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
 );
 
-my $name="SESSIONID";
-my $field="session_id";
+my $ug=Data::UUID->new;
+
+my $name="USACUUID";
+my $field="uuid";
 
 sub state_uuid {
 	my %options=@_;
 	state_cookie(		#setting up a session id string	
-		name=>"SESSIONID",
-		field=>"session_id", 
+		name=>$options{name}//$name,
+		field=>$options{field}//$field,
+
 		decode=>sub {
-			$_[0]//time;
+			$_[0]||undef;	#make empty string an undef
 		},
 		encode=>sub {
-			say "doing encode for UUID: $_[0]";
 			$_[0];
 		}
 	);
 }
 
 sub state_uuid_new{
-	#TODO: update to an actual UUID
-	(time."") =~ s/\.//r
+	$ug->create_str();
 }
 
-sub state_uuid_data : lvalue{
-	$_[1]->state->{$field};
+sub rex_state_uuid_data : lvalue{
+	$_[1]->state->{$_[2]//$field};
 }
 
 1;
