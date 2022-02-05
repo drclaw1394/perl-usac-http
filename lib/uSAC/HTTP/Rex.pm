@@ -53,6 +53,7 @@ rex_redirect_temporary
 rex_redirect_not_modified
 
 rex_error_not_found
+rex_error_internal 
 
 rex_redirect_internal
 >;
@@ -686,6 +687,14 @@ sub rex_redirect_not_modified {
 sub rex_error_not_found {
 	my ($url)=splice @_, 2;
 	rex_reply_simple(@_, HTTP_NOT_FOUND, [], '');
+}
+
+sub rex_error_internal {
+	my ($url)=splice @_, 2;
+	my $session=$_[1][session_];
+	rex_reply_simple(@_, HTTP_INTERNAL_SERVER_ERROR, [], '');
+	$session->[uSAC::HTTP::Session::closeme_]=1;
+	$session->[uSAC::HTTP::Session::dropper_]->();
 }
 
 

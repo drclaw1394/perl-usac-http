@@ -132,11 +132,11 @@ sub make_reader{
 			#
 			if ($state == STATE_REQUEST) {
 				my $pos3=index $buf, LF;
-				($method,$uri,$version)=split " ", substr($buf,0,$pos3);
-				#$uri=uri_decode $uri;
-				uri_decode_inplace $uri;
 				
 				if($pos3>=0){
+					($method,$uri,$version)=split " ", substr($buf,0,$pos3);
+					#$uri=uri_decode $uri;
+					uri_decode_inplace $uri;
 					#end of line found
 						$state   = STATE_HEADERS;
 						%h=();
@@ -146,7 +146,14 @@ sub make_reader{
 						redo;
 				}
 				else {
-					#not found error
+					#Exit the loop as we nee more data pushed in
+					#
+					if( length($buf) >2048){
+						#TODO: create a rex a responde with bad request
+						$r->[uSAC::HTTP::Session::closeme_]=1;
+						$r->[uSAC::HTTP::Session::dropper_]->() 
+					}
+					last;
 				}
 			}
 
@@ -160,7 +167,6 @@ sub make_reader{
 					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 						\my $e=\$h{uc $1=~tr/-/_/r};
 						$e = $e ? $e.','.$2: $2;
-						#say $e;
 						redo;
 					}
 					elsif ($buf =~ /\G\015?\012/sxogca) {
@@ -172,7 +178,6 @@ sub make_reader{
 							return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");
 						}
 						#warn "Need more";
-						#say "need more";
 						$pos=pos($buf);
 						return;
 					}
@@ -289,7 +294,6 @@ sub make_form_data_reader {
 
 					}
 					elsif(substr($buf,$offset,4) eq "--".LF){
-						#say "END BOUNDARD FOUND";
 						$first=1;	#reset first;
 						$cb->($usac, $rex, substr($buf,$processed,$len),$form_headers,1);
 						$processed+=$offset+4;

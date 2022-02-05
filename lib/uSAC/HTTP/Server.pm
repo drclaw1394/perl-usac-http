@@ -77,12 +77,10 @@ sub _welcome {
 }
 
 #if nothing else on this server matches, this will run
+#And if that happens it it most likley a protocol error
+#ie expecting a request line but getting something else
 sub _default_handler {
-		#my ($line,$rex)=@_;
-		state $sub=sub {
-			rex_reply_simple @_, HTTP_NOT_FOUND,undef,"Not found";
-			return;
-		}
+		state $sub=\&rex_error_not_found;
 }
 
 sub new {
