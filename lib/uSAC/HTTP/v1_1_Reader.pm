@@ -70,17 +70,6 @@ sub make_reader{
 	#default is server mode to handle client requests
 	my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
 
-        #################################################################
-        # #find existing sub in session                                 #
-        # #                                                             #
-        # my $sub_id="http1_1". ($mode==MODE_CLIENT?"client":"server"); #
-        # my $sub=$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id};    #
-        # if($sub){                                                     #
-        #         #reset                                                #
-        #         $sub->(undef, undef, undef);                          #
-        #         return $sub;                                          #
-        # }                                                             #
-        #################################################################
 
 	my $self=$r->[uSAC::HTTP::Session::server_];
 	#\my $buf=\$r->[uSAC::HTTP::Session::rbuf_];
@@ -104,15 +93,6 @@ sub make_reader{
 	#	$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id}= 
 	sub {
 		\my $buf=\$_[1];	#\$r->[uSAC::HTTP::Session::rbuf_];
-                ######################################################
-                # unless($_[0]){                                     #
-                #         $r->[uSAC::HTTP::Session::sr_]->buffer=""; #
-                #                                                    #
-                #         $state=$start_state;                       #
-                #         return;                                    #
-                # }                                                  #
-                #                                                    #
-                ######################################################
 		my $write=$r->[uSAC::HTTP::Session::write_];
 		use integer;
 		#say "in base reader";
@@ -241,9 +221,6 @@ sub make_form_data_reader {
 	use integer;
 
 	my ($usac,$rex,$session,$cb)=@_;	
-	#my $session=shift;
-	#\my $buf=\$session->[uSAC::HTTP::Session::rbuf_];
-	#my $cb=shift;#\$session->[uSAC::HTTP::Session::reader_cb_];
 	my $rex=$session->[uSAC::HTTP::Session::rex_];
 
 
@@ -389,8 +366,6 @@ sub make_form_urlencoded_reader {
 	#These values are shared for a session
 	#
 	my ($usac,$rex,$session,$cb)=@_;	
-	#my $session=shift;
-	#my $cb=shift;#$_[1];#=$session->[uSAC::HTTP::Session::reader_cb_]=$_[1];	#Alias reference to current cb
 	my $rex=$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
 	my $processed=0;					#stateful position in buffer
 	my $header={};
@@ -414,11 +389,9 @@ sub make_form_urlencoded_reader {
 		if($processed==$len){
 			$cb->($usac, $rex, substr($buf,0,$new,""),$header,1);		#send to cb and shift buffer down
 			$header={};
-			#$cb->(undef,undef);#$form_headers);
-			#return to the previous 
 			$processed=0;
-			#$session->pop_reader;	#This assumes that the normal 1.1 reader previous in the stack
 			uSAC::HTTP::Session::pop_reader $session;
+
 			#issue a read since reader has changed
 			#$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 		}
