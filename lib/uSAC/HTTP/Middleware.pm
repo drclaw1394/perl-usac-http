@@ -12,6 +12,7 @@ use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie;
 
+use Time::HiRes qw<time>;
 use IO::Compress::Gzip;
 use Compress::Raw::Zlib;
 
@@ -56,16 +57,21 @@ sub log_simple {
 
 sub log_simple_in {
 
-	#No configuration used in this logger, so reuse the same sub for each call
+	#No configuration used in this logger, so the same sub can be saved in a state
+	#and reused
 	state $sub=sub {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
-			say STDERR "\n";
-			say STDERR time;
-			say STDERR " Host: 		$_[1][uSAC::HTTP::Rex::host_]";
-			say STDERR " Original URI: 	$_[1][uSAC::HTTP::Rex::uri_]";
-			say STDERR " Matcher URI:	$_[1][uSAC::HTTP::Rex::uri_stripped_]";
-			say STDERR " Hit counter:		", $_[0][3];
+			my $time=time;
+			package uSAC::HTTP::Rex {
+				say STDERR "\n---->>>";
+				say STDERR "Arraval time:		".$time;
+				say STDERR "Host: 			$_[1][host_]";
+				say STDERR "Original matched URI: 	$_[1][uri_]";
+				say STDERR "Site relative URI:	$_[1][uri_stripped_]";
+				say STDERR "Matched for site:	".$_[0][4][0]->id;
+				say STDERR "Hit counter:		$_[0][3]";
+			}
 			return &$inner_next;		#alway call next. this is just loggin
 		}
 	};
@@ -78,10 +84,8 @@ sub log_simple_out {
 	state $sub=sub {
 		my $outer_next=shift;
 		sub {
-			say STDERR "\n";
-			say STDERR time;
-			say STDERR " Logging on the way out";
-			say STDERR " Renered";
+			say STDERR "\n<<<---";
+			say STDERR "Depature time:		".time;
 			return &$outer_next;
 		}
 	};
