@@ -12,6 +12,7 @@ use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK O_RDONLY);
 use Devel::Peek;
 use File::Spec;
 use File::Basename qw<basename dirname>;
+use Time::Piece;
 use Cwd;
 use AnyEvent;
 
@@ -29,21 +30,12 @@ my $path_ext=	qr{\.([^.]*)$}ao;
 
 my $read_size=4096*16;
 my %stat_cache;
+
+use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_>;
 use constant KEY_OFFSET=>0;
 
 use enum ("mime_=".KEY_OFFSET, qw<default_mime_ root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ end_>);
 use constant KET_COUNT=>end_-mime_+1;
-
-################################################
-# Server: nginx/1.21.0                         #
-# Date: Thu, 15 Jul 2021 22:55:42 GMT          #
-# Content-Type: text/html                      #
-# Content-Length: 612                          #
-# Last-Modified: Thu, 15 Jul 2021 06:55:37 GMT #
-# Connection: keep-alive                       #
-# ETag: "60efdbe9-264"                         #
-# Accept-Ranges: bytes                         #
-################################################
 
 sub new {
 	my $package=shift//__PACKAGE__;
@@ -201,11 +193,12 @@ sub open_cache {
 			#
 			my $ext=substr $abs_path, rindex($abs_path, ".")+1;
 			my @entry;
-			$entry[1]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
-			#$entry[1]=[HTTP_CONTENT_TYPE, ($uSAC::HTTP::Server::MIME{$ext}//$uSAC::HTTP::Server::DEFAULT_MIME)];
-			$entry[0]=$in_fh;
-			$entry[2]=(stat _)[7];
-			$entry[3]=(stat _)[9];
+			$entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
+			$entry[fh_]=$in_fh;
+			$entry[size_]=(stat _)[7];
+			$entry[mt_]=(stat _)[9];
+			my $tp=gmtime($entry[mt_]);
+			$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
 			$self->[cache_]{$abs_path}=\@entry;
 		}
 		#};
@@ -220,11 +213,34 @@ sub send_file_uri_norange {
 		my ($matcher,$rex,$entry)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
-		my $in_fh=$entry->[0];
+		my $in_fh=$entry->[fh_];
 
-		my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
+		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
 
-		my $reply= "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF;
+		my $reply="";
+		#process caching headers
+		my $headers=$rex->headers;
+		my $code=HTTP_OK;
+		my $etag="\"$mod_time-$content_length\"";
+
+		#TODO: needs testing
+		for my $t ($headers->{IF_NONE_MATCH}){
+			$code=HTTP_OK and last unless $t;
+			$code=HTTP_OK and last if  $etag !~ /$t/;
+			$code=HTTP_NOT_MODIFIED and last;	#no body to be sent
+
+		}
+
+		#TODO: needs testing
+		for(my $time=$headers->{IF_MODIFIED_SINCE}){
+			#attempt to parse
+			$code=HTTP_OK and last unless $time;
+			my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
+			$code=HTTP_OK  and last if $mod_time>$tp->epoch;
+			$code=HTTP_NOT_MODIFIED;	#no body to be sent
+		}
+			
+		$reply="$rex->[uSAC::HTTP::Rex::version_] ".$code.LF;
 		my $headers=[
 			[HTTP_DATE, $uSAC::HTTP::Session::Date],
 			($session->[uSAC::HTTP::Session::closeme_]?
@@ -233,10 +249,10 @@ sub send_file_uri_norange {
 					[HTTP_KEEP_ALIVE,"timeout=10, max=1000"]
 				)
 			),
-			$entry->[1],
+			$entry->[last_modified_header_],
+			$entry->[content_type_header_],
 			[HTTP_CONTENT_LENGTH, $content_length],			#need to be length of multipart
-			#.HTTP_TRANSFER_ENCODING.": chunked".LF
-			[HTTP_ETAG,"\"$mod_time-$content_length\""],
+			[HTTP_ETAG,$etag],
 			[HTTP_ACCEPT_RANGES,"bytes"]
 		];
 
@@ -247,10 +263,14 @@ sub send_file_uri_norange {
 		$reply.=LF;
 
 
-		if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
+		if(
+			$rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
+			or $code==HTTP_NOT_MODIFIED
+			){
 			$session->[uSAC::HTTP::Session::write_]->($reply);
 			return;
 		}
+
 
 		my $offset=length($reply);
 		my $rc;
@@ -422,7 +442,7 @@ sub send_file_uri_norange_chunked {
 		delete $self->[cache_]{$abs_path};
 		return
 	}
-	my $in_fh=$entry->[0];
+	my $in_fh=$entry->[fh_];
 
 
 	my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
@@ -435,7 +455,7 @@ sub send_file_uri_norange_chunked {
 			HTTP_CONNECTION.": close".LF
 			:HTTP_CONNECTION.": Keep-Alive".LF
 		)
-		.$entry->[1]
+		.$entry->[content_type_header_]
 		#.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
 		.HTTP_TRANSFER_ENCODING.": chunked".LF
 		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
@@ -530,9 +550,9 @@ sub send_file_uri_range {
 		my ($route,$rex,$entry)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
-		my $in_fh=$entry->[0];
+		my $in_fh=$entry->[fh_];
 
-		my ($content_length, $mod_time)=($entry->[2],$entry->[3]);
+		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
 		#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];	#reuses stat from check_access 
 
 
@@ -579,7 +599,7 @@ sub send_file_uri_range {
 			if(@ranges==1){
 				HTTP_CONTENT_RANGE.": $ranges[0][0]-$ranges[0][1]/$content_length".LF
 				.HTTP_CONTENT_LENGTH.": ".$total_length.LF			#need to be length of multipart
-				.HTTP_CONTENT_TYPE.":".$entry->[1][1]
+				.HTTP_CONTENT_TYPE.":".$entry->[content_type_header_][1]
 				.LF
 			}
 			else {

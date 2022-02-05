@@ -52,14 +52,14 @@ sub dummy_mw{
 
 #log to STDERR	
 sub log_simple {
-	[log_simple_in(), log_simple_out()]
+	[&log_simple_in, &log_simple_out]
 }
 
 sub log_simple_in {
+	my %options=@_;
+	my $dump_headers=$options{dump_headers};
 
-	#No configuration used in this logger, so the same sub can be saved in a state
-	#and reused
-	state $sub=sub {
+	sub {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
 			my $time=time;
@@ -69,19 +69,18 @@ sub log_simple_in {
 				say STDERR "Host: 			$_[1][host_]";
 				say STDERR "Original matched URI: 	$_[1][uri_]";
 				say STDERR "Site relative URI:	$_[1][uri_stripped_]";
-				say STDERR "Matched for site:	".$_[0][4][0]->id;
+				say STDERR "Matched for site:	".($_[0][4][0]->id//"n/a");
 				say STDERR "Hit counter:		$_[0][3]";
+				say STDERR Dumper $_[1]->headers if $dump_headers;
 			}
 			return &$inner_next;		#alway call next. this is just loggin
 		}
 	};
-	$sub;
 }
 
 sub log_simple_out {
 
-	#No configuration used in this logger, so reuse the same sub for each call
-	state $sub=sub {
+	sub {
 		my $outer_next=shift;
 		sub {
 			say STDERR "\n<<<---";
@@ -89,7 +88,6 @@ sub log_simple_out {
 			return &$outer_next;
 		}
 	};
-	$sub;
 }
 
 
