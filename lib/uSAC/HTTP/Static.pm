@@ -210,7 +210,7 @@ sub open_cache {
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
-		my ($matcher,$rex,$entry)=@_;
+		my ($matcher,$rex,$user_headers,$entry)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
 		my $in_fh=$entry->[fh_];
@@ -249,6 +249,7 @@ sub send_file_uri_norange {
 					[HTTP_KEEP_ALIVE,"timeout=10, max=1000"]
 				)
 			),
+			[HTTP_VARY, "Accept"],
 			$entry->[last_modified_header_],
 			$entry->[content_type_header_],
 			[HTTP_CONTENT_LENGTH, $content_length],			#need to be length of multipart
@@ -259,6 +260,7 @@ sub send_file_uri_norange {
 		for my $h ($rex->[uSAC::HTTP::Rex::static_headers_]->@*, $headers->@*){
 			$reply.=$h->[0].": ".$h->[1].LF;
 		}
+		$reply.= join "", map $_->[0].": ".$_->[1].LF, @$user_headers;
 
 		$reply.=LF;
 
@@ -835,7 +837,7 @@ sub usac_index_under {
 			else{
 				#Send normal
 				#$static->send_file_uri_norange(@_, $p, $root);
-				send_file_uri_norange @_, $entry;
+				send_file_uri_norange @_,[], $entry;
 				return;
 			}
 		}
@@ -861,9 +863,10 @@ sub usac_file_under {
 		#make path relative to callers file
 		$root=dirname((caller)[1])."/".$root;
 	}
-
 	$options{mime}=$parent->resolve_mime_lookup;
 	$options{default_mime}=$parent->resolve_mime_default;
+
+	my $headers=$options{headers}//[];
 	my $static=uSAC::HTTP::Static->new(root=>$root,%options);
 
 	my $cache=$static->[cache_];
@@ -894,7 +897,7 @@ sub usac_file_under {
 				return;
 			}
 			else{
-				send_file_uri_norange @_, $entry;
+				send_file_uri_norange @_,$headers, $entry;
 				return;
 			}
 		}

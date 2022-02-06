@@ -115,13 +115,11 @@ sub reply_DEFLATE {
 sub usac_multipart_stream {
 		my $cb=pop;
 	sub {
-	say "Multipart stream";
 		my $line=$_[0];#shift;
 		my $rex=$_[1];#shift;
 		#shift;		#remove place holder for mime
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#check if content type is correct first
-		#say "CONTENT TYPE ON UPLOAD: ", $rex->[headers_]{'CONTENT_TYPE'};
 		unless (index($rex->[headers_]{'CONTENT_TYPE'},'multipart/form-data')>=0){
 			$session->[uSAC::HTTP::Session::closeme_]=1;
 			reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
@@ -148,13 +146,10 @@ sub usac_data_stream{
 	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
 
 	sub {
-		say "DATA STREAM";
 		#my $line=shift;
 		my $rex=$_[1];#shift;	#rex object
 
 		my $session=$rex->[session_];
-		say "CONTENT TYPE ON UPLOAD:", $rex->[headers_]{'CONTENT_TYPE'};
-		say $mime;
 		my @err_res;
 		for($rex->[headers_]){
 			if($_->{'CONTENT_TYPE'}!~/$mime/){
@@ -201,10 +196,9 @@ sub usac_form_stream {
 	my $multi=  usac_multipart_stream @_;
 	my $url= usac_urlencoded_stream @_;
 	sub{
-		say "FORM STREAM_,,";
 		for ($_[1][headers_]{CONTENT_TYPE}){
-			&$multi and say "DOING MULTI" and return if /multipart\/form-data/;
-			&$url and say "DOING URLENC" and return if 'application/x-www-form-urlencoded';
+			&$multi  and return if /multipart\/form-data/;
+			&$url  and return if 'application/x-www-form-urlencoded';
 			reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 		}
 	}
@@ -275,7 +269,6 @@ sub usac_multipart_slurp{
 			close $handle if $handle;
 			$name=$handle=undef;
 			$kv=&parse_form_params;
-			say "Parsed form";
 
 			#test for file
 			if($kv->{filename}){
@@ -310,6 +303,7 @@ sub usac_form_slurp{
 	my ($cb)=pop;
 	my %options=@_;
 	my $tmp_dir=$options{dir}//"uploads";
+
 	if($tmp_dir=~ m|^[^/]|){
 		#implicit path
 		#make path relative to callers file
@@ -322,7 +316,6 @@ sub usac_form_slurp{
 	my $multi= usac_multipart_slurp %options, $cb;
 	my $url=usac_urlencoded_slurp %options, $cb;
 	sub{
-		say "TESTINg CONTENT TYPE: ",$_[1][headers_]{CONTENT_TYPE};
 		for ($_[1][headers_]{CONTENT_TYPE}){
 			if(index($_, "multipart/form-data")>=0){
 				#we do a regex match inste
@@ -330,7 +323,6 @@ sub usac_form_slurp{
 				return
 			}
 			elsif($_ eq 'application/x-www-form-urlencoded'){
-				say "URL ENCODED DISPATCH SLURP";
 				&$url;
 				return
 			}
@@ -412,7 +404,6 @@ sub parse_form_params {
 			my $kv={};
 			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
-				say "key: $key, value: $value";
 				$kv->{$key}=defined($value)?$value=~tr/"//dr : undef;
 			}
 			return $kv;
@@ -472,6 +463,7 @@ sub reply_simple{
 			)
 		)
 	);
+
 	#somehow call outerware before rendering?
 	
 	#use route instance with outerware to filter headers, and also process 
