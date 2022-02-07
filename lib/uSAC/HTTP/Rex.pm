@@ -152,7 +152,8 @@ sub usac_data_stream{
 		my $session=$rex->[session_];
 		my @err_res;
 		for($rex->[headers_]){
-			if($_->{'CONTENT_TYPE'}!~/$mime/){
+			#Wrap regex to prevent captures being destroyed
+			if(do{$_->{'CONTENT_TYPE'}!~/$mime/}){
 				@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
 			}
 

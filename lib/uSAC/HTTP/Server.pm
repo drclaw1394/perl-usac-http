@@ -11,6 +11,7 @@ use version;our $VERSION = version->declare('v0.1');
 use feature qw<isa refaliasing say state>;
 no warnings "experimental";
 use parent 'uSAC::HTTP::Site';
+use uSAC::HTTP::Site;
 
 use Hustle::Table;		#dispatching of endpoints
 
@@ -26,7 +27,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK AF_INET6 fh_nonblocking);
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN SO_LINGER);
 
 use File::Basename qw<dirname>;
-use File::Spec::Functions qw<rel2abs>;
+use File::Spec::Functions qw<rel2abs catdir>;
 use Carp 'croak';
 
 #use constant MAX_READ_SIZE => 128 * 1024;
@@ -472,16 +473,16 @@ sub usac_server :prototype(&) {
 }
 
 #include another config file
+#if 
 sub usac_include {
-	my $path=shift;
-	$path= "./".dirname((caller)[1])."/".$path if $path=~m|^[^/]|;
-	#$path=rel2abs $path;
+	my $path=&uSAC::HTTP::Site::usac_path;
 	say "INCLUDING PATH $path";
 	unless (do $path){
 		
 		say $!;
 	}
 }
+
 ###################################
 # sub usac_interface {            #
 #         my $server=$_;          #

@@ -18,7 +18,7 @@ my @redirects=qw<
 my @errors=qw<
 >;	
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -40,7 +40,7 @@ use uSAC::HTTP::Static;
 use uSAC::HTTP::Middler;
 use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
 
-use File::Spec::Functions qw<rel2abs>;
+use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
 
 use Data::Dumper;
@@ -580,5 +580,33 @@ sub usac_mime_db{
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	$self->mime_db=$db;
 	($self->mime_lookup)=$self->mime_db->index;
+}
+
+#returns the dir of the caller.
+sub usac_dirname{
+	dirname ((caller)[1]);
+}
+
+#Make a path suitable for loading  files via do scripts
+#Makes paths relative to specified root dir
+#Prepends a "./" for relative files.
+sub usac_path {
+	my $path=pop;
+	my %options=@_;
+	return $path if ($path=~m|^/|); #If path is abs, let it be
+
+	$path=$options{root}."/".$path if $options{root};
+	#$path=abs2rel($path, $options{root});
+	if( $path =~ m|^/|){
+		#abs path. Do nothing more
+	}
+	elsif($path!~m|^\.+/|){
+		#relative path, but no leading dot slashe
+		$path="./".$path;
+	}
+	else {
+		#assume ok
+	}
+	$path;
 }
 1;

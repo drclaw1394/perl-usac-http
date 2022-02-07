@@ -371,6 +371,7 @@ sub make_form_urlencoded_reader {
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
+		say "CAPTURE 1 is $1";
 		\my $buf=\$_[1];
 		
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];	#
