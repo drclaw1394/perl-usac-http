@@ -179,7 +179,7 @@ sub make_reader{
 				}
 				
 				#my $host=$h{HOST};#//"";
-				$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, {}, $static_headers], 'uSAC::HTTP::Rex' ;
+				$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, {}, [],$static_headers], 'uSAC::HTTP::Rex' ;
 
 				#$pos = pos($buf);
 
@@ -281,7 +281,6 @@ sub make_form_data_reader {
 					}
 					else{
 						#need more
-						#say "need more";
 						return
 					}
 
@@ -371,7 +370,6 @@ sub make_form_urlencoded_reader {
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
-		say "CAPTURE 1 is $1";
 		\my $buf=\$_[1];
 		
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];	#

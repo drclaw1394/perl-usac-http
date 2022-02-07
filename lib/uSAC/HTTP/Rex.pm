@@ -71,7 +71,7 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ static_headers_ >
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ capture_ static_headers_ >
 );
 
 #Add a mechanism for sub classing
@@ -153,7 +153,7 @@ sub usac_data_stream{
 		my @err_res;
 		for($rex->[headers_]){
 			#Wrap regex to prevent captures being destroyed
-			if(do{$_->{'CONTENT_TYPE'}!~/$mime/}){
+			if($_->{'CONTENT_TYPE'}!~/$mime/){
 				@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
 			}
 
@@ -262,14 +262,15 @@ sub usac_multipart_slurp{
 		state $fields={};	#
 
 		state ($handle,$name);
-
 		if($part_header != $_[3]){
 			#new part
 			local $,=", ";
 			$part_header=$_[3];
 			close $handle if $handle;
 			$name=$handle=undef;
+			{
 			$kv=&parse_form_params;
+			}
 
 			#test for file
 			if($kv->{filename}){
@@ -409,7 +410,7 @@ sub parse_form_params {
 			}
 			return $kv;
 		}
-		elsif('application/x-www-form-urlencoded'){
+		elsif($_ eq 'application/x-www-form-urlencoded'){
 			my $kv={};
 			for(split "&", uri_decode $_[2]){
 				my ($key,$value)=split "=";
@@ -734,6 +735,7 @@ sub cookies :lvalue {
 #RW accessor
 #Returns the current state information for the rex
 sub state :lvalue { $_[0][state_] }
+sub capture:lvalue { $_[0][capture_] }
 
 *rex_headers=*headers;
 *rex_reply_simple=*reply_simple;

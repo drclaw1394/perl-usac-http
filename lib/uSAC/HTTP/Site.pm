@@ -90,7 +90,7 @@ sub add_route {
 	my $path_matcher=shift;
 	my @inner=@_;
 	my @outer;
-	unshift @inner, $self->_strip_prefix if $self->[prefix_];	#make strip prefix first of middleware
+	unshift @inner, $self->_strip_prefix;# if $self->[prefix_];	#make strip prefix first of middleware
 	push @inner, $self->construct_middleware;
 	push @outer, $self->construct_outerware;
 
@@ -168,11 +168,14 @@ sub add_route {
 sub _strip_prefix {
 	my $self=shift;
 	my $prefix=$self->[built_prefix_];
-	my $len=length $prefix;
+	my $len=length($prefix)//0;
 	sub {
 		my $inner_next=shift;
 		sub {
-			$_[1]->[uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len);
+			package uSAC::HTTP::Rex {
+				$_[1][uri_stripped_]= substr($_[1]->[uri_], $len);
+				$_[1][capture_]=[@{^CAPTURE}];
+			}
 			return &$inner_next;
 		},
 
