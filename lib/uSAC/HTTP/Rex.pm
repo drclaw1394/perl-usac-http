@@ -244,11 +244,9 @@ sub usac_multipart_slurp{
 	my $cb=pop;
 	my %options=@_;
         my $tmp_dir=$options{dir}//"uploads";	#temp dir to save file to
-	if($tmp_dir=~ m|^[^/]|){
-		#implicit path
-		#make path relative to callers file
-		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
-	}
+
+	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
+
 	#Attempt open the dir or die
 	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
         my $prefix=$options{prefix}//"uSAC";
@@ -306,11 +304,7 @@ sub usac_form_slurp{
 	my %options=@_;
 	my $tmp_dir=$options{dir}//"uploads";
 
-	if($tmp_dir=~ m|^[^/]|){
-		#implicit path
-		#make path relative to callers file
-		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
-	}
+	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
 	#convert to abs path to prevent double resolving
 	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
 	$options{dir}=rel2abs($tmp_dir);
@@ -340,13 +334,12 @@ sub usac_form_slurp{
 sub usac_data_slurp{
 	my $cb=pop;
 	my %options=@_;
-	
+
+
         my $tmp_dir=$options{dir}//"uploads";	#temp dir to save file to
-	if($tmp_dir=~ m|^[^/]|){
-		#implicit path
-		#make path relative to callers file
-		$tmp_dir=dirname((caller)[1])."/".$tmp_dir;
-	}
+
+	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
+
         my $prefix=$options{prefix}//"uSAC";
 	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
 	my $mime=$options{mime};#//"application/x-www-form-urlencoded";
@@ -562,33 +555,6 @@ sub reply {
 	}
 	1;
 }
-
-########################################################################
-# #reply with static content from specified path                       #
-# sub reply_file {                                                     #
-#         require uSAC::HTTP::Static;                                  #
-#         my ($matcher, $self, $code, $headers, $path)=@_;             #
-#         my $session=$self->[session_];                               #
-#         local $_=$session->[uSAC::HTTP::Session::server_];           #
-#         say Dumper $_;                                               #
-#         my $root=dirname((caller)[1]);                               #
-#         say "Root $root";                                            #
-#         $root=rel2abs($root);                                        #
-#                                                                      #
-#         state $static=uSAC::HTTP::Static->new(root=>$root,%options); #
-#         state $static=uSAC::HTTP::Static::usac_file_under($root);    #
-#         \my $reply=\$session->[uSAC::HTTP::Session::wbuf_];          #
-#         if($path =~ m|^[^/]|){                                       #
-#                                                                      #
-#                 #implicit path                                       #
-#                 #make path relative to callers file                  #
-#                 $path=dirname((caller)[1])."/".$path;                #
-#         }                                                            #
-#         say "Path $path";                                            #
-#         $static->($matcher, $rex,   $path);                          #
-#                                                                      #
-# }                                                                    #
-########################################################################
 
 
 

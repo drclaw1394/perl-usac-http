@@ -473,13 +473,20 @@ sub usac_server :prototype(&) {
 }
 
 #include another config file
-#if 
+#Do so in the callers package namespace
 sub usac_include {
 	my $path=&uSAC::HTTP::Site::usac_path;
+	my $package=(caller)[0];
 	say "INCLUDING PATH $path";
-	unless (do $path){
-		
-		say $!;
+	eval "package $package {
+		unless (do \$path){
+
+		#say \$!;
+
+		}
+	}";
+	if($@){
+		die "Could not include file";	
 	}
 }
 
