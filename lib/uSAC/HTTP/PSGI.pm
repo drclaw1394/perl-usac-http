@@ -25,12 +25,45 @@ our @EXPORT_OK=qw<usac_to_psgi>;
 our @EXPORT=@EXPORT_OK;
 
 package uSAC::HTTP::PSGI::Writer {
+use constant LF => "\015\012";
 	#simple class to wrap the push write of the session
 	sub new {
-
+		my $package=shift;
+		
+		bless {@_},$package
 	}
 	sub write {
-		my ($self)=@_;
+		my $self=shift;
+		my $rex=$self->{rex};
+		#TODO: make this a chunked write
+		if($self->{keep_alive}){
+			my $scratch=sprintf("%02X".LF,length $_[0]).$_[0].LF;
+			$rex->writer->($scratch);
+		}
+		else {
+			$rex->writer->($_[0]);
+		}
+
+	}
+
+	sub close {
+		my $self=shift;
+		my $rex=$self->{rex};
+		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		if($self->{keep_alive}){
+			my $scratch=sprintf("%02X".LF,0).LF;
+			$rex->writer->($scratch,
+				sub {
+					$session->[uSAC::HTTP::Session::dropper_]->();
+				}
+			);
+		}
+		else {
+			#Force closure
+			$session->[uSAC::HTTP::Session::closeme_]=1;
+			$session->[uSAC::HTTP::Session::dropper_]->();
+		}
+		$session->pop_reader;
 	}
 }
 
@@ -38,9 +71,11 @@ package uSAC::HTTP::PSGI::Writer {
 #this acts as either middleware or an end point
 sub usac_to_psgi {
 	
-	#only option is the psgi applcation to call.. might be middleware
-	my $app=shift;
+	#PSGI application 
+	my $app=pop;
+	my %options=@_;
 
+	#TODO: options inclue using keepalive or not.
 
 	#the sub returned is the endpoint in terms of the usac flow
 	sub {
@@ -125,15 +160,13 @@ sub usac_to_psgi {
 		if(ref($res) eq  "CODE"){
 			#delayed response
 			$res->(sub {
-					say Dumper @_;
 					my $res=shift;
 					if(@$res==3){
 						do_array($usac, $rex, $res);
 						return;
 					}
 					#streaming. return writer
-					my $w=uSAC::HTTP::PSGI::Writer->new;
-					return $w;
+					return do_streaming($usac,$rex, $res, \%options);
 				});
 			return
 
@@ -165,13 +198,14 @@ sub do_array {
 
 	my $content=join"",@$psgi_body;
 	#Check for content length header and add if not existing
-	unless(first {/Content-Length/i}, @$psgi_headers)	{
-		push @$psgi_headers, "Content-Length",length($content);
-	}
+        ###################################################################
+        # unless(first {/Content-Length/i}, @$psgi_headers)       {       #
+        #         push @$psgi_headers, "Content-Length",length($content); #
+        # }                                                               #
+        ###################################################################
 	my @headers=pairs @$psgi_headers;
 	rex_reply_simple $usac,$rex,$code,\@headers,$content;
 	$session->pop_reader;
-	#$write->(join("", $res->[2]->@*), $dropper);
 
 }
 sub do_glob {
@@ -222,4 +256,39 @@ sub do_glob {
 	};
 	$write->($reply,$do_it);
 }
+
+sub do_streaming {
+	my ($usac,$rex, $res, $options)=@_;
+	my $write=$rex->[uSAC::HTTP::Rex::write_];
+	my $dropper=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::dropper_];
+	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	my ($code, $psgi_headers, $psgi_body)=@$res;
+
+	my $reply="HTTP/1.1 $code".LF;
+
+
+	my @headers= pairs @$psgi_headers;
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
+
+	@headers=(
+		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
+		($options->{keep_alive}
+			?([	HTTP_CONNECTION,	"Keep-Alive"],
+				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"],
+				[HTTP_TRANSFER_ENCODING, "chunked"],
+			)
+			:[HTTP_CONNECTION,	"close"]
+		),
+
+	);
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
+	$reply.=LF;
+
+	#Write header and return writer object
+	$write->($reply);
+
+	my $w=uSAC::HTTP::PSGI::Writer->new(%$options, rex=>$rex);
+	return $w;
+}
+
 1;

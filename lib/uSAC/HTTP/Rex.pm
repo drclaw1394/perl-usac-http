@@ -702,6 +702,10 @@ sub cookies :lvalue {
 #Returns the current state information for the rex
 sub state :lvalue { $_[0][state_] }
 sub capture:lvalue { $_[0][capture_] }
+sub writer {
+	$_[0][write_];
+
+}
 
 *rex_headers=*headers;
 *rex_reply_simple=*reply_simple;
