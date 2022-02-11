@@ -6,6 +6,7 @@ use feature qw<switch say refaliasing state>;
 no warnings "experimental";
 use List::Util qw<pairs first>;
 use Data::Dumper;
+$Data::Dumper::Deparse=1;
 
 use Exporter "import";
 
@@ -74,7 +75,6 @@ sub usac_to_psgi {
 	#PSGI application 
 	my $app=pop;
 	my %options=@_;
-
 	if(ref($app)eq "CODE"){
 	}
 	else{
@@ -110,8 +110,9 @@ sub usac_to_psgi {
 		$env{PATH_INFO}=		"";
 		$env{REQUEST_URI}=		$rex->[uSAC::HTTP::Rex::uri_];
 		$env{QUERY_STRING}=		$rex->[uSAC::HTTP::Rex::query_string_];
-		$env{SERVER_NAME}=		"";
-		$env{SERVER_PORT}=		"";
+		my($host,$port)=split ":", $rex->headers->{HOST};
+		$env{SERVER_NAME}=	$host;
+		$env{SERVER_PORT}=		$port;
 		$env{SERVER_PROTOCOL}=	$rex->[uSAC::HTTP::Rex::version_];
 
 		#CONTENT_LENGTH=>	"",
@@ -120,14 +121,16 @@ sub usac_to_psgi {
 		#HTTP_HEADERS....
 
 		$env{'psgi.version'}=	$psgi_version;
-		$env{'psgi.url_scheme'}=	"";
+		$env{'psgi.url_scheme'}=	$session->[uSAC::HTTP::Session::scheme_];
 
 		# the input stream.	Buffer?
 		$env{'psgi.input'}=		"";
 		# the error stream.
-		$env{'psgi.errors'}=		"";
-		$env{'psgi.multithreaded'}=	undef;
-		$env{'psgi.multiproess'}=	undef;
+		my $io=IO::Handle->new();
+		$io->fdopen(fileno(STDERR),"w");
+		$env{'psgi.errors'}=	$io;
+		$env{'psgi.multithread'}=	undef;
+		$env{'psgi.multiprocess'}=	undef;
 		$env{'psgi.run_once'}=	undef;
 		$env{'psgi.nonblocking'}= 	1;
 		$env{'psgi.streaming'}=	1;
@@ -164,11 +167,8 @@ sub usac_to_psgi {
 
 
 		#Execute the PSGI application
-		#my $res=$app->(\%env);
-		#my ($code, $psgi_headers, $psgi_body)=
 		my $res=$app->(\%env);
 
-		#@$res;
 		
 		my $write=$_[1][uSAC::HTTP::Rex::write_];
 		my $dropper=$_[1][uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::dropper_];

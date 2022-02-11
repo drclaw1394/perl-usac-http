@@ -2,12 +2,14 @@ use strict;
 use warnings;
 use feature ":all";
 
-my $app=sub {
+use Data::Dumper;
+use Plack::Request;
+sub {
 	my $env=shift;
 	state $c=0;
+	my $req=Plack::Request->new($env);	
+	say Dumper $req->parameters;
+	#say Dumper $env;
 
-	#say "App". $c++;
-
-	say "IN PSGI APP";
 	return [200,[],["content from psgi file"]];
 };

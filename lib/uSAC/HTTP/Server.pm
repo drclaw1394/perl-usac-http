@@ -271,11 +271,11 @@ sub accept {
 
 				$session=pop @zombies;
 				if($session){
-					uSAC::HTTP::Session::revive $session, $id, $fh;
+					uSAC::HTTP::Session::revive $session, $id, $fh, "http";
 					uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 				}
 				else {
-					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self);
+					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, "http");
 					uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 				}
 

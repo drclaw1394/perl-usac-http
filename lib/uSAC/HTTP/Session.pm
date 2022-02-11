@@ -16,7 +16,7 @@ use Errno qw(EAGAIN EINTR);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<time_ fh_ closeme_ rw_ ww_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ dropper_ write_queue_ sr_ sw_ on_body_>);
+use enum ( "id_=0" ,qw<time_ fh_ closeme_ scheme_ rw_ ww_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ dropper_ write_queue_ sr_ sw_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -48,6 +48,7 @@ sub new {
 	$self->[sessions_]=$_[2];	
 	$self->[zombies_]=$_[3];	
 	$self->[server_]=$_[4];
+	$self->[scheme_]=$_[5];
 
 	#$self->[read_stack_]=[];
 	$self->[reader_cache_]={};
@@ -112,6 +113,7 @@ sub revive {
 	$self->[id_]=$_[0];	
 	$self->[time_]=$Time;
 	$self->[fh_]=$_[1];	
+	$self->[scheme_]=$_[2];
 	$self->[rex_]=undef;
 	#$self->[write_queue_]->@*=();
 	$self->[write_stack_]=[];
