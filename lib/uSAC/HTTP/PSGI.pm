@@ -124,10 +124,10 @@ sub usac_to_psgi {
 		$env{'psgi.url_scheme'}=	$session->[uSAC::HTTP::Session::scheme_];
 
 		# the input stream.	Buffer?
-		$env{'psgi.input'}=		"";
+		$env{'psgi.input'}=		$buffer;
 		# the error stream.
-		my $io=IO::Handle->new();
-		$io->fdopen(fileno(STDERR),"w");
+		state $io=IO::Handle->new();
+		$io->fdopen(fileno(STDERR),"w") unless $io;
 		$env{'psgi.errors'}=	$io;
 		$env{'psgi.multithread'}=	undef;
 		$env{'psgi.multiprocess'}=	undef;
@@ -171,7 +171,7 @@ sub usac_to_psgi {
 
 		
 		my $write=$_[1][uSAC::HTTP::Rex::write_];
-		my $dropper=$_[1][uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::dropper_];
+		my $dropper=$session->[uSAC::HTTP::Session::dropper_];
 		if(ref($res) eq  "CODE"){
 			#delayed response
 			$res->(sub {
@@ -205,13 +205,13 @@ sub usac_to_psgi {
 }
 sub do_array {
 	my ($usac,$rex, $res)=@_;
-	my $write=$rex->[uSAC::HTTP::Rex::write_];
-	my $dropper=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::dropper_];
+	#my $write=$rex->[uSAC::HTTP::Rex::write_];
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	my $dropper=$session->[uSAC::HTTP::Session::dropper_];
 	my ($code, $psgi_headers, $psgi_body)=@$res;
 	#Write After joining. Drop if required
 
-	my $content=join"",@$psgi_body;
+	my $content=join"", @$psgi_body;
 	#Check for content length header and add if not existing
         ###################################################################
         # unless(first {/Content-Length/i}, @$psgi_headers)       {       #
@@ -274,8 +274,8 @@ sub do_glob {
 sub do_streaming {
 	my ($usac,$rex, $res, $options)=@_;
 	my $write=$rex->[uSAC::HTTP::Rex::write_];
-	my $dropper=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::dropper_];
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
+	my $dropper=$session->[uSAC::HTTP::Session::dropper_];
 	my ($code, $psgi_headers, $psgi_body)=@$res;
 
 	my $reply="HTTP/1.1 $code".LF;
