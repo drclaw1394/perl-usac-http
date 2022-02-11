@@ -10,8 +10,8 @@ $Data::Dumper::Deparse=1;
 
 use Exporter "import";
 
-#use Stream::Buffered;	#From PSGI distribution
-use Plack::TempBuffer;
+use Stream::Buffered::PerlIO;	#From PSGI distribution
+#use Plack::TempBuffer;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Rex;
@@ -98,7 +98,8 @@ sub usac_to_psgi {
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
 		#buffer to become psgi.input
-		my $buffer=Plack::TempBuffer->new();
+		#my $buffer=Plack::TempBuffer->new();
+		my $buffer=Stream::Buffered::PerlIO->new();
 
 
 		state $psgi_version=[1,1];

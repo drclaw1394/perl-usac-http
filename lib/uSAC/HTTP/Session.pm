@@ -16,7 +16,7 @@ use Errno qw(EAGAIN EINTR);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<time_ fh_ closeme_ scheme_ rw_ ww_ wcb_ left_ read_ write_ request_count_ server_ sessions_ zombies_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ dropper_ write_queue_ sr_ sw_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ sessions_ zombies_ server_ scheme_ time_ closeme_ rw_ ww_ wcb_ left_ read_ write_ request_count_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ dropper_ write_queue_ sr_ sw_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
@@ -40,15 +40,18 @@ sub drop;
 sub new {
 	my $package=shift//__PACKAGE__;
 	
-	my $self=[];
-
-	$self->[id_]=$_[0];	
-	$self->[time_]=$Time;
-	$self->[fh_]=$_[1];	
-	$self->[sessions_]=$_[2];	
-	$self->[zombies_]=$_[3];	
-	$self->[server_]=$_[4];
-	$self->[scheme_]=$_[5];
+	#my $self=[];
+	my $self=\@_;
+        $self->[time_]=$Time; 
+        #############################
+        # $self->[id_]=$_[0];       #
+        # $self->[time_]=$Time;     #
+        # $self->[fh_]=$_[1];       #
+        # $self->[sessions_]=$_[2]; #
+        # $self->[zombies_]=$_[3];  #
+        # $self->[server_]=$_[4];   #
+        # $self->[scheme_]=$_[5];   #
+        #############################
 
 	#$self->[read_stack_]=[];
 	$self->[reader_cache_]={};
@@ -57,7 +60,7 @@ sub new {
 	#$self->[writer_cache_]={};
 
 	#$self->[write_queue_]=[];
-	$self->[on_body_]=undef;	#allocate all the storage now
+	#$self->[on_body_]=undef;	#allocate all the storage now
 	#$self->[dropper_]=make_dropper($self);
 	#
 	my $server=$self->[server_];
@@ -86,9 +89,9 @@ sub new {
 	#make reader
 	my $sr=uSAC::SReader->new($self,$self->[fh_]);
 	$sr->max_read_size=4096*16;
-	$sr->on_read=\$self->[read_];
-	$sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]->()};
-	$sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
+	#$sr->on_read=\$self->[read_];
+	$sr->on_eof = $sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
+	#$sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
 	$sr->timing(\$self->[time_], \$Time);
 	$self->[sr_]=$sr;
 	uSAC::SReader::start $sr;
@@ -103,7 +106,7 @@ sub new {
 
 	bless $self,$package;
 	#make entry on the write stack
-	$self;
+	#$self;
 }
 
 #take a zombie session and revive it
