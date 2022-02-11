@@ -6,6 +6,7 @@ use version; our $VERSION=version->declare("v0.0.1");
 use feature ":all";
 no warnings "experimental";
 
+use Cwd qw<abs_path>;
 use Exporter "import";
 
 my @redirects=qw<
@@ -586,8 +587,15 @@ sub usac_mime_db{
 }
 
 #returns the dir of the caller.
+#Path is abs path, so files loaded via a symlink will refer to 
+#the origina path
 sub usac_dirname{
-	dirname ((caller)[1]);
+	my %options=@_;	
+	my $path=dirname((caller)[1]);
+	#if($options{abs}){
+		return abs_path $path;
+		#}
+	$path;
 }
 
 #Make a path suitable for loading  files via do scripts
@@ -597,7 +605,6 @@ sub usac_path {
 	my $path=pop;
 	my %options=@_;
 	return $path if ($path=~m|^/|); #If path is abs, let it be
-
 	$path=$options{root}."/".$path if $options{root};
 	#$path=abs2rel($path, $options{root});
 	if( $path =~ m|^/|){

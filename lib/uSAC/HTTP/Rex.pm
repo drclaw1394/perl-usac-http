@@ -689,6 +689,9 @@ sub rex_redirect_internal {
 	);
 	1;
 }
+sub rex_headers {
+	return $_[1]->[headers_];
+}
 
 #returns parsed cookies from headers
 #Only parses if the internal field is undefined
@@ -707,7 +710,6 @@ sub writer {
 
 }
 
-*rex_headers=*headers;
 *rex_reply_simple=*reply_simple;
 *rex_reply_chunked=*reply_chunked;
 *rex_reply=*reply;

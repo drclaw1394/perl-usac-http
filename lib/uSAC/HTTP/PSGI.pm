@@ -75,6 +75,21 @@ sub usac_to_psgi {
 	my $app=pop;
 	my %options=@_;
 
+	if(ref($app)eq "CODE"){
+	}
+	else{
+
+		#assume a file path
+		$app=usac_path %options, $app;
+		say "Attempting to load psgi: $app";
+		unless($app=do $app){
+			say STDERR "Could not load psgi";
+			say STDERR $!;
+			say STDERR $@;
+
+		}
+	}
+
 	#TODO: options inclue using keepalive or not.
 
 	#the sub returned is the endpoint in terms of the usac flow
@@ -206,7 +221,6 @@ sub do_array {
 	my @headers=pairs @$psgi_headers;
 	rex_reply_simple $usac,$rex,$code,\@headers,$content;
 	$session->pop_reader;
-
 }
 sub do_glob {
 	my ($usac,$rex, $res)=@_;

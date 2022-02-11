@@ -1,6 +1,7 @@
 package uSAC::HTTP::Server; 
 use strict;
 use warnings;
+use feature qw<isa refaliasing say state current_sub>;
 #use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
@@ -8,7 +9,6 @@ our @Subproducts;#=();		#Global to be provided by applcation
 
 use version;our $VERSION = version->declare('v0.1');
 #use  v5.24;
-use feature qw<isa refaliasing say state>;
 no warnings "experimental";
 use parent 'uSAC::HTTP::Site';
 use uSAC::HTTP::Site;
@@ -27,7 +27,7 @@ use AnyEvent::Util qw(WSAEWOULDBLOCK AF_INET6 fh_nonblocking);
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN SO_LINGER);
 
 use File::Basename qw<dirname>;
-use File::Spec::Functions qw<rel2abs catdir>;
+use File::Spec::Functions qw<rel2abs catfile catdir>;
 use Carp 'croak';
 
 #use constant MAX_READ_SIZE => 128 * 1024;
@@ -477,16 +477,31 @@ sub usac_server :prototype(&) {
 sub usac_include {
 	my $path=&uSAC::HTTP::Site::usac_path;
 	my $package=(caller)[0];
-	say "INCLUDING PATH $path";
-	eval "package $package {
+
+	my @options=@_;
+	#recursivley include files
+	if(-d $path){
+		say "IS A DIR: $path";
+		#Dir list and contin
+		my @files= <"${path}/*">;
+		say "Files : ",@files;
+		for my $file (@files){
+			__SUB__->( $file);
+		}
+	}
+	else{
+		#not a dir . do it
+		say "INCLUDING PATH $path";
+		eval "package $package {
 		unless (do \$path){
 
 		#say \$!;
 
 		}
-	}";
-	if($@){
-		die "Could not include file";	
+		}";
+		if($@){
+			die "Could not include file";	
+		}
 	}
 }
 
