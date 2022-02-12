@@ -144,9 +144,13 @@ sub make_reader{
 					#TODO: 
 					# Understand what the continuation is supposed to achieve. Its depricated
 
-					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
+					#if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
+					if( $buf =~ /\G ([^:\000-\037\040]++):([^\015\012]*+) \015\012/sxogca ){
+						
 						\my $e=\$h{uc $1=~tr/-/_/r};
-						$e = $e ? $e.','.$2: $2;
+						my $val=$2=~tr/\t //dr;
+						#$e = $e ? $e.','.$2: $2;
+						$e = $e ? $e.','.$val: $val;
 						redo;
 					}
 					elsif ($buf =~ /\G\015?\012/sxogca) {

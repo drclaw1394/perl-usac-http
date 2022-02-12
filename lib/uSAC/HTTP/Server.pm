@@ -201,6 +201,7 @@ sub prepare {
 				say "DROPPING ID: $_";
 				$session->[uSAC::HTTP::Session::closeme_]=1;
 				$session->[uSAC::HTTP::Session::dropper_]->();
+				#delete $self->[sessions_]{$_};
 			}
 		}
 	};
@@ -241,10 +242,9 @@ sub accept {
 	weaken( my $self = shift );
 	\my @zombies=$self->[zombies_];
 	\my %sessions=$self->[sessions_];
-	\my $active_connections=\$self->[active_connections_];
-	\my $total_connections=\$self->[total_connections_];
+	#\my $active_connections=\$self->[active_connections_];
+	#\my $total_connections=\$self->[total_connections_];
 	my $session;
-	my $id;
 	for my $fl ( values %{ $self->[fhs_] }) {
 		#my $accept=make_sysaccept $fl;
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
@@ -267,25 +267,22 @@ sub accept {
 				#TODO: setup timeout for bad clients/connections
 
 				#setsockopt($fh, SOL_SOCKET, SO_LINGER, pack ("ll",1,0));
-				$id = ++$seq;
+				my $id = ++$seq;
+				my $scheme="http";
 
 				$session=pop @zombies;
 				if($session){
-					uSAC::HTTP::Session::revive $session, $id, $fh, "http";
-					uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+					uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
 				}
 				else {
-					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, "http");
-					uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
 				}
 
-				#uSAC::HTTP::Session::_make_reader $session;	#conditional
-				#uSAC::HTTP::Session::push_reader $session,"http1_1_base",undef; 
-				#uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
-				#initiate read
 				$sessions{ $id } = $session;
-				$active_connections++;
-				$total_connections++;
+				#$active_connections++;
+				#$total_connections++;
+
+				uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 			}
 		};
 	}

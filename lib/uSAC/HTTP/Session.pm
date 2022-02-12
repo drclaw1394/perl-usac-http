@@ -70,19 +70,17 @@ sub new {
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
-		#reset write stack
-		#$self->[write_]=pop $self->[write_stack_]->@*;
-		#say "in dropper: ", $closeme, " ", caller;
 		return unless $closeme;#||$_[0];
-		delete $sessions->{$id};
 		$self->[sr_]->pause;
 		$self->[sw_]->pause;;
+		delete $sessions->{$self->[id_]};
 		close $fh;
 		$fh=undef;
 		$id=undef;
-		$closeme=undef;
+		#$closeme=undef;
+
 		#$self->[write_queue_]->@*=();
-		#unshift @{$self->[zombies_]}, $self;
+		unshift @{$self->[zombies_]}, $self;
 
 
 	};
@@ -120,6 +118,7 @@ sub revive {
 	$self->[rex_]=undef;
 	#$self->[write_queue_]->@*=();
 	$self->[write_stack_]=[];
+	$self->[closeme_]=undef;
 	#$self->[sr_]->start($self->[fh_]);
 	uSAC::SReader::start $self->[sr_], $self->[fh_];
 	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
