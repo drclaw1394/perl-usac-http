@@ -120,7 +120,7 @@ sub usac_multipart_stream {
 		#shift;		#remove place holder for mime
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#check if content type is correct first
-		unless (index($rex->[headers_]{'CONTENT_TYPE'},'multipart/form-data')>=0){
+		unless (index($rex->[headers_]{HTTP_CONTENT_TYPE},'multipart/form-data')>=0){
 			$session->[uSAC::HTTP::Session::closeme_]=1;
 			reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
 			return;
@@ -153,11 +153,11 @@ sub usac_data_stream{
 		my @err_res;
 		for($rex->[headers_]){
 			#Wrap regex to prevent captures being destroyed
-			if($_->{'CONTENT_TYPE'}!~/$mime/){
+			if($_->{HTTP_CONTENT_TYPE}!~/$mime/){
 				@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
 			}
 
-			elsif(defined $upload_limit  and $_->{'CONTENT_LENGTH'} > $upload_limit){
+			elsif(defined $upload_limit  and $_->{HTTP_CONTENT_LENGTH} > $upload_limit){
 				@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
 			}
 
@@ -168,7 +168,7 @@ sub usac_data_stream{
 				make_form_urlencoded_reader @_, $session, $cb ;
 
 				#check for expects header and send 100 before trying to read
-				if(defined($_->{EXPECT})){
+				if(defined($_->{HTTP_EXPECT})){
 					#issue a continue response	
 					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
 					$rex->[uSAC::HTTP::Rex::write_]->($reply);
@@ -197,7 +197,7 @@ sub usac_form_stream {
 	my $multi=  usac_multipart_stream @_;
 	my $url= usac_urlencoded_stream @_;
 	sub{
-		for ($_[1][headers_]{CONTENT_TYPE}){
+		for ($_[1][headers_]{HTTP_CONTENT_TYPE}){
 			&$multi  and return if /multipart\/form-data/;
 			&$url  and return if 'application/x-www-form-urlencoded';
 			reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
@@ -275,7 +275,7 @@ sub usac_multipart_slurp{
 				#this is a file
 				#open an file
 				($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
-				$fields->{$kv->{name}}={tmp_file=>$name, filename=>$kv->{filename}, CONTENT_TYPE=>$part_header->{CONTENT_TYPE}};
+				$fields->{$kv->{name}}={tmp_file=>$name, filename=>$kv->{filename}, HTTP_CONTENT_TYPE=>$part_header->{HTTP_CONTENT_TYPE}};
 			}
 			else {
 				#just a regular form field
@@ -312,7 +312,7 @@ sub usac_form_slurp{
 	my $multi= usac_multipart_slurp %options, $cb;
 	my $url=usac_urlencoded_slurp %options, $cb;
 	sub{
-		for ($_[1][headers_]{CONTENT_TYPE}){
+		for ($_[1][headers_]{HTTP_CONTENT_TYPE}){
 			if(index($_, "multipart/form-data")>=0){
 				#we do a regex match inste
 				&$multi;
@@ -393,11 +393,11 @@ sub parse_form_params {
 	#3=>section header
 	#
 	#parse the fields	
-	for ($rex->[headers_]{CONTENT_TYPE}){
+	for ($rex->[headers_]{HTTP_CONTENT_TYPE}){
 		if(/multipart\/form-data/){
 			#parse content disposition (name, filename etc)
 			my $kv={};
-			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
+			for(map tr/ //dr, split ";", $_[3]->{HTTP_CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
 				$kv->{$key}=defined($value)?$value=~tr/"//dr : undef;
 			}

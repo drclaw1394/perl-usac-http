@@ -124,7 +124,7 @@ sub revive {
 	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
 
 	#make writer
-	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
+	#$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
 	$self->[sw_]->on_error=$self->[dropper_];
 	$self->[write_]=$self->[sw_]->writer;
 	return $self;

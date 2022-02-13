@@ -105,13 +105,17 @@ sub usac_to_psgi {
 		state $psgi_version=[1,1];
 
 		\my %env=$rex->[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
-
+		#remove /rename content length and content type for PSGI
+		$env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
+		$env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
+		#
 		$env{REQUEST_METHOD}=	$rex->[uSAC::HTTP::Rex::method_];
 		$env{SCRIPT_NAME}=		"";
 		$env{PATH_INFO}=		"";
 		$env{REQUEST_URI}=		$rex->[uSAC::HTTP::Rex::uri_];
 		$env{QUERY_STRING}=		$rex->[uSAC::HTTP::Rex::query_string_];
-		my($host,$port)=split ":", $rex->headers->{HOST};
+
+		my($host,$port)=split ":", $rex->headers->{HTTP_HOST};
 		$env{SERVER_NAME}=	$host;
 		$env{SERVER_PORT}=		$port;
 		$env{SERVER_PROTOCOL}=	$rex->[uSAC::HTTP::Rex::version_];
@@ -121,15 +125,17 @@ sub usac_to_psgi {
 
 		#HTTP_HEADERS....
 
-		$env{'psgi.version'}=	$psgi_version;
+		$env{'psgi.version'}=		$psgi_version;
 		$env{'psgi.url_scheme'}=	$session->[uSAC::HTTP::Session::scheme_];
 
 		# the input stream.	Buffer?
 		$env{'psgi.input'}=		$buffer;
 		# the error stream.
-		state $io=IO::Handle->new();
-		$io->fdopen(fileno(STDERR),"w") unless $io;
-		$env{'psgi.errors'}=	$io;
+                ###############################################
+                # state $io=IO::Handle->new();                #
+                # $io->fdopen(fileno(STDERR),"w") unless $io; #
+                ###############################################
+		$env{'psgi.errors'}=	*STDERR;#$io;
 		$env{'psgi.multithread'}=	undef;
 		$env{'psgi.multiprocess'}=	undef;
 		$env{'psgi.run_once'}=	undef;
@@ -139,7 +145,8 @@ sub usac_to_psgi {
 		#Extensions
 		$env{'psgix.io'}= "";
 		$env{'psgix.input.buffered'}=1;
-		$env{'psgix.logger'}=		sub{};
+		state $logger=sub {};
+		$env{'psgix.logger'}=		$logger;
 		$env{'psgix.session'}=		{};
 		$env{'psgix.session.options'}={};
 		$env{'psgix.harakiri'}=		undef;
@@ -171,8 +178,8 @@ sub usac_to_psgi {
 		my $res=$app->(\%env);
 
 		
-		my $write=$_[1][uSAC::HTTP::Rex::write_];
-		my $dropper=$session->[uSAC::HTTP::Session::dropper_];
+		#my $write=$_[1][uSAC::HTTP::Rex::write_];
+		#my $dropper=$session->[uSAC::HTTP::Session::dropper_];
 		if(ref($res) eq  "CODE"){
 			#delayed response
 			$res->(sub {
@@ -198,29 +205,24 @@ sub usac_to_psgi {
 				say "unknown type";
 			}
 		}
-		#Process response 	
-		#
-		#
-		#
 	};
 }
 sub do_array {
 	my ($usac,$rex, $res)=@_;
-	#my $write=$rex->[uSAC::HTTP::Rex::write_];
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	my $dropper=$session->[uSAC::HTTP::Session::dropper_];
-	my ($code, $psgi_headers, $psgi_body)=@$res;
-	#Write After joining. Drop if required
 
-	my $content=join"", @$psgi_body;
 	#Check for content length header and add if not existing
         ###################################################################
         # unless(first {/Content-Length/i}, @$psgi_headers)       {       #
         #         push @$psgi_headers, "Content-Length",length($content); #
         # }                                                               #
         ###################################################################
-	my @headers=pairs @$psgi_headers;
-	rex_reply_simple $usac,$rex,$code,\@headers,$content;
+	#@$psgi_headers;
+	rex_reply_simple $usac,$rex,
+		$res->[0],
+		[pairs $res->[1]->@*],
+		join "", $res->[2]->@*;
+
 	$session->pop_reader;
 }
 sub do_glob {
