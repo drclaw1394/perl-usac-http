@@ -115,7 +115,7 @@ sub usac_to_psgi {
 		$env{REQUEST_URI}=		$rex->[uSAC::HTTP::Rex::uri_];
 		$env{QUERY_STRING}=		$rex->[uSAC::HTTP::Rex::query_string_];
 
-		my($host,$port)=split ":", $rex->headers->{HTTP_HOST};
+		my($host,$port)=split ":", $env{HTTP_HOST};
 		$env{SERVER_NAME}=	$host;
 		$env{SERVER_PORT}=		$port;
 		$env{SERVER_PROTOCOL}=	$rex->[uSAC::HTTP::Rex::version_];

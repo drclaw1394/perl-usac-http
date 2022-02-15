@@ -746,6 +746,7 @@ sub usac_index_under {
 
 	my $cache=$static->[cache_];
 	my $html_root=$static->[html_root_];
+	die "Can not access dir $html_root to serve static index files" unless -d $html_root;
 	
 	#create the sub to use the static files here
 	sub {
@@ -806,6 +807,7 @@ sub usac_file_under {
 	my $cache=$static->[cache_];
 	my $html_root=$static->[html_root_];
 
+	die "Can not access dir $html_root to serve static files" unless -d $html_root;
 	#check for mime type in parent 
 
 	#create the sub to use the static files here
@@ -821,7 +823,7 @@ sub usac_file_under {
 		else {
 			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
 		}
-
+		
 		my $path=$html_root."/".$p;
 		my $entry=$cache->{$path}//$static->open_cache($path);
 		if($entry){
@@ -856,6 +858,7 @@ sub usac_dir_under {
 	my $headers=$options{headers}//[];
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 	say "HTML ROOT IN DIR LISTING: ", $static->[html_root_];
+	die "Can not access dir $html_root to serve dir listing" unless -d $html_root;
 	my $list_dir=$static->make_list_dir(%options);
 		
 

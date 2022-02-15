@@ -56,6 +56,13 @@ rex_error_not_found
 rex_error_internal 
 
 rex_redirect_internal
+
+rex_reply_json
+rex_reply_html
+rex_reply_javascript
+rex_reply_text
+
+rex_capture
 >;
 our @EXPORT=@EXPORT_OK;
 
@@ -302,11 +309,12 @@ sub usac_multipart_slurp{
 sub usac_form_slurp{
 	my ($cb)=pop;
 	my %options=@_;
+	say "Setup form slurp";
 	my $tmp_dir=$options{dir}//"uploads";
 
 	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
 	#convert to abs path to prevent double resolving
-	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
+	die "Could not access directory $tmp_dir for uploads" unless -d $tmp_dir;
 	$options{dir}=rel2abs($tmp_dir);
 	
 	my $multi= usac_multipart_slurp %options, $cb;
@@ -341,7 +349,7 @@ sub usac_data_slurp{
 	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
 
         my $prefix=$options{prefix}//"uSAC";
-	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
+	die "Could not access directory $tmp_dir for uploads",unless -d $tmp_dir;
 	my $mime=$options{mime};#//"application/x-www-form-urlencoded";
 	my $path=$options{path};
 
@@ -601,9 +609,16 @@ sub query_params {
 
 #Builds a url based on the url of the current site/group
 #match, rex, partial url
+#Append partial url to end if supplied
+#otherwise return the site prefix with no ending slash
 sub rex_site_url {
 	#match_entry->context->site->built_prefix
-	$_[0][4][0]->built_prefix."/".pop;		
+	my $url= $_[0][4][0]->built_prefix;
+	if($_[3]//""){
+		return "$url/$_[3]";
+	}
+	$url;
+	#$_[0][4][0]->built_prefix."/".($_[3]//"");
 }
 
 #returns the site object associate with this request
@@ -692,6 +707,28 @@ sub rex_redirect_internal {
 sub rex_headers {
 	return $_[1]->[headers_];
 }
+
+sub rex_reply_json {
+	my $data=pop;
+	reply_simple @_, HTTP_OK, [[HTTP_CONTENT_TYPE, "text/json"]], $data;
+}
+sub rex_reply_html {
+	my $data=pop;
+	reply_simple @_, HTTP_OK, [[HTTP_CONTENT_TYPE, "text/html"]], $data;
+}
+sub rex_reply_javascript {
+	my $data=pop;
+	reply_simple @_, HTTP_OK, [[HTTP_CONTENT_TYPE, "text/javascript"]], $data;
+}
+
+sub rex_reply_text {
+	my $data=pop;
+	reply_simple @_, HTTP_OK, [[HTTP_CONTENT_TYPE, "text/plain"]], $data;
+}
+sub rex_capture {
+	$_[1][capture_]
+}
+
 
 #returns parsed cookies from headers
 #Only parses if the internal field is undefined

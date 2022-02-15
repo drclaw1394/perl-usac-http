@@ -471,25 +471,27 @@ sub usac_server :prototype(&) {
 
 #include another config file
 #Do so in the callers package namespace
+#the package option allows including into that package
 sub usac_include {
-	my $path=&uSAC::HTTP::Site::usac_path;
-	my $package=(caller)[0];
+	my $path=pop;
+	my %options=@_;
 
-	my @options=@_;
+	$path=uSAC::HTTP::Site::usac_path %options, $path;
+	
+	$options{package}//=(caller)[0];
+	
 	#recursivley include files
 	if(-d $path){
-		say "IS A DIR: $path";
 		#Dir list and contin
 		my @files= <"${path}/*">;
-		say "Files : ",@files;
 		for my $file (@files){
-			__SUB__->( $file);
+			__SUB__->( %options, $file);
 		}
 	}
 	else{
 		#not a dir . do it
 		say "INCLUDING PATH $path";
-		eval "package $package {
+		eval "package $options{package} {
 		unless (do \$path){
 
 		#say \$!;

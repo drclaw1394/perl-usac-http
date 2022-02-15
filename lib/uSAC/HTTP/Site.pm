@@ -415,7 +415,12 @@ sub usac_route {
 		#say "FIXING PATH MATCHER";
 		#not starting with a forward slash but with a method
 		my $url=shift @_;
-		unshift @_, "/".$url;
+
+		#only add a slash if the strin is not empty
+		$url="/".$url if $url ne "";
+
+		unshift @_, $url;
+
 		unshift @_, "GET";
 		$self->add_route(@_);
 
@@ -429,14 +434,14 @@ sub usac_route {
 		#say "Fixing leading slash for: $_[1]";
 		my $method=shift;
 		my $url=shift;
-		$url="/".$url;
+
+		$url="/".$url if $url ne "";
 		unshift @_, $method, $url;
 
 		$self->add_route(@_);
 	}
 	else{
 		say "DEFAULT MATCHING SETUP";
-		say @_;
 		#normal	
 		$self->add_route(@_);
 	}
@@ -591,11 +596,8 @@ sub usac_mime_db{
 #the origina path
 sub usac_dirname{
 	my %options=@_;	
-	my $path=dirname((caller)[1]);
-	#if($options{abs}){
-		return abs_path $path;
-		#}
-	$path;
+	my $path=abs_path((caller)[1]);
+	return dirname $path;
 }
 
 #Make a path suitable for loading  files via do scripts
@@ -618,5 +620,35 @@ sub usac_path {
 		#assume ok
 	}
 	$path;
+}
+
+
+#Immediate redirects
+
+sub usac_redirect_see_other {
+	my $url =pop;
+	sub {
+		rex_reply_simple(@_, HTTP_SEE_OTHER, [[HTTP_LOCATION, $url]],"");
+	}
+
+}
+sub usac_redirect_found{
+	my $url =pop;
+	sub {
+		rex_reply_simple(@_, HTTP_FOUND, [[HTTP_LOCATION, $url]],"");
+	}
+}
+sub usac_redirect_temporary {
+	my $url =pop;
+	sub {
+		rex_reply_simple(@_, HTTP_TEMPORARY_REDIRECT, [[HTTP_LOCATION, $url]],"");
+	}
+}
+
+sub usac_redirect_not_modified {
+	my $url =pop;
+	sub {
+		rex_reply_simple(@_,HTTP_NOT_MODIFIED, [[HTTP_LOCATION, $url]],"");
+	}
 }
 1;
