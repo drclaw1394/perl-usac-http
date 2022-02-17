@@ -213,6 +213,7 @@ sub send_file_uri_norange {
 		use  integer;
 		my ($matcher,$rex,$user_headers,$entry)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
 		my $in_fh=$entry->[fh_];
 

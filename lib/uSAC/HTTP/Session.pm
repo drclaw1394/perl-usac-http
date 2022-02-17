@@ -16,7 +16,7 @@ use Errno qw(EAGAIN EINTR);
 #
 #
 #Class attribute keys
-use enum ( "id_=0" ,qw<fh_ sessions_ zombies_ server_ scheme_ time_ closeme_ rw_ ww_ wcb_ left_ read_ write_ request_count_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ dropper_ write_queue_ sr_ sw_ on_body_>);
+use enum ( "id_=0" ,qw<fh_ sessions_ zombies_ server_ scheme_ time_ closeme_ rw_ ww_ wcb_ left_ read_ write_ request_count_ read_stack_ write_stack_ current_reader_ reader_cache_ writer_cache_ rex_ dropper_ write_queue_ sr_ sw_ in_progress_ on_body_>);
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;

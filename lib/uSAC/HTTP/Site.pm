@@ -19,7 +19,7 @@ my @redirects=qw<
 my @errors=qw<
 >;	
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -174,11 +174,27 @@ sub _strip_prefix {
 		my $inner_next=shift;
 		sub {
 			package uSAC::HTTP::Rex {
-				$_[1][uri_stripped_]= substr($_[1]->[uri_], $len);
-				$_[1][capture_]=[@{^CAPTURE}];
+				$_[1][uri_stripped_]= substr($_[1]->[uri_], $len); #strip the url
+				$_[1][capture_]=[@{^CAPTURE}];	#save the capture 
+
+				&$inner_next; #call the next
+				#Check the inprogress flag
+				unless ($_[1][session_][uSAC::HTTP::Session::in_progress_]){
+					say STDERR "NO ENDPOINT REPLIED for". $_[1]->[uri_];
+					#rex_reply_simple @_, HTTP_OK,[],"NO REPLY for ".$_[1]->[uri_];
+				}
 			}
-			return &$inner_next;
 		},
+
+	}
+
+}
+
+#outerware to catch no reply
+sub _catch_no_reply {
+	my $self=shift;
+	sub {
+		my $outer_next=shift; #this should  not exist...
 
 	}
 
@@ -202,6 +218,15 @@ sub parent_site {
 }
 sub unsupported {
 	return $_[0]->[unsupported_];
+}
+
+sub usac_site_url {
+	my $self=$uSAC::HTTP::Site;
+	my $url=$self->built_prefix;
+	if($_[0]//""){
+		return "$url/$_[0]";
+	}
+	$url
 }
 
 #returns (and builds if required), the prefixs for this sub site

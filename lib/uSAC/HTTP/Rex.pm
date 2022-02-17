@@ -456,6 +456,7 @@ sub reply_simple{
 	#my ($line, $self)=@_;
 	#create a writer for the session
 	my $session=$_[1]->[session_];
+	$session->[uSAC::HTTP::Session::in_progress_]=1;
 	my @headers=(
 		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
 		[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
@@ -499,6 +500,7 @@ sub reply_chunked{
 	my ($matcher, $self, $code, $headers, $cb)=@_;
 	#create a writer for the session
 	my $session=$self->[session_];
+	$session->[uSAC::HTTP::Session::in_progress_]=1;
 
 	#my $content_length=length($_[4])+0;
 	my $reply= "HTTP/1.1 $code".LF;
@@ -614,8 +616,8 @@ sub query_params {
 sub rex_site_url {
 	#match_entry->context->site->built_prefix
 	my $url= $_[0][4][0]->built_prefix;
-	if($_[3]//""){
-		return "$url/$_[3]";
+	if($_[2]//""){
+		return "$url/$_[2]";
 	}
 	$url;
 	#$_[0][4][0]->built_prefix."/".($_[3]//"");

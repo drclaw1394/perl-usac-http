@@ -7,7 +7,7 @@ use uSAC::MIME;
 use Data::Dumper;
 
 my $server; $server=usac_server {
-	usac_listen "127.0.0.1:8080";
+	usac_listen "127.0.0.1:8082";
 	#usac_mime_db uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type");
 	#usac_mime_default "some/stuff";
 	#usac_listen "192.168.1.104";
@@ -15,8 +15,8 @@ my $server; $server=usac_server {
 	#usac_middleware log_simple;
 	my $site;$site=usac_site {
 		usac_id "blog";
-		usac_host "127.0.0.1:8080";
-		usac_host "localhost:8080";
+		#usac_host "127.0.0.1:8080";
+		#usac_host "localhost:8080";
 
 		#usac_middleware log_simple;
 
@@ -24,9 +24,12 @@ my $server; $server=usac_server {
 		usac_route "/static/hot.txt" =>	usac_cached_file "static/hot.txt";
 		usac_route "/statictest"=> usac_static_content "This is some data";
 
-		usac_route "/static/$Dir_Path"=> usac_dir_under "static", renderer=>"json";
-		usac_route "/static/$File_Path"   => usac_file_under "static";
+		usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static";
+		usac_route "/static/$File_Path"   => usac_file_under usac_path root=>usac_dirname, "static";
 		
+		usac_route "noreply"=>sub {
+
+		};
 		usac_route "test/$Comp/$Comp" => sub {
 			my $q=&rex_query_params;
 			rex_reply_simple @_, HTTP_OK, [], "Comp1 $1, Comp $2, query " . Dumper($q);
@@ -42,20 +45,22 @@ my $server; $server=usac_server {
 			rex_reply @_, HTTP_OK, [], [$1, Dumper $q];	#"Test3 Comp3 $1, Comp ${\$rex->query_params}";
 		};
 		
-                usac_route "file/$File_Path" => sub {
-			state $static;
-			local $_=$_[0][4] and $static= usac_file_under "static" unless $static;
-
-                        #test file
-                        if($1 eq "test.txt"){
-				push @_, "test.txt";
-				&$static;#->(@_, "test.txt");
-                        }
-                        else {
-				say "not found";
-                                rex_reply_simple @_, HTTP_NOT_FOUND, [], "";
-                        }
-                };
+                ###################################################################################
+                # usac_route "file/$File_Path" => sub {                                           #
+                #         state $static;                                                          #
+                #         local $_=$_[0][4] and $static= usac_file_under "static" unless $static; #
+                #                                                                                 #
+                #         #test file                                                              #
+                #         if($1 eq "test.txt"){                                                   #
+                #                 push @_, "test.txt";                                            #
+                #                 &$static;#->(@_, "test.txt");                                   #
+                #         }                                                                       #
+                #         else {                                                                  #
+                #                 say "not found";                                                #
+                #                 rex_reply_simple @_, HTTP_NOT_FOUND, [], "";                    #
+                #         }                                                                       #
+                # };                                                                              #
+                ###################################################################################
 
 		usac_include "admin/usac.pl";
 	};
