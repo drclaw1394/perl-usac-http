@@ -737,7 +737,7 @@ sub rex_capture {
 #otherwise uses pre parsed values
 #Read only
 sub cookies :lvalue {
-	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE});
+	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{HTTP_COOKIE});
 }
 
 #RW accessor
