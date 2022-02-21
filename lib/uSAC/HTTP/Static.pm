@@ -29,7 +29,7 @@ our @EXPORT=@EXPORT_OK;
 use constant LF => "\015\012";
 my $path_ext=	qr{\.([^.]*)$}ao;
 
-my $read_size=4096*64;
+my $read_size=4096*8;
 my %stat_cache;
 
 use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_>;
@@ -212,7 +212,7 @@ sub open_cache {
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
-		my ($matcher,$rex,$user_headers,$entry)=@_;
+		my ($matcher,$rex,$user_headers, $read_size, $sendfile, $entry)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
@@ -276,6 +276,7 @@ sub send_file_uri_norange {
                         }
 
                         else {  
+				say "EAGAIN";
 			}
 
         };
@@ -336,7 +337,7 @@ sub send_file_uri_norange {
 			return;
 		}
 
-		my $sendfile=1;
+		#my $sendfile=1;
 		if( $sendfile){
 			#Write header out and then issue send file
 
@@ -816,6 +817,8 @@ sub usac_index_under {
 	$options{default_mime}=$parent->resolve_mime_default;
 
 	my $headers=$options{headers}//[];
+	my $read_size=$options{read_size}//$read_size;
+	my $sendfile=$options{sendfile}//0;
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
 	my $cache=$static->[cache_];
@@ -851,7 +854,7 @@ sub usac_index_under {
 			else{
 				#Send normal
 				#$static->send_file_uri_norange(@_, $p, $root);
-				send_file_uri_norange @_,$headers, $entry;
+				send_file_uri_norange @_,$headers, $read_size, $sendfile, $entry;
 				return;
 			}
 		}
@@ -876,6 +879,9 @@ sub usac_file_under {
 	$options{default_mime}=$parent->resolve_mime_default;
 
 	my $headers=$options{headers}//[];
+	my $read_size=$options{read_size}//$read_size;
+	my $sendfile=$options{sendfile}//0;
+
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
 	my $cache=$static->[cache_];
@@ -906,7 +912,7 @@ sub usac_file_under {
 				return;
 			}
 			else{
-				send_file_uri_norange @_,$headers, $entry;
+				send_file_uri_norange @_,$headers, $read_size, $sendfile, $entry;
 				return;
 			}
 		}
