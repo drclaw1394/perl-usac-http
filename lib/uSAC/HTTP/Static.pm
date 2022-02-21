@@ -15,6 +15,7 @@ use File::Basename qw<basename dirname>;
 use Time::Piece;
 use Cwd;
 use AnyEvent;
+use Sys::Sendfile;
 
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
@@ -28,7 +29,7 @@ our @EXPORT=@EXPORT_OK;
 use constant LF => "\015\012";
 my $path_ext=	qr{\.([^.]*)$}ao;
 
-my $read_size=4096*16;
+my $read_size=4096*64;
 my %stat_cache;
 
 use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_>;
@@ -225,6 +226,66 @@ sub send_file_uri_norange {
 		my $code=HTTP_OK;
 		my $etag="\"$mod_time-$content_length\"";
 
+		my $offset=length($reply);
+		my $rc;
+		my $total=0;
+
+
+		#Send file
+		#======
+		# call sendfile. If remaining data to send, setup write watcher to 
+		# trigger next call
+                my $out_fh=$session->[uSAC::HTTP::Session::fh_];
+		my $ww;
+                my $do_sendfile=sub {
+			$ww=undef;
+                        #Do send file here?
+                        #seek $in_fh,$total,0;
+                        #in, out, size, input_offset
+                        $total+=$rc=sendfile($out_fh, $in_fh, $read_size, $total);
+                                #$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
+                                #$offset=0;
+
+                        #non zero read length.. do the write
+                        if($total==$content_length){    #end of file
+                                #Do dropper as we reached the end
+                                $session->[uSAC::HTTP::Session::dropper_]->();
+				$out_fh=undef;
+				#$ww=undef;
+                                #$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
+                                return;
+                        }
+
+                        elsif($rc){
+                                #redo the sub and more data to send
+				#
+
+				$ww=AE::io $out_fh, 1, __SUB__;#$do_sendfile;
+				# __SUB__->();
+                                #$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
+                                return;
+                        }
+                        elsif( $! != EAGAIN and  $! != EINTR){
+                                say "Send file error";
+                                #say $rc;
+                                say $!;
+                                #delete $cache{$abs_path};
+				#close $in_fh;
+                                $session->[uSAC::HTTP::Session::dropper_]->();
+                                return;
+                        }
+
+                        else {  
+			}
+
+        };
+
+
+
+
+
+
+
 		#TODO: needs testing
 		for my $t ($headers->{IF_NONE_MATCH}){
 			$code=HTTP_OK and last unless $t;
@@ -275,38 +336,50 @@ sub send_file_uri_norange {
 			return;
 		}
 
+		my $sendfile=1;
+		if( $sendfile){
+			#Write header out and then issue send file
 
-		my $offset=length($reply);
-		my $rc;
-		my $total=0;
+			#Setup writable event listener
 
-		sub {
-			seek $in_fh,$total,0;
-			$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
-			$offset=0;
-			#non zero read length.. do the write	
-			if($total==$content_length){	#end of file
-				$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
-				return;
-			}
+			$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
+			return;
+		}
+		#else do the normal copy and write
 
-			elsif($rc){
-				$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
-				return;
-			}
-			elsif( $! != EAGAIN and  $! != EINTR){
-				say "READ ERROR from file";
-				#say $rc;
-				say $!;
-				#delete $cache{$abs_path};
-				close $in_fh;
-				$session->[uSAC::HTTP::Session::dropper_]->();
-				return;
-			}
 
-			#else {  EAGAIN }
+		$offset=length($reply);
 
-	}->();
+                sub {
+                        #NON Send file
+                        seek $in_fh,$total,0;
+                        $total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
+                        $offset=0;
+
+                        #non zero read length.. do the write
+                        if($total==$content_length){    #end of file
+                                $session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
+                                return;
+                        }
+
+                        elsif($rc){
+                                $session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
+                                return;
+                        }
+                        elsif( $! != EAGAIN and  $! != EINTR){
+                                say "READ ERROR from file";
+                                #say $rc;
+                                say $!;
+                                #delete $cache{$abs_path};
+                                close $in_fh;
+                                $session->[uSAC::HTTP::Session::dropper_]->();
+                                return;
+                        }
+
+                        #else {  EAGAIN }
+
+        }->();
+
 
 }
 
