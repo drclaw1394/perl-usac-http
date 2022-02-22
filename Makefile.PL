@@ -1,9 +1,9 @@
 use ExtUtils::MakeMaker;
-#BEGIN{ $ENV{AUTHOR} and require CPAN::Meta and CPAN::Meta->import();  };
 
 WriteMakefile(
 	NAME              => 'uSAC::HTTP',
 	VERSION_FROM      => 'lib/uSAC/HTTP.pm',
+	MIN_PERL_VERSION  => '5.32.0',		#for isa operator
 	PREREQ_PM         => {
 		EV		=> 0,
 		AnyEvent 	=> 0,
@@ -17,7 +17,7 @@ WriteMakefile(
 
 		"Crypt::JWT"	=> 0,
 	},
-	ABSTRACT_FROM     => 'lib/uSAC/HTTP.pod', # retrieve abstract from module
+	ABSTRACT_FROM     => 'lib/uSAC/HTTP.pod', # retrieve abstract from docs
 	AUTHOR            => 'Ruben Westerberg',
 	LICENSE           => 'mit',
 );

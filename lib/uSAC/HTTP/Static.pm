@@ -5,12 +5,10 @@ no warnings "experimental";
 use strict;
 use JSON;
 #no feature "indirect";
-use Scalar::Util qw<weaken>;
 use Devel::Peek qw<SvREFCNT>;
-use Errno qw<:POSIX EACCES ENOENT>;
-use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK O_RDONLY);
-use Devel::Peek;
-use File::Spec;
+#use Errno qw<:POSIX EACCES ENOENT>;
+use Fcntl qw(O_NONBLOCK O_RDONLY);
+#use File::Spec;
 use File::Basename qw<basename dirname>;
 use Time::Piece;
 use Cwd;
@@ -21,7 +19,7 @@ use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 
-use Errno qw<EAGAIN EINTR>;
+use Errno qw<EAGAIN EINTR EBUSY>;
 use Exporter 'import';
 our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_under usac_file_under usac_index_under list_dir>;
 our @EXPORT=@EXPORT_OK;
@@ -241,7 +239,6 @@ sub send_file_uri_norange {
                 my $do_sendfile;
 		if($sendfile){
 			$do_sendfile=sub {
-				$ww=undef;
 				#Do send file here?
 				#seek $in_fh,$total,0;
 				#in, out, size, input_offset
@@ -254,6 +251,7 @@ sub send_file_uri_norange {
 					#Do dropper as we reached the end
 					$session->[uSAC::HTTP::Session::dropper_]->();
 					$out_fh=undef;
+					$ww=undef;
 					#$ww=undef;
 					#$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
 					return;
@@ -262,13 +260,13 @@ sub send_file_uri_norange {
 				elsif($rc){
 					#redo the sub and more data to send
 					#
-
-					$ww=AE::io $out_fh, 1, __SUB__;#$do_sendfile;
+					
+					$ww=AE::io $out_fh, 1, __SUB__ unless $ww;#$do_sendfile;
 					# __SUB__->();
 					#$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
 					return;
 				}
-				elsif( $! != EAGAIN and  $! != EINTR){
+				elsif( $! != EAGAIN and  $! != EINTR and $! != EBUSY){
 					say "Send file error";
 					#say $rc;
 					say $!;
@@ -843,7 +841,7 @@ sub usac_index_under {
 			pop;
 		}	
 		else {
-			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+			$p=&rex_capture->[0];#$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
 		}
 
 		#attempt to locate the index files in sequence
@@ -889,6 +887,7 @@ sub usac_file_under {
 	my $read_size=$options{read_size}//$read_size;
 	my $sendfile=$options{sendfile}//0;
 	my $open_modes=$options{open_flags}//0;
+	my $filter=$options{filter};
 
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
@@ -909,10 +908,14 @@ sub usac_file_under {
 			pop;
 		}	
 		else {
-			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+			$p=&rex_capture->[0];#$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
 		}
 		
 		my $path=$html_root."/".$p;
+		if($filter and $path !~ /$filter/){
+			&rex_error_not_found;
+			return;
+		}
 		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes);
 		if($entry){
 			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
