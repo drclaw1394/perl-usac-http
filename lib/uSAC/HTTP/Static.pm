@@ -29,7 +29,7 @@ our @EXPORT=@EXPORT_OK;
 use constant LF => "\015\012";
 my $path_ext=	qr{\.([^.]*)$}ao;
 
-my $read_size=4096*8;
+my $read_size=4096*16;
 my %stat_cache;
 
 use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_>;
@@ -177,8 +177,9 @@ sub enable_cache {
 }
 
 sub open_cache {
-	my $self=shift;
-	my $abs_path=shift;
+	my ($self,$abs_path,$mode)=@_;
+	#shift;
+	#my $abs_path=shift;
 	#$open_cache->{$abs_path}//do {
 	#do {
 		my $in_fh;
@@ -186,7 +187,7 @@ sub open_cache {
 								#or incorrect premissions
 
 
-		unless(sysopen $in_fh,$abs_path,O_RDONLY|O_NONBLOCK){
+		unless(sysopen $in_fh,$abs_path,O_RDONLY|O_NONBLOCK|($mode//0)){
 			#delete $open_cache->{$abs_path};
 			undef;
 		}
@@ -237,49 +238,52 @@ sub send_file_uri_norange {
 		# trigger next call
                 my $out_fh=$session->[uSAC::HTTP::Session::fh_];
 		my $ww;
-                my $do_sendfile=sub {
-			$ww=undef;
-                        #Do send file here?
-                        #seek $in_fh,$total,0;
-                        #in, out, size, input_offset
-                        $total+=$rc=sendfile($out_fh, $in_fh, $read_size, $total);
-                                #$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
-                                #$offset=0;
+                my $do_sendfile;
+		if($sendfile){
+			$do_sendfile=sub {
+				$ww=undef;
+				#Do send file here?
+				#seek $in_fh,$total,0;
+				#in, out, size, input_offset
+				$total+=$rc=sendfile($out_fh, $in_fh, $read_size, $total);
+				#$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
+				#$offset=0;
 
-                        #non zero read length.. do the write
-                        if($total==$content_length){    #end of file
-                                #Do dropper as we reached the end
-                                $session->[uSAC::HTTP::Session::dropper_]->();
-				$out_fh=undef;
-				#$ww=undef;
-                                #$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
-                                return;
-                        }
+				#non zero read length.. do the write
+				if($total==$content_length){    #end of file
+					#Do dropper as we reached the end
+					$session->[uSAC::HTTP::Session::dropper_]->();
+					$out_fh=undef;
+					#$ww=undef;
+					#$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
+					return;
+				}
 
-                        elsif($rc){
-                                #redo the sub and more data to send
-				#
+				elsif($rc){
+					#redo the sub and more data to send
+					#
 
-				$ww=AE::io $out_fh, 1, __SUB__;#$do_sendfile;
-				# __SUB__->();
-                                #$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
-                                return;
-                        }
-                        elsif( $! != EAGAIN and  $! != EINTR){
-                                say "Send file error";
-                                #say $rc;
-                                say $!;
-                                #delete $cache{$abs_path};
-				#close $in_fh;
-                                $session->[uSAC::HTTP::Session::dropper_]->();
-                                return;
-                        }
+					$ww=AE::io $out_fh, 1, __SUB__;#$do_sendfile;
+					# __SUB__->();
+					#$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
+					return;
+				}
+				elsif( $! != EAGAIN and  $! != EINTR){
+					say "Send file error";
+					#say $rc;
+					say $!;
+					#delete $cache{$abs_path};
+					#close $in_fh;
+					$session->[uSAC::HTTP::Session::dropper_]->();
+					return;
+				}
 
-                        else {  
-				say "EAGAIN";
-			}
+				else {  
+					say "EAGAIN";
+				}
 
-        };
+			};
+		}
 
 
 
@@ -338,7 +342,8 @@ sub send_file_uri_norange {
 		}
 
 		#my $sendfile=1;
-		if( $sendfile){
+		#Enable using send file if content length is greater than threshold
+		if($sendfile and $content_length>=$sendfile){
 			#Write header out and then issue send file
 
 			#Setup writable event listener
@@ -348,13 +353,15 @@ sub send_file_uri_norange {
 		}
 		#else do the normal copy and write
 
+		#Clamp the readsize to the file size if its smaller
+		$read_size=$content_length if $content_length < $read_size;
 
 		$offset=length($reply);
 
                 sub {
                         #NON Send file
                         seek $in_fh,$total,0;
-                        $total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
+                        $total+=$rc=sysread $in_fh, $reply, $read_size, $offset;
                         $offset=0;
 
                         #non zero read length.. do the write
@@ -817,7 +824,7 @@ sub usac_index_under {
 	$options{default_mime}=$parent->resolve_mime_default;
 
 	my $headers=$options{headers}//[];
-	my $read_size=$options{read_size}//$read_size;
+	my $read_size=$options{read_size}//4096;
 	my $sendfile=$options{sendfile}//0;
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
@@ -881,6 +888,7 @@ sub usac_file_under {
 	my $headers=$options{headers}//[];
 	my $read_size=$options{read_size}//$read_size;
 	my $sendfile=$options{sendfile}//0;
+	my $open_modes=$options{open_flags}//0;
 
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
@@ -905,14 +913,14 @@ sub usac_file_under {
 		}
 		
 		my $path=$html_root."/".$p;
-		my $entry=$cache->{$path}//$static->open_cache($path);
+		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes);
 		if($entry){
 			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 				send_file_uri_range @_, $entry;
 				return;
 			}
 			else{
-				send_file_uri_norange @_,$headers, $read_size, $sendfile, $entry;
+				send_file_uri_norange @_, $headers, $read_size, $sendfile, $entry;
 				return;
 			}
 		}

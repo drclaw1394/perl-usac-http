@@ -13,6 +13,7 @@ WriteMakefile(
 		enum	    	=> 0,
 		"Hustle::Table" => "0.3.0",
 		"uSAC::SIO"	=> 0,
+		"Sys::Sendfile" => 0,
 
 		"Crypt::JWT"	=> 0,
 	},

@@ -25,7 +25,7 @@ my $server; $server=usac_server {
 		usac_route "/statictest"=> usac_static_content "This is some data";
 
 		usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static";
-		usac_route "/static/$File_Path"   => usac_file_under sendfile=>0, read_size=>4096*1024, usac_path root=>usac_dirname, "static";
+		usac_route "/static/$File_Path"   => usac_file_under  read_size=>4096*128, usac_path root=>usac_dirname, "static";
 		
 		usac_route "noreply"=>sub {
 
