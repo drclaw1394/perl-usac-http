@@ -3,6 +3,7 @@ package uSAC::HTTP::Static;
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
 use strict;
+use Data::Dumper;
 use JSON;
 #no feature "indirect";
 use Devel::Peek qw<SvREFCNT>;
@@ -322,11 +323,15 @@ sub send_file_uri_norange {
 			[HTTP_ETAG,$etag],
 			[HTTP_ACCEPT_RANGES,"bytes"]
 		];
+		#TODO: outerware
+		my $outer=$_[0][4][1];
+		&$outer if $outer;
 
 		for my $h ($rex->[uSAC::HTTP::Rex::static_headers_]->@*, $headers->@*){
 			$reply.=$h->[0].": ".$h->[1].LF;
 		}
 		$reply.= join "", map $_->[0].": ".$_->[1].LF, @$user_headers;
+
 
 		$reply.=LF;
 
@@ -873,6 +878,7 @@ sub usac_index_under {
 }
 
 #Server static files under the specified root dir
+#Dual mode. Also acks as innerware
 sub usac_file_under {
 	#create a new static file object
 	#my $parent=$_;
@@ -899,6 +905,17 @@ sub usac_file_under {
 
 	#create the sub to use the static files here
 	sub {
+		#Do a check here. if first argment is a sub ref we are being used as middleware
+		#But this should only happen once.
+		state $next;
+		if(!$next and ref($_[0])eq "CODE"){
+		
+				$next=$_[0];
+				say "returning  middle ware";
+				return __SUB__;
+		}
+			
+		
 		#matcher, rex, code, headers, uri if not in $_
 		my $rex=$_[1];
 		#my $p=$1;
@@ -913,9 +930,12 @@ sub usac_file_under {
 		
 		my $path=$html_root."/".$p;
 		if($filter and $path !~ /$filter/){
+			return &$next if $next;
+			
 			&rex_error_not_found;
 			return;
 		}
+
 		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes);
 		if($entry){
 			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
@@ -928,9 +948,17 @@ sub usac_file_under {
 			}
 		}
 		else {
-			#no valid index found so 404
-			rex_reply_simple @_, HTTP_NOT_FOUND,[],"";
-			return;
+			if($next){
+				say "CALLING NEXT";
+				return &$next;
+			}
+			else {
+				say "Calling error";
+				#no valid index found so 404
+				&rex_error_not_found;
+				#rex_reply_simple @_, HTTP_NOT_FOUND,[],"";
+				return;
+			}
 		}
 	}
 

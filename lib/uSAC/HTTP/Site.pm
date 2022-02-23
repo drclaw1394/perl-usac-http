@@ -17,6 +17,7 @@ my @redirects=qw<
 	>;
 
 my @errors=qw<
+usac_error_not_found
 >;	
 	
 our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
@@ -89,11 +90,29 @@ sub add_route {
 	my $end=pop @_;
 	my $method_matcher=shift;
 	my $path_matcher=shift;
-	my @inner=@_;
+	my @inner;
 	my @outer;
-	unshift @inner, $self->_strip_prefix;# if $self->[prefix_];	#make strip prefix first of middleware
-	push @inner, $self->construct_middleware;
+	for(@_){
+		#If the elemtn is a code ref it is innerware
+		if(ref($_)eq "CODE"){
+			push @inner, $_;
+		}
+		#if its an array ref, then it might contain both inner
+		#and outerware
+		elsif(ref($_) eq "ARRAY"){
+			say "innerware ", $_->[0];
+			push @inner, $_->[0];
+			push @outer, $_->[1];
+		}
+		else {
+			#Ignore anything else
+		}
+	}
+
+	unshift @inner, $self->construct_middleware;
 	push @outer, $self->construct_outerware;
+
+	unshift @inner, $self->_strip_prefix;# if $self->[prefix_];	#make strip prefix first of middleware
 
 	#die "No Matcher provided " unless $matcher//0;
 	die "No end point provided" unless $end and ref $end eq "CODE";
@@ -128,6 +147,7 @@ sub add_route {
 	}
 	say "  matching: $matcher";	
 	my $outer;
+
 	if(@inner){
 		my $middler=uSAC::HTTP::Middler->new();
 		for(@inner){
@@ -135,6 +155,7 @@ sub add_route {
 		}
 		$end=$middler->link($end);
 	}
+
 	if(@outer){
 		my $middler=uSAC::HTTP::Middler->new();
 		for(@outer){
@@ -676,4 +697,11 @@ sub usac_redirect_not_modified {
 		rex_reply_simple(@_,HTTP_NOT_MODIFIED, [[HTTP_LOCATION, $url]],"");
 	}
 }
+
+sub usac_error_not_found {
+	sub {
+		&rex_error_not_found;
+	};
+}
+
 1;
