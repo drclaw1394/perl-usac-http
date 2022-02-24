@@ -335,7 +335,6 @@ sub send_file_uri_norange {
 
 		$reply.=LF;
 
-
 		if(
 			$rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
 			or $code==HTTP_NOT_MODIFIED

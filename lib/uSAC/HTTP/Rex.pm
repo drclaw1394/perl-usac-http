@@ -63,6 +63,7 @@ rex_reply_javascript
 rex_reply_text
 
 rex_capture
+rex_write
 >;
 our @EXPORT=@EXPORT_OK;
 
@@ -568,10 +569,60 @@ sub reply {
 
 
 
+#Main output subroutine
+#Arguments are matcher, rex, code, header, data, cb
+sub rex_write{
+	my $session=$_[1]->[session_];
+	$session->[uSAC::HTTP::Session::in_progress_]=1;
+	my @headers=(
+		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
+		[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
+		($session->[uSAC::HTTP::Session::closeme_]
+			?[HTTP_CONNECTION,	"close"]
+			:([	HTTP_CONNECTION,	"Keep-Alive"],
+				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
+			)
+		)
+	);
+	unshift @{$_[3]}, $_[1]->[static_headers_]->@*;
+	unshift @{$_[3]}, @headers;
+
+	my $outer=$_[0][4][1];
+	#simply call outerware with the same arguments
+	&$outer;
+	1;
+}
 	 
 ##
 #OO Methods
 #
+
+#actually render the header 
+sub render_header {
+	my $self=shift;
+	my ($matcher, $rex, $code, $headers, $data)=@_;
+		
+	my $session=$self->[session_];
+
+	$session->[uSAC::HTTP::Session::in_progress_]=1;
+
+	my @headers=(
+		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
+		[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
+		($session->[uSAC::HTTP::Session::closeme_]
+			?[HTTP_CONNECTION,	"close"]
+			:([	HTTP_CONNECTION,	"Keep-Alive"],
+				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
+			)
+		)
+	);
+
+	my $reply="HTTP/1.1 $_[2]".LF;
+	#$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[1]->[static_headers_]->@*; 
+	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[3]->@*;
+
+	$reply.=LF;
+}
 
 # Returns the headers parsed at connection time
 sub headers {

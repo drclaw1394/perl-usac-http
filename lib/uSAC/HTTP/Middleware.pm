@@ -60,6 +60,8 @@ sub log_simple_in {
 	my $dump_headers=$options{dump_headers};
 
 	my $dump_capture=$options{dump_capture};
+
+	#Header processing sub
 	sub {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
@@ -79,10 +81,14 @@ sub log_simple_in {
 			return &$inner_next;		#alway call next. this is just loggin
 		}
 	};
+	
+	#Body processing sub
+	
+	#Return as a array [$header, $body]
 }
 
 sub log_simple_out {
-
+	#header processing sub
 	sub {
 		my $outer_next=shift;
 		sub {
@@ -91,6 +97,10 @@ sub log_simple_out {
 			return &$outer_next;
 		}
 	};
+
+	#Body processing sub
+	
+	#Return as a array [$header, $body]
 }
 
 

@@ -12,7 +12,7 @@ my $server; $server=usac_server {
 	#usac_mime_default "some/stuff";
 	#usac_listen "192.168.1.104";
 	usac_sub_product "blog";
-	usac_middleware log_simple;
+	#usac_middleware log_simple;
 	my $site;$site=usac_site {
 		usac_id "blog";
 		#usac_host "127.0.0.1:8080";
@@ -24,22 +24,28 @@ my $server; $server=usac_server {
 		usac_route "/static/hot.txt" =>	usac_cached_file "static/hot.txt";
 		usac_route "/statictest"=> usac_static_content "This is some data";
 
+		usac_route "testing"=> sub {
+				rex_write @_, HTTP_OK, [], "HELLO";
+
+		};
 		usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static";
 
 		usac_route "/static/$File_Path"   => usac_file_under (
-			filter=>'mp4$',
+			#filter=>'mp4$',
 			read_size=>4096*32, 
 			sendfile=>4096, 
 			usac_path root=>usac_dirname, "static"
-		)
-			=>usac_file_under (
-				usac_path root=>usac_dirname, "static"
-			);
-                        #################################
-                        # =>sub {                       #
-                        #         &rex_error_not_found; #
-                        # };                            #
-                        #################################
+		);
+                        ##################################################
+                        # =>usac_file_under (                            #
+                        #         usac_path root=>usac_dirname, "static" #
+                        # );                                             #
+                        # #################################              #
+                        # # =>sub {                       #              #
+                        # #         &rex_error_not_found; #              #
+                        # # };                            #              #
+                        # #################################              #
+                        ##################################################
 		
 		usac_route "noreply"=>sub {
 

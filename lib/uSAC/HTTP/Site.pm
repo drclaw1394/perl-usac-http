@@ -155,13 +155,32 @@ sub add_route {
 		}
 		$end=$middler->link($end);
 	}
-
+	my $serialize=
+			sub{
+				my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
+				#The last item in the outerware
+				# renders the headers to the output sub
+				# then calls 
+				#
+				if($headers){
+					my $output=$rex->render_header($matcher, $rex, $code, $headers,$data);
+					$output.=$data;
+					$rex->writer->($output,$callback,$arg);
+				}
+				else{
+					$rex->writer->($data,$callback, $arg);
+				}
+			};
 	if(@outer){
 		my $middler=uSAC::HTTP::Middler->new();
 		for(@outer){
 			$middler->register($_);
 		}
-		$outer=$middler->link(sub{});
+
+		$outer=$middler->link($serialize);
+	}
+	else {
+		$outer=$serialize;
 	}
 
 	$self->[server_]->add_end_point($matcher, $end, [$self,$outer]);
