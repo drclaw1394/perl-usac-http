@@ -218,9 +218,9 @@ sub do_array {
         # }                                                               #
         ###################################################################
 	#@$psgi_headers;
-	rex_reply_simple $usac,$rex,
+	rex_write $usac,$rex,
 		$res->[0],
-		[pairs $res->[1]->@*],
+		{pairs $res->[1]->@*},
 		join "", $res->[2]->@*;
 
 	$session->pop_reader;

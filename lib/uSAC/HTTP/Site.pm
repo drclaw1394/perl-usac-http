@@ -124,10 +124,10 @@ sub add_route {
 	my $sub;
 
 	if(@non_matching){
-		my $headers=[[HTTP_ALLOW, join ", ",@matching]];
+		my $headers={HTTP_ALLOW, join ", ",@matching};
 		$sub = sub { 
 			#TODO: how to add middleware ie logging?
-			rex_reply_simple @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
+			rex_write @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
 			return;	#cache this
 		};
 	}
@@ -157,18 +157,20 @@ sub add_route {
 	}
 	my $serialize=
 			sub{
-				my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
+				#my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
 				#The last item in the outerware
 				# renders the headers to the output sub
 				# then calls 
 				#
-				if($headers){
-					my $output=$rex->render_header($matcher, $rex, $code, $headers,$data);
-					$output.=$data;
-					$rex->writer->($output,$callback,$arg);
+				my $session=$_[1]->[uSAC::HTTP::Rex::session_];
+				$_[5]=$session->[uSAC::HTTP::Session::dropper_] unless $_[5];	#If no cb, then assume dropper
+				if($_[3]){
+					my $output=$_[1]->render_header(@_);#$matcher, $rex, $code, $headers,$data);
+					$output.=$_[4]//"";
+					$_[1]->writer->($output, @_[5,6]);
 				}
 				else{
-					$rex->writer->($data,$callback, $arg);
+					$_[1]->writer->(@_[4,5,6]);
 				}
 			};
 	if(@outer){
@@ -227,7 +229,6 @@ sub _strip_prefix {
 		},
 
 	}
-
 }
 
 #outerware to catch no reply
@@ -596,9 +597,13 @@ sub usac_static_content {
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	my $mime=$options{mime}//$self->resolve_mime_default;
-	my $type=[HTTP_CONTENT_TYPE, $mime];
+	#my $type=[HTTP_CONTENT_TYPE, $mime];
 	sub {
-		rex_reply_simple @_, HTTP_OK, [$type], $static; return
+		rex_write @_, HTTP_OK, {
+			HTTP_CONTENT_TYPE, $mime,
+			HTTP_CONTENT_LENGTH, length($static)
+		},
+		$static; return
 	}
 }
 
@@ -626,7 +631,7 @@ sub usac_cached_file {
 		open my $fh, "<", $path;
 		local $/;
 		$entry->[0]=<$fh>;
-		$entry->[1]=[ HTTP_CONTENT_TYPE, $type];
+		$entry->[1]=[HTTP_CONTENT_TYPE, $type];
 		$entry->[2]=(stat _)[7];
 		$entry->[3]=(stat _)[9];
 		close $fh;
@@ -693,27 +698,27 @@ sub usac_path {
 sub usac_redirect_see_other {
 	my $url =pop;
 	sub {
-		rex_reply_simple(@_, HTTP_SEE_OTHER, [[HTTP_LOCATION, $url]],"");
+		rex_write (@_, HTTP_SEE_OTHER, {HTTP_LOCATION, $url},"");
 	}
 
 }
 sub usac_redirect_found{
 	my $url =pop;
 	sub {
-		rex_reply_simple(@_, HTTP_FOUND, [[HTTP_LOCATION, $url]],"");
+		rex_write (@_, HTTP_FOUND, {HTTP_LOCATION, $url},"");
 	}
 }
 sub usac_redirect_temporary {
 	my $url =pop;
 	sub {
-		rex_reply_simple(@_, HTTP_TEMPORARY_REDIRECT, [[HTTP_LOCATION, $url]],"");
+		rex_write (@_, HTTP_TEMPORARY_REDIRECT, {HTTP_LOCATION, $url},"");
 	}
 }
 
 sub usac_redirect_not_modified {
 	my $url =pop;
 	sub {
-		rex_reply_simple(@_,HTTP_NOT_MODIFIED, [[HTTP_LOCATION, $url]],"");
+		rex_write (@_,HTTP_NOT_MODIFIED, {HTTP_LOCATION, $url},"");
 	}
 }
 

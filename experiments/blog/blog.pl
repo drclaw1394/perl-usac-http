@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 use uSAC::HTTP;
-use uSAC::HTTP::Middleware qw<dummy_mw log_simple>;
+use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked>;
 
 
 use uSAC::MIME;
@@ -24,16 +24,16 @@ my $server; $server=usac_server {
 		usac_route "/static/hot.txt" =>	usac_cached_file "static/hot.txt";
 		usac_route "/statictest"=> usac_static_content "This is some data";
 
-		usac_route "testing"=> sub {
-				rex_write @_, HTTP_OK, [], "HELLO";
-
+		usac_route "testing"=> chunked()=>sub {
+				rex_write @_, HTTP_OK, {}, "HELLO";
 		};
+
 		usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static";
 
 		usac_route "/static/$File_Path"   => usac_file_under (
 			#filter=>'mp4$',
 			read_size=>4096*32, 
-			sendfile=>4096, 
+			#sendfile=>4096, 
 			usac_path root=>usac_dirname, "static"
 		);
                         ##################################################

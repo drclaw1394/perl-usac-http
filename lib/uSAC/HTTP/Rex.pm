@@ -79,7 +79,7 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ capture_ static_headers_ >
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ capture_ out_headers_ out_code_ out_length_ static_headers_>
 );
 
 #Add a mechanism for sub classing
@@ -104,7 +104,7 @@ require uSAC::HTTP::Middleware;
 ###########################################################
 		
 sub reply_simple;
-		
+sub rex_write;		
 	
 
 sub reply_GZIP {
@@ -130,7 +130,7 @@ sub usac_multipart_stream {
 		#check if content type is correct first
 		unless (index($rex->[headers_]{HTTP_CONTENT_TYPE},'multipart/form-data')>=0){
 			$session->[uSAC::HTTP::Session::closeme_]=1;
-			reply_simple $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
+			rex_write $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
 			return;
 		}
 		uSAC::HTTP::Session::push_reader
@@ -187,7 +187,7 @@ sub usac_data_stream{
 		}
 
 		$session->[uSAC::HTTP::Session::closeme_]=1;
-		reply_simple @_, @err_res;#$line,$rex,@err_res; 
+		rex_write @_, @err_res;#$line,$rex,@err_res; 
 	}
 }
 
@@ -208,7 +208,7 @@ sub usac_form_stream {
 		for ($_[1][headers_]{HTTP_CONTENT_TYPE}){
 			&$multi  and return if /multipart\/form-data/;
 			&$url  and return if 'application/x-www-form-urlencoded';
-			reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+			rex_write $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 		}
 	}
 }
@@ -332,7 +332,7 @@ sub usac_form_slurp{
 				return
 			}
 			else{
-				reply_simple $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+				rex_write $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 			}
 		}
 	}
@@ -549,7 +549,7 @@ sub reply {
 	#wrapper for simple and chunked
 	# if the body element is a code ref, or array ref, then chunked is used
 	for (ref $_[4]){
-		&reply_simple and return 1 unless $_;
+		&rex_write and return 1 unless $_;
 		&reply_chunked and return 1 if $_ eq "CODE";
 		if($_ eq "ARRAY"){
 			#send each element of array as a chunk
@@ -573,23 +573,29 @@ sub reply {
 #Arguments are matcher, rex, code, header, data, cb
 sub rex_write{
 	my $session=$_[1]->[session_];
-	$session->[uSAC::HTTP::Session::in_progress_]=1;
-	my @headers=(
-		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
-		[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
-		($session->[uSAC::HTTP::Session::closeme_]
-			?[HTTP_CONNECTION,	"close"]
-			:([	HTTP_CONNECTION,	"Keep-Alive"],
-				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
-			)
-		)
-	);
-	unshift @{$_[3]}, $_[1]->[static_headers_]->@*;
-	unshift @{$_[3]}, @headers;
+	if($_[3]){
+		#If headers are supplied, then  process headers
+		$session->[uSAC::HTTP::Session::in_progress_]=1;
+		\my %h=$_[3];
 
-	my $outer=$_[0][4][1];
-	#simply call outerware with the same arguments
-	&$outer;
+		$h{HTTP_DATE()}=$uSAC::HTTP::Session::Date;
+		#[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
+		if($session->[uSAC::HTTP::Session::closeme_]){
+			$h{HTTP_CONNECTION()}="close";
+		}
+		else{
+			$h{HTTP_CONNECTION()}="Keep-Alive";
+			$h{HTTP_KEEP_ALIVE()}="timeout=10, max=1000";
+
+		}
+		for($_[1][static_headers_]){
+			@h{keys $_->%*}=values $_->%*;
+		}
+	}
+	#Otherwise this is just a body call
+	#
+
+	&{$_[0][4][1]};	#Execute the outerware for this site/location
 	1;
 }
 	 
@@ -600,27 +606,20 @@ sub rex_write{
 #actually render the header 
 sub render_header {
 	my $self=shift;
-	my ($matcher, $rex, $code, $headers, $data)=@_;
+	#my ($matcher, $rex, $code, $headers, $data)=@_;
 		
 	my $session=$self->[session_];
 
 	$session->[uSAC::HTTP::Session::in_progress_]=1;
 
-	my @headers=(
-		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
-		[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
-		($session->[uSAC::HTTP::Session::closeme_]
-			?[HTTP_CONNECTION,	"close"]
-			:([	HTTP_CONNECTION,	"Keep-Alive"],
-				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
-			)
-		)
-	);
 
 	my $reply="HTTP/1.1 $_[2]".LF;
-	#$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[1]->[static_headers_]->@*; 
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[3]->@*;
+	\my %h=$_[3];
+	#$reply.= join "", map $_.": ".$h{$_}.LF, keys $_[3]->%*;
 
+	while(my ($k, $v)=each $_[3]->%*){
+		$reply.="$k: $v".LF;
+	}
 	$reply.=LF;
 }
 
@@ -691,36 +690,36 @@ sub rex_state :lvalue{
 #code
 sub rex_redirect_see_other{
 	my ($url)=splice @_, 2;
-	rex_reply_simple(@_, HTTP_SEE_OTHER,[[HTTP_LOCATION, $url]],"");
+	rex_write (@_, HTTP_SEE_OTHER,{HTTP_LOCATION,$url},"");
 }
 
 sub rex_redirect_found {
 	my ($url)=splice @_, 2;
-	rex_reply_simple(@_, HTTP_FOUND,[[HTTP_LOCATION, $url]],"");
+	rex_write (@_, HTTP_FOUND,{HTTP_LOCATION, $url},"");
 	
 }
 
 sub rex_redirect_temporary {
 
 	my ($url)=splice @_, 2;
-	rex_reply_simple(@_, HTTP_TEMPORARY_REDIRECT,[[HTTP_LOCATION, $url]],"");
+	rex_write (@_, HTTP_TEMPORARY_REDIRECT,{HTTP_LOCATION, $url},"");
 	
 }
 sub rex_redirect_not_modified {
 	my ($url)=splice @_, 2;
-	rex_reply_simple(@_, HTTP_NOT_MODIFIED,[[HTTP_LOCATION, $url]],"");
+	rex_write (@_, HTTP_NOT_MODIFIED,{HTTP_LOCATION, $url},"");
 	
 }
 
 sub rex_error_not_found {
 	my ($url)=splice @_, 2;
-	rex_reply_simple(@_, HTTP_NOT_FOUND, [], '');
+	rex_write (@_, HTTP_NOT_FOUND, {}, '');
 }
 
 sub rex_error_internal {
 	my ($url)=splice @_, 2;
 	my $session=$_[1][session_];
-	rex_reply_simple(@_, HTTP_INTERNAL_SERVER_ERROR, [], '');
+	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, {}, '');
 	$session->[uSAC::HTTP::Session::closeme_]=1;
 	$session->[uSAC::HTTP::Session::dropper_]->();
 }
@@ -747,7 +746,7 @@ sub rex_redirect_internal {
 	if($counter>10){
 		$counter=0;
 		carp "Redirections loop detected for $uri";
-		rex_reply($matcher, $rex, HTTP_LOOP_DETECTED, [],"");
+		rex_reply($matcher, $rex, HTTP_LOOP_DETECTED, {},"");
 		return;
 	}
 	undef $_[0];
@@ -763,20 +762,32 @@ sub rex_headers {
 
 sub rex_reply_json {
 	my $data=pop;
-	reply_simple @_, HTTP_OK, [[HTTP_CONTENT_TYPE, "text/json"]], $data;
+	rex_write @_, HTTP_OK, {
+		HTTP_CONTENT_TYPE, "text/json",
+		HTTP_CONTENT_LENGTH, length($data),
+	}, $data;
 }
 sub rex_reply_html {
 	my $data=pop;
-	reply_simple @_, HTTP_OK, [[HTTP_CONTENT_TYPE, "text/html"]], $data;
+	rex_write @_, HTTP_OK, {
+		HTTP_CONTENT_TYPE, "text/html",
+		HTTP_CONTENT_LENGTH, length($data),
+	}, $data;
 }
 sub rex_reply_javascript {
 	my $data=pop;
-	reply_simple @_, HTTP_OK, [[HTTP_CONTENT_TYPE, "text/javascript"]], $data;
+	rex_write @_, HTTP_OK, {
+		HTTP_CONTENT_TYPE, "text/javascript",
+		HTTP_CONTENT_LENGTH, length($data),
+	}, $data;
 }
 
 sub rex_reply_text {
 	my $data=pop;
-	reply_simple @_, HTTP_OK, [[HTTP_CONTENT_TYPE, "text/plain"]], $data;
+	rex_write @_, HTTP_OK, {
+		HTTP_CONTENT_TYPE, "text/plain",
+		HTTP_CONTENT_LENGTH, length($data),
+	}, $data;
 }
 sub rex_capture {
 	$_[1][capture_]

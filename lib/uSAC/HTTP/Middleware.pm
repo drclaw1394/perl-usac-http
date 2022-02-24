@@ -23,7 +23,7 @@ use Crypt::JWT qw<decode_jwt encode_jwt>;
 
 use constant LF => "\015\012";
 
-our @EXPORT_OK=qw<dummy_mw log_simple log_simple_in log_simple_out authenticate_simple state_simple make_chunked_writer make_chunked_deflate_writer>;
+our @EXPORT_OK=qw<dummy_mw log_simple log_simple_in log_simple_out chunked authenticate_simple state_simple make_chunked_writer make_chunked_deflate_writer>;
 our @EXPORT=();
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
@@ -119,7 +119,7 @@ sub authenticate_simple{
 			#check that cookie value is found and valid in hash
 			unless($cookies->{test}){
 				say "invalid test variable... return forbidden";
-				rex_reply_simple @_, (HTTP_FORBIDDEN,[] , "Go away!");
+				rex_write @_, (HTTP_FORBIDDEN,{} , "Go away!");
 				return;
 			}
 			return &$next;		#alway call next. this is just loggin
@@ -179,19 +179,44 @@ sub http2_upgrade {
 #Last write must be an empty string
 #
 sub chunked{
-	my $next=shift;
 	my $scratch="";
 	#"x"x1024;
 	#$scratch="";
 
-	#data,cb,arg
+	#matcher,rex, code, headers, data,cb,arg
+	my $chunked_in=
 	sub {
-		$_[2]//= __SUB__ ;		#argument to callback is self unless one is provided
-		return &$next unless defined $_[0];	#reset stack if requested. pass it on
-		$scratch=sprintf("%02X".LF,length $_[0]).$_[0].LF;
-		shift;
-		$next->($scratch, @_);
-	}
+		my $next=shift;
+		sub {
+			&$next;
+		};
+	};
+	my $chunked_out=
+	sub {
+		my $next=shift;
+		sub {
+			#$_[5]//= __SUB__ ;		#argument to callback is self unless one is provided
+			if($_[3] and $_[4]//0){
+				#we actually have  headers and Data. this is the first call
+				#Add to headers the chunked trasfer encoding
+				return &$next if(exists $_[3]{HTTP_CONTENT_LENGTH()});
+
+				$_[3]->{HTTP_TRANSFER_ENCODING()}="chunked";
+			}
+			if($_[4]//0){	
+				#Only make chunks if data is defined.
+				$scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF;
+
+				#Add an additional chunk of 0 when no callback is provided
+				$scratch.="00".LF.LF unless $_[5];
+				return $next->(@_[0,1,2,3],$scratch,@_[5,6]);
+
+			}
+
+			return &$next;
+		};
+	};
+	[$chunked_in, $chunked_out]
 }
 
 my $sub=sub{};

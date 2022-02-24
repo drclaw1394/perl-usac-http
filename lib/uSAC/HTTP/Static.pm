@@ -222,7 +222,7 @@ sub send_file_uri_norange {
 
 		my $reply="";
 		#process caching headers
-		my $headers=$rex->headers;
+		my $headers=$_[1][uSAC::HTTP::Rex::headers_];#$rex->headers;
 		my $code=HTTP_OK;
 		my $etag="\"$mod_time-$content_length\"";
 
@@ -307,39 +307,42 @@ sub send_file_uri_norange {
 			$code=HTTP_NOT_MODIFIED;	#no body to be sent
 		}
 			
-		$reply="$rex->[uSAC::HTTP::Rex::version_] ".$code.LF;
-		my $headers=[
-			[HTTP_DATE, $uSAC::HTTP::Session::Date],
-			($session->[uSAC::HTTP::Session::closeme_]?
-				[HTTP_CONNECTION, "close"]
-				:([HTTP_CONNECTION, "Keep-Alive"],
-					[HTTP_KEEP_ALIVE,"timeout=10, max=1000"]
-				)
-			),
-			[HTTP_VARY, "Accept"],
-			$entry->[last_modified_header_],
-			$entry->[content_type_header_],
-			[HTTP_CONTENT_LENGTH, $content_length],			#need to be length of multipart
-			[HTTP_ETAG,$etag],
-			[HTTP_ACCEPT_RANGES,"bytes"]
-		];
-		#TODO: outerware
-		my $outer=$_[0][4][1];
-		&$outer if $outer;
+		#$reply="$rex->[uSAC::HTTP::Rex::version_] ".$code.LF;
+                ####################################################################
+                # my $headers=[                                                    #
+                #         [HTTP_DATE, $uSAC::HTTP::Session::Date],                 #
+                #         ($session->[uSAC::HTTP::Session::closeme_]?              #
+                #                 [HTTP_CONNECTION, "close"]                       #
+                #                 :([HTTP_CONNECTION, "Keep-Alive"],               #
+                #                         [HTTP_KEEP_ALIVE,"timeout=10, max=1000"] #
+                #                 )                                                #
+                #         ),                                                       #
+                ####################################################################
+		my $headers={
+			HTTP_VARY, "Accept",
+			$entry->[last_modified_header_]->@*,
+			$entry->[content_type_header_]->@*,
+			HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
+			HTTP_ETAG,$etag,
+			HTTP_ACCEPT_RANGES,"bytes"
+		};
 
-		for my $h ($rex->[uSAC::HTTP::Rex::static_headers_]->@*, $headers->@*){
-			$reply.=$h->[0].": ".$h->[1].LF;
-		}
-		$reply.= join "", map $_->[0].": ".$_->[1].LF, @$user_headers;
-
-
-		$reply.=LF;
+                ###########################################################################
+                # for my $h ($rex->[uSAC::HTTP::Rex::static_headers_]->@*, $headers->@*){ #
+                #         $reply.=$h->[0].": ".$h->[1].LF;                                #
+                # }                                                                       #
+                # $reply.= join "", map $_->[0].": ".$_->[1].LF, @$user_headers;          #
+                #                                                                         #
+                #                                                                         #
+                # $reply.=LF;                                                             #
+                ###########################################################################
 
 		if(
 			$rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
 			or $code==HTTP_NOT_MODIFIED
 			){
-			$session->[uSAC::HTTP::Session::write_]->($reply);
+			rex_write $matcher,$rex,$code,$headers,"";
+			#$session->[uSAC::HTTP::Session::write_]->($reply);
 			return;
 		}
 
@@ -350,7 +353,8 @@ sub send_file_uri_norange {
 
 			#Setup writable event listener
 
-			$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
+			rex_write $matcher,$rex,$code,$headers,undef, $do_sendfile;
+			#$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
 			return;
 		}
 		#else do the normal copy and write
@@ -358,22 +362,25 @@ sub send_file_uri_norange {
 		#Clamp the readsize to the file size if its smaller
 		$read_size=$content_length if $content_length < $read_size;
 
-		$offset=length($reply);
+		#$offset=length($reply);
 
                 sub {
                         #NON Send file
                         seek $in_fh,$total,0;
-                        $total+=$rc=sysread $in_fh, $reply, $read_size, $offset;
-                        $offset=0;
+                        $total+=$rc=sysread $in_fh, $reply, $read_size;#, $offset;
+			#$offset=0;
 
                         #non zero read length.. do the write
                         if($total==$content_length){    #end of file
-                                $session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
+				rex_write $matcher,$rex,$code,$headers,$reply;
+				#$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
                                 return;
                         }
 
                         elsif($rc){
-                                $session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
+				rex_write $matcher,$rex,$code,$headers,$reply,__SUB__;
+				$headers=undef;
+				#$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
                                 return;
                         }
                         elsif( $! != EAGAIN and  $! != EINTR){
@@ -460,7 +467,7 @@ sub make_list_dir {
 		my $abs_path=$html_root."/".$uri;
 		stat $abs_path;
 		unless(-d _ and  -r _){
-			rex_reply_simple $line, $rex, HTTP_NOT_FOUND, [],"";
+			rex_write $line, $rex, HTTP_NOT_FOUND, {},"";
 			return;
 		}
 
@@ -869,7 +876,7 @@ sub usac_index_under {
 		}
 
 		#no valid index found so 404
-		rex_reply_simple @_, HTTP_NOT_FOUND,[],"";
+		rex_write @_, HTTP_NOT_FOUND,{},"";
 		return;
 	}
 
@@ -924,7 +931,8 @@ sub usac_file_under {
 			pop;
 		}	
 		else {
-			$p=&rex_capture->[0];#$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+			#$p=&rex_capture->[0];#$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+			$p=$_[1][uSAC::HTTP::Rex::capture_][0];
 		}
 		
 		my $path=$html_root."/".$p;
