@@ -27,6 +27,7 @@ use Scalar::Util 'refaddr', 'weaken';
 
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Header qw<:constants>;
 use constant MAX_READ_SIZE => 128 * 1024;
 
 #our $LF = "\015\012";
@@ -147,7 +148,7 @@ sub make_reader{
 					#if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 					if( $buf =~ /\G ([^:\000-\037\040]++):([^\015\012]*+) \015\012/sxogca ){
 						
-						\my $e=\$h{"HTTP_".uc $1=~tr/-/_/r};
+						\my $e=\$h{uc $1=~tr/-/_/r};
 						my $val=$2=~tr/\t //dr;
 						#$e = $e ? $e.','.$2: $2;
 						$e = $e ? $e.','.$val: $val;
@@ -183,20 +184,22 @@ sub make_reader{
 				}
 				
 				#my $host=$h{HOST};#//"";
-				$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HTTP_HOST}, $method, $uri, $uri, {}, [],{},200,undef, $static_headers], 'uSAC::HTTP::Rex' ;
+				$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, {}, [],{},200,undef, $static_headers], 'uSAC::HTTP::Rex' ;
 
 				#$pos = pos($buf);
 
 				$r->[uSAC::HTTP::Session::rex_]=$req;
-				$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{HTTP_CONNECTION} =~/^Keep-Alive/ );
-				$r->[uSAC::HTTP::Session::closeme_]||=	$h{HTTP_CONNECTION}=~/close/i;
+				$r->[uSAC::HTTP::Session::closeme_]=0;
+				$r->[uSAC::HTTP::Session::closeme_]||= $h{CONNECTION} =~/close/ ||$version ne "HTTP/1.1";
+				#$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{HTTP_CONNECTION} =~/^Keep-Alive/ );
+				#$r->[uSAC::HTTP::Session::closeme_]||=	$h{HTTP_CONNECTION}=~/close/i;
 
 				#shift buffer
 				$buf=substr $buf, pos $buf;# $pos;
 				$pos=0;
 				$state=$start_state;
 				$cb->(
-					"$h{HTTP_HOST} $method $uri",
+					"$h{HOST} $method $uri",
 					$req
 				);
 				return;
@@ -240,7 +243,7 @@ sub make_form_data_reader {
 		my $processed=0;
 
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];
-		my $type = $h{HTTP_CONTENT_TYPE};
+		my $type = $h{CONTENT_TYPE};
 		#TODO: check for content-disposition and filename if only a single part.
 		my $boundary="--".(split("=", $type))[1];
 		my $b_len=length $boundary;
@@ -313,7 +316,7 @@ sub make_form_data_reader {
 
 				while (){
 					if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
-						\my $e=\$form_headers->{"HTTP_".uc $1=~tr/-/_/r};
+						\my $e=\$form_headers->{uc $1=~tr/-/_/r};
 						$e = defined $e ? $e.','.$2: $2;
 						#say "Got header: $e";
 
@@ -378,10 +381,10 @@ sub make_form_urlencoded_reader {
 		
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];	#
 		my $len =
-		$header->{HTTP_CONTENT_LENGTH}=		#copy header to part header
-		$h{HTTP_CONTENT_LENGTH}//0; #number of bytes to read, or 0 if undefined
+		$header->{CONTENT_LENGTH}=		#copy header to part header
+		$h{CONTENT_LENGTH}//0; #number of bytes to read, or 0 if undefined
 
-		$header->{HTTP_CONTENT_TYPE}=$h{HTTP_CONTENT_TYPE};
+		$header->{CONTENT_TYPE}=$h{CONTENT_TYPE};
 
 		my $new=length($buf)-$processed;	#length of read buffer
 

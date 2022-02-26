@@ -543,8 +543,8 @@ sub usac_sub_product {
 	my $sub_product=pop;	#Content is the last item
 	my %options=@_;
 	my $server=$options{parent}//$uSAC::HTTP::Site;
-	$server->[static_headers_]={
-	HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )};
+	$server->[static_headers_]=[
+	HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )];
 }
 
 

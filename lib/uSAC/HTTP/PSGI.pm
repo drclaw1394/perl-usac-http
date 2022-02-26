@@ -106,8 +106,8 @@ sub usac_to_psgi {
 
 		\my %env=$rex->[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
 		#remove /rename content length and content type for PSGI
-		$env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
-		$env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
+		$env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH()};
+		$env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE()};
 		#
 		$env{REQUEST_METHOD}=	$rex->[uSAC::HTTP::Rex::method_];
 		$env{SCRIPT_NAME}=		"";
@@ -115,7 +115,7 @@ sub usac_to_psgi {
 		$env{REQUEST_URI}=		$rex->[uSAC::HTTP::Rex::uri_];
 		$env{QUERY_STRING}=		$rex->[uSAC::HTTP::Rex::query_string_];
 
-		my($host,$port)=split ":", $env{HTTP_HOST};
+		my($host,$port)=split ":", $env{HTTP_HOST()};
 		$env{SERVER_NAME}=	$host;
 		$env{SERVER_PORT}=		$port;
 		$env{SERVER_PROTOCOL}=	$rex->[uSAC::HTTP::Rex::version_];

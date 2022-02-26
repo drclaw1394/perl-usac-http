@@ -199,9 +199,9 @@ sub chunked{
 			if($_[3] and $_[4]//0){
 				#we actually have  headers and Data. this is the first call
 				#Add to headers the chunked trasfer encoding
-				return &$next if(exists $_[3]{HTTP_CONTENT_LENGTH()});
+				return &$next if(grep HTTP_CONTENT_LENGTH eq $_, $_[3]->@*);
 
-				$_[3]->{HTTP_TRANSFER_ENCODING()}="chunked";
+				push $_[3]->@*, HTTP_TRANSFER_ENCODING, "chunked";
 			}
 			if($_[4]//0){	
 				#Only make chunks if data is defined.

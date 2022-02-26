@@ -128,7 +128,7 @@ sub usac_multipart_stream {
 		#shift;		#remove place holder for mime
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#check if content type is correct first
-		unless (index($rex->[headers_]{HTTP_CONTENT_TYPE},'multipart/form-data')>=0){
+		unless (index($rex->[headers_]{CONTENT_TYPE},'multipart/form-data')>=0){
 			$session->[uSAC::HTTP::Session::closeme_]=1;
 			rex_write $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
 			return;
@@ -161,11 +161,11 @@ sub usac_data_stream{
 		my @err_res;
 		for($rex->[headers_]){
 			#Wrap regex to prevent captures being destroyed
-			if($_->{HTTP_CONTENT_TYPE}!~/$mime/){
+			if($_->{CONTENT_TYPE}!~/$mime/){
 				@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
 			}
 
-			elsif(defined $upload_limit  and $_->{HTTP_CONTENT_LENGTH} > $upload_limit){
+			elsif(defined $upload_limit  and $_->{CONTENT_LENGTH} > $upload_limit){
 				@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
 			}
 
@@ -176,7 +176,7 @@ sub usac_data_stream{
 				make_form_urlencoded_reader @_, $session, $cb ;
 
 				#check for expects header and send 100 before trying to read
-				if(defined($_->{HTTP_EXPECT})){
+				if(defined($_->{EXPECT})){
 					#issue a continue response	
 					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
 					$rex->[uSAC::HTTP::Rex::write_]->($reply);
@@ -205,7 +205,7 @@ sub usac_form_stream {
 	my $multi=  usac_multipart_stream @_;
 	my $url= usac_urlencoded_stream @_;
 	sub{
-		for ($_[1][headers_]{HTTP_CONTENT_TYPE}){
+		for ($_[1][headers_]{CONTENT_TYPE}){
 			&$multi  and return if /multipart\/form-data/;
 			&$url  and return if 'application/x-www-form-urlencoded';
 			rex_write $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
@@ -283,7 +283,7 @@ sub usac_multipart_slurp{
 				#this is a file
 				#open an file
 				($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
-				$fields->{$kv->{name}}={tmp_file=>$name, filename=>$kv->{filename}, HTTP_CONTENT_TYPE=>$part_header->{HTTP_CONTENT_TYPE}};
+				$fields->{$kv->{name}}={tmp_file=>$name, filename=>$kv->{filename}, CONTENT_TYPE=>$part_header->{CONTENT_TYPE}};
 			}
 			else {
 				#just a regular form field
@@ -321,7 +321,7 @@ sub usac_form_slurp{
 	my $multi= usac_multipart_slurp %options, $cb;
 	my $url=usac_urlencoded_slurp %options, $cb;
 	sub{
-		for ($_[1][headers_]{HTTP_CONTENT_TYPE}){
+		for ($_[1][headers_]{CONTENT_TYPE}){
 			if(index($_, "multipart/form-data")>=0){
 				#we do a regex match inste
 				&$multi;
@@ -402,11 +402,11 @@ sub parse_form_params {
 	#3=>section header
 	#
 	#parse the fields	
-	for ($rex->[headers_]{HTTP_CONTENT_TYPE}){
+	for ($rex->[headers_]{CONTENT_TYPE}){
 		if(/multipart\/form-data/){
 			#parse content disposition (name, filename etc)
 			my $kv={};
-			for(map tr/ //dr, split ";", $_[3]->{HTTP_CONTENT_DISPOSITION}){
+			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
 				$kv->{$key}=defined($value)?$value=~tr/"//dr : undef;
 			}
@@ -576,22 +576,24 @@ sub rex_write{
 	if($_[3]){
 		#If headers are supplied, then  process headers
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
-		\my %h=$_[3];
+		\my @h=$_[3];
 
-		$h{HTTP_DATE()}=$uSAC::HTTP::Session::Date;
+		#push @h, HTTP_DATE, 
 		#[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
 		if($session->[uSAC::HTTP::Session::closeme_]){
-			$h{HTTP_CONNECTION()}="close";
+			push @h, 
+				HTTP_CONNECTION, "close";
 		}
 		else{
-			$h{HTTP_CONNECTION()}="Keep-Alive";
-			$h{HTTP_KEEP_ALIVE()}="timeout=10, max=1000";
-
+			push @h,
+				HTTP_CONNECTION, "Keep-Alive",
+				HTTP_KEEP_ALIVE,"timeout=10, max=1000";
 		}
-		for($_[1][static_headers_]){
-			@h{keys $_->%*}=values $_->%*;
-		}
+		push @h,
+			$_[1][static_headers_]->@*,
+			HTTP_DATE, $uSAC::HTTP::Session::Date;
 	}
+
 	#Otherwise this is just a body call
 	#
 
@@ -614,12 +616,11 @@ sub render_header {
 
 
 	my $reply="HTTP/1.1 $_[2]".LF;
-	\my %h=$_[3];
+	\my @h=$_[3];
 	#$reply.= join "", map $_.": ".$h{$_}.LF, keys $_[3]->%*;
 
-	while(my ($k, $v)=each $_[3]->%*){
-		$reply.="$k: $v".LF;
-	}
+	$reply.=join "", map "$h[2*$_]: $h[2*$_+1]".LF, 0..@h/2-1;
+
 	$reply.=LF;
 }
 
@@ -690,36 +691,36 @@ sub rex_state :lvalue{
 #code
 sub rex_redirect_see_other{
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_SEE_OTHER,{HTTP_LOCATION,$url},"");
+	rex_write (@_, HTTP_SEE_OTHER,[HTTP_LOCATION,$url],"");
 }
 
 sub rex_redirect_found {
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_FOUND,{HTTP_LOCATION, $url},"");
+	rex_write (@_, HTTP_FOUND,[HTTP_LOCATION, $url],"");
 	
 }
 
 sub rex_redirect_temporary {
 
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_TEMPORARY_REDIRECT,{HTTP_LOCATION, $url},"");
+	rex_write (@_, HTTP_TEMPORARY_REDIRECT,[HTTP_LOCATION, $url],"");
 	
 }
 sub rex_redirect_not_modified {
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_MODIFIED,{HTTP_LOCATION, $url},"");
+	rex_write (@_, HTTP_NOT_MODIFIED,[HTTP_LOCATION, $url],"");
 	
 }
 
 sub rex_error_not_found {
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_FOUND, {}, '');
+	rex_write (@_, HTTP_NOT_FOUND, [], '');
 }
 
 sub rex_error_internal {
 	my ($url)=splice @_, 2;
 	my $session=$_[1][session_];
-	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, {}, '');
+	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, [], '');
 	$session->[uSAC::HTTP::Session::closeme_]=1;
 	$session->[uSAC::HTTP::Session::dropper_]->();
 }
@@ -762,32 +763,32 @@ sub rex_headers {
 
 sub rex_reply_json {
 	my $data=pop;
-	rex_write @_, HTTP_OK, {
+	rex_write @_, HTTP_OK, [
 		HTTP_CONTENT_TYPE, "text/json",
 		HTTP_CONTENT_LENGTH, length($data),
-	}, $data;
+	], $data;
 }
 sub rex_reply_html {
 	my $data=pop;
-	rex_write @_, HTTP_OK, {
+	rex_write @_, HTTP_OK, [
 		HTTP_CONTENT_TYPE, "text/html",
 		HTTP_CONTENT_LENGTH, length($data),
-	}, $data;
+	], $data;
 }
 sub rex_reply_javascript {
 	my $data=pop;
-	rex_write @_, HTTP_OK, {
+	rex_write @_, HTTP_OK, [
 		HTTP_CONTENT_TYPE, "text/javascript",
 		HTTP_CONTENT_LENGTH, length($data),
-	}, $data;
+	], $data;
 }
 
 sub rex_reply_text {
 	my $data=pop;
-	rex_write @_, HTTP_OK, {
+	rex_write @_, HTTP_OK, [
 		HTTP_CONTENT_TYPE, "text/plain",
 		HTTP_CONTENT_LENGTH, length($data),
-	}, $data;
+	], $data;
 }
 sub rex_capture {
 	$_[1][capture_]
@@ -799,7 +800,7 @@ sub rex_capture {
 #otherwise uses pre parsed values
 #Read only
 sub cookies :lvalue {
-	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{HTTP_COOKIE});
+	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE});
 }
 
 #RW accessor

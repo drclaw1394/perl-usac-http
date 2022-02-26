@@ -24,8 +24,8 @@ my $server; $server=usac_server {
 		usac_route "/static/hot.txt" =>	usac_cached_file "static/hot.txt";
 		usac_route "/statictest"=> usac_static_content "This is some data";
 
-		usac_route "testing"=> chunked()=>sub {
-				rex_write @_, HTTP_OK, {}, "HELLO";
+		usac_route "testing"=>chunked()=>sub {
+				rex_write @_, HTTP_OK, [HTTP_CONTENT_LENGTH, 5], "HELLO";
 		};
 
 		usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static";

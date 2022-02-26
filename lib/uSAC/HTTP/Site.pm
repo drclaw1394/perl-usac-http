@@ -124,7 +124,7 @@ sub add_route {
 	my $sub;
 
 	if(@non_matching){
-		my $headers={HTTP_ALLOW, join ", ",@matching};
+		my $headers=[HTTP_ALLOW, join ", ",@matching];
 		$sub = sub { 
 			#TODO: how to add middleware ie logging?
 			rex_write @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
@@ -155,6 +155,7 @@ sub add_route {
 		}
 		$end=$middler->link($end);
 	}
+
 	my $serialize=
 			sub{
 				#my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
@@ -599,10 +600,10 @@ sub usac_static_content {
 	my $mime=$options{mime}//$self->resolve_mime_default;
 	#my $type=[HTTP_CONTENT_TYPE, $mime];
 	sub {
-		rex_write @_, HTTP_OK, {
+		rex_write @_, HTTP_OK, [
 			HTTP_CONTENT_TYPE, $mime,
 			HTTP_CONTENT_LENGTH, length($static)
-		},
+		],
 		$static; return
 	}
 }
@@ -698,27 +699,27 @@ sub usac_path {
 sub usac_redirect_see_other {
 	my $url =pop;
 	sub {
-		rex_write (@_, HTTP_SEE_OTHER, {HTTP_LOCATION, $url},"");
+		rex_write (@_, HTTP_SEE_OTHER, [HTTP_LOCATION, $url],"");
 	}
 
 }
 sub usac_redirect_found{
 	my $url =pop;
 	sub {
-		rex_write (@_, HTTP_FOUND, {HTTP_LOCATION, $url},"");
+		rex_write (@_, HTTP_FOUND, [HTTP_LOCATION, $url],"");
 	}
 }
 sub usac_redirect_temporary {
 	my $url =pop;
 	sub {
-		rex_write (@_, HTTP_TEMPORARY_REDIRECT, {HTTP_LOCATION, $url},"");
+		rex_write (@_, HTTP_TEMPORARY_REDIRECT, [HTTP_LOCATION, $url],"");
 	}
 }
 
 sub usac_redirect_not_modified {
 	my $url =pop;
 	sub {
-		rex_write (@_,HTTP_NOT_MODIFIED, {HTTP_LOCATION, $url},"");
+		rex_write (@_,HTTP_NOT_MODIFIED, [HTTP_LOCATION, $url],"");
 	}
 }
 

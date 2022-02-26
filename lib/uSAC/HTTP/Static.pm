@@ -307,35 +307,15 @@ sub send_file_uri_norange {
 			$code=HTTP_NOT_MODIFIED;	#no body to be sent
 		}
 			
-		#$reply="$rex->[uSAC::HTTP::Rex::version_] ".$code.LF;
-                ####################################################################
-                # my $headers=[                                                    #
-                #         [HTTP_DATE, $uSAC::HTTP::Session::Date],                 #
-                #         ($session->[uSAC::HTTP::Session::closeme_]?              #
-                #                 [HTTP_CONNECTION, "close"]                       #
-                #                 :([HTTP_CONNECTION, "Keep-Alive"],               #
-                #                         [HTTP_KEEP_ALIVE,"timeout=10, max=1000"] #
-                #                 )                                                #
-                #         ),                                                       #
-                ####################################################################
-		my $headers={
+		my $headers=[
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
 			$entry->[content_type_header_]->@*,
 			HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
 			HTTP_ETAG,$etag,
 			HTTP_ACCEPT_RANGES,"bytes"
-		};
+		];
 
-                ###########################################################################
-                # for my $h ($rex->[uSAC::HTTP::Rex::static_headers_]->@*, $headers->@*){ #
-                #         $reply.=$h->[0].": ".$h->[1].LF;                                #
-                # }                                                                       #
-                # $reply.= join "", map $_->[0].": ".$_->[1].LF, @$user_headers;          #
-                #                                                                         #
-                #                                                                         #
-                # $reply.=LF;                                                             #
-                ###########################################################################
 
 		if(
 			$rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
