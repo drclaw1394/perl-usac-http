@@ -16,6 +16,7 @@ use Stream::Buffered::PerlIO;	#From PSGI distribution
 use uSAC::HTTP;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
+use uSAC::HTTP::Middleware qw<chunked>;
 
 use constant KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
@@ -26,6 +27,7 @@ our @EXPORT_OK=qw<usac_to_psgi>;
 our @EXPORT=@EXPORT_OK;
 
 package uSAC::HTTP::PSGI::Writer {
+	use uSAC::HTTP::Rex;
 use constant LF => "\015\012";
 	#simple class to wrap the push write of the session
 	sub new {
@@ -36,14 +38,11 @@ use constant LF => "\015\012";
 	sub write {
 		my $self=shift;
 		my $rex=$self->{rex};
-		#TODO: make this a chunked write
-		if($self->{keep_alive}){
-			my $scratch=sprintf("%02X".LF,length $_[0]).$_[0].LF;
-			$rex->writer->($scratch);
-		}
-		else {
-			$rex->writer->($_[0]);
-		}
+	
+		#call with generic sub as callback to continue the chunks
+		rex_write( $self->{matcher}, $self->{rex}, $self->{code},$self->{headers}, $_[0], sub {});
+
+		$self->{headers}=undef;
 
 	}
 
@@ -51,19 +50,13 @@ use constant LF => "\015\012";
 		my $self=shift;
 		my $rex=$self->{rex};
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
-		if($self->{keep_alive}){
-			my $scratch=sprintf("%02X".LF,0).LF;
-			$rex->writer->($scratch,
-				sub {
-					$session->[uSAC::HTTP::Session::dropper_]->();
-				}
-			);
-		}
-		else {
-			#Force closure
-			$session->[uSAC::HTTP::Session::closeme_]=1;
-			$session->[uSAC::HTTP::Session::dropper_]->();
-		}
+		#call with no callback to mark the end of chunked stream
+		#Also need to pass defined but empty data
+		rex_write( $self->{matcher}, $self->{rex}, $self->{code},$self->{headers}, "");
+
+		$session->[uSAC::HTTP::Session::closeme_]=1;
+		$session->[uSAC::HTTP::Session::dropper_]->();
+
 		$session->pop_reader;
 	}
 }
@@ -93,6 +86,7 @@ sub usac_to_psgi {
 	#TODO: options inclue using keepalive or not.
 
 	#the sub returned is the endpoint in terms of the usac flow
+	(chunked(),
 	sub {
 		my ($usac,$rex)=@_;	
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
@@ -104,10 +98,12 @@ sub usac_to_psgi {
 
 		state $psgi_version=[1,1];
 
-		\my %env=$rex->[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
+		my $h=$rex->[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
+		my %env=map(("HTTP_".$_, $h->{$_}), keys $h->%*);
+		
 		#remove /rename content length and content type for PSGI
-		$env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH()};
-		$env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE()};
+		$env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
+		$env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
 		#
 		$env{REQUEST_METHOD}=	$rex->[uSAC::HTTP::Rex::method_];
 		$env{SCRIPT_NAME}=		"";
@@ -115,7 +111,7 @@ sub usac_to_psgi {
 		$env{REQUEST_URI}=		$rex->[uSAC::HTTP::Rex::uri_];
 		$env{QUERY_STRING}=		$rex->[uSAC::HTTP::Rex::query_string_];
 
-		my($host,$port)=split ":", $env{HTTP_HOST()};
+		my($host,$port)=split ":", $env{HTTP_HOST};
 		$env{SERVER_NAME}=	$host;
 		$env{SERVER_PORT}=		$port;
 		$env{SERVER_PROTOCOL}=	$rex->[uSAC::HTTP::Rex::version_];
@@ -169,6 +165,7 @@ sub usac_to_psgi {
 
 			$buffer->print($_[1]);	
 		};
+
 		
 		#Pump the reader for outstanding bytes we could process immediately
 		$session->pump_reader;
@@ -178,7 +175,6 @@ sub usac_to_psgi {
 		my $res=$app->(\%env);
 
 		
-		#my $write=$_[1][uSAC::HTTP::Rex::write_];
 		#my $dropper=$session->[uSAC::HTTP::Session::dropper_];
 		if(ref($res) eq  "CODE"){
 			#delayed response
@@ -205,38 +201,30 @@ sub usac_to_psgi {
 				say "unknown type";
 			}
 		}
-	};
+	}
+	)
 }
 sub do_array {
 	my ($usac,$rex, $res)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 
-	#Check for content length header and add if not existing
-        ###################################################################
-        # unless(first {/Content-Length/i}, @$psgi_headers)       {       #
-        #         push @$psgi_headers, "Content-Length",length($content); #
-        # }                                                               #
-        ###################################################################
-	#@$psgi_headers;
 	rex_write $usac,$rex,
 		$res->[0],
-		{pairs $res->[1]->@*},
+		$res->[1],
 		join "", $res->[2]->@*;
 
 	$session->pop_reader;
 }
 sub do_glob {
 	my ($usac,$rex, $res)=@_;
-	my $write=$rex->[uSAC::HTTP::Rex::write_];
 	my $dropper=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::dropper_];
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	my ($code, $psgi_headers, $psgi_body)=@$res;
 
-	local $/=\4096;
 
 	#setup headers
 
-	my $reply="HTTP/1.1 $code".LF;
+	#my $reply="HTTP/1.1 $code".LF;
 
 	unless(first {/Content-Length/i}, @$psgi_headers)	{
 		#calculate the file size from stating it
@@ -244,25 +232,13 @@ sub do_glob {
 		push @$psgi_headers, "Content-Length",$size;
 	}
 
-	my @headers= pairs @$psgi_headers;
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
-
-	@headers=(
-		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
-		($session->[uSAC::HTTP::Session::closeme_]
-			?[HTTP_CONNECTION,	"close"]
-			:([	HTTP_CONNECTION,	"Keep-Alive"],
-				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
-			)
-		)
-	);
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
-	$reply.=LF.<$psgi_body>;
-	#setup reader to execute on callback
+	
+	local $/=\4096;
+	my $data;
 	my $do_it=sub{
-		my $data=<$psgi_body>;
+		$data=<$psgi_body>;
 		if(length($data)){
-			$write->($data, __SUB__);
+			rex_write($usac,$rex, $code, undef, $data, __SUB__);
 		}
 		else {
 			close $psgi_body; 
@@ -271,40 +247,19 @@ sub do_glob {
 
 		}
 	};
-	$write->($reply,$do_it);
+	$data=<$psgi_body>;
+	rex_write($usac,$rex, $code, $psgi_headers, $data, $do_it);
 }
 
 sub do_streaming {
 	my ($usac,$rex, $res, $options)=@_;
-	my $write=$rex->[uSAC::HTTP::Rex::write_];
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	my $dropper=$session->[uSAC::HTTP::Session::dropper_];
 	my ($code, $psgi_headers, $psgi_body)=@$res;
 
-	my $reply="HTTP/1.1 $code".LF;
+	
 
-
-	my @headers= pairs @$psgi_headers;
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
-
-	@headers=(
-		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
-		($options->{keep_alive}
-			?([	HTTP_CONNECTION,	"Keep-Alive"],
-				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"],
-				[HTTP_TRANSFER_ENCODING, "chunked"],
-			)
-			:[HTTP_CONNECTION,	"close"]
-		),
-
-	);
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
-	$reply.=LF;
-
-	#Write header and return writer object
-	$write->($reply);
-
-	my $w=uSAC::HTTP::PSGI::Writer->new(%$options, rex=>$rex);
+	my $w=uSAC::HTTP::PSGI::Writer->new(%$options, code=>$code, headers=>$psgi_headers, rex=>$rex, matcher=>$usac);
 	return $w;
 }
 

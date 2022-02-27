@@ -3,6 +3,7 @@ use uSAC::HTTP::PSGI;
 use AnyEvent;
 
 
+
 my $app3=sub {
 	my $env=shift;
 	sub {
@@ -32,8 +33,8 @@ my $server; $server=usac_server {
 	#	usac_route "/app1"=>usac_to_psgi keep_alive=>1, $app;
 	usac_route "/app3"=>usac_to_psgi $app3;
 	usac_route "/app4"=>usac_to_psgi keep_alive=>1, $app4;
-	usac_route "/app5"=>sub {
-		rex_reply @_, 200, [[HTTP_CONTENT_TYPE, "text/plain"]], "Hello there";
+	usac_route "/app5"=>chunked()=>sub {
+		rex_write @_, 200, [HTTP_CONTENT_TYPE, "text/plain"], "Hello there";
 	};
 };
 $server->run;

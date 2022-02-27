@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use uSAC::HTTP;
 use uSAC::HTTP::PSGI;
+use uSAC::HTTP::Middleware qw<chunked>;
 my $app=sub {
 	my $env=shift;
 	state $c=0;

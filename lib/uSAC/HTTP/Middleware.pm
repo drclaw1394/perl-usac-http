@@ -179,7 +179,6 @@ sub http2_upgrade {
 #Last write must be an empty string
 #
 sub chunked{
-	my $scratch="";
 	#"x"x1024;
 	#$scratch="";
 
@@ -195,46 +194,28 @@ sub chunked{
 	sub {
 		my $next=shift;
 		sub {
-			#$_[5]//= __SUB__ ;		#argument to callback is self unless one is provided
-			if($_[3] and $_[4]//0){
+			#Prevent double chunking
+			return &$next if($_[3] and grep HTTP_TRANSFER_ENCODING eq $_, $_[3]->@*);
+
+			if($_[3]){
 				#we actually have  headers and Data. this is the first call
 				#Add to headers the chunked trasfer encoding
 				return &$next if(grep HTTP_CONTENT_LENGTH eq $_, $_[3]->@*);
-
 				push $_[3]->@*, HTTP_TRANSFER_ENCODING, "chunked";
 			}
-			if($_[4]//0){	
-				#Only make chunks if data is defined.
-				$scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF;
 
-				#Add an additional chunk of 0 when no callback is provided
-				$scratch.="00".LF.LF unless $_[5];
-				return $next->(@_[0,1,2,3],$scratch,@_[5,6]);
-
-			}
+			my $scratch="";
+			$scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF if $_[4];
+			$scratch.="00".LF.LF unless $_[5];
+			return $next->(@_[0,1,2,3],$scratch,@_[5,6]) if $scratch;
 
 			return &$next;
+
 		};
 	};
 	[$chunked_in, $chunked_out]
 }
 
-my $sub=sub{};
-sub chunked_2{
-	my $next=shift;
-	my $scratch="";
-
-	sub {
-		$_[2]//= __SUB__ ;		#argument to callback is self unless one is provided
-		return &$next unless defined $_[0];	#reset stack if requested. pass it on
-		$next->(sprintf("%02X".LF,length $_[0]),$sub,1);
-		$next->($_[0],$sub,1);#->($scratch, @_);
-		#$_[0].=LF;
-		#$scratch.="00".LF.LF unless $_[1];
-		shift;
-		$_[0]?$next->(LF,@_):$next->(LF."00".LF.LF,@_);
-	}
-}
 
 sub gzip {
 	my $next=shift;

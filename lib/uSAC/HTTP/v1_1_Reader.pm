@@ -81,7 +81,7 @@ sub make_reader{
 	weaken $r;
 
 	my $cb=$self->current_cb;	
-	my $static_headers=$self->static_headers;
+	#my $static_headers=$self->static_headers;
 	
 	my ($state,$seq) = ($start_state, 0);
 	my ($method,$uri,$version,$len,$pos, $req);
@@ -123,7 +123,8 @@ sub make_reader{
 						%h=();
 						++$seq;
 
-						$pos=$pos3+2;
+						#$pos=$pos3+2;
+						$buf=substr $buf, $pos3+2;#pos $buf;# $pos;
 						redo;
 				}
 				else {
@@ -140,53 +141,68 @@ sub make_reader{
 
 			elsif ($state == STATE_HEADERS) {
 				# headers
-				pos($buf) = $pos;
+				my $k;
+				my $v;
 				while () {
-					#TODO: 
-					# Understand what the continuation is supposed to achieve. Its depricated
+					$pos3=index $buf, LF;
+					if($pos3>=0){
+						if($pos3 == 0){
+							$buf=substr($buf, $pos3+2);
+							last;
+						};	#empty line.
 
-					#if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
-					if( $buf =~ /\G ([^:\000-\037\040]++):([^\015\012]*+) \015\012/sxogca ){
-						
-						\my $e=\$h{uc $1=~tr/-/_/r};
-						my $val=$2=~tr/\t //dr;
-						#$e = $e ? $e.','.$2: $2;
+						($k,$v)=split ":", substr($buf,0,$pos3);
+
+						\my $e=\$h{uc $k=~tr/-/_/r};
+						my $val=$v=~tr/\t //dr;
 						$e = $e ? $e.','.$val: $val;
+
+						$buf=substr $buf, $pos3+2;
 						redo;
 					}
-					elsif ($buf =~ /\G\015?\012/sxogca) {
-						#warn "Last line";
-						last;
+
+					else{
+						#-1	Need more
+                                                if (length($buf) > MAX_READ_SIZE) {
+                                                        return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");
+                                                }
+                                                warn "Need more";
+						#$pos=pos($buf);
+                                                return;
 					}
-					elsif($buf =~ /\G [^\012]* \Z/sxogca) {
-						if (length($buf) - 0 > MAX_READ_SIZE) {
-							return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");
-						}
-						#warn "Need more";
-						$pos=pos($buf);
-						return;
-					}
-					else {
-						my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;
-						my $content = 'Bad request headers';
-						my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content;
-						$write->($str);
-						$write->(undef);
-						return;
-					}
+					
+
+                                        #############################################################################################################################################################
+                                        # elsif ($buf =~ /\G\015?\012/sxogca) {                                                                                                                     #
+                                        #         #warn "Last line";                                                                                                                                #
+                                        #         last;                                                                                                                                             #
+                                        # }                                                                                                                                                         #
+                                        # elsif($buf =~ /\G [^\012]* \Z/sxogca) {                                                                                                                   #
+                                        #         if (length($buf) - 0 > MAX_READ_SIZE) {                                                                                                           #
+                                        #                 return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");                     #
+                                        #         }                                                                                                                                                 #
+                                        #         #warn "Need more";                                                                                                                                #
+                                        #         $pos=pos($buf);                                                                                                                                   #
+                                        #         return;                                                                                                                                           #
+                                        # }                                                                                                                                                         #
+                                        # else {                                                                                                                                                    #
+                                        #         my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;                                                                                    #
+                                        #         my $content = 'Bad request headers';                                                                                                              #
+                                        #         my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content; #
+                                        #         $write->($str);                                                                                                                                   #
+                                        #         $write->(undef);                                                                                                                                  #
+                                        #         return;                                                                                                                                           #
+                                        # }                                                                                                                                                         #
+                                        #############################################################################################################################################################
 				}
 				#Done with headers. 
 
 				#($uri,my $query)=split('\?', $uri);
-				my $query_string="";
-				if((my $i=index($uri, "?"))>=0){
-					$query_string=substr $uri, $i+1;
-				}
 				
 				#my $host=$h{HOST};#//"";
-				$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, {}, [],{},200,undef, $static_headers], 'uSAC::HTTP::Rex' ;
+				$req=uSAC::HTTP::Rex->new($r, \%h, $version, $method, $uri);
+				#$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, {}, [],{},200,undef, $static_headers], 'uSAC::HTTP::Rex' ;
 
-				#$pos = pos($buf);
 
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]=0;

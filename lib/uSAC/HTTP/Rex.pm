@@ -28,7 +28,7 @@ use File::Path qw<make_path>;
 
 use Data::Dumper;
 
-our @EXPORT_OK=qw<rex_headers rex_reply rex_reply_simple rex_reply_chunked 
+our @EXPORT_OK=qw<rex_headers 
 
 usac_data_stream
 usac_multipart_stream
@@ -103,9 +103,26 @@ require uSAC::HTTP::Middleware;
 # }                                                       #
 ###########################################################
 		
-sub reply_simple;
 sub rex_write;		
 	
+
+
+sub new {
+	#my ($package, $session, $headers, $version, $method, $uri)=@_;
+
+	my $self=[];
+	my $query_string="";
+	if((my $i=index($_[5], "?"))>=0){
+		$query_string=substr $_[5], $i+1;
+	}
+	my $server=$_[1]->[uSAC::HTTP::Session::server_];
+	my $write=$_[1]->[uSAC::HTTP::Session::write_];
+
+	my $static_headers=$server->static_headers;
+	bless [ $_[3], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[2]{HOST}, $_[4], $_[5], $_[5], {}, [],{},200,undef, $static_headers], $_[0];
+
+
+}
 
 sub reply_GZIP {
 
@@ -449,125 +466,6 @@ sub parse_query_params_old {
 #also setup need to decode any Content-Encoding (ie gzip)
 
 
-#Reply the body and code specified. Adds Server and Content-Length headers
-#Line, Rex, code, header_ref, content
-
-sub reply_simple{
-	use integer;
-	#my ($line, $self)=@_;
-	#create a writer for the session
-	my $session=$_[1]->[session_];
-	$session->[uSAC::HTTP::Session::in_progress_]=1;
-	my @headers=(
-		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
-		[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
-		($session->[uSAC::HTTP::Session::closeme_]
-			?[HTTP_CONNECTION,	"close"]
-			:([	HTTP_CONNECTION,	"Keep-Alive"],
-				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
-			)
-		)
-	);
-
-	#somehow call outerware before rendering?
-	
-	#use route instance with outerware to filter headers, and also process 
-	
-	my $outer=$_[0][4][1];
-	&$outer if $outer;
-	
-	
-
-	my $reply="HTTP/1.1 $_[2]".LF;
-        ############################################################################
-        # for my $h ($_[1]->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){ #
-        #         $reply.=$h->[0].": ".$h->[1].LF;                                 #
-        # }                                                                        #
-        ############################################################################
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[1]->[static_headers_]->@*; 
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[3]->@* if $_[3];
-
-	$reply.=LF.$_[4];
-	$_[1][write_]($reply, $session->[uSAC::HTTP::Session::dropper_]);	#fire and forget
-
-	1;
-}
-
-
-#rex, http_code, header, datacb 
-sub reply_chunked{
-	use integer;
-	my ($matcher, $self, $code, $headers, $cb)=@_;
-	#create a writer for the session
-	my $session=$self->[session_];
-	$session->[uSAC::HTTP::Session::in_progress_]=1;
-
-	#my $content_length=length($_[4])+0;
-	my $reply= "HTTP/1.1 $code".LF;
-	my @headers=(
-		[HTTP_DATE,		$uSAC::HTTP::Session::Date],
-		($session->[uSAC::HTTP::Session::closeme_]
-			?[HTTP_CONNECTION,	"close"]
-			:(	[HTTP_CONNECTION,	"Keep-Alive"],
-				[HTTP_KEEP_ALIVE,	"timeout=10, max=1000"]
-			)
-		),
-		[HTTP_TRANSFER_ENCODING, "chunked"]
-
-	);
-
-	my $outer=$_[0][4][1];
-	&$outer if $outer;
-
-
-        ############################################################################
-        # #render_v1_1_headers($reply, $headers, $self->[static_headers_], $_[3]); #
-        # for my $h ($self->[static_headers_]->@*, $headers->@*, ($_[3]//[])->@*){ #
-        #         $reply.=$h->[0].": ".$h->[1].LF;                                 #
-        # }                                                                        #
-        ############################################################################
-	#
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[1]->[static_headers_]->@*; 
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, @headers;
-	$reply.= join "", map $_->[0].": ".$_->[1].LF, $_[3]->@* if $_[3];
-
-	#Execute the filters based on headers
-	#&{$_[0][4][1]};
-	#
-	
-
-	$reply.=LF;
-	$self->[write_]($reply, $cb, uSAC::HTTP::Middleware::make_chunked_writer($session));
-
-	1;
-}
-
-sub reply {
-	my ($matcher, $self)=@_;#, $code, $headers, $cb)=@_;
-	my $session=$self->[session_];
-	#wrapper for simple and chunked
-	# if the body element is a code ref, or array ref, then chunked is used
-	for (ref $_[4]){
-		&rex_write and return 1 unless $_;
-		&reply_chunked and return 1 if $_ eq "CODE";
-		if($_ eq "ARRAY"){
-			#send each element of array as a chunk
-			my $i=0;
-			my $chunks=pop;
-			#push @$chunks, "";
-
-			reply_chunked @_, sub {
-				$_[0]->($chunks->[$i++]//"", $i <= $chunks->@* ? __SUB__:$session->[uSAC::HTTP::Session::dropper_]);
-			};
-		}
-		else{
-		}
-	}
-	1;
-}
-
-
 
 #Main output subroutine
 #Arguments are matcher, rex, code, header, data, cb
@@ -747,7 +645,7 @@ sub rex_redirect_internal {
 	if($counter>10){
 		$counter=0;
 		carp "Redirections loop detected for $uri";
-		rex_reply($matcher, $rex, HTTP_LOOP_DETECTED, {},"");
+		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, [],"");
 		return;
 	}
 	undef $_[0];
@@ -811,11 +709,6 @@ sub writer {
 	$_[0][write_];
 
 }
-
-*rex_reply_simple=*reply_simple;
-*rex_reply_chunked=*reply_chunked;
-*rex_reply=*reply;
-
 
 *rex_parse_form_params=*parse_form_params;
 *rex_query_params=*query_params;
