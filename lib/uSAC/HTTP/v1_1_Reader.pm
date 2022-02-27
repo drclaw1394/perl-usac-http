@@ -151,7 +151,7 @@ sub make_reader{
 							last;
 						};	#empty line.
 
-						($k,$v)=split ":", substr($buf,0,$pos3);
+						($k,$v)=split ":", substr($buf,0,$pos3), 2;
 
 						\my $e=\$h{uc $k=~tr/-/_/r};
 						my $val=$v=~tr/\t //dr;

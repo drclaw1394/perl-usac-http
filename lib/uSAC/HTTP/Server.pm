@@ -82,7 +82,10 @@ sub _welcome {
 #And if that happens it it most likley a protocol error
 #ie expecting a request line but getting something else
 sub _default_handler {
-		state $sub=\&rex_error_not_found;
+		state $sub=sub {
+			say "DEFAULT HANDLER FOR TABLE";
+			&rex_error_not_found;
+		};
 }
 
 sub new {
@@ -97,6 +100,7 @@ sub new {
 	$self->[zombies_]=[];
 	$self->[static_headers_]=[];#STATIC_HEADERS;
 	register_site($self, uSAC::HTTP::Site->new(id=>"default"));#,host=>'[^ ]+'));
+	#$self->[table_]->set_default(_default_handler,$self->site);
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	$self->[workers_]=1;
@@ -404,6 +408,19 @@ sub run {
 	} else {
 		$self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];
 	}
+	
+	#=======CATCH ALL
+	# Add the catch all site with a single route matching everything
+	# This not the same as the default site or the default match in the lookup table
+	#
+	my $site=uSAC::HTTP::Site->new(server=>$self);
+	unshift $site->host->@*, "[^ ]+";	#match any host
+	$site->add_route($Any_Method, qr|.*|, sub {
+			&rex_error_not_found 
+		}
+	);
+
+
 	$self->rebuild_dispatch;
 	$self->listen;
 	$self->accept;

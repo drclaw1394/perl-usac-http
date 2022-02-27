@@ -589,36 +589,36 @@ sub rex_state :lvalue{
 #code
 sub rex_redirect_see_other{
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_SEE_OTHER,[HTTP_LOCATION,$url],"");
+	rex_write (@_, HTTP_SEE_OTHER,[HTTP_LOCATION,$url, HTTP_CONTENT_LENGTH, 0],"");
 }
 
 sub rex_redirect_found {
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_FOUND,[HTTP_LOCATION, $url],"");
+	rex_write (@_, HTTP_FOUND,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
 	
 }
 
 sub rex_redirect_temporary {
 
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_TEMPORARY_REDIRECT,[HTTP_LOCATION, $url],"");
+	rex_write (@_, HTTP_TEMPORARY_REDIRECT,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
 	
 }
 sub rex_redirect_not_modified {
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_MODIFIED,[HTTP_LOCATION, $url],"");
+	rex_write (@_, HTTP_NOT_MODIFIED,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
 	
 }
 
 sub rex_error_not_found {
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_FOUND, [], '');
+	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
 }
 
 sub rex_error_internal {
 	my ($url)=splice @_, 2;
 	my $session=$_[1][session_];
-	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, [], '');
+	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, [HTTP_CONTENT_LENGTH, 0], '');
 	$session->[uSAC::HTTP::Session::closeme_]=1;
 	$session->[uSAC::HTTP::Session::dropper_]->();
 }

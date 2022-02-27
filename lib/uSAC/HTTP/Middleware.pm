@@ -217,51 +217,54 @@ sub chunked{
 }
 
 
-sub gzip {
-	my $next=shift;
-	my $scratch="";
-	my $compressor;
-	sub {
-
-		my $cb=$_[1];
-		unless(defined $_[0]){
-			#reset
-			$compressor->close if $compressor;
-			return $next->(undef,$cb);
-		}
-		\my $buf=\$_[0];
-
-		$scratch="";
-		unless($compressor){
-			#say "Creating new compressor";
-			$scratch="";
-			$compressor=IO::Compress::Gzip->new(\$scratch, "-Level"=>-1, Minimal=>1);
-		}
-		if(length $buf ==0){
-			#say "End of data received";
-			$compressor->close;
-			$compressor=undef;
-			$next->($scratch,sub {
-					#pass on done to next
-					$next->("",$cb);
-			});
-		}
-		else{
-			#say "data received";
-			$compressor->syswrite($buf);
-			if(length $scratch){
-				#say "sending scratch";
-				$next->($scratch,$cb);
-			}
-			else {
-				#say "no new  data";
-				#trigger upstream for more
-				$cb->(1);
-			}
-		}
-
-	}
-}
+#############################################################################################################
+# sub gzip {                                                                                                #
+#         my $gzip_in=sub {                                                                                 #
+#                 my $next=shift;                                                                           #
+#                 sub {                                                                                     #
+#                                                                                                           #
+#                 }                                                                                         #
+#         }                                                                                                 #
+#                                                                                                           #
+#         my $gzip_out=sub {                                                                                #
+#                 my $next=shift;                                                                           #
+#                 my $compressor;                                                                           #
+#                 sub {                                                                                     #
+#                         my $scratch="";                                                                   #
+#                         unless($compressor){                                                              #
+#                                 #say "Creating new compressor";                                           #
+#                                 $scratch="";                                                              #
+#                                 $compressor=IO::Compress::Gzip->new(\$scratch, "-Level"=>-1, Minimal=>1); #
+#                         }                                                                                 #
+#                                                                                                           #
+#                         unless($_[5]){                                                                    #
+#                                 #say "End of data received";                                              #
+#                                 $compressor->close;                                                       #
+#                                 $compressor=undef;                                                        #
+#                                 $next->($scratch,sub {                                                    #
+#                                                 #pass on done to next                                     #
+#                                                 $next->("",$cb);                                          #
+#                                         });                                                               #
+#                         }                                                                                 #
+#                         else{                                                                             #
+#                                 #say "data received";                                                     #
+#                                 $compressor->syswrite($buf);                                              #
+#                                 if(length $scratch){                                                      #
+#                                         #say "sending scratch";                                           #
+#                                         $next->($scratch,$cb);                                            #
+#                                 }                                                                         #
+#                                 else {                                                                    #
+#                                         #say "no new  data";                                              #
+#                                         #trigger upstream for more                                        #
+#                                         $cb->(1);                                                         #
+#                                 }                                                                         #
+#                         }                                                                                 #
+#                                                                                                           #
+#                 }                                                                                         #
+#         };                                                                                                #
+#         [$gzip_in, $gzip_out];                                                                            #
+# }                                                                                                         #
+#############################################################################################################
 
 sub deflate {
 	my $next=shift;

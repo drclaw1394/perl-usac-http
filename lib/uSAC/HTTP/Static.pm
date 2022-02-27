@@ -434,11 +434,20 @@ sub make_list_dir {
 	\my %cache=$self->[cache_];
 	my %options=@_;
 	my $renderer=$options{renderer};
+	my @type;
 	#resolve renderer
-	$renderer=
-	lc $renderer eq "html"? _html_dir_list:
-	lc $renderer eq "json"? _json_dir_list:
-	!defined $renderer? _html_dir_list: $renderer;
+	if(lc $renderer eq "html"){
+		$renderer=_html_dir_list;
+		@type=(HTTP_CONTENT_TYPE, "text/html");
+	}
+	elsif(lc $renderer eq "json"){
+		$renderer= _json_dir_list;
+		@type=(HTTP_CONTENT_TYPE, "text/json");
+	}
+	else {
+		!defined $renderer? _html_dir_list: $renderer;
+		@type=(HTTP_CONTENT_TYPE, "text/html");
+	}
 	
 	sub{
 		my ($line,$rex,$uri)=@_;
@@ -483,20 +492,25 @@ sub make_list_dir {
 		#say "Results ", @results;
 		my $ren=$renderer//_html_dir_list;
 
-		rex_reply_chunked $line, $rex, HTTP_OK,[] , sub {
-			return unless my $writer=$_[0];			#no writer so bye
-			##### Start app logic
-			state $first=1;
-			my $reply="";					#Reset buffer
-			$ren->($reply, $first?$labels : undef, \@results);	#Render to output
-			$first=0;
-
-			###### End app logic
-			#$session->[uSAC::HTTP::Session::closeme_]=1;
-			$writer->($reply);#$session->[uSAC::HTTP::Session::dropper_]);
-			$writer->("", $session->[uSAC::HTTP::Session::dropper_]);
-
-		};
+		my $data="";
+		$ren->($data, $labels, \@results);	#Render to output
+		rex_write $line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , $data;
+                #####################################################################################
+                # sub {                                                                             #
+                #         return unless my $writer=$_[0];                 #no writer so bye         #
+                #         ##### Start app logic                                                     #
+                #         state $first=1;                                                           #
+                #         my $reply="";                                   #Reset buffer             #
+                #         $ren->($reply, $first?$labels : undef, \@results);      #Render to output #
+                #         $first=0;                                                                 #
+                #                                                                                   #
+                #         ###### End app logic                                                      #
+                #         #$session->[uSAC::HTTP::Session::closeme_]=1;                             #
+                #         $writer->($reply);#$session->[uSAC::HTTP::Session::dropper_]);            #
+                #         $writer->("", $session->[uSAC::HTTP::Session::dropper_]);                 #
+                #                                                                                   #
+                # };                                                                                #
+                #####################################################################################
 	}
 }
 
@@ -936,11 +950,10 @@ sub usac_file_under {
 		}
 		else {
 			if($next){
-				say "CALLING NEXT";
+				#say "CALLING NEXT";
 				return &$next;
 			}
 			else {
-				say "Calling error";
 				#no valid index found so 404
 				&rex_error_not_found;
 				#rex_reply_simple @_, HTTP_NOT_FOUND,[],"";
@@ -977,7 +990,8 @@ sub usac_dir_under {
 			pop;
 		}	
 		else {
-			$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+			#$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
+			$p=$_[1][uSAC::HTTP::Rex::capture_][0];
 		}
 
 		$list_dir->(@_, $p);
