@@ -2,8 +2,8 @@ package uSAC::HTTP::Session;
 use feature qw<say state refaliasing>;
 no warnings "experimental";
 use Scalar::Util 'openhandle','refaddr', 'weaken';
-use uSAC::SReader;
-use uSAC::SWriter;
+use uSAC::SIO::AE::SReader;
+use uSAC::SIO::AE::SWriter;
 use Data::Dumper;
 
 #require uSAC::HTTP::Server;
@@ -85,18 +85,18 @@ sub new {
 
 	};
 	#make reader
-	my $sr=uSAC::SReader->new($self,$self->[fh_]);
+	my $sr=uSAC::SIO::AE::SReader->new($self->[fh_]);
 	$sr->max_read_size=4096*16;
 	#$sr->on_read=\$self->[read_];
 	$sr->on_eof = $sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
 	#$sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
 	$sr->timing(\$self->[time_], \$Time);
 	$self->[sr_]=$sr;
-	uSAC::SReader::start $sr;
+	uSAC::SIO::AE::SReader::start $sr;
 	#$sr->start;
 
 	#make writer
-	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
+	$self->[sw_]=uSAC::SIO::AE::SWriter->new($self->[fh_]);
 	$self->[sw_]->on_error=$self->[dropper_];
 	$self->[sw_]->timing(\$self->[time_], \$Time);
 	$self->[write_]=$self->[sw_]->writer;
@@ -120,8 +120,8 @@ sub revive {
 	$self->[write_stack_]=[];
 	$self->[closeme_]=undef;
 	#$self->[sr_]->start($self->[fh_]);
-	uSAC::SReader::start $self->[sr_], $self->[fh_];
-	$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
+	uSAC::SIO::AE::SReader::start $self->[sr_], $self->[fh_];
+	$self->[sw_]=uSAC::SIO::AE::SWriter->new($self->[fh_]);
 
 	#make writer
 	#$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);

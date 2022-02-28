@@ -73,21 +73,14 @@ sub make_reader{
 
 
 	my $self=$r->[uSAC::HTTP::Session::server_];
-	#\my $buf=\$r->[uSAC::HTTP::Session::rbuf_];
-	#my $fh=$r->[uSAC::HTTP::Session::fh_];
-	
-	#my $write=$r->[uSAC::HTTP::Session::write_];
-	#weaken $write;
 	weaken $r;
 
 	my $cb=$self->current_cb;	
-	#my $static_headers=$self->static_headers;
 	
 	my ($state,$seq) = ($start_state, 0);
 	my ($method,$uri,$version,$len,$pos, $req);
 	my $line;
 
-	#my $ixx = 0;
 	my %h;		#Define the header storage here, once per connection
 	
 	#ctx, buffer, flags 
