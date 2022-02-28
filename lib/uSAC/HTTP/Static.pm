@@ -456,7 +456,8 @@ sub make_list_dir {
 		my $abs_path=$html_root."/".$uri;
 		stat $abs_path;
 		unless(-d _ and  -r _){
-			rex_write $line, $rex, HTTP_NOT_FOUND, {},"";
+			rex_error_not_found $line, $rex;
+			#rex_write $line, $rex, HTTP_NOT_FOUND, {},"";
 			return;
 		}
 
@@ -870,7 +871,8 @@ sub usac_index_under {
 		}
 
 		#no valid index found so 404
-		rex_write @_, HTTP_NOT_FOUND,{},"";
+		rex_error_not_found @_;
+		#rex_write @_, HTTP_NOT_FOUND,[],"";
 		return;
 	}
 

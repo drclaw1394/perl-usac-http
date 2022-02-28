@@ -405,15 +405,17 @@ sub run {
 			$_ = join ':',$h,$p;
 		}
 		($self->[host_],$self->[port_]) = split ':',$self->[listen_][0],2;
-	} else {
+	}
+	else {
 		$self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];
 	}
 	
 	#=======CATCH ALL
-	# Add the catch all site with a single route matching everything
-	# This not the same as the default site or the default match in the lookup table
+	#Add a catch all route to the default site.
+	#As this is always the last route added, it will be tested last
+	#Middleware for the default site is applicable to this handler
 	#
-	my $site=uSAC::HTTP::Site->new(server=>$self);
+	my $site=$self->site;#uSAC::HTTP::Site->new(server=>$self);
 	unshift $site->host->@*, "[^ ]+";	#match any host
 	$site->add_route($Any_Method, qr|.*|, sub {
 			&rex_error_not_found 
