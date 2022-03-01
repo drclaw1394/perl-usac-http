@@ -167,6 +167,7 @@ sub add_route {
 				$_[5]=$session->[uSAC::HTTP::Session::dropper_] unless $_[5];	#If no cb, then assume dropper
 				if($_[3]){
 					my $output=$_[1]->render_header(@_);#$matcher, $rex, $code, $headers,$data);
+					$_[3]=undef;	#mark headers as done
 					$output.=$_[4]//"";
 					$_[1]->writer->($output, @_[5,6]);
 				}

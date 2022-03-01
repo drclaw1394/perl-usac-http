@@ -359,7 +359,6 @@ sub send_file_uri_norange {
 
                         elsif($rc){
 				rex_write $matcher,$rex,$code,$headers,$reply,__SUB__;
-				$headers=undef;
 				#$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
                                 return;
                         }

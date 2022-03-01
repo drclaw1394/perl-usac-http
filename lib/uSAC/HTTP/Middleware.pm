@@ -21,10 +21,19 @@ use Digest::SHA1;
 
 use Crypt::JWT qw<decode_jwt encode_jwt>;
 use Data::Dumper;
+use List::Util qw<first>;
 
 use constant LF => "\015\012";
 
-our @EXPORT_OK=qw<dummy_mw log_simple log_simple_in log_simple_out chunked authenticate_simple state_simple make_chunked_writer make_chunked_deflate_writer>;
+our @EXPORT_OK=qw<
+	dummy_mw 
+	log_simple log_simple_in log_simple_out 
+	chunked
+	deflate
+	gzip
+	authenticate_simple
+	state_simple
+>;
 our @EXPORT=();
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
@@ -50,8 +59,9 @@ sub dummy_mw{
 	};
 	$sub;
 }
-
-#log to STDERR	
+# ===========
+# Log Simple - Log basic stats to STDERR
+#
 sub log_simple {
 	[&log_simple_in, &log_simple_out]
 }
@@ -103,6 +113,10 @@ sub log_simple_out {
 	
 	#Return as a array [$header, $body]
 }
+
+
+
+# =============
 
 
 sub authenticate_simple{
@@ -194,16 +208,32 @@ sub chunked{
 	my $chunked_out=
 	sub {
 		my $next=shift;
+		my $bypass;
 		sub {
-			#Prevent double chunking
-			return &$next if($_[3] and grep HTTP_TRANSFER_ENCODING eq $_, $_[3]->@*);
+
+			say "Calling chunked";
+			#return &$next if($_[3] and grep HTTP_TRANSFER_ENCODING eq $_, $_[3]->@*);
 
 			if($_[3]){
+				$bypass=defined first {$_[3][$_*2] =~ HTTP_CONTENT_LENGTH} 0..$_[3]->@*/2-1;
+				return &$next if $bypass;
+				
 				#we actually have  headers and Data. this is the first call
 				#Add to headers the chunked trasfer encoding
-				return &$next if(grep HTTP_CONTENT_LENGTH eq $_, $_[3]->@*);
-				push $_[3]->@*, HTTP_TRANSFER_ENCODING, "chunked";
+				#
+				my $index=first {$_[3][$_*2] =~ HTTP_TRANSFER_ENCODING} 0..$_[3]->@*/2-1;
+
+				if(!defined($index)){
+
+					push $_[3]->@*, HTTP_TRANSFER_ENCODING, "chunked";
+				} 
+				else {
+					for($_[3][$index*2+1]){
+						$_=join ", ", $_, "chunked " unless $_ =~ /chunked/;
+					}
+				}
 			}
+			return &$next if $bypass;
 
 			my $scratch="";
 			$scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF if $_[4];
@@ -218,127 +248,181 @@ sub chunked{
 }
 
 
-#############################################################################################################
-# sub gzip {                                                                                                #
-#         my $gzip_in=sub {                                                                                 #
-#                 my $next=shift;                                                                           #
-#                 sub {                                                                                     #
-#                                                                                                           #
-#                 }                                                                                         #
-#         }                                                                                                 #
-#                                                                                                           #
-#         my $gzip_out=sub {                                                                                #
-#                 my $next=shift;                                                                           #
-#                 my $compressor;                                                                           #
-#                 sub {                                                                                     #
-#                         my $scratch="";                                                                   #
-#                         unless($compressor){                                                              #
-#                                 #say "Creating new compressor";                                           #
-#                                 $scratch="";                                                              #
-#                                 $compressor=IO::Compress::Gzip->new(\$scratch, "-Level"=>-1, Minimal=>1); #
-#                         }                                                                                 #
-#                                                                                                           #
-#                         unless($_[5]){                                                                    #
-#                                 #say "End of data received";                                              #
-#                                 $compressor->close;                                                       #
-#                                 $compressor=undef;                                                        #
-#                                 $next->($scratch,sub {                                                    #
-#                                                 #pass on done to next                                     #
-#                                                 $next->("",$cb);                                          #
-#                                         });                                                               #
-#                         }                                                                                 #
-#                         else{                                                                             #
-#                                 #say "data received";                                                     #
-#                                 $compressor->syswrite($buf);                                              #
-#                                 if(length $scratch){                                                      #
-#                                         #say "sending scratch";                                           #
-#                                         $next->($scratch,$cb);                                            #
-#                                 }                                                                         #
-#                                 else {                                                                    #
-#                                         #say "no new  data";                                              #
-#                                         #trigger upstream for more                                        #
-#                                         $cb->(1);                                                         #
-#                                 }                                                                         #
-#                         }                                                                                 #
-#                                                                                                           #
-#                 }                                                                                         #
-#         };                                                                                                #
-#         [$gzip_in, $gzip_out];                                                                            #
-# }                                                                                                         #
-#############################################################################################################
 
 sub deflate {
-	my $next=shift;
-	my $scratch="";
-	my $compressor;
-	my $status;
-	$compressor=Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6);
-	$scratch="";
-	sub {
-		my $cb=$_[1];
-		unless(defined $_[0]){
-			#reset
-			#$compressor->close if $compressor;
-			return $next->(undef,$cb);
+	my $in=sub {
+		my $next=shift;
+		sub {
+			say "DEFLATE IN.. bypass";
+			&$next;
 		}
+	};
 
-		\my $buf=\$_[0];
+	my $out=sub {
+		my $next=shift;
+		my $bypass;
+		my $compressor=Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6);
+		my $status;
+		my $index;
+		(sub {
+			say "calling deflate out";
+
+			# 0	1 	2   3	    4     5
+			# usac, rex, code, headers, data, cb
+			\my $buf=\$_[4];
+			if($_[3]){
+				#Calling first time with headers
+
+				# Check content negotiation
+				#
+				$bypass=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/;
+
+				# Also avoid compressing any of the following
+				# TODO: add content type matching
 
 
-		if(length $buf ==0){
-			#say "End of data received";
-			$status=$compressor->flush($scratch);
-			say "Status of flush: $status";
-			say " scratch length: ", length $scratch;
-			#$compressor=undef;
-			$next->($scratch,sub {
-					#pass on done to next
-					$scratch="";
-					$status=$compressor->deflateReset();
-					say "Status of deflateReset: $status";
-					$status == Z_OK or say "this isn;t good";
-					$next->("",$cb);
-			});
-		}
-		else{
-			say "data received, ", length $buf;
+				# locate transfer encoding header if present
+				#
+				$bypass||=defined first {$_[3][$_] =~ HTTP_CONTENT_ENCODING} 0..$_[3]->@*/2-1;
+
+				return &$next if $bypass;
+
+				# Remove content length. We rely on chunked transfer
+				$index=first {$_[3][$_] =~ HTTP_CONTENT_LENGTH} 0..$_[3]->@*/2-1;
+				splice($_[3]->@*, $index, 2) if defined $index;
+				
+
+				push $_[3]->@*, HTTP_CONTENT_ENCODING, "deflate";
+				say "HEaders after deflate", Dumper $_[3];
+
+				# reset compression context
+				#
+				$status=$compressor->deflateReset();
+				$status == Z_OK or say STDERR "Could not reset deflate";
+			}
+
+			# Only process if setup correctly
+			#
+			return &$next if $bypass;
+
+
+			# Append comppressed data to the scratch when its ready
+			#
+			my $scratch=""; 	#new scratch each call
 			$status=$compressor->deflate($buf, $scratch);
-			say "Status of deflat: $status";
-			$status == Z_OK or say "this isn;t good";
-			if(length $scratch){
-				#say "sending scratch";
-				$next->($scratch,$cb);
+			$status == Z_OK or say STDERR "deflating error";
+
+
+			# Push to next stage
+			unless($_[5]){
+				#if no callback is provided, then this is the last write
+				$status=$compressor->flush($scratch);
+				$next->(@_[0,1,2,3], $scratch , @_[5,6]);
+				return;
+
 			}
 			else {
-				#say "no new  data";
-				#trigger upstream for more
-				$cb->(1);
+				# more data expected
+				if(length $scratch){
+					#enough data to send out
+					$next->(@_[0,1,2,3], $scratch , @_[5,6]);
+					$_[5]->($_[6]);	#execute callback to force feed
+				}
+			}
+		},
+		#TODO:
+		# add chunked out only here
+	)
+	};
+	[$in, $out];
+}
+
+sub gzip{
+	my $in=sub {
+		my $next=shift;
+		sub {
+			say "gzip IN.. bypass";
+			&$next;
+		}
+	};
+
+	my $out=sub {
+		my $next=shift;
+		my $bypass;
+                my $compressor;
+		my $status;
+		my $scratch="";
+		sub {
+			say "calling gzip out";
+
+			# 0	1 	2   3	    4     5
+			# usac, rex, code, headers, data, cb
+			\my $buf=\$_[4];
+			if($_[3]){
+				#Calling first time with headers
+
+				# Check content negotiation
+				#
+				$bypass=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/;
+
+				# Also avoid compressing any of the following
+				# TODO: add content type matching
+
+
+				# locate transfer encoding header if present
+				#
+				$bypass||=defined first {$_[3][$_] =~ HTTP_CONTENT_ENCODING} 0..$_[3]->@*/2-1;
+
+				return &$next if $bypass;
+
+				push $_[3]->@*, HTTP_CONTENT_ENCODING, "deflate";
+
+				# reset compression context
+				#
+				$scratch="";
+				$compressor=IO::Compress::Gzip->new(\$scratch, "-Level"=>-1, Minimal=>1);
+			}
+
+			# Only process if setup correctly
+			#
+			return &$next if $bypass;
+
+
+			# Append comppressed data to the scratch when its ready
+			#
+			my $copy=""; 	#new scratch each call
+			$compressor->syswrite($buf);
+
+
+			# Push to next stage
+			unless($_[5]){
+				#if no callback is provided, then this is the last write
+				$compressor->close;
+				$copy=$scratch;
+				$scratch="";
+				$next->(@_[0,1,2,3], $copy, @_[5,6]);
+				return;
+
+			}
+			else {
+				# more data expected
+				if(length $scratch){
+					#enough data to send out
+					$copy=$scratch;
+					$scratch="";
+					$next->(@_[0,1,2,3], $copy, @_[5,6]);
+					$_[5]->($_[6]);	#execute callback to force feed
+				}
 			}
 		}
+	};
+	[$in, $out];
 
-	}
-}
-#returns a stack entry point which will write set of input data as a chunk to ouput
-sub make_chunked_deflate_writer {
-	my $session=shift;
-	#create a chunked sub
-	#and link to the writer of the session
-	my ($entrypoint,$stack)=uSAC::HTTP::Middler->new()
-	->register(\&uSAC::HTTP::Middleware::deflate)
-	->register(\&uSAC::HTTP::Middleware::chunked)
-	->link($session->[uSAC::HTTP::Session::write_]);	#this could be a normal socket writer, orssl type
-	return $entrypoint;
+
+
+
+
 }
 
-#returns a stack entry point which will write set of input data as a chunk to ouput
-sub make_chunked_writer {
-	my $session=shift;
-	#create a chunked sub
-	#and link to the writer of the session
-	my ($entrypoint,$stack)=uSAC::HTTP::Middler->new()
-	->register(\&uSAC::HTTP::Middleware::chunked)
-	->link($session->[uSAC::HTTP::Session::write_]);	#this could be a normal socket writer, orssl type
-	return $entrypoint;
-}
 
 1;
