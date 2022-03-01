@@ -201,9 +201,7 @@ sub chunked{
 	my $chunked_in=
 	sub {
 		my $next=shift;
-		sub {
-			&$next;
-		};
+		
 	};
 	my $chunked_out=
 	sub {
@@ -211,7 +209,6 @@ sub chunked{
 		my $bypass;
 		sub {
 
-			say "Calling chunked";
 			#return &$next if($_[3] and grep HTTP_TRANSFER_ENCODING eq $_, $_[3]->@*);
 
 			if($_[3]){
@@ -244,6 +241,7 @@ sub chunked{
 
 		};
 	};
+
 	[$chunked_in, $chunked_out]
 }
 
@@ -253,7 +251,6 @@ sub deflate {
 	my $in=sub {
 		my $next=shift;
 		sub {
-			say "DEFLATE IN.. bypass";
 			&$next;
 		}
 	};
@@ -265,7 +262,6 @@ sub deflate {
 		my $status;
 		my $index;
 		(sub {
-			say "calling deflate out";
 
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
@@ -293,7 +289,6 @@ sub deflate {
 				
 
 				push $_[3]->@*, HTTP_CONTENT_ENCODING, "deflate";
-				say "HEaders after deflate", Dumper $_[3];
 
 				# reset compression context
 				#

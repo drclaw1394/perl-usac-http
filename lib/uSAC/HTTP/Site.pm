@@ -40,7 +40,7 @@ use uSAC::HTTP::Static;
 #use Hustle::Table;
 #
 use uSAC::HTTP::Middler;
-use uSAC::HTTP::Middleware ":all";#qw<log_simple authenticate_simple>;
+use uSAC::HTTP::Middleware qw<log_simple chunked>;
 
 use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
@@ -92,6 +92,11 @@ sub add_route {
 	my $path_matcher=shift;
 	my @inner;
 	my @outer;
+
+	#Add chunked always. Add at start of total middleware
+	# Than means executed first for innerware 
+	# and last for outerware
+	unshift @_, chunked();
 	for(@_){
 		#If the elemtn is a code ref it is innerware
 		if(ref($_)eq "CODE"){
@@ -109,8 +114,15 @@ sub add_route {
 		}
 	}
 
+	
+	# Innerware run form parent to child to route in
+	# the order of listing
+	#
 	unshift @inner, $self->construct_middleware;
-	push @outer, $self->construct_outerware;
+
+	# Outerware is in reverse order
+	unshift @outer, $self->construct_outerware;
+	@outer=reverse @outer;
 
 	unshift @inner, $self->_strip_prefix;# if $self->[prefix_];	#make strip prefix first of middleware
 
