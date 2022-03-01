@@ -20,6 +20,7 @@ use MIME::Base64;
 use Digest::SHA1;
 
 use Crypt::JWT qw<decode_jwt encode_jwt>;
+use Data::Dumper;
 
 use constant LF => "\015\012";
 

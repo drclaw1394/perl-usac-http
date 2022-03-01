@@ -84,16 +84,16 @@ sub state_cookie_out {
 					if($_){
 						if(my $encoded=encode_base64url $state_encode->($_)){
 							push $_[3]->@*,
-							[HTTP_SET_COOKIE,
+							HTTP_SET_COOKIE,
 								new_cookie($state_name=>$encoded)
 								->serialize_set_cookie
-							];
+							;
 						}
 					}
 					elsif($_ eq ""){
 						push $_[3]->@*,
 						#expire the cookie
-						map [HTTP_SET_COOKIE, $_->serialize_set_cookie], expire_cookies $state_name;
+						map((HTTP_SET_COOKIE, $_->serialize_set_cookie), expire_cookies $state_name);
 
 					}
 				}
