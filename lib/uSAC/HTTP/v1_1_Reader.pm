@@ -199,7 +199,7 @@ sub make_reader{
 
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]=0;
-				$r->[uSAC::HTTP::Session::closeme_]||= $h{CONNECTION} =~/close/ ||$version ne "HTTP/1.1";
+				$r->[uSAC::HTTP::Session::closeme_]||= $h{CONNECTION} eq "close" ||$version ne "HTTP/1.1";
 				#$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{HTTP_CONNECTION} =~/^Keep-Alive/ );
 				#$r->[uSAC::HTTP::Session::closeme_]||=	$h{HTTP_CONNECTION}=~/close/i;
 

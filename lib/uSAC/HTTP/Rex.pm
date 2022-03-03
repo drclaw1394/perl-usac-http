@@ -79,12 +79,12 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ capture_ out_headers_ out_code_ out_length_ static_headers_>
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ capture_>
 );
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>static_headers_-version_+1;
+use constant KEY_COUNT=>capture_-version_+1;
 
 require uSAC::HTTP::Middleware;
 ###########################################################
@@ -115,11 +115,9 @@ sub new {
 	if((my $i=index($_[5], "?"))>=0){
 		$query_string=substr $_[5], $i+1;
 	}
-	my $server=$_[1]->[uSAC::HTTP::Session::server_];
 	my $write=$_[1]->[uSAC::HTTP::Session::write_];
 
-	my $static_headers=$server->static_headers;
-	bless [ $_[3], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[2]{HOST}, $_[4], $_[5], $_[5], {}, [],{},200,undef, $static_headers], $_[0];
+	bless [ $_[3], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[2]{HOST}, $_[4], $_[5], $_[5], {}, []], $_[0];
 
 
 }
@@ -476,19 +474,25 @@ sub rex_write{
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 		\my @h=$_[3];
 
-		#push @h, HTTP_DATE, 
-		#[HTTP_CONTENT_LENGTH,	length ($_[4])+0],
 		if($session->[uSAC::HTTP::Session::closeme_]){
 			push @h, 
 				HTTP_CONNECTION, "close";
 		}
 		else{
 			push @h,
-				HTTP_CONNECTION, "Keep-Alive",
+				HTTP_CONNECTION, "keep-alive",
 				HTTP_KEEP_ALIVE,"timeout=10, max=1000";
 		}
+
+		state $server=$session->[uSAC::HTTP::Session::server_];
+		state $static_headers=$server->static_headers;
+
+		if($server!=$session->[uSAC::HTTP::Session::server_]){
+			$server=$session->[uSAC::HTTP::Session::server_];
+			state $static_headers=$server->static_headers;
+		}
 		push @h,
-			$_[1][static_headers_]->@*,
+			$static_headers->@*,
 			HTTP_DATE, $uSAC::HTTP::Session::Date;
 	}
 
@@ -504,8 +508,10 @@ sub rex_write{
 #
 
 #actually render the header 
+my @index=map {$_*2} 0..99;
 sub render_header {
 	my $self=shift;
+	no warnings "uninitialized";
 	#my ($matcher, $rex, $code, $headers, $data)=@_;
 		
 	my $session=$self->[session_];
@@ -517,7 +523,16 @@ sub render_header {
 	\my @h=$_[3];
 	#$reply.= join "", map $_.": ".$h{$_}.LF, keys $_[3]->%*;
 
-	$reply.=join "", map "$h[2*$_]: $h[2*$_+1]".LF, 0..@h/2-1;
+	
+	for(@index){
+		last unless $h[$_];
+		$reply.= "$h[$_]: $h[$_+1]".LF;
+	}
+	#$reply.=join "", map {$h[$_]?("$h[$_]: $h[$_+1]".LF):()} @index;
+	#say $reply;
+	#0..@h/2-1;
+	#$reply.=join "", map {my $a=2*$_;"$h[$a]: $h[$a+1]".LF} 0..@h/2-1;
+	#$reply.=join "", map "$h[2*$_]: $h[2*$_+1]".LF, 0..@h/2-1;
 
 	$reply.=LF;
 }
