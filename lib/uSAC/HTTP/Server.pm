@@ -1,6 +1,21 @@
 package uSAC::HTTP::Server; 
+use Log::ger;
 use strict;
 use warnings;
+#use constant "OS::darwin"=>$^O =~ /darwin/;
+#use constant "OS::linux"=>0;
+#
+use constant {
+	"OS::darwin"=>"darwin",
+	"OS::linux"=>"linux",
+	"OS::bsd"=>"bsd",
+};
+use constant {
+	"CONFIG::single_process"=>1,
+	"CONFIG::kernel_loadbalancing"=>1,
+	"CONFIG::log"=>0
+};
+
 use feature qw<isa refaliasing say state current_sub>;
 #use IO::Handle;
 use constant NAME=>"uSAC";
@@ -53,7 +68,7 @@ use uSAC::HTTP::Rex;
 use uSAC::MIME;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_default usac_hosts usac_sub_product>;
+our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_default usac_sub_product>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -92,6 +107,7 @@ sub new {
 	my $pkg = shift;
 	my $self = $pkg->SUPER::new();#bless [], $pkg;
 	my %options=@_;
+
 	$self->[host_]=$options{host}//"0.0.0.0";
 	$self->[port_]=$options{port}//8080;
 	$self->[enable_hosts_]=1;#$options{enable_hosts};
@@ -157,7 +173,7 @@ sub listen {
 		} elsif ($af == AF_UNIX) {
 			unlink $service;
 		}
-		say "Service: $service, host $host, ipn ". length $ipn;
+		log_info "Service: $service, host $host, ipn ". length $ipn;
 		bind $fh, AnyEvent::Socket::pack_sockaddr( $service, $ipn )
 			or Carp::croak "listen/bind on ".eval{Socket::inet_ntoa($ipn)}.":$service: $!";
 		
@@ -193,6 +209,8 @@ sub prepare {
 	my $timeout=20;
 	$self->[server_clock_]=time;	
 
+	#Timeout timer
+	#
 	$self->[stream_timer_]=AE::timer 0,$interval, sub {
 		#iterate through all connections and check the difference between the last update
 		$self->[server_clock_]+=$interval;
@@ -203,13 +221,37 @@ sub prepare {
 			#say "checking id: $_ time: ", $session->[uSAC::HTTP::Session::time_];
 
 			if(($self->[server_clock_]-$session->[uSAC::HTTP::Session::time_])> $timeout){
-				say "DROPPING ID: $_";
+				log_info "DROPPING ID: $_";
 				$session->[uSAC::HTTP::Session::closeme_]=1;
 				$session->[uSAC::HTTP::Session::dropper_]->();
 				#delete $self->[sessions_]{$_};
 			}
 		}
 	};
+
+        # FD recieve
+        #open child pipe
+        my $sfd;
+        my $rfd;
+        my $socket;
+	return unless $socket;
+	my $do_client=$self->make_do_client;
+        my $watcher; $watcher=AE::io $socket, 0, sub {
+                #fd is readable.. attempt to read
+                $rfd=IO::FDPass::recv $sfd;
+                if(defined $rfd){
+                        #New fd to play with
+			$do_client->($rfd);
+                }
+                elsif($! == EAGAIN or $! ==EINTR){
+                        return;
+                }
+                else {
+                        #Actuall error
+                        #TODO
+                }
+
+        };
 }
 
 sub make_sysaccept {
@@ -247,51 +289,76 @@ sub accept {
 	weaken( my $self = shift );
 	\my @zombies=$self->[zombies_];
 	\my %sessions=$self->[sessions_];
-	#\my $active_connections=\$self->[active_connections_];
-	#\my $total_connections=\$self->[total_connections_];
-	my $session;
+	my $do_client=$self->make_do_client;
+
+	my $child_index;
+	\my @children=[];
+
 	for my $fl ( values %{ $self->[fhs_] }) {
-		#my $accept=make_sysaccept $fl;
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
 			while(($peer = accept my $fh, $fl)){
-			#(while(my $fh=sysaccept($fl)){
-			#while(my $fh=$accept->()){
 				last unless $fh;
-				#while ($fl and ($peer = accept my $fh, $fl)) {
 
-				binmode	$fh, ":raw";
-				#fcntl $fh, F_SETFL, fcntl($fh, F_GETFL,0)|O_NONBLOCK;
-				fcntl $fh, F_SETFL,O_NONBLOCK;
+				CONFIG::kernel_loadbalancing and $do_client->($fh);
 
-				#TODO:
-				# Need to do OS check here
-				setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1 or Carp::croak "listen/so_nodelay $!";
-				#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
-
-				#TODO: setup timeout for bad clients/connections
-
-				#setsockopt($fh, SOL_SOCKET, SO_LINGER, pack ("ll",1,0));
-				my $id = ++$seq;
-				my $scheme="http";
-
-				$session=pop @zombies;
-				if($session){
-					uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
-				}
-				else {
-					$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
-				}
-
-				$sessions{ $id } = $session;
-				#$active_connections++;
-				#$total_connections++;
-
-				uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+				!CONFIG::kernel_loadbalancing and IO::FDPass::send $children[$child_index++%@children], $fh;
 			}
 		};
 	}
 	return;
+}
+sub as_satellite {
+	#Connect to unix socket, which master is listening to
+}
+sub as_central {
+	#Create a unix socket and start accepting connections from worker
+	
+}
+
+
+
+sub make_do_client{
+
+	my ($self)=@_;
+	\my @zombies=$self->[zombies_];
+	\my %sessions=$self->[sessions_];
+
+	my $session;
+	my $seq=0;
+	sub {
+		my $fh=shift;
+
+		#while ($fl and ($peer = accept my $fh, $fl)) {
+
+		binmode	$fh, ":raw";
+		#Linux does not inherit the socket flags from parent socket. But BSD does.
+		#Compile time disabling with constants
+		OS::linux and fcntl $fh, F_SETFL,O_NONBLOCK;
+
+		#TODO:
+		# Need to do OS check here
+		setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1 or Carp::croak "listen/so_nodelay $!";
+		#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
+
+
+		my $id = ++$seq;
+		my $scheme="http";
+
+		$session=pop @zombies;
+		if($session){
+			uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
+		}
+		else {
+			$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
+		}
+
+		$sessions{ $id } = $session;
+		#$active_connections++;
+		#$total_connections++;
+
+		uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+	}
 }
 
 sub current_cb {
@@ -449,17 +516,6 @@ sub mime_lookup: lvalue {
 
 #declarative setup
 
-#Logical or of existing enable_hosts_ flag
-#Sub servers can enable it if needed.
-#Servers not needing host should't have has a host match specified
-#TODO: adding multiple ports and interfaces essentially is adding multiple hosts
-#need to allow for this
-sub usac_hosts  {
-	say "Enabling host support for: ", $uSAC::HTTP::Site;
-	say @_;
-	$uSAC::HTTP::Site->[enable_hosts_]=$uSAC::HTTP::Site->[enable_hosts_]//$_[0]//0;
-	say "Hosts enabled? ", $uSAC::HTTP::Site->[enable_hosts_];
-}
 
 #########################################################
 # sub usac_host {                                       #
@@ -480,7 +536,7 @@ sub usac_server :prototype(&) {
 	#my $server=$uSAC::HTTP::Site;
 	unless(defined $server and ($server isa 'uSAC::HTTP::Site'  )) {
 		#only create if one doesn't exist
-		say "Creating new server";
+		log_info "Creating new server";
 		$server=uSAC::HTTP::Server->new();
 	}
 	#Push the server as the lastest 'site'

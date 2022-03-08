@@ -6,6 +6,7 @@ use version; our $VERSION=version->declare("v0.0.1");
 use feature ":all";
 no warnings "experimental";
 
+use Log::ger;
 use Cwd qw<abs_path>;
 use Exporter "import";
 
@@ -105,7 +106,6 @@ sub add_route {
 		#if its an array ref, then it might contain both inner
 		#and outerware
 		elsif(ref($_) eq "ARRAY"){
-			say "innerware ", $_->[0];
 			push @inner, $_->[0];
 			push @outer, $_->[1];
 		}
@@ -126,12 +126,10 @@ sub add_route {
 
 	unshift @inner, $self->_strip_prefix;# if $self->[prefix_];	#make strip prefix first of middleware
 
-	#die "No Matcher provided " unless $matcher//0;
 	die "No end point provided" unless $end and ref $end eq "CODE";
 	state @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 
 	my @non_matching=(qr{[^ ]+});#grep {!/$method_matcher/} @methods;
-	#my @non_matching=grep {!/$method_matcher/} @methods;
 	my @matching=grep { /$method_matcher/ } @methods;
 	my $sub;
 
@@ -144,20 +142,14 @@ sub add_route {
 		};
 	}
 
+	my @hosts;
 	my $matcher;
-	#my $unsupported;
+	@hosts=$self->build_hosts;
+	push @hosts, qr{[^ ]+} unless @hosts;
+	my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
 	my $bp=$self->built_prefix;
-	if($self->[server_]->enable_hosts){
-		my @hosts=$self->build_hosts;
-		push @hosts, qr{[^ ]+} unless @hosts;
-		my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
-		my $bp=$self->built_prefix;
-		$matcher=qr{^$host_match $method_matcher $bp$path_matcher};
-	}
-	else {
-		$matcher=qr{^$method_matcher $bp$path_matcher};
-	}
-	say "  matching: $matcher";	
+	$matcher=qr{^$host_match $method_matcher $bp$path_matcher};
+	log_info "  matching: $matcher";	
 	my $outer;
 
 	if(@inner){
@@ -206,18 +198,11 @@ sub add_route {
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
 	my $unsupported;
-	if($self->[server_]->enable_hosts){
-		my @hosts=$self->build_hosts;
-		push @hosts, qr{[^ ]+} unless @hosts;
-		my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
-		$unsupported=qr{^$host_match $mre $bp$path_matcher};
+	@hosts=$self->build_hosts;
+	push @hosts, qr{[^ ]+} unless @hosts;
+	$host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
+	$unsupported=qr{^$host_match $mre $bp$path_matcher};
 		
-	}
-	else {
-		$unsupported=qr{^$mre $bp$path_matcher};
-	}
-	#say "Unmatching: $unsupported";	
-	#$self->[server_]->add_end_point($unsupported,$sub, $self);
 	push $self->[unsupported_]->@*, [$unsupported, $sub,[$self,$outer]];
 }
 
@@ -236,8 +221,7 @@ sub _strip_prefix {
 				&$inner_next; #call the next
 				#Check the inprogress flag
 				unless ($_[1][session_][uSAC::HTTP::Session::in_progress_]){
-					say STDERR "NO ENDPOINT REPLIED for". $_[1]->[uri_];
-					#rex_reply_simple @_, HTTP_OK,[],"NO REPLY for ".$_[1]->[uri_];
+					log_error("NO ENDPOINT REPLIED for". $_[1]->[uri_]);
 				}
 			}
 		},
@@ -412,7 +396,6 @@ sub resolve_mime_lookup {
 	my $db;;
 	while($parent) {
 		$db=$parent->mime_db;
-		#say "looking up mime db in : ",$parent;
 		last if $db;
 		$parent=$parent->parent_site;
 	}
@@ -492,7 +475,6 @@ sub usac_route {
 		$self->add_route(@_);
 	}
 	elsif(!($_[0]=~m|^[/]|) and !($_[0]=~m|^$Any_Method|)){
-		#say "FIXING PATH MATCHER";
 		#not starting with a forward slash but with a method
 		my $url=shift @_;
 
@@ -511,7 +493,6 @@ sub usac_route {
 		ref($_[1]) ne "Regexp"
 	){
 		#Method specified but route missing a leading slash
-		#say "Fixing leading slash for: $_[1]";
 		my $method=shift;
 		my $url=shift;
 
@@ -521,7 +502,6 @@ sub usac_route {
 		$self->add_route(@_);
 	}
 	else{
-		say "DEFAULT MATCHING SETUP";
 		#normal	
 		$self->add_route(@_);
 	}
@@ -567,10 +547,6 @@ sub usac_middleware {
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
-	say "ADDING MIDDLEWARE";	
-	#my $d=Data::Dumper->new($mw);
-	#$d->Deparse(1);
-	#say $d->Dump;
 	push $self->innerware->@*, $mw->[0];
 	push $self->outerware->@*, $mw->[1];
 }
@@ -579,7 +555,6 @@ sub usac_innerware{
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
-	say "ADDING INNERWARE";	
 	if(ref($mw)eq"ARRAY"){
 		push $self->innerware->@*, @$mw;
 	}
@@ -592,7 +567,6 @@ sub usac_outerware {
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
-	say "ADDING OUTERWARE";	
 	if(ref($mw)eq"ARRAY"){
 		push $self->outerware->@*, @$mw;
 	}
@@ -654,7 +628,7 @@ sub usac_cached_file {
 		usac_static_content($entry->[0], mime=>$type);
 	}
 	else {
-		say "Could not add hot path: $path";
+		log_error "Could not add hot path: $path";
 	}
 }
 #set the default mime for this level

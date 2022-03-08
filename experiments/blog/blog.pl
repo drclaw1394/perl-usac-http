@@ -1,6 +1,11 @@
 #!/usr/bin/env perl
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
+use Log::ger::Output 'Screen';
+use Log::ger::Util;
+
+Log::ger::Util::set_level "trace";
+
 
 
 use uSAC::MIME;

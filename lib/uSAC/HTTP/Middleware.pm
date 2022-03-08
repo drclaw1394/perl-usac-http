@@ -22,6 +22,7 @@ use Digest::SHA1;
 use Crypt::JWT qw<decode_jwt encode_jwt>;
 use Data::Dumper;
 use List::Util qw<first>;
+use Log::ger;
 
 use constant LF => "\015\012";
 
@@ -39,6 +40,9 @@ our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
 );
 use uSAC::HTTP::Middler;
+
+my @key_indexes=map {$_*2} 0..99;
+
 #INCOMMING REX PROCESSING
 #
 sub dummy_mw{
@@ -208,24 +212,30 @@ sub chunked{
 		my $next=shift;
 		my $bypass;
 		sub {
-
-			#return &$next if($_[3] and grep HTTP_TRANSFER_ENCODING eq $_, $_[3]->@*);
-
+			CONFIG::log  and log_trace "Chunked Outerware";
 			if($_[3]){
-				$bypass=defined first {$_[3][$_*2] =~ HTTP_CONTENT_LENGTH} 0..$_[3]->@*/2-1;
-				return &$next if $bypass;
+				\my @headers=$_[3];
+				for my $k (@key_indexes){
+					last if $k > @headers;
+					($bypass= $headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and return &$next;
+				}
+				CONFIG::log and log_debug "Chunk bypass: $bypass";
 				
 				#we actually have  headers and Data. this is the first call
 				#Add to headers the chunked trasfer encoding
 				#
-				my $index=first {$_[3][$_*2] =~ HTTP_TRANSFER_ENCODING} 0..$_[3]->@*/2-1;
+				my $index=-1;
+				for my $k (@key_indexes){
+					last if $k>@headers;
+					$index =$k if $headers[$k] =~ /@{[HTTP_TRANSFER_ENCODING]}/ioaa;
+				}
 
-				if(!defined($index)){
+				if($index<0){
 
-					push $_[3]->@*, HTTP_TRANSFER_ENCODING, "chunked";
+					push @headers, HTTP_TRANSFER_ENCODING, "chunked";
 				} 
 				else {
-					for($_[3][$index*2+1]){
+					for($headers[$index+1]){
 						$_=join ", ", $_, "chunked " unless $_ =~ /chunked/;
 					}
 				}

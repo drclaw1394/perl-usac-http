@@ -489,7 +489,7 @@ sub rex_write{
 
 		if($server!=$session->[uSAC::HTTP::Session::server_]){
 			$server=$session->[uSAC::HTTP::Session::server_];
-			state $static_headers=$server->static_headers;
+			$static_headers=$server->static_headers;
 		}
 		push @h,
 			$static_headers->@*,
