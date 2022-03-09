@@ -3,6 +3,7 @@ package uSAC::HTTP::Static;
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
 use strict;
+use Log::ger;
 use Data::Dumper;
 use JSON;
 #no feature "indirect";
@@ -240,6 +241,7 @@ sub send_file_uri_norange {
                 my $do_sendfile;
 		if($sendfile){
 			$do_sendfile=sub {
+				CONFIG::log  and log_trace "Doing send file";
 				#Do send file here?
 				#seek $in_fh,$total,0;
 				#in, out, size, input_offset
@@ -329,11 +331,12 @@ sub send_file_uri_norange {
 		#my $sendfile=1;
 		#Enable using send file if content length is greater than threshold
 		if($sendfile and $content_length>=$sendfile){
+			CONFIG::log  and log_trace "Writing sendfile header";
 			#Write header out and then issue send file
 
 			#Setup writable event listener
 
-			rex_write $matcher,$rex,$code,$headers,undef, $do_sendfile;
+			rex_write $matcher,$rex,$code,$headers,"", $do_sendfile;
 			#$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
 			return;
 		}

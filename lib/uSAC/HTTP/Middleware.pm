@@ -6,11 +6,9 @@ use feature qw<refaliasing say switch state current_sub signatures>;
 no warnings "experimental";
 no feature "indirect";
 use uSAC::HTTP::Session;
-use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
-use uSAC::HTTP::Cookie;
 
 use Time::HiRes qw<time>;
 use IO::Compress::Gzip;
@@ -23,6 +21,9 @@ use Crypt::JWT qw<decode_jwt encode_jwt>;
 use Data::Dumper;
 use List::Util qw<first>;
 use Log::ger;
+
+
+
 
 use constant LF => "\015\012";
 
@@ -214,9 +215,10 @@ sub chunked{
 		sub {
 			CONFIG::log  and log_trace "Chunked Outerware";
 			if($_[3]){
+				$bypass=undef;#reset
 				\my @headers=$_[3];
 				for my $k (@key_indexes){
-					last if $k > @headers;
+					last if $k >= @headers;
 					($bypass= $headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and return &$next;
 				}
 				CONFIG::log and log_debug "Chunk bypass: $bypass";
@@ -226,7 +228,7 @@ sub chunked{
 				#
 				my $index=-1;
 				for my $k (@key_indexes){
-					last if $k>@headers;
+					last if $k>=@headers;
 					$index =$k if $headers[$k] =~ /@{[HTTP_TRANSFER_ENCODING]}/ioaa;
 				}
 
@@ -268,7 +270,7 @@ sub deflate {
 	my $out=sub {
 		my $next=shift;
 		my $bypass;
-		my $compressor=Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6);
+		my $compressor=Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 		my $status;
 		my $index;
 		(sub {
@@ -276,36 +278,59 @@ sub deflate {
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
 			\my $buf=\$_[4];
+
 			if($_[3]){
-				#Calling first time with headers
+				CONFIG::log  and log_trace "Entering deflate output";
+				\my @headers=$_[3]; #Alias for easy of use and performance
 
-				# Check content negotiation
+				$bypass=undef; #reset
+
+				unless($_[4]){
+					#If empty or undefined body, then we disable.
+					$bypass=1;
+				}
+
+				#Also disable if client doesn't want our services
+				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/;
+
+
 				#
-				$bypass=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/;
-
 				# Also avoid compressing any of the following
 				# TODO: add content type matching
 
 
-				# locate transfer encoding header if present
-				#
-				$bypass||=defined first {$_[3][$_] =~ HTTP_CONTENT_ENCODING} 0..$_[3]->@*/2-1;
+				#Also disable if we are already encoded
+				for my $k (@key_indexes){
+					last if $k >= @headers;
+					($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and last;
+				}
 
 				return &$next if $bypass;
 
-				# Remove content length. We rely on chunked transfer
-				$index=first {$_[3][$_] =~ HTTP_CONTENT_LENGTH} 0..$_[3]->@*/2-1;
-				splice($_[3]->@*, $index, 2) if defined $index;
+				#Remove content length as we will rely on chunked encoding
+				for my $k (@key_indexes){
+					last if $k >= @headers;
+					CONFIG::log and log_debug "Header testing: $headers[$k]";
+					($headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and ($index=$k);
+					last if defined $index;
+				}
+
+				CONFIG::log and log_debug "Content length index: $index";
+
+				splice(@headers, $index, 2) if defined $index;
 				
 
-				push $_[3]->@*, HTTP_CONTENT_ENCODING, "deflate";
+				#Set our encoding header
+				push @headers, HTTP_CONTENT_ENCODING, "deflate";
 
+
+				#Finally configure compressor	
 				# reset compression context
 				#
 				$status=$compressor->deflateReset();
 				$status == Z_OK or say STDERR "Could not reset deflate";
 			}
-
+			CONFIG::log and log_trace "Processing deflate content";
 			# Only process if setup correctly
 			#
 			return &$next if $bypass;
@@ -315,11 +340,12 @@ sub deflate {
 			#
 			my $scratch=""; 	#new scratch each call
 			$status=$compressor->deflate($buf, $scratch);
-			$status == Z_OK or say STDERR "deflating error";
+			$status == Z_OK or log_error "Error creating deflate context";
 
 
 			# Push to next stage
 			unless($_[5]){
+				CONFIG::log and log_trace "No more data expected";
 				#if no callback is provided, then this is the last write
 				$status=$compressor->flush($scratch);
 				$next->(@_[0,1,2,3], $scratch , @_[5,6]);
@@ -327,6 +353,7 @@ sub deflate {
 
 			}
 			else {
+				CONFIG::log and log_trace "Expecting more data";
 				# more data expected
 				if(length $scratch){
 					#enough data to send out
@@ -335,8 +362,6 @@ sub deflate {
 				}
 			}
 		},
-		#TODO:
-		# add chunked out only here
 	)
 	};
 	[$in, $out];
@@ -345,10 +370,7 @@ sub deflate {
 sub gzip{
 	my $in=sub {
 		my $next=shift;
-		sub {
-			say "gzip IN.. bypass";
-			&$next;
-		}
+		
 	};
 
 	my $out=sub {
@@ -357,35 +379,54 @@ sub gzip{
                 my $compressor;
 		my $status;
 		my $scratch="";
+		my $index;
 		sub {
-			say "calling gzip out";
+			CONFIG::log and log_trace "Gzip out middleware";
 
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
 			\my $buf=\$_[4];
 			if($_[3]){
-				#Calling first time with headers
+				\my @headers=$_[3]; #Alias for easy of use and performance
+				$bypass=undef;#reset  for reuse
 
-				# Check content negotiation
-				#
-				$bypass=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/;
+				unless($_[4]){
+					#If empty or undefined body, then we disable.
+					$bypass=1;
+				}
 
-				# Also avoid compressing any of the following
-				# TODO: add content type matching
+				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/;
 
-
-				# locate transfer encoding header if present
-				#
-				$bypass||=defined first {$_[3][$_] =~ HTTP_CONTENT_ENCODING} 0..$_[3]->@*/2-1;
+				#Also disable if we are already encoded
+				for my $k (@key_indexes){
+					last if $k >= @headers;
+					($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and last;
+				}
 
 				return &$next if $bypass;
 
-				push $_[3]->@*, HTTP_CONTENT_ENCODING, "deflate";
+				#Remove content length as we will rely on chunked encoding
+				for my $k (@key_indexes){
+					last if $k >= @headers;
+					CONFIG::log and log_debug "Header testing: $headers[$k]";
+					($headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and ($index=$k);
+					last if defined $index;
+				}
+
+				CONFIG::log and log_debug "Content length index: $index";
+
+				splice(@headers, $index, 2) if defined $index;
+				
+
+				#Set our encoding header
+				push @headers, HTTP_CONTENT_ENCODING, "gzip";
+
+
 
 				# reset compression context
 				#
 				$scratch="";
-				$compressor=IO::Compress::Gzip->new(\$scratch, "-Level"=>-1, Minimal=>1);
+				$compressor=IO::Compress::Gzip->new(\$scratch, "Append"=>1, "Level"=>1, Minimal=>1);
 			}
 
 			# Only process if setup correctly
@@ -431,3 +472,31 @@ sub gzip{
 
 
 1;
+
+__END__
+
+=head1 NAME
+
+uSAC::HTTP::Middleware - Common Middleware and API
+
+=head1 API
+
+Each component inner or outerware is a sub reference, which has captured the next sub lexically in a closure.
+
+Linking is performed by L<Sub::Middler>  to generate a chained set of middlewares
+
+Arguments to the Middlware are as follows:
+
+	Matcher Rex code headers body callback arg
+
+Aliasing to be used where possible
+
+First call must have headers defined. If body is 'true' (non empty string), then if the middlware modifies the body, it can enable itself.
+A false body indicates the body will be sent outside of this middleware chain (ie sendfile). Should be disabled.
+
+Subsequency calls Must have headers undefined.	
+	Renderer sets headers to undef (as its aliased). So using the same variable this should be automatic
+
+
+The last call is indicated by not suppling a callback. Middleware which modifies the body should flush when this condition is present.
+

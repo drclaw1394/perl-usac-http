@@ -8,6 +8,7 @@ Log::ger::Util::set_level "trace";
 
 
 
+
 use uSAC::MIME;
 use Data::Dumper;
 
@@ -36,12 +37,19 @@ my $server; $server=usac_server {
 
 		usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static";
 
-		usac_route "/static/$File_Path"   =>deflate()=>usac_file_under (
-			#filter=>'mp4$',
+		usac_route "/static/$File_Path"=>gzip=>deflate()=>usac_file_under (
+			filter=>'txt$',
 			read_size=>4096*32, 
 			#sendfile=>4096, 
 			usac_path root=>usac_dirname, "static"
+		)=>
+		usac_file_under (
+			read_size=>4096*32,	
+			sendfile=>12,
+			usac_path root =>usac_dirname, "static"
 		);
+			
+
                         ##################################################
                         # =>usac_file_under (                            #
                         #         usac_path root=>usac_dirname, "static" #
