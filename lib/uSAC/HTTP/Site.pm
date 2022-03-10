@@ -159,9 +159,11 @@ sub add_route {
 		}
 		$end=$middler->link($end);
 	}
+	my @index=map {$_*2} 0..99;
 
 	my $serialize=
 			sub{
+				no warnings qw<numeric uninitialized>;
 				#my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
 				#The last item in the outerware
 				# renders the headers to the output sub
@@ -170,14 +172,26 @@ sub add_route {
 				my $session=$_[1]->[uSAC::HTTP::Rex::session_];
 				$_[5]//=$session->[uSAC::HTTP::Session::dropper_];# unless $_[5];	#If no cb, then assume dropper
 				if($_[3]){
+					\my @h=$_[3];
 					CONFIG::log and log_trace  "Renderer: doing headers";
-					my $output=$_[1]->render_header(@_);#$matcher, $rex, $code, $headers,$data);
+
+					my $reply="HTTP/1.1 $_[2]".LF;
+					for(@index){
+						last unless $h[$_];
+						$reply.= ($uSAC::HTTP::Header::index_to_name[$h[$_]]//$h[$_]).": $h[$_+1]".LF;
+					}
+
+					$reply.=LF;
+
+
 					$_[3]=undef;	#mark headers as done
-					$output.=$_[4]//"";
-					$_[1]->writer->($output, @_[5,6]);
+					$reply.=$_[4]//"";
+					#$_[1]->writer->($reply, @_[5,6]);
+					$_[1][uSAC::HTTP::Rex::write_]($reply, @_[5,6]);
 				}
 				else{
-					$_[1]->writer->(@_[4,5,6]);
+					#$_[1]->writer->(@_[4,5,6]);
+					$_[1][uSAC::HTTP::Rex::write_](@_[4,5,6]);
 				}
 			};
 	if(@outer){
@@ -586,13 +600,16 @@ sub usac_static_content {
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	my $mime=$options{mime}//$self->resolve_mime_default;
+	my $headers=$options{headers}//[];
 	#my $type=[HTTP_CONTENT_TYPE, $mime];
 	sub {
 		rex_write @_, HTTP_OK, [
 			HTTP_CONTENT_TYPE, $mime,
-			HTTP_CONTENT_LENGTH, length($static)
+			HTTP_CONTENT_LENGTH, length($static),
+			@$headers
 		],
-		$static; return
+		$static; 
+		return
 	}
 }
 
@@ -626,7 +643,7 @@ sub usac_cached_file {
 		close $fh;
 
 		#Create a static content endpoint
-		usac_static_content($entry->[0], mime=>$type);
+		usac_static_content(%options, $entry->[0]);
 	}
 	else {
 		log_error "Could not add hot path: $path";

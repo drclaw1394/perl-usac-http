@@ -2,7 +2,7 @@ package uSAC::HTTP::Middleware;
 use strict;
 use warnings;
 use Exporter 'import';
-use feature qw<refaliasing say switch state current_sub signatures>;
+use feature qw<refaliasing say fc switch state current_sub signatures>;
 no warnings "experimental";
 no feature "indirect";
 use uSAC::HTTP::Session;
@@ -110,6 +110,7 @@ sub log_simple_out {
 		sub {
 			say STDERR "\n<<<---";
 			say STDERR "Depature time:		".time;
+			say STDERR Dumper $_[3];
 			return &$outer_next;
 		}
 	};
@@ -219,7 +220,8 @@ sub chunked{
 				\my @headers=$_[3];
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					($bypass= $headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and return &$next;
+					($bypass= ($headers[$k]) == (HTTP_CONTENT_LENGTH)) and return &$next;
+					#($bypass= $headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and return &$next;
 				}
 				CONFIG::log and log_debug "Chunk bypass: $bypass";
 				
@@ -229,7 +231,8 @@ sub chunked{
 				my $index=-1;
 				for my $k (@key_indexes){
 					last if $k>=@headers;
-					$index =$k if $headers[$k] =~ /@{[HTTP_TRANSFER_ENCODING]}/ioaa;
+					$index =$k if ($headers[$k]) == (HTTP_TRANSFER_ENCODING);
+					#$index =$k if $headers[$k] =~ /@{[HTTP_TRANSFER_ENCODING]}/ioaa;
 				}
 
 				if($index<0){
@@ -290,8 +293,16 @@ sub deflate {
 					$bypass=1;
 				}
 
+				#Also disable if we are already encoded
+				for my $k (@key_indexes){
+					last if $k >= @headers;
+					CONFIG::log  and log_trace "$headers[$k] => $headers[$k+1]";
+					($bypass||= ($headers[$k]) == (HTTP_CONTENT_ENCODING)) and return &$next;
+					#($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and return &$next;
+				}
+
 				#Also disable if client doesn't want our services
-				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/;
+				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa;
 
 
 				#
@@ -299,11 +310,6 @@ sub deflate {
 				# TODO: add content type matching
 
 
-				#Also disable if we are already encoded
-				for my $k (@key_indexes){
-					last if $k >= @headers;
-					($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and last;
-				}
 
 				return &$next if $bypass;
 
@@ -311,7 +317,8 @@ sub deflate {
 				for my $k (@key_indexes){
 					last if $k >= @headers;
 					CONFIG::log and log_debug "Header testing: $headers[$k]";
-					($headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and ($index=$k);
+					(($headers[$k]) == (HTTP_CONTENT_LENGTH)) and ($index=$k);
+					#($headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and ($index=$k);
 					last if defined $index;
 				}
 
@@ -328,7 +335,7 @@ sub deflate {
 				# reset compression context
 				#
 				$status=$compressor->deflateReset();
-				$status == Z_OK or say STDERR "Could not reset deflate";
+				$status == Z_OK or log_error "Could not reset deflate";
 			}
 			CONFIG::log and log_trace "Processing deflate content";
 			# Only process if setup correctly
@@ -395,12 +402,13 @@ sub gzip{
 					$bypass=1;
 				}
 
-				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/;
+				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa;
 
 				#Also disable if we are already encoded
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and last;
+					($bypass||= $headers[$k] == HTTP_CONTENT_ENCODING) and last;
+					#($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and last;
 				}
 
 				return &$next if $bypass;
@@ -409,7 +417,7 @@ sub gzip{
 				for my $k (@key_indexes){
 					last if $k >= @headers;
 					CONFIG::log and log_debug "Header testing: $headers[$k]";
-					($headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and ($index=$k);
+					($headers[$k] == HTTP_CONTENT_LENGTH) and ($index=$k);
 					last if defined $index;
 				}
 

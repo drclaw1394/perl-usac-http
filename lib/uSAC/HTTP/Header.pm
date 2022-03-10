@@ -1,8 +1,10 @@
 #Generate a list of header names as a hash or array
 package uSAC::HTTP::Header;
+use feature "fc";
 use Exporter 'import';
 BEGIN {
 	our @names=qw(
+		_unkown_
 		Accept
 		Accept-Charset
 		Accept-Encoding
@@ -70,10 +72,18 @@ BEGIN {
 		Sec-WebSocket-Extensions
 		DataServiceVersion
 	);
-	our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names;
+	#our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, fc $_)} @names;
+
+	my $i=0;
+	our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $i++)} @names;
+
+	our @index_to_name=@names;
+	$index_to_name[0]=undef;
+	#
 };
 
 use constant \%const_names; #Direct constants to use
+#use constant \%name_to_index;
 our @EXPORT_OK=keys %const_names;
 our %EXPORT_TAGS=(
 	constants=>[keys %const_names]

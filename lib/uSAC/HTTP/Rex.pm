@@ -470,9 +470,10 @@ sub parse_query_params_old {
 sub rex_write{
 	my $session=$_[1]->[session_];
 	if($_[3]){
+		\my @h=$_[3];
+
 		#If headers are supplied, then  process headers
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
-		\my @h=$_[3];
 
 		if($session->[uSAC::HTTP::Session::closeme_]){
 			push @h, 
@@ -507,35 +508,26 @@ sub rex_write{
 #OO Methods
 #
 
-#actually render the header 
-my @index=map {$_*2} 0..99;
-sub render_header {
-	my $self=shift;
-	no warnings "uninitialized";
-	#my ($matcher, $rex, $code, $headers, $data)=@_;
-		
-	my $session=$self->[session_];
-
-	$session->[uSAC::HTTP::Session::in_progress_]=1;
-
-
-	my $reply="HTTP/1.1 $_[2]".LF;
-	\my @h=$_[3];
-	#$reply.= join "", map $_.": ".$h{$_}.LF, keys $_[3]->%*;
-
-	
-	for(@index){
-		last unless $h[$_];
-		$reply.= "$h[$_]: $h[$_+1]".LF;
-	}
-	#$reply.=join "", map {$h[$_]?("$h[$_]: $h[$_+1]".LF):()} @index;
-	#say $reply;
-	#0..@h/2-1;
-	#$reply.=join "", map {my $a=2*$_;"$h[$a]: $h[$a+1]".LF} 0..@h/2-1;
-	#$reply.=join "", map "$h[2*$_]: $h[2*$_+1]".LF, 0..@h/2-1;
-
-	$reply.=LF;
-}
+##################################################################################################
+# #actually render the header                                                                    #
+# my @index=map {$_*2} 0..99;                                                                    #
+# sub render_header {                                                                            #
+#         my $self=shift;                                                                        #
+#         no warnings qw<numeric uninitialized>;                                                 #
+#         #my ($matcher, $rex, $code, $headers, $data)=@_;                                       #
+#                                                                                                #
+#         my $reply="HTTP/1.1 $_[2]".LF;                                                         #
+#         \my @h=$_[3];                                                                          #
+#                                                                                                #
+#                                                                                                #
+#         for(@index){                                                                           #
+#                 last unless $h[$_];                                                            #
+#                 $reply.= ($uSAC::HTTP::Header::index_to_name[$h[$_]]//$h[$_]).": $h[$_+1]".LF; #
+#         }                                                                                      #
+#                                                                                                #
+#         $reply.=LF;                                                                            #
+# }                                                                                              #
+##################################################################################################
 
 # Returns the headers parsed at connection time
 sub headers {

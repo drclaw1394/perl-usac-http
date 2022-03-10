@@ -315,8 +315,12 @@ sub send_file_uri_norange {
 			$entry->[content_type_header_]->@*,
 			HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
 			HTTP_ETAG,$etag,
-			HTTP_ACCEPT_RANGES,"bytes"
+			HTTP_ACCEPT_RANGES,"bytes",
+			@$user_headers
+
+
 		];
+		
 
 
 		if(
@@ -898,7 +902,7 @@ sub usac_file_under {
 	my $sendfile=$options{sendfile}//0;
 	my $open_modes=$options{open_flags}//0;
 	my $filter=$options{filter};
-
+	my $no_compress=$options{no_compress};
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
 	my $cache=$static->[cache_];
@@ -934,12 +938,22 @@ sub usac_file_under {
 		}
 		
 		my $path=$html_root."/".$p;
-		if($filter and $path !~ /$filter/){
+		if($filter and $path !~ /$filter/o){
 			return &$next if $next;
 			
 			&rex_error_not_found;
 			return;
 		}
+
+		#If compress option is enabled then do not set the content-encoding header
+		#Otherwise we set to identity
+		my @head=@$headers;
+		if($no_compress and $path =~ /$no_compress/o){
+			CONFIG::log and log_trace "Setting identity content encoding";
+			push @head, HTTP_CONTENT_ENCODING, "identity";
+		}
+		CONFIG::log and log_debug Dumper \@head;
+
 
 		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes);
 		if($entry){
@@ -948,7 +962,7 @@ sub usac_file_under {
 				return;
 			}
 			else{
-				send_file_uri_norange @_, $headers, $read_size, $sendfile, $entry;
+				send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry;
 				return;
 			}
 		}
