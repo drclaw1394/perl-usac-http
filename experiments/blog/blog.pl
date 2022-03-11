@@ -27,7 +27,7 @@ my $server; $server=usac_server {
 		#usac_middleware log_simple;
 
 		usac_route "/favicon.png"   => usac_cached_file "images/favicon.png";
-		usac_route "/static/hot.txt" =>	usac_cached_file headers=>["unkown","a"], "static/hot.txt";
+		usac_route "/static/hot.txt" =>	usac_cached_file headers=>[], "static/hot.txt";
 		usac_route "/statictest"=> usac_static_content "This is some data";
 
 		usac_route "testing.txt"=>deflate()=>sub {

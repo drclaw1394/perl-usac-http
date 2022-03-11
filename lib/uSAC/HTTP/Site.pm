@@ -176,9 +176,10 @@ sub add_route {
 					CONFIG::log and log_trace  "Renderer: doing headers";
 
 					my $reply="HTTP/1.1 $_[2]".LF;
-					for(@index){
-						last unless $h[$_];
-						$reply.= ($uSAC::HTTP::Header::index_to_name[$h[$_]]//$h[$_]).": $h[$_+1]".LF;
+					my $h=$_[1][uSAC::HTTP::Rex::out_set_];
+					for($_[1][uSAC::HTTP::Rex::out_used_]->@*){
+                                        	$reply.= ($uSAC::HTTP::Header::index_to_name[$_]).": $h->[$_]".LF; #
+
 					}
 
 					$reply.=LF;

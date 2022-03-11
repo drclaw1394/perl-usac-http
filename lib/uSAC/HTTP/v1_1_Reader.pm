@@ -1,6 +1,9 @@
 package uSAC::HTTP::v1_1_Reader;
-use feature qw<current_sub refaliasing say>;
+use feature qw<fc current_sub refaliasing say>;
+use strict;
 no warnings "experimental";
+use Log::ger;
+use Data::Dumper;
 
 use Exporter 'import';
 use Encode qw<find_encoding decode encode decode_utf8>;
@@ -45,7 +48,7 @@ sub uri_decode {
 sub uri_decode_inplace {
 	$_[0]=~ tr/+/ /;
 	$_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
-	return $UTF_8->decode($octets);
+	return $UTF_8->decode($_[0]);
 	#decode_utf8($_[0]);
 	#return decode("utf8", $octets);
 }
@@ -81,8 +84,12 @@ sub make_reader{
 	my ($method,$uri,$version,$len,$pos, $req);
 	my $line;
 
-	my %h;		#Define the header storage here, once per connection
+	#my %h;		#Define the header storage here, once per connection
+	my @headers;
+	my @hset;
+	my @hused;
 	
+	my $host;
 	#ctx, buffer, flags 
 	#	$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id}= 
 	sub {
@@ -113,7 +120,10 @@ sub make_reader{
 					uri_decode_inplace $uri;
 					#end of line found
 						$state   = STATE_HEADERS;
-						%h=();
+						#%h=();
+						@headers=();
+						@hset=();
+						@hused=();
 						++$seq;
 
 						#$pos=$pos3+2;
@@ -136,6 +146,7 @@ sub make_reader{
 				# headers
 				my $k;
 				my $v;
+				my $pos3;
 				while () {
 					$pos3=index $buf, LF;
 					if($pos3>=0){
@@ -145,10 +156,22 @@ sub make_reader{
 						};	#empty line.
 
 						($k,$v)=split ":", substr($buf,0,$pos3), 2;
-
-						\my $e=\$h{uc $k=~tr/-/_/r};
+						$k=fc $k;
+						my $index=$uSAC::HTTP::Header::name_to_index{$k}//$k;
+						
+						#\my $e=\$h{uc $k=~tr/-/_/r};
 						my $val=$v=~tr/\t //dr;
-						$e = $e ? $e.','.$val: $val;
+
+						unless($hset[$index]){
+							$hset[$index]=$val;
+							push @hused, $index;
+						}
+						else {
+							$hset[$index].=','.$val;
+						}
+					
+						
+
 
 						$buf=substr $buf, $pos3+2;
 						redo;
@@ -164,51 +187,32 @@ sub make_reader{
                                                 return;
 					}
 					
-
-                                        #############################################################################################################################################################
-                                        # elsif ($buf =~ /\G\015?\012/sxogca) {                                                                                                                     #
-                                        #         #warn "Last line";                                                                                                                                #
-                                        #         last;                                                                                                                                             #
-                                        # }                                                                                                                                                         #
-                                        # elsif($buf =~ /\G [^\012]* \Z/sxogca) {                                                                                                                   #
-                                        #         if (length($buf) - 0 > MAX_READ_SIZE) {                                                                                                           #
-                                        #                 return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");                     #
-                                        #         }                                                                                                                                                 #
-                                        #         #warn "Need more";                                                                                                                                #
-                                        #         $pos=pos($buf);                                                                                                                                   #
-                                        #         return;                                                                                                                                           #
-                                        # }                                                                                                                                                         #
-                                        # else {                                                                                                                                                    #
-                                        #         my ($line) = $buf =~ /\G([^\015\012]++)(?:\015?\012|\Z)/sxogc;                                                                                    #
-                                        #         my $content = 'Bad request headers';                                                                                                              #
-                                        #         my $str = "HTTP/1.1 400 Bad Request${LF}Connection:close${LF}Content-Type:text/plain${LF}Content-Length:".length($content)."${LF}${LF}".$content; #
-                                        #         $write->($str);                                                                                                                                   #
-                                        #         $write->(undef);                                                                                                                                  #
-                                        #         return;                                                                                                                                           #
-                                        # }                                                                                                                                                         #
-                                        #############################################################################################################################################################
 				}
+
 				#Done with headers. 
 
 				#($uri,my $query)=split('\?', $uri);
+				#
+				my $host=$hset[HTTP_HOST];#find_header \@headers, HTTP_HOST;
 				
-				#my $host=$h{HOST};#//"";
-				$req=uSAC::HTTP::Rex->new($r, \%h, $version, $method, $uri);
-				#$req = bless [ $version, $r, \%h, $write, undef, $query_string, 1 ,undef,undef,undef,$h{HOST}, $method, $uri, $uri, {}, [],{},200,undef, $static_headers], 'uSAC::HTTP::Rex' ;
+				$req=uSAC::HTTP::Rex->new($r, \@headers, $host, $version, $method, $uri);
+				$req->[uSAC::HTTP::Rex::in_set_()]=\@hset;
+				$req->[uSAC::HTTP::Rex::in_used_()]=\@hused;
+
 
 
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]=0;
-				$r->[uSAC::HTTP::Session::closeme_]||= $h{CONNECTION} eq "close" ||$version ne "HTTP/1.1";
-				#$r->[uSAC::HTTP::Session::closeme_]= !( $version eq "HTTP/1.1" or $h{HTTP_CONNECTION} =~/^Keep-Alive/ );
-				#$r->[uSAC::HTTP::Session::closeme_]||=	$h{HTTP_CONNECTION}=~/close/i;
+				
+				$r->[uSAC::HTTP::Session::closeme_]||= $hset[HTTP_CONNECTION] eq "close" ||$version ne "HTTP/1.1";
 
 				#shift buffer
 				$buf=substr $buf, pos $buf;# $pos;
 				$pos=0;
 				$state=$start_state;
 				$cb->(
-					"$h{HOST} $method $uri",
+					#"$h{HOST} $method $uri",
+					"$host $method $uri",
 					$req
 				);
 				return;

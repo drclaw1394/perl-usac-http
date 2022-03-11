@@ -1,7 +1,10 @@
 #Generate a list of header names as a hash or array
 package uSAC::HTTP::Header;
-use feature "fc";
+use feature qw<refaliasing fc>;
+no warnings qw<experimental>;
+use List::Util qw<first>;
 use Exporter 'import';
+use Log::ger;
 BEGIN {
 	our @names=qw(
 		_unkown_
@@ -77,15 +80,47 @@ BEGIN {
 	my $i=0;
 	our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $i++)} @names;
 
-	our @index_to_name=@names;
+	#Resolve index to name string
+	our @index_to_name=map fc, @names;
 	$index_to_name[0]=undef;
+
+	#Resolve name string to index
+	our %name_to_index=map { fc($index_to_name[$_])=>$_ } 0..$#index_to_name;
 	#
 };
 
 use constant \%const_names; #Direct constants to use
 #use constant \%name_to_index;
-our @EXPORT_OK=keys %const_names;
+our @EXPORT_OK=(keys(%const_names), "find_header");
 our %EXPORT_TAGS=(
-	constants=>[keys %const_names]
+	constants=>["find_header", keys %const_names]
 );
+
+my @key_indexes=map {$_*2} 0..99;
+sub find_header_old: lvalue {
+	\my @headers=$_[0];
+	my $key=$_[1];
+	#print "Searching for key $key\n";
+	#print @headers;
+	my $index=first {$headers[$_] == $key} @key_indexes;
+	#print $index."\n";
+	return $headers[($index//-2)+1];
+	#?$headers[$index+1]:undef;
+
+
+}
+sub find_header_na: lvalue{
+	#my($headers, $key)=@_;	
+	\my @headers=$_[0];
+	for my $k (@key_indexes){
+		return undef if $k >=@headers;
+		CONFIG::log and do {
+			log_trace "iteration key is $k, search key is $_[1]";
+			log_trace "serching through headers: ".$index_to_name[$headers[$k]]//$headers[$k];
+			log_trace "lable: $headers[$k]";
+		};
+		$headers[$k] == $_[1] and return $headers[$k+1];
+	}
+}
+
 1;

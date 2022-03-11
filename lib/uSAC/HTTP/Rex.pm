@@ -5,6 +5,7 @@ use version; our $VERSION = version->declare('v0.1');
 use feature qw<current_sub say refaliasing switch state>;
 no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
+use Log::ger;
 
 use Carp qw<carp>;
 use File::Basename qw<basename dirname>;
@@ -79,7 +80,7 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ capture_>
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ in_set_ in_used_ out_set_ out_used_ capture_>
 );
 
 #Add a mechanism for sub classing
@@ -87,28 +88,13 @@ use constant KEY_OFFSET=>0;
 use constant KEY_COUNT=>capture_-version_+1;
 
 require uSAC::HTTP::Middleware;
-###########################################################
-# sub uri_decode {                                        #
-#         my $octets= shift;                              #
-#         $octets=~ s/\+/ /sg;                            #
-#         $octets=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge; #
-#         return decode_utf8($octets);                    #
-#         #return decode("utf8", $octets);                #
-# }                                                       #
-# sub uri_decode_inplace {                                #
-#         $_[0]=~ s/\+/ /sg;                              #
-#         $_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;   #
-#         decode_utf8($_[0]);                             #
-#         #return decode("utf8", $octets);                #
-# }                                                       #
-###########################################################
 		
 sub rex_write;		
 	
 
 
 sub new {
-	#my ($package, $session, $headers, $version, $method, $uri)=@_;
+	#my ($package, $session, $headers, $host, $version, $method, $uri)=@_;
 
 	my $self=[];
 	my $query_string="";
@@ -117,7 +103,7 @@ sub new {
 	}
 	my $write=$_[1]->[uSAC::HTTP::Session::write_];
 
-	bless [ $_[3], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[2]{HOST}, $_[4], $_[5], $_[5], {}, []], $_[0];
+	bless [ $_[4], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[]], $_[0];
 
 
 }
@@ -469,6 +455,7 @@ sub parse_query_params_old {
 #Arguments are matcher, rex, code, header, data, cb
 sub rex_write{
 	my $session=$_[1]->[session_];
+	state @keys= map {$_*2} 0..99;
 	if($_[3]){
 		\my @h=$_[3];
 
@@ -495,6 +482,19 @@ sub rex_write{
 		push @h,
 			$static_headers->@*,
 			HTTP_DATE, $uSAC::HTTP::Session::Date;
+
+		my $index;
+		for(@keys){
+			last if $_>=@h;
+			$index=$h[$_];
+			unless($_[1][out_set_][$index]){
+				$_[1][out_set_][$index]=$h[$_+1];
+				push $_[1][out_used_]->@*, $index;
+			}
+			else {
+				$_[1][out_set_][$index].=','.$h[$_+1];
+			}
+		}
 	}
 
 	#Otherwise this is just a body call

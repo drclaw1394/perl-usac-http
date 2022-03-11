@@ -217,33 +217,29 @@ sub chunked{
 			CONFIG::log  and log_trace "Chunked Outerware";
 			if($_[3]){
 				$bypass=undef;#reset
-				\my @headers=$_[3];
-				for my $k (@key_indexes){
-					last if $k >= @headers;
-					($bypass= ($headers[$k]) == (HTTP_CONTENT_LENGTH)) and return &$next;
-					#($bypass= $headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and return &$next;
-				}
-				CONFIG::log and log_debug "Chunk bypass: $bypass";
+
+				#\my @headers=$_[3];
+				\my @used=$_[1][uSAC::HTTP::Rex::out_used_];
+				\my @set=$_[1][uSAC::HTTP::Rex::out_set_];
+
+				($bypass= ($set[HTTP_CONTENT_LENGTH])) and return &$next;
+
+				CONFIG::log and log_trace "Chunk bypass: $bypass";
 				
 				#we actually have  headers and Data. this is the first call
 				#Add to headers the chunked trasfer encoding
 				#
-				my $index=-1;
-				for my $k (@key_indexes){
-					last if $k>=@headers;
-					$index =$k if ($headers[$k]) == (HTTP_TRANSFER_ENCODING);
-					#$index =$k if $headers[$k] =~ /@{[HTTP_TRANSFER_ENCODING]}/ioaa;
+				unless($set[HTTP_TRANSFER_ENCODING]){
+					push @used, HTTP_TRANSFER_ENCODING;
+					$set[HTTP_TRANSFER_ENCODING]="chunked";
+
+				}
+				else{
+					$set[HTTP_TRANSFER_ENCODING].=",chunked";
+
 				}
 
-				if($index<0){
 
-					push @headers, HTTP_TRANSFER_ENCODING, "chunked";
-				} 
-				else {
-					for($headers[$index+1]){
-						$_=join ", ", $_, "chunked " unless $_ =~ /chunked/;
-					}
-				}
 			}
 			return &$next if $bypass;
 
@@ -281,6 +277,11 @@ sub deflate {
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
 			\my $buf=\$_[4];
+			\my @used=$_[1][uSAC::HTTP::Rex::out_used_];
+			\my @set=$_[1][uSAC::HTTP::Rex::out_set_];
+
+			\my @in_used=$_[1][uSAC::HTTP::Rex::in_used_];
+			\my @in_set=$_[1][uSAC::HTTP::Rex::in_set_];
 
 			if($_[3]){
 				CONFIG::log  and log_trace "Entering deflate output";
@@ -293,16 +294,11 @@ sub deflate {
 					$bypass=1;
 				}
 
-				#Also disable if we are already encoded
-				for my $k (@key_indexes){
-					last if $k >= @headers;
-					CONFIG::log  and log_trace "$headers[$k] => $headers[$k+1]";
-					($bypass||= ($headers[$k]) == (HTTP_CONTENT_ENCODING)) and return &$next;
-					#($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and return &$next;
-				}
+				($bypass||= $set[HTTP_CONTENT_ENCODING]) and return &$next;
 
 				#Also disable if client doesn't want our services
-				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa;
+				#$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa;
+				$bypass||=$in_set[HTTP_ACCEPT_ENCODING] !~ /deflate/iaa;
 
 
 				#
@@ -314,21 +310,20 @@ sub deflate {
 				return &$next if $bypass;
 
 				#Remove content length as we will rely on chunked encoding
-				for my $k (@key_indexes){
-					last if $k >= @headers;
-					CONFIG::log and log_debug "Header testing: $headers[$k]";
-					(($headers[$k]) == (HTTP_CONTENT_LENGTH)) and ($index=$k);
-					#($headers[$k] =~ /^@{[HTTP_CONTENT_LENGTH]}/ioaa) and ($index=$k);
-					last if defined $index;
+				my $index=0;
+				for my $k (@used){
+					if($k == HTTP_CONTENT_LENGTH){
+						splice @used, $index, 1;
+						$set[HTTP_CONTENT_LENGTH]=undef;
+					}
+					$index++;
 				}
 
-				CONFIG::log and log_debug "Content length index: $index";
-
-				splice(@headers, $index, 2) if defined $index;
 				
 
 				#Set our encoding header
-				push @headers, HTTP_CONTENT_ENCODING, "deflate";
+				push @used, HTTP_CONTENT_ENCODING;
+				$set[HTTP_CONTENT_ENCODING]="deflate";
 
 
 				#Finally configure compressor	
