@@ -109,7 +109,7 @@ sub find_header_old: lvalue {
 
 
 }
-sub find_header_na: lvalue{
+sub find_header: lvalue{
 	#my($headers, $key)=@_;	
 	\my @headers=$_[0];
 	for my $k (@key_indexes){

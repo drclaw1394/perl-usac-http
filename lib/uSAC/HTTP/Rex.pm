@@ -483,18 +483,20 @@ sub rex_write{
 			$static_headers->@*,
 			HTTP_DATE, $uSAC::HTTP::Session::Date;
 
-		my $index;
-		for(@keys){
-			last if $_>=@h;
-			$index=$h[$_];
-			unless($_[1][out_set_][$index]){
-				$_[1][out_set_][$index]=$h[$_+1];
-				push $_[1][out_used_]->@*, $index;
-			}
-			else {
-				$_[1][out_set_][$index].=','.$h[$_+1];
-			}
-		}
+                ##########################################################
+                # my $index;                                             #
+                # for(@keys){                                            #
+                #         last if $_>=@h;                                #
+                #         $index=$h[$_];                                 #
+                #         unless($_[1][out_set_][$index]){               #
+                #                 $_[1][out_set_][$index]=$h[$_+1];      #
+                #                 push $_[1][out_used_]->@*, $index;     #
+                #         }                                              #
+                #         else {                                         #
+                #                 $_[1][out_set_][$index].=','.$h[$_+1]; #
+                #         }                                              #
+                # }                                                      #
+                ##########################################################
 	}
 
 	#Otherwise this is just a body call

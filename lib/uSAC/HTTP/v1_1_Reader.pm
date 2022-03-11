@@ -84,10 +84,10 @@ sub make_reader{
 	my ($method,$uri,$version,$len,$pos, $req);
 	my $line;
 
-	#my %h;		#Define the header storage here, once per connection
-	my @headers;
-	my @hset;
-	my @hused;
+	my %h;		#Define the header storage here, once per connection
+	#my @headers;
+	#my @hset;
+	#my @hused;
 	
 	my $host;
 	#ctx, buffer, flags 
@@ -120,10 +120,10 @@ sub make_reader{
 					uri_decode_inplace $uri;
 					#end of line found
 						$state   = STATE_HEADERS;
-						#%h=();
-						@headers=();
-						@hset=();
-						@hused=();
+						%h=();
+						#@headers=();
+						#@hset=();
+						#@hused=();
 						++$seq;
 
 						#$pos=$pos3+2;
@@ -157,18 +157,28 @@ sub make_reader{
 
 						($k,$v)=split ":", substr($buf,0,$pos3), 2;
 						$k=fc $k;
-						my $index=$uSAC::HTTP::Header::name_to_index{$k}//$k;
+						#my $index=$uSAC::HTTP::Header::name_to_index{$k}//$k;
 						
-						#\my $e=\$h{uc $k=~tr/-/_/r};
 						my $val=$v=~tr/\t //dr;
-
-						unless($hset[$index]){
-							$hset[$index]=$val;
-							push @hused, $index;
+						\my $e=\$h{fc $k};#uc $k=~tr/-/_/r};
+						if($e){
+							$e.=",$val";
 						}
 						else {
-							$hset[$index].=','.$val;
+							$e=$val;
+							$host=$val if $val eq "host";
 						}
+						
+
+                                                ####################################
+                                                # unless($hset[$index]){           #
+                                                #         $hset[$index]=$val;      #
+                                                #         push @hused, $index;     #
+                                                # }                                #
+                                                # else {                           #
+                                                #         $hset[$index].=','.$val; #
+                                                # }                                #
+                                                ####################################
 					
 						
 
@@ -193,18 +203,18 @@ sub make_reader{
 
 				#($uri,my $query)=split('\?', $uri);
 				#
-				my $host=$hset[HTTP_HOST];#find_header \@headers, HTTP_HOST;
+				my $host=$h{host};#$hset[HTTP_HOST];#find_header \@headers, HTTP_HOST;
+				CONFIG::log and log_trace "Host: $host";
 				
-				$req=uSAC::HTTP::Rex->new($r, \@headers, $host, $version, $method, $uri);
-				$req->[uSAC::HTTP::Rex::in_set_()]=\@hset;
-				$req->[uSAC::HTTP::Rex::in_used_()]=\@hused;
+				$req=uSAC::HTTP::Rex->new($r, \%h, $host, $version, $method, $uri);
+				CONFIG::log and log_trace  "Headers  parsed: ".Dumper \%h;
 
 
 
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]=0;
 				
-				$r->[uSAC::HTTP::Session::closeme_]||= $hset[HTTP_CONNECTION] eq "close" ||$version ne "HTTP/1.1";
+				$r->[uSAC::HTTP::Session::closeme_]||= $h{connection} eq "close" ||$version ne "HTTP/1.1";
 
 				#shift buffer
 				$buf=substr $buf, pos $buf;# $pos;

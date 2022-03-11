@@ -176,9 +176,11 @@ sub add_route {
 					CONFIG::log and log_trace  "Renderer: doing headers";
 
 					my $reply="HTTP/1.1 $_[2]".LF;
-					my $h=$_[1][uSAC::HTTP::Rex::out_set_];
-					for($_[1][uSAC::HTTP::Rex::out_used_]->@*){
-                                        	$reply.= ($uSAC::HTTP::Header::index_to_name[$_]).": $h->[$_]".LF; #
+					#my $h=$_[1][uSAC::HTTP::Rex::out_set_];
+					#for($_[1][uSAC::HTTP::Rex::out_used_]->@*){
+					for(@index){
+						last if $_ >= @h;
+                                        	$reply.= ($uSAC::HTTP::Header::index_to_name[$h[$_]]//$h[$_]).": $h[$_+1]".LF; #
 
 					}
 
@@ -230,6 +232,7 @@ sub _strip_prefix {
 	sub {
 		my $inner_next=shift;
 		sub {
+			CONFIG::log and log_trace "Headers in strip prefix: ".Dumper $_[1]->headers;
 			package uSAC::HTTP::Rex {
 				$_[1][uri_stripped_]= substr($_[1]->[uri_], $len); #strip the url
 				$_[1][capture_]=[@{^CAPTURE}];	#save the capture 
