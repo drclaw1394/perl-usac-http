@@ -164,6 +164,7 @@ sub add_route {
 	my $serialize=
 			sub{
 				no warnings qw<numeric uninitialized>;
+
 				#my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
 				#The last item in the outerware
 				# renders the headers to the output sub
@@ -171,6 +172,15 @@ sub add_route {
 				#
 				my $session=$_[1]->[uSAC::HTTP::Rex::session_];
 				$_[5]//=$session->[uSAC::HTTP::Session::dropper_];# unless $_[5];	#If no cb, then assume dropper
+
+				state $server=$session->[uSAC::HTTP::Session::server_];
+				state $static_headers=$server->static_headers;
+
+				if($server!=$session->[uSAC::HTTP::Session::server_]){
+					$server=$session->[uSAC::HTTP::Session::server_];
+					$static_headers=$server->static_headers;
+				}
+
 				if($_[3]){
 					\my @h=$_[3];
 					CONFIG::log and log_trace  "Renderer: doing headers";
@@ -182,6 +192,12 @@ sub add_route {
                                         	$reply.= $h[$_].": $h[$_+1]".LF;
 
 					}
+					for(@index){
+						last if  $_ >= $static_headers->@*;
+						$reply.="$static_headers->[$_]:$static_headers->[$_+1]".LF;
+					}
+
+					$reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".LF;
 
 					#$reply.=LF;
 

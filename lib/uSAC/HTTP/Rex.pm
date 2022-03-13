@@ -455,7 +455,6 @@ sub parse_query_params_old {
 #Arguments are matcher, rex, code, header, data, cb
 sub rex_write{
 	my $session=$_[1]->[session_];
-	state @keys= map {$_*2} 0..99;
 	if($_[3]){
 		\my @h=$_[3];
 
@@ -474,31 +473,6 @@ sub rex_write{
                 # }                                                       #
                 ###########################################################
 
-		state $server=$session->[uSAC::HTTP::Session::server_];
-		state $static_headers=$server->static_headers;
-
-		if($server!=$session->[uSAC::HTTP::Session::server_]){
-			$server=$session->[uSAC::HTTP::Session::server_];
-			$static_headers=$server->static_headers;
-		}
-		push @h,
-			$static_headers->@*,
-			HTTP_DATE, $uSAC::HTTP::Session::Date;
-
-                ##########################################################
-                # my $index;                                             #
-                # for(@keys){                                            #
-                #         last if $_>=@h;                                #
-                #         $index=$h[$_];                                 #
-                #         unless($_[1][out_set_][$index]){               #
-                #                 $_[1][out_set_][$index]=$h[$_+1];      #
-                #                 push $_[1][out_used_]->@*, $index;     #
-                #         }                                              #
-                #         else {                                         #
-                #                 $_[1][out_set_][$index].=','.$h[$_+1]; #
-                #         }                                              #
-                # }                                                      #
-                ##########################################################
 	}
 
 	#Otherwise this is just a body call
@@ -512,26 +486,6 @@ sub rex_write{
 #OO Methods
 #
 
-##################################################################################################
-# #actually render the header                                                                    #
-# my @index=map {$_*2} 0..99;                                                                    #
-# sub render_header {                                                                            #
-#         my $self=shift;                                                                        #
-#         no warnings qw<numeric uninitialized>;                                                 #
-#         #my ($matcher, $rex, $code, $headers, $data)=@_;                                       #
-#                                                                                                #
-#         my $reply="HTTP/1.1 $_[2]".LF;                                                         #
-#         \my @h=$_[3];                                                                          #
-#                                                                                                #
-#                                                                                                #
-#         for(@index){                                                                           #
-#                 last unless $h[$_];                                                            #
-#                 $reply.= ($uSAC::HTTP::Header::index_to_name[$h[$_]]//$h[$_]).": $h[$_+1]".LF; #
-#         }                                                                                      #
-#                                                                                                #
-#         $reply.=LF;                                                                            #
-# }                                                                                              #
-##################################################################################################
 
 # Returns the headers parsed at connection time
 sub headers {
