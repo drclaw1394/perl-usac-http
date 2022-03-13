@@ -71,7 +71,7 @@ sub _check_ranges{
 		}
 		else {
 			#check the If-Range
-			my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF_RANGE"};
+			my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF-RANGE"};
 
 			#check range is present
 			#response code is then 206 partial
@@ -293,7 +293,7 @@ sub send_file_uri_norange {
 
 
 		#TODO: needs testing
-		for my $t ($headers->{if_none_match}){#HTTP_IF_NONE_MATCH){
+		for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
 			$code=HTTP_OK and last unless $t;
 			$code=HTTP_OK and last if  $etag !~ /$t/;
 			$code=HTTP_NOT_MODIFIED and last;	#no body to be sent
@@ -301,7 +301,7 @@ sub send_file_uri_norange {
 		}
 
 		#TODO: needs testing
-		for(my $time=$headers->{if_modified_since}){
+		for(my $time=$headers->{"IF-MODIFIED-SINCE"}){
 			#attempt to parse
 			$code=HTTP_OK and last unless $time;
 			my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
@@ -957,7 +957,7 @@ sub usac_file_under {
 
 		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes);
 		if($entry){
-			if($rex->[uSAC::HTTP::Rex::headers_]{range}){
+			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 				send_file_uri_range @_, $entry;
 				return;
 			}

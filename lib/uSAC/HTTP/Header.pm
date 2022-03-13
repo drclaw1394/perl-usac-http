@@ -75,17 +75,17 @@ BEGIN {
 		Sec-WebSocket-Extensions
 		DataServiceVersion
 	);
-	#our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, fc $_)} @names;
+	our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names;
 
 	my $i=0;
-	our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $i++)} @names;
+	#our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $i++)} @names;
 
 	#Resolve index to name string
-	our @index_to_name=map fc, @names;
+	our @index_to_name=@names;#map fc, @names;
 	$index_to_name[0]=undef;
 
 	#Resolve name string to index
-	our %name_to_index=map { fc($index_to_name[$_])=>$_ } 0..$#index_to_name;
+	our %name_to_index=map { uc($index_to_name[$_])=>$_ } 0..$#index_to_name;
 	#
 };
 

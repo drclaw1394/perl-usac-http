@@ -466,11 +466,13 @@ sub rex_write{
 			push @h, 
 				HTTP_CONNECTION, "close";
 		}
-		else{
-			push @h,
-				HTTP_CONNECTION, "keep-alive",
-				HTTP_KEEP_ALIVE,"timeout=10, max=1000";
-		}
+                ###########################################################
+                # else{                                                   #
+                #         push @h,                                        #
+                #                 HTTP_CONNECTION, "keep-alive",          #
+                #                 HTTP_KEEP_ALIVE,"timeout=10, max=1000"; #
+                # }                                                       #
+                ###########################################################
 
 		state $server=$session->[uSAC::HTTP::Session::server_];
 		state $static_headers=$server->static_headers;

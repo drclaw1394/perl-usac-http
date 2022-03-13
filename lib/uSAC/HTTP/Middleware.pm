@@ -295,12 +295,12 @@ sub deflate {
 				CONFIG::log  and log_trace "looking for accept";
 				CONFIG::log and "Incoming accpet_encodeing: ".$_[1]->headers;
 
-				$bypass||=($_[1]->headers->{"accept-encoding"}//"") !~ /deflate/iaa;
+				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa;
 
 				#Also disable if we are already encoded
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					($bypass||= $headers[$k] == HTTP_CONTENT_ENCODING) and last;
+					($bypass||= $headers[$k] eq HTTP_CONTENT_ENCODING) and last;
 					#($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and last;
 				}
 
@@ -310,7 +310,7 @@ sub deflate {
 				for my $k (@key_indexes){
 					last if $k >= @headers;
 					CONFIG::log and log_debug "Header testing: $headers[$k]";
-					($headers[$k] == HTTP_CONTENT_LENGTH) and ($index=$k);
+					($headers[$k] eq HTTP_CONTENT_LENGTH) and ($index=$k);
 					last if defined $index;
 				}
 
@@ -399,7 +399,7 @@ sub gzip{
 				#Also disable if we are already encoded
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					($bypass||= $headers[$k] == HTTP_CONTENT_ENCODING) and last;
+					($bypass||= $headers[$k] eq HTTP_CONTENT_ENCODING) and last;
 					#($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and last;
 				}
 
@@ -409,7 +409,7 @@ sub gzip{
 				for my $k (@key_indexes){
 					last if $k >= @headers;
 					CONFIG::log and log_debug "Header testing: $headers[$k]";
-					($headers[$k] == HTTP_CONTENT_LENGTH) and ($index=$k);
+					($headers[$k] eq HTTP_CONTENT_LENGTH) and ($index=$k);
 					last if defined $index;
 				}
 

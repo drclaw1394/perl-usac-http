@@ -2,6 +2,7 @@ package uSAC::HTTP::v1_1_Reader;
 use feature qw<fc current_sub refaliasing say>;
 use strict;
 no warnings "experimental";
+use EV;
 use Log::ger;
 use Data::Dumper;
 
@@ -121,6 +122,7 @@ sub make_reader{
 					#end of line found
 						$state   = STATE_HEADERS;
 						%h=();
+						%h=2048;
 						#@headers=();
 						#@hset=();
 						#@hused=();
@@ -156,32 +158,16 @@ sub make_reader{
 						};	#empty line.
 
 						($k,$v)=split ":", substr($buf,0,$pos3), 2;
-						$k=fc $k;
-						#my $index=$uSAC::HTTP::Header::name_to_index{$k}//$k;
-						
+						$k=uc $k=~tr/-/_/r;	
 						my $val=$v=~tr/\t //dr;
-						\my $e=\$h{fc $k};#uc $k=~tr/-/_/r};
+						\my $e=\$h{$k};
 						if($e){
 							$e.=",$val";
 						}
 						else {
 							$e=$val;
-							$host=$val if $val eq "host";
+							$host=$val if $k eq "HOST";
 						}
-						
-
-                                                ####################################
-                                                # unless($hset[$index]){           #
-                                                #         $hset[$index]=$val;      #
-                                                #         push @hused, $index;     #
-                                                # }                                #
-                                                # else {                           #
-                                                #         $hset[$index].=','.$val; #
-                                                # }                                #
-                                                ####################################
-					
-						
-
 
 						$buf=substr $buf, $pos3+2;
 						redo;
@@ -203,10 +189,10 @@ sub make_reader{
 
 				#($uri,my $query)=split('\?', $uri);
 				#
-				my $host=$h{host};#$hset[HTTP_HOST];#find_header \@headers, HTTP_HOST;
+				#my $host=$h{HOST};#$hset[HTTP_HOST];#find_header \@headers, HTTP_HOST;
 				CONFIG::log and log_trace "Host: $host";
 				
-				$req=uSAC::HTTP::Rex->new($r, \%h, $host, $version, $method, $uri);
+				$req=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri);
 				CONFIG::log and log_trace  "Headers  parsed: ".Dumper \%h;
 
 
@@ -214,7 +200,7 @@ sub make_reader{
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]=0;
 				
-				$r->[uSAC::HTTP::Session::closeme_]||= $h{connection} eq "close" ||$version ne "HTTP/1.1";
+				$r->[uSAC::HTTP::Session::closeme_]||= $h{CONNECTION} eq "close" ||$version ne "HTTP/1.1";
 
 				#shift buffer
 				$buf=substr $buf, pos $buf;# $pos;
