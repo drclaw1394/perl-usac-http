@@ -35,23 +35,23 @@ my $server; $server=usac_server {
 				#rex_write @_, HTTP_OK, [HTTP_CONTENT_LENGTH, 5], "HELLO";
 		};
 
-		usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static";
+		#usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static";
 
-		usac_route "/static/$File_Path"=>deflate()=>usac_file_under (
+		usac_route "/static"=>deflate()=>usac_file_under (
 			filter=>'txt$',
-			#no_compress=>'txt$',
 			read_size=>4096*32, 
+			#do_dir=>1,
+			#indexes=>["index.html"],
 			#sendfile=>4096, 
-			usac_path root=>usac_dirname, "static"
-		)=>
-		usac_file_under (
-			read_size=>4096*32,	
-			no_compress=>'jpg$',
-			#sendfile=>12,
-			usac_path root =>usac_dirname, "static"
-		);
-			
+			usac_path root=>usac_dirname #, "static"
+		)
 
+                => usac_file_under (
+                        read_size=>4096*32,
+                        no_compress=>'jpg$',
+                        #sendfile=>12,
+                        usac_path root =>usac_dirname
+                );
                         ##################################################
                         # =>usac_file_under (                            #
                         #         usac_path root=>usac_dirname, "static" #

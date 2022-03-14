@@ -235,7 +235,7 @@ sub chunked{
 					last if $_ >=@headers;
 					$index=$_+1 if ($headers[$_] eq HTTP_CONTENT_ENCODING);
 				}
-				if($index){	
+				unless($index){	
 					push @headers, HTTP_TRANSFER_ENCODING, "chunked";
 
 				}
