@@ -246,7 +246,6 @@ sub _strip_prefix {
 	sub {
 		my $inner_next=shift;
 		sub {
-			CONFIG::log and log_trace "Headers in strip prefix: ".Dumper $_[1]->headers;
 			package uSAC::HTTP::Rex {
 				$_[1][uri_stripped_]= substr($_[1]->[uri_], $len); #strip the url
 				$_[1][capture_]=[@{^CAPTURE}];	#save the capture 
@@ -551,7 +550,9 @@ sub usac_prefix {
 	#my $self=$_;
         my $prefix=pop;
 	unless($prefix=~m|^/|){
-		warn "Prefix '$prefix' needs to start with a '/'. Fixing";
+
+		#CONFIG::log and 
+		log_info "Prefix '$prefix' needs to start with a '/'. Fixing it...";
 		$prefix="/".$prefix;
 	}
 	#$self->[prefix_]=$_;

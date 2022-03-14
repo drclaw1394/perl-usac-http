@@ -190,10 +190,8 @@ sub make_reader{
 				#($uri,my $query)=split('\?', $uri);
 				#
 				#my $host=$h{HOST};#$hset[HTTP_HOST];#find_header \@headers, HTTP_HOST;
-				CONFIG::log and log_trace "Host: $host";
 				
 				$req=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri);
-				CONFIG::log and log_trace  "Headers  parsed: ".Dumper \%h;
 
 
 

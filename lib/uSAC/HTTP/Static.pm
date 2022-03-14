@@ -23,7 +23,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR EBUSY>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_dir_under usac_file_under usac_index_under list_dir>;
+our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_file_under list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -502,22 +502,6 @@ sub make_list_dir {
 		my $data="";
 		$ren->($data, $labels, \@results);	#Render to output
 		rex_write $line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , $data;
-                #####################################################################################
-                # sub {                                                                             #
-                #         return unless my $writer=$_[0];                 #no writer so bye         #
-                #         ##### Start app logic                                                     #
-                #         state $first=1;                                                           #
-                #         my $reply="";                                   #Reset buffer             #
-                #         $ren->($reply, $first?$labels : undef, \@results);      #Render to output #
-                #         $first=0;                                                                 #
-                #                                                                                   #
-                #         ###### End app logic                                                      #
-                #         #$session->[uSAC::HTTP::Session::closeme_]=1;                             #
-                #         $writer->($reply);#$session->[uSAC::HTTP::Session::dropper_]);            #
-                #         $writer->("", $session->[uSAC::HTTP::Session::dropper_]);                 #
-                #                                                                                   #
-                # };                                                                                #
-                #####################################################################################
 	}
 }
 
@@ -823,68 +807,6 @@ sub send_file_uri_range {
 
 
 
-#Serve index files for dirs
-#####################################################################################################
-# sub usac_index_under {                                                                            #
-#         #create a new static file object                                                          #
-#         my $html_root=pop;                                                                        #
-#         my %options=@_;                                                                           #
-#         my $parent=$options{parent}//$uSAC::HTTP::Site;                                           #
-#         \my @indexes=$options{indexes}//[];                                                       #
-#         $options{mime}=$parent->resolve_mime_lookup;                                              #
-#         $options{default_mime}=$parent->resolve_mime_default;                                     #
-#                                                                                                   #
-#         my $headers=$options{headers}//[];                                                        #
-#         my $read_size=$options{read_size}//4096;                                                  #
-#         my $sendfile=$options{sendfile}//0;                                                       #
-#         my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);                      #
-#                                                                                                   #
-#         my $cache=$static->[cache_];                                                              #
-#         my $html_root=$static->[html_root_];                                                      #
-#         die "Can not access dir $html_root to serve static index files" unless -d $html_root;     #
-#                                                                                                   #
-#         #create the sub to use the static files here                                              #
-#         sub {                                                                                     #
-#                 #matcher, rex, code, headers, uri if not in $_                                    #
-#                 my $rex=$_[1];                                                                    #
-#                 #my $p=$1;                                                                        #
-#                 my $p;                                                                            #
-#                 if($_[2]){                                                                        #
-#                         $p=$_[2];                                                                 #
-#                         pop;                                                                      #
-#                 }                                                                                 #
-#                 else {                                                                            #
-#                         $p=&rex_capture->[0];                                                     #
-#                         #$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];                            #
-#                 }                                                                                 #
-#                                                                                                   #
-#                 #attempt to locate the index files in sequence                                    #
-#                 my $entry;                                                                        #
-#                 for(@indexes){                                                                    #
-#                         my $path=$html_root."/".$p.$_;                                            #
-#                         #say "PATH: $path";                                                       #
-#                         $entry=$cache->{$path}//$static->open_cache($path);                       #
-#                         next unless $entry;                                                       #
-#                         if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){                             #
-#                                 send_file_uri_range @_, $entry;                                   #
-#                                 return;                                                           #
-#                         }                                                                         #
-#                         else{                                                                     #
-#                                 #Send normal                                                      #
-#                                 #$static->send_file_uri_norange(@_, $p, $root);                   #
-#                                 send_file_uri_norange @_,$headers, $read_size, $sendfile, $entry; #
-#                                 return;                                                           #
-#                         }                                                                         #
-#                 }                                                                                 #
-#                                                                                                   #
-#                 #no valid index found so 404                                                      #
-#                 rex_error_not_found @_;                                                           #
-#                 #rex_write @_, HTTP_NOT_FOUND,[],"";                                              #
-#                 return;                                                                           #
-#         }                                                                                         #
-# }                                                                                                 #
-#                                                                                                   #
-#####################################################################################################
 #Server static files under the specified root dir
 #Dual mode. Also acts as innerware
 
@@ -921,7 +843,6 @@ sub usac_file_under {
 	#create the sub to use the static files here
 	sub {
 		#Do a check here. if first argment is a sub ref we are being used as middleware
-		CONFIG::log and log_trace "do DIR AT TOp: $do_dir";
 		#But this should only happen once.
 		state $next;
 		if(!$next and ref($_[0])eq "CODE"){
@@ -937,13 +858,14 @@ sub usac_file_under {
 		#my $p=$1;
 		my $p;
 		if($_[2]){
-			CONFIG::log and log_trace "Input uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
+
+			CONFIG::log and log_trace "Static: Input uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
 			$p=$_[2];
 			pop;
 		}	
 		else {
 			#$p=&rex_capture->[0];#$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
-			CONFIG::log and log_trace "Stripped uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
+			CONFIG::log and log_trace "Static: Stripped uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
 			#$p=$_[1][uSAC::HTTP::Rex::capture_][0];
 			$p=$rex->[uSAC::HTTP::Rex::uri_stripped_];
 		}
@@ -962,16 +884,14 @@ sub usac_file_under {
 			CONFIG::log and log_trace "Setting identity content encoding";
 			push @head, HTTP_CONTENT_ENCODING, "identity";
 		}
-		CONFIG::log and log_debug Dumper \@head;
-		CONFIG::log and log_trace "PATH TO SERVE $path";
-		CONFIG::log and log_trace "do dir? $do_dir";
+		CONFIG::log and log_trace "static: html_root: $html_root";
 		#Server dir listing if option is specified
 		if($do_dir || @indexes and $path =~ m|/$|){
 			#attempt to do automatic index file.
 			my $entry;
 			for(@indexes){
 				my $path=$html_root.$p.$_;
-				CONFIG::log and log_trace "Index searching PATH: $path";
+				CONFIG::log and log_trace "Static: Index searching PATH: $path";
 				$entry=$cache->{$path}//$static->open_cache($path);
 				next unless $entry;
 				if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
@@ -987,12 +907,12 @@ sub usac_file_under {
 			}
 
 			if($do_dir){
-				CONFIG::log and log_trace "Listing dir $p";
+				CONFIG::log and log_trace "Static: Listing dir $p";
 				#dir listing
 				$list_dir->(@_, $p);
 			}
 			else {
-				CONFIG::log and log_trace "NO DIR LISTING";
+				CONFIG::log and log_trace "Static: NO DIR LISTING";
 				#no valid index found so 404
 				rex_error_not_found @_;
 			}
@@ -1028,39 +948,6 @@ sub usac_file_under {
 }
 
 
-##########################################################################################
-# sub usac_dir_under {                                                                   #
-#         #my %args=@_;                                                                  #
-#         #say "static file from ",@_;                                                   #
-#         my $html_root=pop;                                                             #
-#         my %options=@_;                                                                #
-#         my $parent=$options{parent}//$uSAC::HTTP::Site;                                #
-#                                                                                        #
-#                                                                                        #
-#         my $headers=$options{headers}//[];                                             #
-#         my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);           #
-#         say "HTML ROOT IN DIR LISTING: ", $static->[html_root_];                       #
-#         die "Can not access dir $html_root to serve dir listing" unless -d $html_root; #
-#         my $list_dir=$static->make_list_dir(%options);                                 #
-#                                                                                        #
-#                                                                                        #
-#         sub {                                                                          #
-#                 my $rex=$_[1];                                                         #
-#                 #my $p=$1;                                                             #
-#                 my $p;                                                                 #
-#                 if($_[2]){                                                             #
-#                         $p=$_[2];                                                      #
-#                         pop;                                                           #
-#                 }                                                                      #
-#                 else {                                                                 #
-#                         #$p=$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];              #
-#                         $p=$_[1][uSAC::HTTP::Rex::capture_][0];                        #
-#                 }                                                                      #
-#                                                                                        #
-#                 $list_dir->(@_, $p);                                                   #
-#         }                                                                              #
-# }                                                                                      #
-##########################################################################################
 
 
 sub send_file {

@@ -19,7 +19,7 @@ my $server; $server=usac_server {
 	#usac_listen "192.168.1.104";
 	usac_sub_product "blog";
 	#usac_middleware log_simple dump_headers=>1;
-	my $site;$site=usac_site {
+	my $site; $site=usac_site {
 		usac_id "blog";
 		usac_host "127.0.0.1:8082";
 		usac_host "localhost:8082";

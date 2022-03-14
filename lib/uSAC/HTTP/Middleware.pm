@@ -214,7 +214,7 @@ sub chunked{
 		my $next=shift;
 		my $bypass;
 		sub {
-			CONFIG::log  and log_trace "Chunked Outerware";
+			CONFIG::log  and log_trace "Middeware: Chunked Outerware";
 			if($_[3]){
 				$bypass=undef;#reset
 
@@ -225,7 +225,7 @@ sub chunked{
 					($bypass =($headers[$_] eq HTTP_CONTENT_LENGTH)) and return &$next;
 				}
 
-				CONFIG::log and log_trace "Chunk bypass: $bypass";
+				CONFIG::log and log_trace "Middelware: Chunked bypass: ".($bypass//"");
 				
 				#we actually have  headers and Data. this is the first call
 				#Add to headers the chunked trasfer encoding
@@ -233,7 +233,7 @@ sub chunked{
 				my $index;
 				for(@key_indexes){
 					last if $_ >=@headers;
-					$index=$_+1 if ($headers[$_] eq HTTP_CONTENT_ENCODING);
+					$index=$_+1 if ($headers[$_] eq HTTP_TRANSFER_ENCODING);
 				}
 				unless($index){	
 					push @headers, HTTP_TRANSFER_ENCODING, "chunked";

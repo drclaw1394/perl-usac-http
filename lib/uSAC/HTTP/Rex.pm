@@ -311,12 +311,17 @@ sub usac_multipart_slurp{
 sub usac_form_slurp{
 	my ($cb)=pop;
 	my %options=@_;
-	say "Setup form slurp";
+	CONFIG::log and  log_trace "Setup usac_form_slurp";
 	my $tmp_dir=$options{dir}//"uploads";
 
 	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
 	#convert to abs path to prevent double resolving
-	die "Could not access directory $tmp_dir for uploads" unless -d $tmp_dir;
+	unless( -d $tmp_dir){
+		my $message= "Could not access directory $tmp_dir for uploads";
+		CONFIG::log and log_error $message;
+		die $message;
+	}
+
 	$options{dir}=rel2abs($tmp_dir);
 	
 	my $multi= usac_multipart_slurp %options, $cb;
