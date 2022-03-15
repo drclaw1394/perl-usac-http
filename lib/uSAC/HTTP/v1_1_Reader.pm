@@ -201,10 +201,17 @@ sub make_reader{
 				$pos=0;
 				$state=$start_state;
 				$cb->(
-					#"$h{HOST} $method $uri",
-					"$host $method $uri",
+					$host,
+					"$method $uri",
 					$req
 				);
+                                #####################################
+                                # $cb->(                            #
+                                #         #"$h{HOST} $method $uri", #
+                                #         "$host $method $uri",     #
+                                #         $req                      #
+                                # );                                #
+                                #####################################
 				return;
 
 			}

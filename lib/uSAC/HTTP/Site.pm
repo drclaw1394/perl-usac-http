@@ -93,6 +93,8 @@ sub add_route {
 	my $path_matcher=shift;
 	my @inner;
 	my @outer;
+	log_trace "Adding route";
+	log_trace "Path matcher: $path_matcher";
 
 	#Add chunked always. Add at start of total middleware
 	# Than means executed first for innerware 
@@ -129,8 +131,9 @@ sub add_route {
 	die "No end point provided" unless $end and ref $end eq "CODE";
 	state @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 
-	my @non_matching=(qr{[^ ]+});#grep {!/$method_matcher/} @methods;
+	#my @non_matching=(qr{[^ ]+});
 	my @matching=grep { /$method_matcher/ } @methods;
+	my @non_matching=grep { !/$method_matcher/ } @methods;
 	my $sub;
 
 	if(@non_matching){
@@ -142,14 +145,6 @@ sub add_route {
 		};
 	}
 
-	my @hosts;
-	my $matcher;
-	@hosts=$self->build_hosts;
-	push @hosts, qr{[^ ]+} unless @hosts;
-	my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
-	my $bp=$self->built_prefix;
-	$matcher=qr{^$host_match $method_matcher $bp$path_matcher};
-	log_info "  matching: $matcher";	
 	my $outer;
 
 	if(@inner){
@@ -231,19 +226,75 @@ sub add_route {
 		$outer=$serialize;
 	}
 
-	$self->[server_]->add_end_point($matcher, $end, [$self,$outer]);
+	my @hosts;
+	my $matcher;
+	@hosts=$self->build_hosts;
+        my $bp=$self->built_prefix;                                      #
+
+        ####################################################################
+        # push @hosts, qr{[^ ]+} unless @hosts;                            #
+        # my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";      #
+        # my $bp=$self->built_prefix;                                      #
+        # $matcher=qr{^$host_match $method_matcher $bp$path_matcher};      #
+        # log_info "  matching: $matcher";                                 #
+        # $self->[server_]->add_end_point($matcher, $end, [$self,$outer]); #
+        ####################################################################
+
+	push @hosts, "*.*" unless @hosts;
+	#$matcher=qr{^$method_matcher $bp$path_matcher};
+	my $pm;
+	for my $host (@hosts){
+		for my $method (@matching){
+			#test if $path_matcher is a regex
+			my $type;
+			if(ref($path_matcher) eq "Regexp"){
+				$type=undef;
+				$pm=$path_matcher;
+			}
+			elsif($path_matcher =~ /[(^]/){
+				$type=undef;
+				$pm=$path_matcher;
+			}
+			elsif($path_matcher =~ /\$$/){
+				$pm=substr $path_matcher, 0,-1;
+				log_trace "Exact match";
+				$type="exact";
+			}
+			else {
+				$type="start";
+				$pm=$path_matcher;
+			}
+        		$matcher="$method $bp$pm";
+			$self->[server_]->add_host_end_point($host, $matcher, $end, [$self, $outer], $type);
+			log_info "  matching: $host $matcher";                                 #
+		}
+	}
+
 	# first argument is a 'route' object
 	# 		0 site
 	# 		1 outerware to execute
+        ########################################################################
+        # my $tmp=join "|", @non_matching;                                     #
+        # my $mre=qr{$tmp};                                                    #
+        # my $unsupported;                                                     #
+        # @hosts=$self->build_hosts;                                           #
+        # push @hosts, qr{[^ ]+} unless @hosts;                                #
+        # my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";          #
+        # $unsupported=qr{^$host_match $mre $bp$path_matcher};                 #
+        # push $self->[unsupported_]->@*, [$unsupported, $sub,[$self,$outer]]; #
+        ########################################################################
+
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
-	my $unsupported;
-	@hosts=$self->build_hosts;
-	push @hosts, qr{[^ ]+} unless @hosts;
-	$host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";
-	$unsupported=qr{^$host_match $mre $bp$path_matcher};
-		
-	push $self->[unsupported_]->@*, [$unsupported, $sub,[$self,$outer]];
+	my $unsupported=qr{^$mre $bp$path_matcher};
+	#push @hosts, "*.*" unless @hosts;
+	for my $host (@hosts){
+		for my $method (@non_matching){
+			$unsupported="$method $bp$path_matcher";
+			push $self->[unsupported_]->@*, [$host, $unsupported, $sub,[$self,$outer]];
+			log_info "  non matching: $host $unsupported";                                 #
+		}
+	}
 }
 
 #middleware to strip prefix

@@ -54,7 +54,7 @@ use Carp 'croak';
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
+	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ host_tables_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
 );
 
 use constant KEY_COUNT=> total_requests_ - host_+1;
@@ -112,11 +112,11 @@ sub new {
 	$self->[port_]=$options{port}//8080;
 	$self->[enable_hosts_]=1;#$options{enable_hosts};
 	$self->[table_]=Hustle::Table->new(_default_handler);
+	$self->[host_tables_]={};
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
 	$self->[static_headers_]=[];#STATIC_HEADERS;
 	register_site($self, uSAC::HTTP::Site->new(id=>"default"));#,host=>'[^ ]+'));
-	#$self->[table_]->set_default(_default_handler,$self->site);
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	$self->[workers_]=1;
@@ -375,6 +375,12 @@ sub add_end_point{
 	my ($self,$matcher,$end, $ctx)=@_;
 	$self->[table_]->add(matcher=>$matcher,sub=>$end, ctx=>$ctx);
 }
+sub add_host_end_point{
+	my ($self, $host, $matcher, $end, $ctx, $type)=@_;
+
+	my $table=$self->[host_tables_]{$host}//=Hustle::Table->new(_default_handler);
+	$table->add(matcher=>$matcher, sub=>$end, ctx=>$ctx, type=>$type);
+}
 
 #registers a site object with the server
 #returns the object
@@ -439,11 +445,18 @@ sub rebuild_dispatch {
 	#
 	for(keys $self->[sites_]->%*){
 		for ($self->[sites_]{$_}->unsupported->@*){
-			$self->add_end_point($_->@*);
+			$self->add_host_end_point($_->@*);
 		}
 	}
+	my %lookup=map {$_, $self->[host_tables_]{$_}->prepare_dispatcher(cache=>undef)} keys $self->[host_tables_]->%*;
 
-	$self->[cb_]=$self->[table_]->prepare_dispatcher( cache=>undef);#$cache);
+	$self->[cb_]=sub {
+		my $host=shift;
+		#TODO: need to respond to bad host
+		#
+		&{$lookup{$host}}
+	};
+	#$self->[cb_]=$self->[table_]->prepare_dispatcher( cache=>undef);#$cache);
 }
 
 sub stop {
