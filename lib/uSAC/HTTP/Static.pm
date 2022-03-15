@@ -875,7 +875,7 @@ sub usac_file_under {
 			return &$next if $next;
 			
 			&rex_error_not_found;
-			return;
+			return 1;
 		}
 		#If compress option is enabled then do not set the content-encoding header
 		#Otherwise we set to identity
@@ -915,6 +915,7 @@ sub usac_file_under {
 				CONFIG::log and log_trace "Static: NO DIR LISTING";
 				#no valid index found so 404
 				rex_error_not_found @_;
+				return 1;
 			}
 			
 		}

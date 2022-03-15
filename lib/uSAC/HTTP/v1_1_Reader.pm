@@ -122,10 +122,6 @@ sub make_reader{
 					#end of line found
 						$state   = STATE_HEADERS;
 						%h=();
-						%h=2048;
-						#@headers=();
-						#@hset=();
-						#@hused=();
 						++$seq;
 
 						#$pos=$pos3+2;

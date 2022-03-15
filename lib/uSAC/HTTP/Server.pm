@@ -13,7 +13,7 @@ use constant {
 use constant {
 	"CONFIG::single_process"=>1,
 	"CONFIG::kernel_loadbalancing"=>1,
-	"CONFIG::log"=>1
+	"CONFIG::log"=>0
 };
 
 use feature qw<isa refaliasing say state current_sub>;
@@ -443,7 +443,7 @@ sub rebuild_dispatch {
 		}
 	}
 
-	$self->[cb_]=$self->[table_]->prepare_dispatcher(type=>"online", cache=>undef);#$cache);
+	$self->[cb_]=$self->[table_]->prepare_dispatcher( cache=>undef);#$cache);
 }
 
 sub stop {

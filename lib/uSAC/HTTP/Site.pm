@@ -161,6 +161,7 @@ sub add_route {
 	}
 	my @index=map {$_*2} 0..99;
 
+	state $alloc="x" x 2048;
 	my $serialize=
 			sub{
 				no warnings qw<numeric uninitialized>;
@@ -185,11 +186,18 @@ sub add_route {
 					\my @h=$_[3];
 					CONFIG::log and log_trace  "Renderer: doing headers";
 
-					my $reply="HTTP/1.1 $_[2]".LF;
+					my $reply=$alloc;#."x";
+					$reply="HTTP/1.1 $_[2]".LF;
 					for(@index){
 						last if $_ >= @h;
 						#$reply.= ($uSAC::HTTP::Header::index_to_name[$h[$_]]//$h[$_]).": $h[$_+1]".LF;
-                                        	$reply.= $h[$_].": $h[$_+1]".LF;
+						$reply.= $h[$_].": $h[$_+1]".LF;
+                                                ######################
+                                                # $reply.= $h[$_];   #
+                                                # $reply.= ":";      #
+                                                # $reply.= $h[$_+1]; #
+                                                # $reply.= LF;       #
+                                                ######################
 
 					}
 					for(@index){
