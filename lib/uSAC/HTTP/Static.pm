@@ -848,7 +848,7 @@ sub usac_file_under {
 		if(!$next and ref($_[0])eq "CODE"){
 		
 				$next=$_[0];
-				say "returning  middle ware";
+				CONFIG::log and log_trace "Static file: returning  middle ware";
 				return __SUB__;
 		}
 			

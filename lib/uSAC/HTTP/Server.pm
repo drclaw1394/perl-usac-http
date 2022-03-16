@@ -13,8 +13,13 @@ use constant {
 use constant {
 	"CONFIG::single_process"=>1,
 	"CONFIG::kernel_loadbalancing"=>1,
-	"CONFIG::log"=>0
+	#"CONFIG::log"=>0
 };
+BEGIN {
+	unless (defined CONFIG::log){
+		"CONFIG::log"=>0
+	}
+}
 
 use feature qw<isa refaliasing say state current_sub>;
 #use IO::Handle;
@@ -98,7 +103,7 @@ sub _welcome {
 #ie expecting a request line but getting something else
 sub _default_handler {
 		state $sub=sub {
-			say "DEFAULT HANDLER FOR TABLE";
+			CONFIG::log and log_trace "DEFAULT HANDLER FOR TABLE";
 			&rex_error_not_found;
 		};
 }
@@ -111,12 +116,12 @@ sub new {
 	$self->[host_]=$options{host}//"0.0.0.0";
 	$self->[port_]=$options{port}//8080;
 	$self->[enable_hosts_]=1;#$options{enable_hosts};
-	$self->[table_]=Hustle::Table->new(_default_handler);
+	#$self->[table_]=Hustle::Table->new(_default_handler);
 	$self->[host_tables_]={};
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
 	$self->[static_headers_]=[];#STATIC_HEADERS;
-	register_site($self, uSAC::HTTP::Site->new(id=>"default"));#,host=>'[^ ]+'));
+	$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*"));#,host=>'[^ ]+'));
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	$self->[workers_]=1;
@@ -378,7 +383,8 @@ sub add_end_point{
 sub add_host_end_point{
 	my ($self, $host, $matcher, $end, $ctx, $type)=@_;
 
-	my $table=$self->[host_tables_]{$host}//=Hustle::Table->new(_default_handler);
+	CONFIG::log and log_trace $matcher;
+	my $table=$self->[host_tables_]{$host}//=Hustle::Table->new(sub {say "SHould not use table default dispatcher"});
 	$table->add(matcher=>$matcher, sub=>$end, ctx=>$ctx, type=>$type);
 }
 
@@ -408,32 +414,36 @@ sub site {
 }
 
 #Duck type as a site 
-sub add_route {
-	my $self=shift;
-	$self->site->add_route(@_);
-}
-
-
-
-sub host {
-	return $_[0]->site->host;
-}
-sub innerware {
-	$_[0]->site->innerware;
-}
-sub outerware{
-	$_[0]->site->outerware;
-}
+#######################################
+# sub add_route {                     #
+#         my $self=shift;             #
+#         $self->site->add_route(@_); #
+# }                                   #
+#                                     #
+#                                     #
+#                                     #
+# sub host {                          #
+#         return $_[0]->site->host;   #
+# }                                   #
+# sub innerware {                     #
+#         $_[0]->site->innerware;     #
+# }                                   #
+# sub outerware{                      #
+#         $_[0]->site->outerware;     #
+# }                                   #
+#######################################
 
 
 sub rebuild_dispatch {
 	my $self=shift;
-	my $cache={};
-	keys %$cache=512;
-	#The dispatcher always has a default. Thus if we only have 1 entry in the dispatch table add explicit 
-	if($self->[table_]->@*==1 or keys $self->[sites_]->%* > 1){
-		$self->site_route('GET', qr{.*}=>()=>_welcome);
-	}
+        #########################################################################################################
+        # my $cache={};                                                                                         #
+        # keys %$cache=512;                                                                                     #
+        # #The dispatcher always has a default. Thus if we only have 1 entry in the dispatch table add explicit #
+        # if($self->[table_]->@*==1 or keys $self->[sites_]->%* > 1){                                           #
+        #         $self->site_route('GET', qr{.*}=>()=>_welcome);                                               #
+        # }                                                                                                     #
+        #########################################################################################################
 
 	#here we add the unsupported methods to the table before building it
 	#Note: this is different to a unfound URL resource.
@@ -448,13 +458,32 @@ sub rebuild_dispatch {
 			$self->add_host_end_point($_->@*);
 		}
 	}
+
+	#Create a special default site for each host that matches any method and uri
+	for my $host (keys $self->[host_tables_]->%*) {
+
+		my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
+		$site->parent_site=$self;
+		#$self->register_site($site);
+		CONFIG::log and log_trace "Adding default handler to $host";
+
+		$site->add_route($Any_Method, qr|.*|, _default_handler);
+	}
+		my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self);
+		$site->parent_site=$self;
+		#$self->register_site($site);
+		CONFIG::log and log_trace "Adding default handler to *.*";
+
+		$site->add_route($Any_Method, qr|.*|, _default_handler);
+
 	my %lookup=map {$_, $self->[host_tables_]{$_}->prepare_dispatcher(cache=>undef)} keys $self->[host_tables_]->%*;
 
 	$self->[cb_]=sub {
 		my $host=shift;
+		CONFIG::log and log_trace "Doing host lookup for $host";
 		#TODO: need to respond to bad host
-		#
-		&{$lookup{$host}}
+		my $table=$lookup{$host}//$lookup{"*.*"};
+		&$table;
 	};
 	#$self->[cb_]=$self->[table_]->prepare_dispatcher( cache=>undef);#$cache);
 }
@@ -490,17 +519,20 @@ sub run {
 		$self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];
 	}
 	
-	#=======CATCH ALL
-	#Add a catch all route to the default site.
-	#As this is always the last route added, it will be tested last
-	#Middleware for the default site is applicable to this handler
-	#
-	my $site=$self->site;#uSAC::HTTP::Site->new(server=>$self);
-	unshift $site->host->@*, "[^ ]+";	#match any host
-	$site->add_route($Any_Method, qr|.*|, sub {
-			&rex_error_not_found 
-		}
-	);
+        ###################################################################
+        # #=======CATCH ALL                                               #
+        # #Add a catch all route to the default site.                     #
+        # #As this is always the last route added, it will be tested last #
+        # #Middleware for the default site is applicable to this handler  #
+        # #                                                               #
+        # my $site=$self->site;#uSAC::HTTP::Site->new(server=>$self);     #
+        #                                                                 #
+        # unshift $site->host->@*, "[^ ]+";       #match any host         #
+        # $site->add_route($Any_Method, qr|.*|, sub {                     #
+        #                 &rex_error_not_found                            #
+        #         }                                                       #
+        # );                                                              #
+        ###################################################################
 
 
 	$self->rebuild_dispatch;
@@ -516,16 +548,18 @@ sub run {
 sub list_routes {
 	#dump all routes	
 }
-
-sub mime_default: lvalue {
-	$_[0]->site->mime_default;
-}
-sub mime_db: lvalue {
-	$_[0]->site->mime_db;
-}
-sub mime_lookup: lvalue {
-	$_[0]->site->mime_lookup;
-}
+######################################
+#                                    #
+# sub mime_default: lvalue {         #
+#         $_[0]->site->mime_default; #
+# }                                  #
+# sub mime_db: lvalue {              #
+#         $_[0]->site->mime_db;      #
+# }                                  #
+# sub mime_lookup: lvalue {          #
+#         $_[0]->site->mime_lookup;  #
+# }                                  #
+######################################
 
 #declarative setup
 

@@ -93,8 +93,8 @@ sub add_route {
 	my $path_matcher=shift;
 	my @inner;
 	my @outer;
-	log_trace "Adding route";
-	log_trace "Path matcher: $path_matcher";
+	CONFIG::log and log_trace "Adding route: from ".join ", ", caller;
+	CONFIG::log and log_trace "Path matcher: $path_matcher";
 
 	#Add chunked always. Add at start of total middleware
 	# Than means executed first for innerware 
@@ -257,7 +257,7 @@ sub add_route {
 			}
 			elsif($path_matcher =~ /\$$/){
 				$pm=substr $path_matcher, 0,-1;
-				log_trace "Exact match";
+				CONFIG::log and log_trace "Exact match";
 				$type="exact";
 			}
 			else {
@@ -266,7 +266,7 @@ sub add_route {
 			}
         		$matcher="$method $bp$pm";
 			$self->[server_]->add_host_end_point($host, $matcher, $end, [$self, $outer], $type);
-			log_info "  matching: $host $matcher";                                 #
+			CONFIG::log and log_info "  matching: $host $matcher";                                 #
 		}
 	}
 
@@ -292,7 +292,7 @@ sub add_route {
 		for my $method (@non_matching){
 			$unsupported="$method $bp$path_matcher";
 			push $self->[unsupported_]->@*, [$host, $unsupported, $sub,[$self,$outer]];
-			log_info "  non matching: $host $unsupported";                                 #
+			CONFIG::log and log_trace "  non matching: $host $unsupported";                                 #
 		}
 	}
 }
@@ -343,7 +343,7 @@ sub add_end_point {
 }
 
 
-sub parent_site {
+sub parent_site :lvalue{
 	$_[0][parent_];
 }
 sub unsupported {
@@ -392,6 +392,8 @@ sub construct_middleware {
 	my $parent=$_[0];
 	my @middleware;
 	while($parent){
+		CONFIG::log and log_trace "Middleware from $parent";
+		CONFIG::log and log_trace "Parent_site ". $parent->parent_site;
 		unshift @middleware, @{$parent->innerware//[]};
 		$parent=$parent->parent_site;
 	}
