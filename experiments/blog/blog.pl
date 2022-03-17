@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use constant "CONFIG::log"=>1;
+use constant "CONFIG::log"=>0;
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
 use Log::ger::Output 'Screen';
@@ -19,7 +19,7 @@ my $server; $server=usac_server {
 	#usac_mime_default "some/stuff";
 	#usac_listen "192.168.1.104";
 	usac_sub_product "blog";
-	usac_middleware log_simple dump_headers=>1;
+	#usac_middleware log_simple dump_headers=>1;
 	my $site; $site=usac_site {
 		usac_id "blog";
 		usac_host "127.0.0.1:8082";
@@ -28,7 +28,7 @@ my $server; $server=usac_server {
 		#usac_middleware log_simple;
 
 		usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
-		usac_route '/static/hot.txt$' =>	usac_cached_file headers=>[unkown=>"A"], "static/hot.txt";
+		usac_route '/static/hot.txt$' =>(deflate)=>	usac_cached_file headers=>[unkown=>"A"], "static/hot.txt";
 		usac_route '/statictest$'=> usac_static_content "This is some data";
 
 		usac_route 'testing.txt$'=>deflate()=>sub {

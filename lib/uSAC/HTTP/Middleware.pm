@@ -82,7 +82,6 @@ sub log_simple_in {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
 			my $time=time;
-			#say "INNER LOG: ", @{^CAPTURE};
 			package uSAC::HTTP::Rex {
 				say STDERR "\n---->>>";
 				say STDERR "Arraval time:		".$time;
@@ -108,9 +107,12 @@ sub log_simple_out {
 	sub {
 		my $outer_next=shift;
 		sub {
-			say STDERR "\n<<<---";
-			say STDERR "Depature time:		".time;
-			say STDERR Dumper $_[3];
+			#matcher, rex, code, header, body, cb, arg
+			#only log on complete responses
+			unless($_[5]){
+				say STDERR "\n<<<---";
+				say STDERR "Depature time:		".time;
+			}
 			return &$outer_next;
 		}
 	};
@@ -209,23 +211,32 @@ sub chunked{
 		my $next=shift;
 		
 	};
+
+	my %out_ctx;
+	my $ctx;
 	my $chunked_out=
 	sub {
 		my $next=shift;
-		my $bypass;
+		#my $bypass;
 		sub {
 			CONFIG::log  and log_trace "Middeware: Chunked Outerware";
+			CONFIG::log  and log_trace "Key count chunked: ". scalar keys %out_ctx;
+			#\my $bypass=\$out_ctx{$_[1]}; #access the statefull info for this instance and requst
+			my $exe;
+
 			if($_[3]){
-				$bypass=undef;#reset
+				#$bypass=undef;#reset
 
 				\my @headers=$_[3];
 
 				for(@key_indexes){
 					last if $_ >=@headers;
-					($bypass =($headers[$_] eq HTTP_CONTENT_LENGTH)) and return &$next;
-				}
 
-				CONFIG::log and log_trace "Middelware: Chunked bypass: ".($bypass//"");
+					(($headers[$_] eq HTTP_CONTENT_LENGTH)) and return &$next;
+				}
+				$exe=1;
+
+				CONFIG::log and log_trace "Middelware: Chunked execute".($exe//"");
 				
 				#we actually have  headers and Data. this is the first call
 				#Add to headers the chunked trasfer encoding
@@ -243,14 +254,20 @@ sub chunked{
 					$headers[$index].=",chunked";
 
 				}
+				$ctx=$exe;
+				$out_ctx{$_[1]}=$ctx;
 
 
 			}
-			return &$next if $bypass;
+			$ctx//=$out_ctx{$_[1]};
+			return &$next unless $ctx;
 
 			my $scratch="";
 			$scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF if $_[4];
-			$scratch.="00".LF.LF unless $_[5];
+			unless($_[5]){
+				$scratch.="00".LF.LF;
+				delete $out_ctx{$_[1]};	#Last call, delete
+			}
 			return $next->(@_[0,1,2,3],$scratch,@_[5,6]) if $scratch;
 
 			return &$next;
@@ -271,40 +288,65 @@ sub deflate {
 		}
 	};
 
+	state @deflate_pool;
+	my %out_ctx; #stores bypass and  compressor
+	my $ctx;
+	my $dummy=sub{};
 	my $out=sub {
 		my $next=shift;
-		my $bypass;
-		my $compressor=Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 		my $status;
 		my $index;
 		(sub {
+		
+			
 
-			CONFIG::log and log_trace "Headers in deflate: ".Dumper $_[1]->headers;
+			CONFIG::log and log_debug "Input data length: ".length  $_[4];
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
 			\my $buf=\$_[4];
+			#Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1)
+			CONFIG::log and log_debug "Context count: ".scalar keys %out_ctx;
+			CONFIG::log and log_debug "Compressor pool: ".scalar @deflate_pool;
+
 			CONFIG::log  and log_trace "doing deflate";
+			my $exe;
 			if($_[3]){
+				CONFIG::log and log_debug "in header processing";
 				\my @headers=$_[3]; #Alias for easy of use and performance
-				$bypass=undef;#reset  for reuse
+				#$ctx->[0]=undef;#reset  for reuse
 
-				unless($_[4]){
-					#If empty or undefined body, then we disable.
-					$bypass=1;
-				}
-				CONFIG::log  and log_trace "looking for accept";
-				CONFIG::log and "Incoming accpet_encodeing: ".$_[1]->headers;
+				#if this is a one shot write then we don't need to store a context
+				#
+                                #########################################################
+                                # unless($_[4]){                                        #
+                                #         #If empty or undefined body, then we disable. #
+                                #         $exe=0;                                       #
+                                # }                                                     #
+                                #########################################################
+				CONFIG::log and log_trace "looking for accept";
+				CONFIG::log and log_trace "Incoming accept_encoding: ".Dumper $_[1]->headers;
 
-				$bypass||=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa;
+				($exe=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa) and return &$next;
+				#unless $exe; #bypass is default
 
 				#Also disable if we are already encoded
+				$exe=1;
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					($bypass||= $headers[$k] eq HTTP_CONTENT_ENCODING) and last;
-					#($bypass||= $headers[$k] =~ /^@{[HTTP_CONTENT_ENCODING]}/ioaa) and last;
+					CONFIG::log and log_trace "Testing header: $headers[$k]";
+					($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;
 				}
+				
+				CONFIG::log  and log_trace "exe ". $exe; 
+				CONFIG::log  and log_trace "Single shot: ". !$_[5];
 
-				return &$next if $bypass;
+				$ctx=$exe;
+				#$out_ctx{$_[1]}=$ctx if $_[5]; #save context if more to come
+						
+
+				return &$next unless $exe; #bypass is default
+				
+				CONFIG::log  and log_trace "No bypass in headers";
 
 				#Remove content length as we will rely on chunked encoding
 				for my $k (@key_indexes){
@@ -323,40 +365,77 @@ sub deflate {
 				push @headers, HTTP_CONTENT_ENCODING, "deflate";
 
 
-				#Finally configure compressor	
-				# reset compression context
-				#
-				$status=$compressor->deflateReset();
-				$status == Z_OK or log_error "Could not reset deflate";
+				unless($_[5]){
+					# no callback...single shot	
+					#
+					#
+					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
+
+					CONFIG::log and log_trace "single shot";
+					my $scratch=""; 	#new scratch each call
+					my $status=$ctx->deflate($buf, $scratch);
+					$status == Z_OK or log_error "Error creating deflate context";
+					$status=$ctx->flush($scratch);
+					$ctx->deflateReset;
+					CONFIG::log and log_debug "about to push for single shot";
+					push @deflate_pool, $ctx;
+					$next->(@_[0,1,2,3], $scratch, @_[5,6]);
+					return;
+					
+				}
+				else{
+					#multiple calls required so setup context
+					my $scratch="";
+					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
+					CONFIG::log and log_trace "Multicalls required $_[1]";
+					$out_ctx{$_[1]}=$ctx;
+
+					CONFIG::log and log_trace Dumper $out_ctx{$_[1]};
+
+				}
 			}
+			CONFIG::log and log_trace "Doing body";
 			CONFIG::log and log_trace "Processing deflate content";
 			# Only process if setup correctly
 			#
-			return &$next if $bypass;
+			CONFIG::log and log_trace $_[1];
+
+			$ctx//=$out_ctx{$_[1]};
+
+			CONFIG::log and log_trace Dumper $ctx;
+
+			return &$next unless $ctx;
 
 
 			# Append comppressed data to the scratch when its ready
 			#
 			my $scratch=""; 	#new scratch each call
-			$status=$compressor->deflate($buf, $scratch);
+			$status=$ctx->deflate($buf, $scratch);
 			$status == Z_OK or log_error "Error creating deflate context";
 
 
 			# Push to next stage
 			unless($_[5]){
-				CONFIG::log and log_trace "No more data expected";
+				CONFIG::log and log_debug "No more data expected";
 				#if no callback is provided, then this is the last write
-				$status=$compressor->flush($scratch);
-				$next->(@_[0,1,2,3], $scratch , @_[5,6]);
+				$status=$ctx->flush($scratch);
+				delete $out_ctx{$_[1]};
+
+				$ctx->deflateReset;
+				CONFIG::log and log_debug "about to push for multicall";
+				push @deflate_pool, $ctx;
+				CONFIG::log and log_trace "delete...".scalar keys %out_ctx;
+
+				$next->(@_[0,1,2,3], $scratch, @_[5,6]);
 				return;
 
 			}
 			else {
-				CONFIG::log and log_trace "Expecting more data";
+				CONFIG::log and log_debug "Expecting more data";
 				# more data expected
 				if(length $scratch){
 					#enough data to send out
-					$next->(@_[0,1,2,3], $scratch , @_[5,6]);
+					$next->(@_[0,1,2,3], $scratch,$dummy);# @_[5,6]);
 					$_[5]->($_[6]);	#execute callback to force feed
 				}
 			}
