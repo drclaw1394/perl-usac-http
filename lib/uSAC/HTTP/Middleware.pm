@@ -88,8 +88,8 @@ sub log_simple_in {
 				say STDERR "Host: 			$_[1][host_]";
 				say STDERR "Original matched URI: 	$_[1][uri_]";
 				say STDERR "Site relative URI:	$_[1][uri_stripped_]";
-				say STDERR "Matched for site:	".($_[0][4][0]->id//"n/a");
-				say STDERR "Hit counter:		$_[0][3]";
+				say STDERR "Matched for site:	".($_[0][1][0]->id//"n/a");
+				say STDERR "Hit counter:		$_[0][1][4]";
 				say STDERR "Captures:		".join ", ",$_[1][captures_]->@* if $dump_capture;
 				say STDERR Dumper $_[1]->headers if $dump_headers;
 			}

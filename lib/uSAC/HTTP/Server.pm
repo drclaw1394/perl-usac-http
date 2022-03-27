@@ -55,7 +55,7 @@ use Data::Dumper;
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ table_ host_tables_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
+	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ host_tables_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
 );
 
 use constant KEY_COUNT=> total_requests_ - host_+1;
@@ -371,16 +371,21 @@ sub enable_hosts {
 sub static_headers {
 	shift->[static_headers_];
 }
-sub add_end_point{
-	my ($self,$matcher,$end, $ctx)=@_;
-	$self->[table_]->add(matcher=>$matcher,sub=>$end, ctx=>$ctx);
-}
+#########################################################################
+# sub add_end_point{                                                    #
+#         my ($self,$matcher,$end, $ctx)=@_;                            #
+#         $self->[table_]->add(matcher=>$matcher,sub=>$end, ctx=>$ctx); #
+# }                                                                     #
+#########################################################################
 sub add_host_end_point{
 	my ($self, $host, $matcher, $ctx, $type)=@_;
 
 	CONFIG::log and log_trace Dumper $matcher;
-	my $table=$self->[host_tables_]{$host}//=Hustle::Table->new(sub {log_error "Should not use table default dispatcher: ". $_[1]->[uSAC::HTTP::Rex::uri_]});
-	$table->add(matcher=>$matcher, value=>$ctx, type=>$type);
+	my $table=$self->[host_tables_]{$host}//=[
+		Hustle::Table->new(sub {log_error "Should not use table default dispatcher: ". $_[1]->[uSAC::HTTP::Rex::uri_]})
+		,{}
+	];
+	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
 #registers a site object with the server
@@ -457,30 +462,38 @@ sub rebuild_dispatch {
 
 		$site->add_route($Any_Method, qr|.*|, _default_handler);
 	}
-		my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self);
-		$site->parent_site=$self;
-		#$self->register_site($site);
-		CONFIG::log and log_trace "Adding default handler to *.*";
 
-		$site->add_route($Any_Method, qr|.*|, _default_handler);
+	my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self);
+	$site->parent_site=$self;
+	#$self->register_site($site);
+	CONFIG::log and log_trace "Adding default handler to *.*";
 
-	my %lookup=map {$_, $self->[host_tables_]{$_}->prepare_dispatcher(cache=>{})} keys $self->[host_tables_]->%*;
+	$site->add_route($Any_Method, qr|.*|, _default_handler);
+
+
+	my %lookup=map {
+		$_, [
+			$self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
+			$self->[host_tables_]{$_}[1]
+			]
+		}
+		keys $self->[host_tables_]->%*;
 
 	$self->[cb_]=sub {
 		my ($host, $input, $rex)=@_;
-		CONFIG::log and log_trace "Doing host lookup for $host";
-		#TODO: need to respond to bad host
-		my $table=$lookup{$host}//$lookup{"*.*"};
-		CONFIG::log and log_trace "looking for url $input";
-		#my ($route, $captures)=$table->($input);
-		(my $route, $rex->[uSAC::HTTP::Rex::captures_])= $table->($input);
 
-		$Data::Dumper::Maxdepth=2;
-		CONFIG::log and log_trace Dumper $route;
+		my $table=$lookup{$host}//$lookup{"*.*"};
+		(my $route, $rex->[uSAC::HTTP::Rex::captures_])= $table->[0]($input);
+
+
+		$route->[1][4]++;
 		$route->[1][1]($route,$rex);
-		#&$table;
+
+		#TODO: Better Routing Cache management.
+		if($route->[3]){
+			delete $table->[1]{$route->[0]}
+		}
 	};
-	#$self->[cb_]=$self->[table_]->prepare_dispatcher( cache=>undef);#$cache);
 }
 
 sub stop {

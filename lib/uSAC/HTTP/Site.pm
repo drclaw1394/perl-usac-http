@@ -278,7 +278,7 @@ sub add_route {
 			#$matcher="$method $bp$pm";
 			CONFIG::log and log_trace "Adding matched endpoints";
 			CONFIG::log and log_info "  matching: $host $matcher";                                 #
-			$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer], $type);
+			$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
 		}
 	}
 
@@ -290,7 +290,7 @@ sub add_route {
 	for my $host (@hosts){
 		for my $method (@non_matching){
 			$unsupported="$method $bp$path_matcher";
-			push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer]];
+			push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer,0]];
 			CONFIG::log and log_trace "  non matching: $host $unsupported";                                 #
 		}
 	}
