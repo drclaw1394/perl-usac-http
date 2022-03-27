@@ -63,7 +63,7 @@ rex_reply_html
 rex_reply_javascript
 rex_reply_text
 
-rex_capture
+rex_captures
 rex_write
 >;
 our @EXPORT=@EXPORT_OK;
@@ -80,12 +80,12 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ in_set_ in_used_ out_set_ out_used_ capture_>
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ in_set_ in_used_ out_set_ out_used_ captures_>
 );
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>capture_-version_+1;
+use constant KEY_COUNT=>captures_-version_+1;
 
 require uSAC::HTTP::Middleware;
 		
@@ -156,6 +156,7 @@ sub usac_data_stream{
 
 	sub {
 		#my $line=shift;
+		my $matcher=$_[0];
 		my $rex=$_[1];#shift;	#rex object
 
 		my $session=$rex->[session_];
@@ -363,6 +364,7 @@ sub usac_data_slurp{
 	make_path $tmp_dir unless $path;
 
 	usac_data_stream %options, sub {
+		my $matcher=$_[0];
 		my $rex=$_[1];
 		#handle_upload @_, $mime, sub {
 			state $header=0;
@@ -384,7 +386,7 @@ sub usac_data_slurp{
 			$wc=syswrite $handle, $_[2];
 			#TODO: error checking and drop connection on write error
 			if($_[4]){
-				$cb->(undef, $rex, $name,1);
+				$cb->($matcher, $rex, $name,1);
 				$header=0;
 				$name=undef;
 				$handle=undef;
@@ -482,9 +484,11 @@ sub rex_write{
 
 	#Otherwise this is just a body call
 	#
+	
 
-	&{$_[0][4][1]};	#Execute the outerware for this site/location
-	1;
+	CONFIG::log and log_trace "Calling outerware chain for ". $_[1]->uri."from caller: ". join ", ",caller;
+	CONFIG::log and log_trace Dumper $_[0];
+	&{$_[0][1][2]};	#Execute the outerware for this site/location
 }
 	 
 ##
@@ -619,8 +623,10 @@ sub rex_redirect_internal {
 		return;
 	}
 	undef $_[0];
+	CONFIG::log and  log_trace "Redirecting internal to host: $rex->[host_]";
 	$rex->[session_]->server->current_cb->(
-		join(" ", $rex->@[host_, method_, uri_]),
+		$rex->[host_],
+		join(" ", $rex->@[method_, uri_]),
 		$rex
 	);
 	1;
@@ -631,6 +637,7 @@ sub rex_headers {
 
 sub rex_reply_json {
 	my $data=pop;
+	CONFIG::log and log_trace "rex_reply_json caller: ". join ", ", caller;
 	rex_write @_, HTTP_OK, [
 		HTTP_CONTENT_TYPE, "text/json",
 		HTTP_CONTENT_LENGTH, length($data),
@@ -658,8 +665,8 @@ sub rex_reply_text {
 		HTTP_CONTENT_LENGTH, length($data),
 	], $data;
 }
-sub rex_capture {
-	$_[1][capture_]
+sub rex_captures {
+	$_[1][captures_]
 }
 
 
@@ -674,7 +681,7 @@ sub cookies :lvalue {
 #RW accessor
 #Returns the current state information for the rex
 sub state :lvalue { $_[0][state_] }
-sub capture:lvalue { $_[0][capture_] }
+sub captures:lvalue { $_[0][captures_] }
 sub writer {
 	$_[0][write_];
 

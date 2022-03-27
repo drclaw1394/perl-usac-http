@@ -132,10 +132,12 @@ sub add_route {
 	state @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 
 	#my @non_matching=(qr{[^ ]+});
+	CONFIG::log and log_trace Dumper $method_matcher;
 	my @matching=grep { /$method_matcher/ } @methods;
 	my @non_matching=grep { !/$method_matcher/ } @methods;
 	my $sub;
-
+	local $"=",";
+	CONFIG::log and log_trace "Methods array : @matching";
 	if(@non_matching){
 		my $headers=[HTTP_ALLOW, join ", ",@matching];
 		$sub = sub { 
@@ -245,44 +247,41 @@ sub add_route {
 	my $pm;
 	for my $host (@hosts){
 		for my $method (@matching){
+			CONFIG::log and log_trace "$host=>$method";
 			#test if $path_matcher is a regex
 			my $type;
+
+			say $path_matcher;
+
 			if(ref($path_matcher) eq "Regexp"){
 				$type=undef;
-				$pm=$path_matcher;
+				#$pm=$path_matcher;
+        			$matcher=qr{$method $bp$path_matcher};
 			}
-			elsif($path_matcher =~ /[(^]/){
+			elsif($path_matcher =~ /[(\^\$]/){
 				$type=undef;
-				$pm=$path_matcher;
+				#$pm=$path_matcher;
+        			$matcher=qr{$method $bp$path_matcher};
 			}
 			elsif($path_matcher =~ /\$$/){
-				$pm=substr $path_matcher, 0,-1;
+				$pm=substr $path_matcher, 0, -1;
 				CONFIG::log and log_trace "Exact match";
 				$type="exact";
+        			$matcher="$method $bp$path_matcher";
 			}
 			else {
-				$type="start";
-				$pm=$path_matcher;
+				$type="begin";
+				#$pm=$path_matcher;
+        			$matcher="$method $bp$path_matcher";
 			}
-        		$matcher="$method $bp$pm";
-			$self->[server_]->add_host_end_point($host, $matcher, $end, [$self, $outer], $type);
+
+			#$matcher="$method $bp$pm";
+			CONFIG::log and log_trace "Adding matched endpoints";
 			CONFIG::log and log_info "  matching: $host $matcher";                                 #
+			$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer], $type);
 		}
 	}
 
-	# first argument is a 'route' object
-	# 		0 site
-	# 		1 outerware to execute
-        ########################################################################
-        # my $tmp=join "|", @non_matching;                                     #
-        # my $mre=qr{$tmp};                                                    #
-        # my $unsupported;                                                     #
-        # @hosts=$self->build_hosts;                                           #
-        # push @hosts, qr{[^ ]+} unless @hosts;                                #
-        # my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";          #
-        # $unsupported=qr{^$host_match $mre $bp$path_matcher};                 #
-        # push $self->[unsupported_]->@*, [$unsupported, $sub,[$self,$outer]]; #
-        ########################################################################
 
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
@@ -291,7 +290,7 @@ sub add_route {
 	for my $host (@hosts){
 		for my $method (@non_matching){
 			$unsupported="$method $bp$path_matcher";
-			push $self->[unsupported_]->@*, [$host, $unsupported, $sub,[$self,$outer]];
+			push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer]];
 			CONFIG::log and log_trace "  non matching: $host $unsupported";                                 #
 		}
 	}
@@ -307,7 +306,7 @@ sub _strip_prefix {
 		sub {
 			package uSAC::HTTP::Rex {
 				$_[1][uri_stripped_]= substr($_[1]->[uri_], $len); #strip the url
-				$_[1][capture_]=[@{^CAPTURE}];	#save the capture 
+				#$_[1][capture_]=[@{^CAPTURE}];	#save the capture 
 
 				&$inner_next; #call the next
 				#Check the inprogress flag
@@ -424,10 +423,10 @@ sub host {
 
 #Take matcher, list of innerware and endpoint sub
 
-our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS) /;
+our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
-our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|OPTIONS)/;
+our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS)/;
 
 our $Method=		qr{^([^ ]+)};
 

@@ -90,7 +90,7 @@ sub log_simple_in {
 				say STDERR "Site relative URI:	$_[1][uri_stripped_]";
 				say STDERR "Matched for site:	".($_[0][4][0]->id//"n/a");
 				say STDERR "Hit counter:		$_[0][3]";
-				say STDERR "Captures:		".join ", ",$_[1][capture_]->@* if $dump_capture;
+				say STDERR "Captures:		".join ", ",$_[1][captures_]->@* if $dump_capture;
 				say STDERR Dumper $_[1]->headers if $dump_headers;
 			}
 			return &$inner_next;		#alway call next. this is just loggin
@@ -214,6 +214,7 @@ sub chunked{
 
 	my %out_ctx;
 	my $ctx;
+	my @hindexes;
 	my $chunked_out=
 	sub {
 		my $next=shift;
@@ -228,9 +229,9 @@ sub chunked{
 				#$bypass=undef;#reset
 
 				\my @headers=$_[3];
-
-				for(@key_indexes){
-					last if $_ >=@headers;
+				@hindexes=@key_indexes[0..@headers/2-1];
+				for(@hindexes){
+					#last if $_ >=@headers;
 
 					(($headers[$_] eq HTTP_CONTENT_LENGTH)) and return &$next;
 				}
@@ -242,9 +243,9 @@ sub chunked{
 				#Add to headers the chunked trasfer encoding
 				#
 				my $index;
-				for(@key_indexes){
-					last if $_ >=@headers;
-					$index=$_+1 if ($headers[$_] eq HTTP_TRANSFER_ENCODING);
+				for(@hindexes){
+						#last if $_ >=@headers;
+					$index=$_+1  and last if ($headers[$_] eq HTTP_TRANSFER_ENCODING);
 				}
 				unless($index){	
 					push @headers, HTTP_TRANSFER_ENCODING, "chunked";
@@ -283,9 +284,12 @@ sub chunked{
 sub deflate {
 	my $in=sub {
 		my $next=shift;
-		sub {
-			&$next;
-		}
+                ###################
+                # sub {           #
+                #         &$next; #
+                # }               #
+                ###################
+		$next;
 	};
 
 	state @deflate_pool;
@@ -368,6 +372,9 @@ sub deflate {
 				unless($_[5]){
 					# no callback...single shot	
 					#
+					#
+					#TODO: Compress::Zlib->memGzip is how to do
+					#gzip and deflate and remove some overheads
 					#
 					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 

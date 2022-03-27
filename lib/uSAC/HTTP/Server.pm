@@ -13,13 +13,8 @@ use constant {
 use constant {
 	"CONFIG::single_process"=>1,
 	"CONFIG::kernel_loadbalancing"=>1,
-	#"CONFIG::log"=>0
+	"CONFIG::log"=>0
 };
-BEGIN {
-	unless (defined CONFIG::log){
-		"CONFIG::log"=>0
-	}
-}
 
 use feature qw<isa refaliasing say state current_sub>;
 #use IO::Handle;
@@ -50,6 +45,7 @@ use File::Basename qw<dirname>;
 use File::Spec::Functions qw<rel2abs catfile catdir>;
 use Carp 'croak';
 
+use Data::Dumper;
 #use constant MAX_READ_SIZE => 128 * 1024;
 
 #Class attribute keys
@@ -116,7 +112,6 @@ sub new {
 	$self->[host_]=$options{host}//"0.0.0.0";
 	$self->[port_]=$options{port}//8080;
 	$self->[enable_hosts_]=1;#$options{enable_hosts};
-	#$self->[table_]=Hustle::Table->new(_default_handler);
 	$self->[host_tables_]={};
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
@@ -381,11 +376,11 @@ sub add_end_point{
 	$self->[table_]->add(matcher=>$matcher,sub=>$end, ctx=>$ctx);
 }
 sub add_host_end_point{
-	my ($self, $host, $matcher, $end, $ctx, $type)=@_;
+	my ($self, $host, $matcher, $ctx, $type)=@_;
 
-	CONFIG::log and log_trace $matcher;
-	my $table=$self->[host_tables_]{$host}//=Hustle::Table->new(sub {say "SHould not use table default dispatcher"});
-	$table->add(matcher=>$matcher, sub=>$end, ctx=>$ctx, type=>$type);
+	CONFIG::log and log_trace Dumper $matcher;
+	my $table=$self->[host_tables_]{$host}//=Hustle::Table->new(sub {log_error "Should not use table default dispatcher: ". $_[1]->[uSAC::HTTP::Rex::uri_]});
+	$table->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
 #registers a site object with the server
@@ -436,14 +431,6 @@ sub site {
 
 sub rebuild_dispatch {
 	my $self=shift;
-        #########################################################################################################
-        # my $cache={};                                                                                         #
-        # keys %$cache=512;                                                                                     #
-        # #The dispatcher always has a default. Thus if we only have 1 entry in the dispatch table add explicit #
-        # if($self->[table_]->@*==1 or keys $self->[sites_]->%* > 1){                                           #
-        #         $self->site_route('GET', qr{.*}=>()=>_welcome);                                               #
-        # }                                                                                                     #
-        #########################################################################################################
 
 	#here we add the unsupported methods to the table before building it
 	#Note: this is different to a unfound URL resource.
@@ -455,6 +442,7 @@ sub rebuild_dispatch {
 	#
 	for(keys $self->[sites_]->%*){
 		for ($self->[sites_]{$_}->unsupported->@*){
+			CONFIG::log and log_trace "Adding Unmatched endpoints";
 			$self->add_host_end_point($_->@*);
 		}
 	}
@@ -476,14 +464,21 @@ sub rebuild_dispatch {
 
 		$site->add_route($Any_Method, qr|.*|, _default_handler);
 
-	my %lookup=map {$_, $self->[host_tables_]{$_}->prepare_dispatcher(cache=>undef)} keys $self->[host_tables_]->%*;
+	my %lookup=map {$_, $self->[host_tables_]{$_}->prepare_dispatcher(cache=>{})} keys $self->[host_tables_]->%*;
 
 	$self->[cb_]=sub {
-		my $host=shift;
+		my ($host, $input, $rex)=@_;
 		CONFIG::log and log_trace "Doing host lookup for $host";
 		#TODO: need to respond to bad host
 		my $table=$lookup{$host}//$lookup{"*.*"};
-		&$table;
+		CONFIG::log and log_trace "looking for url $input";
+		#my ($route, $captures)=$table->($input);
+		(my $route, $rex->[uSAC::HTTP::Rex::captures_])= $table->($input);
+
+		$Data::Dumper::Maxdepth=2;
+		CONFIG::log and log_trace Dumper $route;
+		$route->[1][1]($route,$rex);
+		#&$table;
 	};
 	#$self->[cb_]=$self->[table_]->prepare_dispatcher( cache=>undef);#$cache);
 }
@@ -617,7 +612,8 @@ sub usac_include {
 		eval "package $options{package} {
 		unless (do \$path){
 
-		#say \$!;
+		log_error \$!;
+		log_error \$@;
 
 		}
 		}";
