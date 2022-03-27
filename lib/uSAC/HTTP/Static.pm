@@ -32,7 +32,7 @@ my $path_ext=	qr{\.([^.]*)$}ao;
 my $read_size=4096*16;
 my %stat_cache;
 
-use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_>;
+use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_>;
 use constant KEY_OFFSET=>0;
 
 use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ end_>);
@@ -158,7 +158,6 @@ sub disable_cache {
 	}
 	#stop timer
 	$self->[cache_timer_]=undef;
-	
 }
 
 sub enable_cache {
@@ -171,40 +170,58 @@ sub enable_cache {
 				last if ++$i >= $self->[cache_sweep_size_];
 			}
 		};
-
 	}
-
 }
 
+my %encoding_map =(
+	gz=>"gzip",
+);
+
 sub open_cache {
-	my ($self,$abs_path,$mode)=@_;
-	#shift;
-	#my $abs_path=shift;
-	#$open_cache->{$abs_path}//do {
-	#do {
-		my $in_fh;
-		return unless stat($abs_path) and -r _ and ! -d _; #undef if stat fails
-								#or incorrect premissions
+	my ($self, $abs_path, $mode, $pre_encoded)=@_;
+	my $in_fh;
+	my $enc_path;
+	#my @search=map $abs_path.".$_", @$pre_encoded;
+	#push @search, $abs_path;
+
+	for my $pre (@$pre_encoded,""){
+
+		my $path= $abs_path.($pre?".$pre":"");
+
+		log_trace "Searching for: $path";
+
+		next unless stat($path) and -r _ and ! -d _; #undef if stat fails
+		#or incorrect premissions
 
 
-		unless(sysopen $in_fh,$abs_path,O_RDONLY|O_NONBLOCK|($mode//0)){
-			#delete $open_cache->{$abs_path};
-			undef;
+		unless(sysopen $in_fh,$path,O_RDONLY|O_NONBLOCK|($mode//0)){
+			#undef;
+			return;
 		}
 		else {
 			#lookup mime type
 			#
 			my $ext=substr $abs_path, rindex($abs_path, ".")+1;
+			#next if $ext==$pre;
+
 			my @entry;
 			$entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
 			$entry[fh_]=$in_fh;
 			$entry[size_]=(stat _)[7];
 			$entry[mt_]=(stat _)[9];
+			if($pre){
+				$entry[content_encoding_]=[HTTP_CONTENT_ENCODING, $encoding_map{$pre}];
+			}
+			else{
+				$entry[content_encoding_]=[];
+			}
+			log_trace "pre com: ".$pre;
+			log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
 			my $tp=gmtime($entry[mt_]);
 			$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
-			$self->[cache_]{$abs_path}=\@entry;
+			return $self->[cache_]{$abs_path}=\@entry;
 		}
-		#};
+	}
 }
 
 
@@ -213,7 +230,7 @@ sub open_cache {
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
-		my ($matcher,$rex,$user_headers, $read_size, $sendfile, $entry)=@_;
+		my ($matcher,$rex,$user_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
@@ -309,10 +326,21 @@ sub send_file_uri_norange {
 			$code=HTTP_NOT_MODIFIED;	#no body to be sent
 		}
 			
+		#Add no compress (ie identity) if encoding is not set
+		#and if no_encodingflag is set
+		#
+		log_trace "No_compress set to: ".$no_encoding;
 		my $headers=[
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
 			$entry->[content_type_header_]->@*,
+			(!$entry->[content_encoding_]->@* and $no_encoding)
+				? (HTTP_CONTENT_ENCODING, "identity")
+				: $entry->[content_encoding_]->@*,
+
+			#HTTP_CONTENT_TYPE, "text/plain",
+			#HTTP_CONTENT_ENCODING, "gzip",
+
 			HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
 			HTTP_ETAG,$etag,
 			HTTP_ACCEPT_RANGES,"bytes",
@@ -320,6 +348,7 @@ sub send_file_uri_norange {
 
 
 		];
+		log_trace join ", ", @$headers;
 		
 
 
@@ -705,8 +734,9 @@ sub usac_file_under {
 	my $sendfile=$options{sendfile}//0;
 	my $open_modes=$options{open_flags}//0;
 	my $filter=$options{filter};
-	my $no_compress=$options{no_compress};
+	my $no_encoding=$options{no_encoding};
 	my $do_dir=$options{list_dir}//$options{do_dir};
+	my $pre_encoded=$options{pre_encoded}//[];
 	CONFIG::log and log_trace "OPTIONS IN: ".join ", ", %options;
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
@@ -757,13 +787,23 @@ sub usac_file_under {
 			&rex_error_not_found;
 			return 1;
 		}
+
 		#If compress option is enabled then do not set the content-encoding header
 		#Otherwise we set to identity
+		#check that the requested file matches the the pre compressed 
+		#
+
+		#
 		my @head=@$headers;
-		if($no_compress and $path =~ /$no_compress/o){
-			CONFIG::log and log_trace "Setting identity content encoding";
-			push @head, HTTP_CONTENT_ENCODING, "identity";
-		}
+                ##########################################################################
+                # if($no_compress and $path =~ /$no_compress/o){                         #
+                #         CONFIG::log and log_trace "Setting identity content encoding"; #
+                #         push @head, HTTP_CONTENT_ENCODING, "identity";                 #
+                # }                                                                      #
+                ##########################################################################
+		#Ensure we don't attempt to test gz files
+		$pre_encoded=[] if $path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING} !~ /gzip/;		#GZIP is supporte
+
 		CONFIG::log and log_trace "static: html_root: $html_root";
 
 
@@ -804,8 +844,10 @@ sub usac_file_under {
 				rex_error_not_found @_;
 				return;
 			}
-			
 		}
+
+
+
 
 		#File serving
 		#
@@ -813,15 +855,14 @@ sub usac_file_under {
 
 
 
-
-		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes);
+		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded);
 		if($entry){
 			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 				send_file_uri_range @_, $entry;
 				return;
 			}
 			else{
-				send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry;
+				send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
 				return;
 			}
 		}

@@ -284,11 +284,6 @@ sub chunked{
 sub deflate {
 	my $in=sub {
 		my $next=shift;
-                ###################
-                # sub {           #
-                #         &$next; #
-                # }               #
-                ###################
 		$next;
 	};
 
@@ -315,7 +310,7 @@ sub deflate {
 			CONFIG::log  and log_trace "doing deflate";
 			my $exe;
 			if($_[3]){
-				CONFIG::log and log_debug "in header processing";
+				CONFIG::log and log_debug "Deflate: in header processing";
 				\my @headers=$_[3]; #Alias for easy of use and performance
 				#$ctx->[0]=undef;#reset  for reuse
 
@@ -327,8 +322,8 @@ sub deflate {
                                 #         $exe=0;                                       #
                                 # }                                                     #
                                 #########################################################
-				CONFIG::log and log_trace "looking for accept";
-				CONFIG::log and log_trace "Incoming accept_encoding: ".Dumper $_[1]->headers;
+				CONFIG::log and log_trace "deflate: looking for accept";
+				CONFIG::log and log_trace "delfate: Incoming accept_encoding: ".Dumper $_[1]->headers;
 
 				($exe=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa) and return &$next;
 				#unless $exe; #bypass is default
@@ -337,7 +332,7 @@ sub deflate {
 				$exe=1;
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					CONFIG::log and log_trace "Testing header: $headers[$k]";
+					CONFIG::log and log_trace "Deflate: Testing header: $headers[$k]";
 					($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;
 				}
 				

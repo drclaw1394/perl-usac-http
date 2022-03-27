@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use constant "CONFIG::log"=>0;
+use constant "CONFIG::log"=>1;
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
 use Log::ger::Output 'Screen';
@@ -47,21 +47,25 @@ my $server; $server=usac_server {
                 # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; #
                 #                                                                                                            #
                 usac_route "/static"=>deflate()=>usac_file_under (
-                        filter=>'txt$',
+			#filter=>'txt$',
                         read_size=>4096*32,
+			pre_encoded=>[qw<gz>],
+			#no_compress=>qr/txt$/,
                         #do_dir=>1,
                         #indexes=>["index.html"],
                         #sendfile=>4096,
                         usac_path root=>usac_dirname, "."#, "static"
-                )
-
-                => usac_file_under (
-                        do_dir=>1,
-                        read_size=>4096*32,
-                        no_compress=>'jpg$',
-                        #sendfile=>12,
-                        usac_path root =>usac_dirname, "."
                 );
+
+                ##############################################
+                # => usac_file_under (                       #
+                #         do_dir=>1,                         #
+                #         read_size=>4096*32,                #
+                #         no_compress=>'jpg$',               #
+                #         #sendfile=>12,                     #
+                #         usac_path root =>usac_dirname, "." #
+                # );                                         #
+                ##############################################
                 # usac_route "noreply"=>sub {                                                                                #
                 #                                                                                                            #
                 # };                                                                                                         #
