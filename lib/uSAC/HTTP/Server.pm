@@ -99,7 +99,7 @@ sub _welcome {
 #ie expecting a request line but getting something else
 sub _default_handler {
 		state $sub=sub {
-			CONFIG::log and log_trace "DEFAULT HANDLER FOR TABLE";
+			#CONFIG::log and log_trace "DEFAULT HANDLER FOR TABLE";
 			&rex_error_not_found;
 		};
 }
@@ -491,10 +491,12 @@ sub rebuild_dispatch {
 
 		#TODO: Better Routing Cache management.
 		if($route->[3]){
+			say "deleting default";
 			delete $table->[1]{$route->[0]}
 		}
 	};
 }
+
 
 sub stop {
 	my $self=shift;

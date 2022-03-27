@@ -486,8 +486,6 @@ sub rex_write{
 	#
 	
 
-	CONFIG::log and log_trace "Calling outerware chain for ". $_[1]->uri."from caller: ". join ", ",caller;
-	CONFIG::log and log_trace Dumper $_[0];
 	&{$_[0][1][2]};	#Execute the outerware for this site/location
 }
 	 

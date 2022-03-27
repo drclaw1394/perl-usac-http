@@ -23,7 +23,7 @@ use uSAC::HTTP::Rex;
 
 use Errno qw<EAGAIN EINTR EBUSY>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_norange_chunked send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_file_under list_dir>;
+our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_file_under list_dir>;
 our @EXPORT=@EXPORT_OK;
 
 use constant LF => "\015\012";
@@ -443,15 +443,15 @@ sub make_list_dir {
 	my @type;
 	#resolve renderer
 	if(lc $renderer eq "html"){
-		$renderer=_html_dir_list;
+		$renderer=\&_html_dir_list;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
 	elsif(lc $renderer eq "json"){
-		$renderer= _json_dir_list;
+		$renderer= \&_json_dir_list;
 		@type=(HTTP_CONTENT_TYPE, "text/json");
 	}
 	else {
-		!defined $renderer? _html_dir_list: $renderer;
+		!defined $renderer? \&_html_dir_list: $renderer;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
 	
@@ -478,148 +478,26 @@ sub make_list_dir {
 		}
 
 		state $labels=[qw<name dev inode mode nlink uid gid rdev size access_time modification_time change_time block_size blocks>];
-		my @results=map {
-			#say "WORKING ON PATH: $_";
-			#if(-r){			#only list items we can read
-				my $isDir= -d;
-				s|^$html_root/||;			#strip out html_root
-				my $base=(split "/")[-1].($isDir? "/":"");
-
-				#[qq|<a href="$rex->[uSAC::HTTP::Rex::uri_]$base">$base</a>|,stat _];
-				["$rex->[uSAC::HTTP::Rex::uri_]$base", $base, stat _]
-				#}
-                        ###############
-                        # else{       #
-                        #         (); #
-                        # }           #
-                        ###############
-		}
+		my @results;
+                ################################################################################
+                #         =map {                                                               #
+                #         #say "WORKING ON PATH: $_";                                          #
+                #         #if(-r){                        #only list items we can read         #
+                #                 my $isDir= -d;                                               #
+                #                 s|^$html_root/||;                       #strip out html_root #
+                #                 my $base=(split "/")[-1].($isDir? "/":"");                   #
+                #                                                                              #
+                #                 ["$rex->[uSAC::HTTP::Rex::uri_]$base", $base, stat _]        #
+                # }                                                                            #
+                ################################################################################
 
 		@fs_paths;
-		#say "Results ", @results;
-		my $ren=$renderer//_html_dir_list;
+		my $ren=$renderer//\&_html_dir_list;
 
-		my $data="";
-		$ren->($data, $labels, \@results);	#Render to output
+		my $data="lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
+		#$ren->($data, $labels, \@results);	#Render to output
 		rex_write $line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , $data;
 	}
-}
-
-sub send_file_uri_norange_chunked {
-	use  integer;
-
-	my ($self, $line,$rex,$uri,$sys_root)=@_;
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-
-	my $abs_path=$sys_root."/".$uri;
-
-	my $entry=$self->[cache_]->{$abs_path}//$self->open_cache($abs_path);
-
-	unless($entry and stat $abs_path and -r _ and !-d _){
-		rex_reply_simple $line, $rex, HTTP_NOT_FOUND;
-		#remove from cache
-		delete $self->[cache_]{$abs_path};
-		return
-	}
-	my $in_fh=$entry->[fh_];
-
-
-	my ($content_length,$mod_time)=(stat _)[7,9];	#reuses stat from check_access 
-	
-	my $reply=
-		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_OK.LF
-		#.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
-        	.($session->[uSAC::HTTP::Session::closeme_]?
-			HTTP_CONNECTION.": close".LF
-			:HTTP_CONNECTION.": Keep-Alive".LF
-		)
-		.$entry->[content_type_header_]
-		#.HTTP_CONTENT_LENGTH.": ".$content_length.LF			#need to be length of multipart
-		.HTTP_TRANSFER_ENCODING.": chunked".LF
-		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
-		.HTTP_ACCEPT_RANGES.": bytes".LF
-		;
-
-	#prime the buffer by doing a read first
-
-	#my $offset=length($reply);
-
-	#\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
-	seek $in_fh,0,0;
-	my $res;
-	my $rc;
-	my $total=0;
-        ####################################
-        # #Build the required stack        #
-        # uSAC::HTTP::Session::push_writer #
-        #         $session,                #
-        #         "http1_1_socket_writer", #
-        #         undef;                   #
-        ####################################
-
-	my $chunker;
-
-	if($rex->headers->{"ACCEPT_ENCODING"}=~/deflate/){
-		#say "WILL DO GZIP";	
-		$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_deflate_writer";	
-		$reply.=
-		HTTP_CONTENT_ENCODING.": deflate".LF
-		.LF;
-	}
-	else{
-		$chunker=uSAC::HTTP::Session::select_writer $session, "http1_1_chunked_writer";	
-
-		$reply.=
-		LF;
-	}
-
-	my $last=1;
-	my $timer;
-	#my $offset=length $reply;
-	my $reader; $reader= sub {
-
-		($_[0]//0) or $chunker->(undef,sub {});	#Execute stack reset
-		seek $in_fh, $total, 0;
-		$total+=$rc=sysread $in_fh, $reply, $read_size;#-$offset, $offset;
-		
-		unless($rc//0 or $! == EAGAIN or $! == EINTR){
-			say "READ ERROR from file";
-			say $rc;
-			say $!;
-			delete $self->[cache_]{$abs_path};
-			close $in_fh;
-			$reader=undef;
-			#$chunker=undef;
-			$session->[uSAC::HTTP::Session::dropper_]->();
-			#$chunker->(undef, $reader);
-			#uSAC::HTTP::Session::drop $session;
-			return;
-		}
-		#$offset=0;
-		#non zero read length.. do the write	
-		if($total==$content_length){	#end of file
-			$chunker->($reply);
-			$reader=undef;
-			return;
-		}
-		else{
-			$chunker->($reply,$reader);
-		}
-
-
-		#Note: GZIP take time, so much time that the when the data is compressed
-		#the socket is probably writable again. The way the writer works is it trys
-		#nonblocking write before making a event listener. Potentiall this callback 
-		#would never be executed based on an event, so we force it to be to prevent
-		#a blocking cycle which would prevent other requests from being processed at all
-		#$timer=AE::timer 0.0,0, sub { $timer=undef; $chunker->($reply, $reader)};
-	};
-
-
-	#write the header
-	$session->[uSAC::HTTP::Session::write_]->($reply,$reader);
-
 }
 
 
@@ -828,7 +706,7 @@ sub usac_file_under {
 	my $open_modes=$options{open_flags}//0;
 	my $filter=$options{filter};
 	my $no_compress=$options{no_compress};
-	my $do_dir=$options{do_dir};
+	my $do_dir=$options{list_dir}//$options{do_dir};
 	CONFIG::log and log_trace "OPTIONS IN: ".join ", ", %options;
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
@@ -853,6 +731,7 @@ sub usac_file_under {
 		}
 			
 		
+
 		#matcher, rex, code, headers, uri if not in $_
 		my $rex=$_[1];
 		#my $p=$1;
@@ -869,6 +748,7 @@ sub usac_file_under {
 			#$p=$_[1][uSAC::HTTP::Rex::capture_][0];
 			$p=$rex->[uSAC::HTTP::Rex::uri_stripped_];
 		}
+
 		
 		my $path=$html_root.$p;
 		if($filter and $path !~ /$filter/o){
@@ -885,7 +765,13 @@ sub usac_file_under {
 			push @head, HTTP_CONTENT_ENCODING, "identity";
 		}
 		CONFIG::log and log_trace "static: html_root: $html_root";
+
+
+
 		#Server dir listing if option is specified
+		#
+		#=========================================
+		
 		if($do_dir || @indexes and $path =~ m|/$|){
 			#attempt to do automatic index file.
 			my $entry;
@@ -910,15 +796,20 @@ sub usac_file_under {
 				CONFIG::log and log_trace "Static: Listing dir $p";
 				#dir listing
 				$list_dir->(@_, $p);
+				return;
 			}
 			else {
 				CONFIG::log and log_trace "Static: NO DIR LISTING";
 				#no valid index found so 404
 				rex_error_not_found @_;
-				return 1;
+				return;
 			}
 			
 		}
+
+		#File serving
+		#
+		#=============
 
 
 
