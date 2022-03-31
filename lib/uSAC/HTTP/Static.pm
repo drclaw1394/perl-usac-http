@@ -188,7 +188,7 @@ sub open_cache {
 
 		my $path= $abs_path.($pre?".$pre":"");
 
-		log_trace "Searching for: $path";
+		CONFIG::log and log_trace "Searching for: $path";
 
 		next unless stat($path) and -r _ and ! -d _; #undef if stat fails
 		#or incorrect premissions
@@ -215,8 +215,8 @@ sub open_cache {
 			else{
 				$entry[content_encoding_]=[];
 			}
-			log_trace "pre com: ".$pre;
-			log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
+			CONFIG::log and log_trace "pre com: ".$pre;
+			CONFIG::log and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
 			my $tp=gmtime($entry[mt_]);
 			$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
 			return $self->[cache_]{$abs_path}=\@entry;
@@ -329,7 +329,7 @@ sub send_file_uri_norange {
 		#Add no compress (ie identity) if encoding is not set
 		#and if no_encodingflag is set
 		#
-		log_trace "No_compress set to: ".$no_encoding;
+		CONFIG::log and log_trace "No_compress set to: ".$no_encoding;
 		my $headers=[
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
@@ -348,7 +348,7 @@ sub send_file_uri_norange {
 
 
 		];
-		log_trace join ", ", @$headers;
+		CONFIG::log and log_trace join ", ", @$headers;
 		
 
 
