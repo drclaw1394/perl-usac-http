@@ -112,6 +112,7 @@ sub revive {
 	#say "revive  session";
 	my $self=shift;
 	$self->[id_]=$_[0];	
+	$self->[in_progress_]=undef;
 	$self->[time_]=$Time;
 	$self->[fh_]=$_[1];	
 	$self->[scheme_]=$_[2];

@@ -27,7 +27,7 @@ my $LF=$uSAC::HTTP::Rex::LF;
 
 use constant LF=>"\015\012";
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 
 
 use enum ( "id_=0" ,qw<writer_ maxframe_ mask_ ping_interval_ ping_id_ pinger_ state_ on_open_ on_message_ on_fragment_ on_close_ on_error_ PMD_ message_buf_ session_>);
@@ -66,18 +66,18 @@ sub usac_websocket {
 	my $cb=shift;
 
 	sub {
-		DEBUG && say  "Testing for websocket";
-		my $line=shift;
-		my $rex=shift;
+		DEBUG and say  "Testing for websocket";
+		my ($line, $rex)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#attempt to do the match
+		
 		for ($rex->[uSAC::HTTP::Rex::headers_]){
 			if(
-				$_->{CONNECTION} =~ /upgrade/i	#required
-					and  $_->{UPGRADE} =~ /websocket/i	#required
-					and  $_->{'SEC_WEBSOCKET_VERSION'} ==13	#required
-					and  exists $_->{'SEC_WEBSOCKET_KEY'}	#required
-					and  $_->{'SEC_WEBsOCKET_PROTOCOL'} =~ /.*/  #sub proto
+				$_->{CONNECTION} =~ /upgrade/ai	#required
+					and  $_->{UPGRADE} =~ /websocket/ai	#required
+					and  $_->{SEC_WEBSOCKET_VERSION} ==13	#required
+					and  exists $_->{SEC_WEBSOCKET_KEY}	#required
+					and  $_->{SEC_WEBSOCKET_PROTOCOL} =~ /.*/  #sub proto
 			){
 
 				#TODO:  origin testing, externsions,
@@ -93,11 +93,11 @@ sub usac_websocket {
 				.HTTP_UPGRADE.": websocket".LF
 				.HTTP_SEC_WEBSOCKET_ACCEPT.": $key".LF
 				;
+
 				#support the permessage deflate
 				my $deflate_flag;
-				for($_->{'SEC_WEBSOCKET_EXTENSIONS'}){
+				for($_->{SEC_WEBSOCKET_EXTENSIONS}){
 					if(/permessage-deflate/){
-						say "Permessage deflate";
 						$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
 						$deflate_flag=1;
 					}
@@ -106,19 +106,17 @@ sub usac_websocket {
 				}
 
 				#write reply	
-				say $reply;
+				DEBUG and say "setting in progress flag";
+				$session->[uSAC::HTTP::Session::in_progress_]=1;
 				local $/=", ";
-				say $rex->[uSAC::HTTP::Rex::headers_]->%*;
 				for($session->[uSAC::HTTP::Session::write_]){
-					say "Writer is: ", $_;
 					$_->($reply.LF , sub {
 
-							say "handshake written out";
 							my $ws=uSAC::HTTP::Server::WS->new($session);
 							$ws->[PMD_]=$deflate_flag;
-							$cb->($ws);
+							$cb->($line, $rex, $ws);
 							#defer the open callback
-							AnyEvent::postpone {$ws->[on_open_]->($ws, $ws->[id_])};
+							AnyEvent::postpone {$ws->[on_open_]->($ws)};
 
 							#read and write setup create a new ws with just the session
 							#uSAC::HTTP::Server::WS->new($_);
@@ -130,9 +128,8 @@ sub usac_websocket {
 			else{
 				DEBUG && say "Websocket did not match";
 				#reply
-				say "NO WEBSOCKET ALLOWED";
 				$session->[uSAC::HTTP::Session::closeme_]=1;
-				uSAC::HTTP::Rex::reply_simple $line, $rex, HTTP_FORBIDDEN, undef,"";
+				uSAC::HTTP::Rex::rex_error_forbidden $line, $rex;
 				return;
 			}
 		}
@@ -159,18 +156,13 @@ sub  _make_websocket_server_reader {
 	my $deflate_flag=$self->[PMD_];
 	my $state=STATE_HEADER;	#0 header, 1 body
 	\my $on_fragment=\$self->[on_message_];#$session->[uSAC::HTTP::Session::reader_cb_];
-	say "ON FRAGMENT: ", $on_fragment;
 
 	sub {
 		\my $buf=\$_[1];
 		state $do_deflate=0;
-		#say "reader";
 		#do the frame parsing here
 		while($buf){
-			#say "";
-			#say "Input buffer: ", unpack "H*", $buf;
 			if($state==STATE_HEADER){
-				#say "parsing header";
 				#header
 				return if length $buf<2;
 				($op,$len)=unpack "CC",$buf;#substr $buf, 0, 2;
@@ -185,16 +177,12 @@ sub  _make_websocket_server_reader {
 				$masked = ($len & 0b10000000)>0;#FIN_FLAG ;
 				#inital 7 bits of len
 				$len&=0b01111111;
-				warn "LENGTH: $len\n" if DEBUG;
-				#say "op code: $op";
 				for($len){
 					if($_==0) {
 						$hlen = 2;
-						warn "NO Length payload\n" if DEBUG;
 					}
 					elsif($_< 126){
 						$hlen = 2;
-						warn "SMALL payload\n" if DEBUG;
 					}
 					elsif($_==126){
 						# 16 bit extended payload length
@@ -202,7 +190,6 @@ sub  _make_websocket_server_reader {
 						$hlen = 4;
 						my $ext = substr $buf, 2, 2;
 						$len = unpack 'n', $ext;
-						warn "EXTENDED payload (16bit): $len\n" if DEBUG;
 					}
 					elsif($_==127){
 
@@ -217,13 +204,11 @@ sub  _make_websocket_server_reader {
                                                 # ? unpack('Q>', $ext)               #
                                                 # : unpack('N', substr($ext, 4, 4)); #
                                                 ######################################
-						warn "EXTENDED payload (64bit): $len\n" if DEBUG;
 					}
 					else{
 						#error if here
 					}
 				}
-				#say "valid length: $len";
 
 
 				if($masked){	
@@ -236,70 +221,59 @@ sub  _make_websocket_server_reader {
 					$mask=0;
 				}
 
-				#say "header len was $hlen";	
 				substr $buf, 0, $hlen, "";
-				#say "buf after header: ", unpack "H*", $buf;
 				$state=STATE_BODY;
 				next;
 			}
 
 			elsif($state==STATE_BODY){
-				#say "Parsing body with op:" , $op;
 				#do body	
 				return if length $buf < $len;
 				if($op == TEXT){
 					#check payload can be decoded
 					$mode=TEXT;
 					#masked and fin
-					warn "UNMASKING PAYLOAD\n" if DEBUG;
 					_xor_mask_inplace(substr($buf, 0, $len), $mask);
 					if($do_deflate){
 						my $data;
 						rawinflate \substr($buf,0,$len)=> \$data;
-						$on_fragment->($self, $self->[id_], decode("UTF-8",substr $buf, 0, $len,''),$fin);
+						$on_fragment->($self, decode("UTF-8",substr $buf, 0, $len,''),$fin);
 						
-						#$on_message->($self, $self->[id_], decode("UTF-8",substr $buf, 0, $len,''),$fin);
 					}
 					else {
-						$on_fragment->($self, $self->[id_], decode("UTF-8",substr $buf, 0, $len,''),$fin);
+						$on_fragment->($self, decode("UTF-8",substr $buf, 0, $len,''),$fin);
 					}
-					#say "buffer after body: ", unpack "H*", $buf;
 
 				}
 
 				elsif($op == BINARY){
-					say "BINARAY FRAME";
 					$mode=BINARY;
-					$on_fragment->($self, $self->[id_], _xor_mask(substr($buf, 0, $len,''), $mask), $fin);
+					$on_fragment->($self, _xor_mask(substr($buf, 0, $len,''), $mask), $fin);
 				}
 
 				elsif($op == CONTINUATION){
 						if($mode==TEXT){
 							_xor_mask_inplace(substr($buf, 0, $len), $mask);
-							$on_fragment->($self, $self->[id_], decode("UTF-8",substr $buf, 0, $len,''),$fin);
+							$on_fragment->($self, decode("UTF-8",substr $buf, 0, $len,''),$fin);
 						}
 						else {
-							$on_fragment->($self, $self->[id_], _xor_mask(substr($buf, 0, $len, ''), $mask), $fin);
+							$on_fragment->($self, _xor_mask(substr($buf, 0, $len, ''), $mask), $fin);
 						}
 				}
 				elsif($op == PING){
 					#do not change accumulating payload
 					#reply directly with PONG
-					say "GOT PING";
-					warn "UNMASKING PAYLOAD\n" if DEBUG;
 					$self->[writer_]->(FIN_FLAG|PONG, _xor_mask(substr($buf, 0, $len,''), $mask));
 					substr $buf,0, $len,'';
 
 				}
 				elsif($op == PONG){
 					#assumes a fin flag
-					#say "GOT PONG";
 					#do not change accumulating payload
 					substr $buf,0, $len,'';
 				}
 				elsif($op == CLOSE){
 					#TODO: break out reason code and description
-					say "GOT CLOSE";
 					_xor_mask(substr($buf, 0, $len, ''),$mask);
 
 					#TODO: drop the session, undef any read/write subs
@@ -330,22 +304,15 @@ sub _websocket_writer {
 		my ($op_flags, $payload, $cb, $arg)=@_;
 		$cb//=sub {};		#if no callback provided, fire and forget
 		$arg//=__SUB__;		#Use 'self' as argument if none provided
-		warn "BUILDING FRAME\n" if DEBUG;
 
 		# Head
-		#say "fin is $fin";
-		#say "op is $op";
 
 
 		my $frame= pack "C", $op_flags;
-		say "Frame ",unpack "H*",$frame if DEBUG;
-		#printf "Frame: %X\n",$frame;
 		my $len = length $payload;
 		# Mask payload
-		warn "PAYLOAD: $payload\n" if DEBUG;
 		my $masked =0;	
 		if ($masked) {
-			warn "MASKING PAYLOAD\n" if DEBUG;
 			my $mask = pack 'N', int(rand( 2**32 ));
 			$payload = $mask . _xor_mask($payload, $mask);
 		}
@@ -383,18 +350,8 @@ sub _websocket_writer {
                         ################################################
 		}
 
-		if (DEBUG) {
-			warn 'HEAD: ', unpack('B*', $frame), "\n";
-			warn "OPCODE: $op_flags\n";
-		}
-
 		# Payload
 		$frame .= $payload;
-		if(DEBUG){
-
-			say "FRAME TO SEND ",$frame;
-			say "NEXT is : ", $next;
-		}
 		$next->($frame,$cb,$arg);
 		return;
 	}
@@ -425,7 +382,6 @@ sub new {
 	$session->[uSAC::HTTP::Session::closeme_]=1;	#At the end of the session close the socket
 
 	$self->[writer_]=_make_websocket_server_writer $self, $session;	#create a writer and store in ws
-	say "Created writer: ",$self->[writer_];
 
 	#the pushed reader now has access to the writer via the session->rex
 	$session->push_reader(_make_websocket_server_reader($self,$session));
@@ -439,7 +395,6 @@ sub new {
 		$self->[pinger_]=undef;
 		$self->[writer_]=sub {};
 		$old_dropper->();
-		say "WEBSOCKET CLOSED";
 		$self->[on_close_]->();
 	};
 	$session->[uSAC::HTTP::Session::dropper_]=$dropper;
@@ -529,7 +484,6 @@ sub ping_interval {
 	undef $self->[pinger_];
 	$self->[ping_interval_]=$new;
 	$self->[pinger_] = AE::timer(0, $self->[ping_interval_], sub {
-			#say "Sending ping\n\n\n\n";
 		$self->[ping_id_] = "hello";	
 		$self->[writer_]->( FIN_FLAG | PING, $self->[ping_id_]); #no cb used->dropper defalt
 		#TODO: Add client ping support? (ie masking)

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use feature qw<state say signatures>;
+use feature qw<state say>;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Server::WS;
@@ -20,15 +20,16 @@ $server->add_route('GET'=>"/\$"=>sub {
 
 	#TODO: bug. <> operator not working with state
 	
-	rex_reply_simple(@_, HTTP_OK, [], $data);
+	rex_write(@_, HTTP_OK, [], $data);
 	return;
 });
 
-$server->add_route(GET=>"/ws"=> usac_websocket sub($ws){
+$server->add_route(GET=>"/ws"=> usac_websocket sub{
+		my (undef, undef, $ws)=@_;
 		my $timer;
 		$ws->ping_interval(0);
 		$ws->on_open=sub {
-			$clients{$_[1]}=$_[0];
+			$clients{$_[0]}=$_[0];
                         ################################################
                         #  $timer=AE::timer 0, 1, sub {                #
                         #         $ws->send_text_message("hello",sub { #
@@ -39,9 +40,9 @@ $server->add_route(GET=>"/ws"=> usac_websocket sub($ws){
 		};
 
 		$ws->on_message=sub {
-				say "GOT message: $_[2]";
-				while(my($id,$client)=each  %clients){
-					$client->send_text_message($_[2]) unless $id==$_[1];
+				say "GOT message: $_[1]";
+				while(my($id, $client)=each  %clients){
+					$client->send_text_message($_[1]) unless $client==$_[0];
 				}
 			};
 
@@ -54,20 +55,19 @@ $server->add_route(GET=>"/ws"=> usac_websocket sub($ws){
 				undef $timer;
 			};
 
-		say "GOT WEBSOCKET ", $_[0];
 	}
 );
 
 $server->add_route("GET"=>"/large"=>()=>sub {
 	state $data= "x"x(4096*4096);
-	rex_reply_simple @_,HTTP_OK,undef,$data;
+	rex_write @_,HTTP_OK,undef,$data;
 });
 
 $server->add_route("GET"=>"/chunks"=>()=>sub {
 	state $data= "x" x (4096*4096);
 	my $size=4096*128;
 	my $offset=0;#-$size;;
-	rex_reply @_, HTTP_OK, undef, sub {
+	rex_write @_, HTTP_OK, undef, sub {
 		return unless $_[0];
 
 		my $d=substr($data, $offset, $size);	#Data to send
@@ -78,7 +78,7 @@ $server->add_route("GET"=>"/chunks"=>()=>sub {
 });
 
 $server->add_route("GET"=>"/array"=>()=>sub {
-	rex_reply @_, HTTP_OK, undef, [qw<this is a set of data>];
+	rex_write @_, HTTP_OK, undef, [qw<this is a set of data>];
 });
 
 $server->run;

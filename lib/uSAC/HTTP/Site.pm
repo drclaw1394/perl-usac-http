@@ -310,6 +310,7 @@ sub _strip_prefix {
 
 				&$inner_next; #call the next
 				#Check the inprogress flag
+				log_info "In progress: ".$_[1][session_][uSAC::HTTP::Session::in_progress_];
 				unless ($_[1][session_][uSAC::HTTP::Session::in_progress_]){
 					log_error("NO ENDPOINT REPLIED for". $_[1]->[uri_]);
 				}

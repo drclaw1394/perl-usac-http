@@ -1,7 +1,9 @@
 #!/usr/bin/env perl
+use UV;
 use constant "CONFIG::log"=>0;
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
+
 use Log::ger::Output 'Screen';
 use Log::ger::Util;
 

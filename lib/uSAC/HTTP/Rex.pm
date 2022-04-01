@@ -587,6 +587,11 @@ sub rex_error_not_found {
 	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
 }
 
+sub rex_error_forbidden {
+	my ($url)=splice @_, 2;
+	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
+}
+
 sub rex_error_internal {
 	my ($url)=splice @_, 2;
 	my $session=$_[1][session_];
