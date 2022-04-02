@@ -42,7 +42,7 @@ $server->add_route(GET=>"/ws"=> usac_websocket sub{
 		$ws->on_message=sub {
 				say "GOT message: $_[1]";
 				while(my($id, $client)=each  %clients){
-					$client->send_text_message($_[1]) unless $client==$_[0];
+					$client->send_text_message("hello") unless $client==$_[0];
 				}
 			};
 

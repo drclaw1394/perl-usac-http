@@ -6,9 +6,11 @@ use Exporter 'import';
 use MIME::Base64;		
 use Digest::SHA1;
 use Encode qw<decode encode>;
-use IO::Compress::RawDeflate qw(rawdeflate $RawDeflateError) ;
+#use IO::Compress::RawDeflate qw(rawdeflate $RawDeflateError) ;
 use IO::Uncompress::RawInflate qw<rawinflate>;
 #use Compress::Raw::Zlib qw(Z_SYNC_FLUSH);
+
+use Compress::Raw::Zlib;
 
 our @EXPORT_OK=qw<usac_websocket>;
 our @EXPORT=@EXPORT_OK;
@@ -83,7 +85,7 @@ sub usac_websocket {
 				#TODO:  origin testing, externsions,
 				# mangle the key
 				my $key=MIME::Base64::encode_base64 
-				Digest::SHA1::sha1( $_->{'SEC_WEBSOCKET_KEY'}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
+				Digest::SHA1::sha1( $_->{SEC_WEBSOCKET_KEY}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
 				"";
 				#
 				#reply
@@ -99,7 +101,9 @@ sub usac_websocket {
 				for($_->{SEC_WEBSOCKET_EXTENSIONS}){
 					if(/permessage-deflate/){
 						$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
+						say  "DEFLATE SUPPORTED";
 						$deflate_flag=1;
+
 					}
 					else{
 					}
@@ -113,7 +117,8 @@ sub usac_websocket {
 					$_->($reply.LF , sub {
 
 							my $ws=uSAC::HTTP::Server::WS->new($session);
-							$ws->[PMD_]=$deflate_flag;
+							#$ws->[PMD_]=$deflate_flag;
+							$ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);
 							$cb->($line, $rex, $ws);
 							#defer the open callback
 							AnyEvent::postpone {$ws->[on_open_]->($ws)};
@@ -278,7 +283,7 @@ sub  _make_websocket_server_reader {
 
 					#TODO: drop the session, undef any read/write subs
 					$self->[pinger_]=undef;
-					$self->[on_close_]->($self, $self->[id_]);
+					$self->[on_close_]->($self);
 					$session->[uSAC::HTTP::Session::closeme_]=1;
 					$session->[uSAC::HTTP::Session::dropper_]->();
 
@@ -352,6 +357,7 @@ sub _websocket_writer {
 
 		# Payload
 		$frame .= $payload;
+		say "FRAME: ".unpack "H*", $frame;
 		$next->($frame,$cb,$arg);
 		return;
 	}
@@ -445,7 +451,25 @@ sub send_binary_message {
 sub send_text_message {
 	#write as a single complete message. checks utf flag
 	my $self=splice @_, 0, 1, FIN_FLAG|TEXT;
-	&{$self->[writer_]};
+
+	if($self->[PMD_]){
+		say  "COMPRESSED";
+		$_[0]|=RSV1_FLAG;
+		#rawdeflate \$_[1]=> \$data;
+		my $scratch="";
+		$self->[PMD_]->deflateReset;
+		$self->[PMD_]->deflate($_[1], $scratch);
+		$self->[PMD_]->flush($scratch,Z_SYNC_FLUSH);
+		#$self->[PMD_]->flush($scratch);
+		say unpack "H*", $scratch;
+		#say unpack "H*", substr($scratch,0 ,length($scratch)-4);
+		#$self->[writer_]->($_[0], $scratch, $_[2], $_[3]);
+		$self->[writer_]->($_[0], substr($scratch,0, length($scratch) -4), $_[2], $_[3]);
+	}
+	else{
+
+		&{$self->[writer_]};
+	}
 }
 
 sub close {
