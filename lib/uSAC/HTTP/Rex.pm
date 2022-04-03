@@ -472,6 +472,7 @@ sub rex_write{
 			push @h, 
 				HTTP_CONNECTION, "close";
 		}
+
                 ###########################################################
                 # else{                                                   #
                 #         push @h,                                        #

@@ -1,4 +1,6 @@
 package uSAC::HTTP::Server::WS;
+use strict;
+use warnings;
 no warnings "experimental";
 use feature qw<bitwise state say refaliasing current_sub>;
 
@@ -241,7 +243,8 @@ sub  _make_websocket_server_reader {
 					_xor_mask_inplace(substr($buf, 0, $len), $mask);
 					if($do_deflate){
 						my $data;
-						rawinflate \substr($buf,0,$len)=> \$data;
+						#TODO: setup inflate
+						#rawinflate \substr($buf,0,$len)=> \$data;
 						$on_fragment->($self, decode("UTF-8",substr $buf, 0, $len,''),$fin);
 						
 					}
@@ -357,7 +360,6 @@ sub _websocket_writer {
 
 		# Payload
 		$frame .= $payload;
-		say "FRAME: ".unpack "H*", $frame;
 		$next->($frame,$cb,$arg);
 		return;
 	}
@@ -453,21 +455,14 @@ sub send_text_message {
 	my $self=splice @_, 0, 1, FIN_FLAG|TEXT;
 
 	if($self->[PMD_]){
-		say  "COMPRESSED";
 		$_[0]|=RSV1_FLAG;
-		#rawdeflate \$_[1]=> \$data;
 		my $scratch="";
 		$self->[PMD_]->deflateReset;
 		$self->[PMD_]->deflate($_[1], $scratch);
 		$self->[PMD_]->flush($scratch,Z_SYNC_FLUSH);
-		#$self->[PMD_]->flush($scratch);
-		say unpack "H*", $scratch;
-		#say unpack "H*", substr($scratch,0 ,length($scratch)-4);
-		#$self->[writer_]->($_[0], $scratch, $_[2], $_[3]);
 		$self->[writer_]->($_[0], substr($scratch,0, length($scratch) -4), $_[2], $_[3]);
 	}
 	else{
-
 		&{$self->[writer_]};
 	}
 }

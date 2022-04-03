@@ -25,10 +25,6 @@ our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_h
 
 our @EXPORT=@EXPORT_OK;
 
-#use AnyEvent;
-
-#use uSAC::HTTP::Server;
-
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
@@ -182,6 +178,7 @@ sub add_route {
 				if($_[3]){
 					\my @h=$_[3];
 					CONFIG::log and log_trace  "Renderer: doing headers";
+					CONFIG::log and log_trace Dumper $_[3];
 
 					my $reply=$alloc;#."x";
 					$reply="HTTP/1.1 $_[2]".LF;
@@ -250,8 +247,6 @@ sub add_route {
 			CONFIG::log and log_trace "$host=>$method";
 			#test if $path_matcher is a regex
 			my $type;
-
-			say $path_matcher;
 
 			if(ref($path_matcher) eq "Regexp"){
 				$type=undef;
@@ -699,7 +694,7 @@ sub usac_cached_file {
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	#resolve the file relative path or 
-	$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
+	#$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
 
 	my $mime=$options{mime};
 	my $type;
@@ -709,7 +704,10 @@ sub usac_cached_file {
 	}
 	else{
 		my $ext=substr $path, rindex($path, ".")+1;
+		CONFIG::log and log_trace "Extension: $ext";
 		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
+		CONFIG::log and log_trace "type: $type";
+		$options{mime}=$type;
 	}
 
 	if( stat $path and -r _ and !-d _){

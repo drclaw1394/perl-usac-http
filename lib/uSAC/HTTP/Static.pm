@@ -1,8 +1,9 @@
 package uSAC::HTTP::Static;
+use strict;
+use warnings;
 
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
-use strict;
 use Log::ger;
 use Data::Dumper;
 use JSON;
@@ -330,7 +331,7 @@ sub send_file_uri_norange {
 		#and if no_encodingflag is set
 		#
 		CONFIG::log and log_trace "No_compress set to: ".$no_encoding;
-		my $headers=[
+		my $out_headers=[
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
 			$entry->[content_type_header_]->@*,
@@ -348,7 +349,7 @@ sub send_file_uri_norange {
 
 
 		];
-		CONFIG::log and log_trace join ", ", @$headers;
+		CONFIG::log and log_trace join ", ", @$out_headers;
 		
 
 
@@ -356,7 +357,7 @@ sub send_file_uri_norange {
 			$rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
 			or $code==HTTP_NOT_MODIFIED
 			){
-			rex_write $matcher,$rex,$code,$headers,"";
+			rex_write $matcher,$rex,$code,$out_headers,"";
 			#$session->[uSAC::HTTP::Session::write_]->($reply);
 			return;
 		}
@@ -369,7 +370,7 @@ sub send_file_uri_norange {
 
 			#Setup writable event listener
 
-			rex_write $matcher,$rex,$code,$headers,"", $do_sendfile;
+			rex_write $matcher,$rex,$code,$out_headers,"", $do_sendfile;
 			#$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
 			return;
 		}
@@ -388,13 +389,13 @@ sub send_file_uri_norange {
 
                         #non zero read length.. do the write
                         if($total==$content_length){    #end of file
-				rex_write $matcher,$rex,$code,$headers,$reply;
+				rex_write $matcher,$rex,$code,$out_headers,$reply;
 				#$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
                                 return;
                         }
 
                         elsif($rc){
-				rex_write $matcher,$rex,$code,$headers,$reply,__SUB__;
+				rex_write $matcher,$rex,$code,$out_headers,$reply,__SUB__;
 				#$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
                                 return;
                         }
@@ -471,7 +472,11 @@ sub make_list_dir {
 	my $renderer=$options{renderer};
 	my @type;
 	#resolve renderer
-	if(lc $renderer eq "html"){
+	if( !defined $renderer){
+		$renderer=\&_html_dir_list;
+		@type=(HTTP_CONTENT_TYPE, "text/html");
+	}
+	elsif(lc $renderer eq "html"){
 		$renderer=\&_html_dir_list;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
@@ -480,7 +485,7 @@ sub make_list_dir {
 		@type=(HTTP_CONTENT_TYPE, "text/json");
 	}
 	else {
-		!defined $renderer? \&_html_dir_list: $renderer;
+		$renderer=!defined $renderer? \&_html_dir_list: $renderer;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
 	
@@ -520,7 +525,7 @@ sub make_list_dir {
                 # }                                                                            #
                 ################################################################################
 
-		@fs_paths;
+		#@fs_paths;
 		my $ren=$renderer//\&_html_dir_list;
 
 		my $data="lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
@@ -604,7 +609,7 @@ sub send_file_uri_range {
 
 
 		#setup write watcher
-		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		#my $session=$rex->[uSAC::HTTP::Rex::session_];
 		\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
 
 		my $state=0;#=@ranges==1?1:0;	#0 single header,1 multi header,2 data
@@ -742,7 +747,7 @@ sub usac_file_under {
 
 	\my @indexes=$options{indexes}//[];
 	my $cache=$static->[cache_];
-	my $html_root=$static->[html_root_];
+	$html_root=$static->[html_root_];
 	my $list_dir=$static->make_list_dir(%options);
 
 	die "Can not access dir $html_root to serve static files" unless -d $html_root;

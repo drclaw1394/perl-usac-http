@@ -1,6 +1,7 @@
 package uSAC::HTTP::v1_1_Reader;
 use feature qw<fc current_sub refaliasing say>;
 use strict;
+use warnings;
 no warnings "experimental";
 use EV;
 use Log::ger;
@@ -238,7 +239,7 @@ sub make_form_data_reader {
 	use integer;
 
 	my ($usac,$rex,$session,$cb)=@_;	
-	my $rex=$session->[uSAC::HTTP::Session::rex_];
+	#my $rex=$session->[uSAC::HTTP::Session::rex_];
 
 
 	my $state=0;
@@ -382,7 +383,7 @@ sub make_form_urlencoded_reader {
 	#These values are shared for a session
 	#
 	my ($usac,$rex,$session,$cb)=@_;	
-	my $rex=$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
+	#my $rex=$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
 	my $processed=0;					#stateful position in buffer
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed

@@ -2,9 +2,11 @@ use strict;
 use warnings;
 use feature qw<state say>;
 
+use UV;
+use AnyEvent;
+
 use uSAC::HTTP;
 use uSAC::HTTP::Server::WS;
-use AnyEvent;
 
 my %clients;
 
