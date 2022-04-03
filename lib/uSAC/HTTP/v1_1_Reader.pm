@@ -98,9 +98,7 @@ sub make_reader{
 		\my $buf=\$_[1];	#\$r->[uSAC::HTTP::Session::rbuf_];
 		my $write=$r->[uSAC::HTTP::Session::write_];
 		use integer;
-		#say "in base reader";
 		$len=length $buf;
-		#say $len;
 		while ( $len ) {
 			#Dual mode variables:
 			#	server:
@@ -123,10 +121,9 @@ sub make_reader{
 					#end of line found
 						$state   = STATE_HEADERS;
 						%h=();
-						++$seq;
+						#++$seq;
 
-						#$pos=$pos3+2;
-						$buf=substr $buf, $pos3+2;#pos $buf;# $pos;
+						$buf=substr $buf, $pos3+2;
 						redo;
 				}
 				else {
@@ -176,7 +173,6 @@ sub make_reader{
                                                         return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");
                                                 }
                                                 warn "Need more";
-						#$pos=pos($buf);
                                                 return;
 					}
 					
@@ -195,11 +191,13 @@ sub make_reader{
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]=0;
 				
-				$r->[uSAC::HTTP::Session::closeme_]||= $h{CONNECTION} eq "close" ||$version ne "HTTP/1.1";
+				$r->[uSAC::HTTP::Session::closeme_]||= $h{CONNECTION}//"" eq "close" ||$version ne "HTTP/1.1";
 
 				#shift buffer
-				$buf=substr $buf, pos $buf;# $pos;
-				$pos=0;
+
+				#$buf=substr $buf, pos $buf;# $pos;
+				#
+				#$pos=0;
 				$state=$start_state;
 				$cb->(
 					$host,

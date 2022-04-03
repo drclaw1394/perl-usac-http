@@ -1,4 +1,5 @@
 package uSAC::HTTP::Code;
+use List::Util qw<pairs>;
 use Exporter 'import';
 
 BEGIN {
@@ -77,7 +78,15 @@ BEGIN {
 	);
 	our @names= map {$lookup[$_*2]} 0..@lookup/2-1; 
 	our @values= map {$lookup[1+$_*2]} 0..@lookup/2-1; 
-	our %const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr, "$values[$_] $names[$_]")} 0..@names-1;
+	#our %const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr, "$values[$_] $names[$_]")} 0..@names-1;
+	our %const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr, "$values[$_]")} 0..@names-1;
+	
+	#build value to code array
+	our @code_to_name;
+	for my $p (pairs(@lookup)){
+		$code_to_name[$p->[1]]=$p->[0];
+	}
+	
 }
 use enum (map s/ |-|'/_/gr, @names);
 

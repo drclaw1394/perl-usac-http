@@ -179,9 +179,10 @@ sub add_route {
 					\my @h=$_[3];
 					CONFIG::log and log_trace  "Renderer: doing headers";
 					CONFIG::log and log_trace Dumper $_[3];
+					CONFIG::log and log_trace "CODE: $_[2]";
 
 					my $reply=$alloc;#."x";
-					$reply="HTTP/1.1 $_[2]".LF;
+					$reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
 					for(@index){
 						last if $_ >= @h;
 						#$reply.= ($uSAC::HTTP::Header::index_to_name[$h[$_]]//$h[$_]).": $h[$_+1]".LF;
@@ -305,7 +306,6 @@ sub _strip_prefix {
 
 				&$inner_next; #call the next
 				#Check the inprogress flag
-				log_info "In progress: ".$_[1][session_][uSAC::HTTP::Session::in_progress_];
 				unless ($_[1][session_][uSAC::HTTP::Session::in_progress_]){
 					log_error("NO ENDPOINT REPLIED for". $_[1]->[uri_]);
 				}
