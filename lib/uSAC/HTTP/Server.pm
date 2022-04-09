@@ -1,19 +1,22 @@
 package uSAC::HTTP::Server; 
 use Log::ger;
+use Log::OK;
 use strict;
 use warnings;
 #use constant "OS::darwin"=>$^O =~ /darwin/;
 #use constant "OS::linux"=>0;
 #
-use constant {
+use constant::more {
 	"OS::darwin"=>"darwin",
 	"OS::linux"=>"linux",
 	"OS::bsd"=>"bsd",
 };
-use constant {
+use constant::more {
 	"CONFIG::single_process"=>1,
 	"CONFIG::kernel_loadbalancing"=>1,
-	"CONFIG::log"=>0
+};
+use Log::OK {
+	lvl=>"warn"
 };
 
 use feature qw<isa refaliasing say state current_sub>;
@@ -99,7 +102,7 @@ sub _welcome {
 #ie expecting a request line but getting something else
 sub _default_handler {
 		state $sub=sub {
-			#CONFIG::log and log_trace "DEFAULT HANDLER FOR TABLE";
+			#Log::OK::TRACE and log_trace "DEFAULT HANDLER FOR TABLE";
 			&rex_error_not_found;
 		};
 }
@@ -380,7 +383,7 @@ sub static_headers {
 sub add_host_end_point{
 	my ($self, $host, $matcher, $ctx, $type)=@_;
 
-	CONFIG::log and log_trace Dumper $matcher;
+	Log::OK::TRACE and log_trace Dumper $matcher;
 	my $table=$self->[host_tables_]{$host}//=[
 		Hustle::Table->new(sub {log_error "Should not use table default dispatcher: ". $_[1]->[uSAC::HTTP::Rex::uri_]})
 		,{}
@@ -447,7 +450,7 @@ sub rebuild_dispatch {
 	#
 	for(keys $self->[sites_]->%*){
 		for ($self->[sites_]{$_}->unsupported->@*){
-			CONFIG::log and log_trace "Adding Unmatched endpoints";
+			Log::OK::TRACE and log_trace "Adding Unmatched endpoints";
 			$self->add_host_end_point($_->@*);
 		}
 	}
@@ -458,7 +461,7 @@ sub rebuild_dispatch {
 		my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
 		$site->parent_site=$self;
 		#$self->register_site($site);
-		CONFIG::log and log_trace "Adding default handler to $host";
+		Log::OK::TRACE and log_trace "Adding default handler to $host";
 
 		$site->add_route($Any_Method, qr|.*|, _default_handler);
 	}
@@ -466,7 +469,7 @@ sub rebuild_dispatch {
 	my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self);
 	$site->parent_site=$self;
 	#$self->register_site($site);
-	CONFIG::log and log_trace "Adding default handler to *.*";
+	Log::OK::TRACE and log_trace "Adding default handler to *.*";
 
 	$site->add_route($Any_Method, qr|.*|, _default_handler);
 
@@ -623,7 +626,7 @@ sub usac_include {
 	}
 	else{
 		#not a dir . do it
-		CONFIG::log and log_info "Including server script from $path";
+		Log::OK::TRACE and log_info "Including server script from $path";
 		eval "package $options{package} {
 		unless (do \$path){
 

@@ -7,6 +7,7 @@ use feature ":all";
 no warnings "experimental";
 
 use Log::ger;
+use Log::OK;
 use Cwd qw<abs_path>;
 use Exporter "import";
 
@@ -89,8 +90,8 @@ sub add_route {
 	my $path_matcher=shift;
 	my @inner;
 	my @outer;
-	CONFIG::log and log_trace "Adding route: from ".join ", ", caller;
-	CONFIG::log and log_trace "Path matcher: $path_matcher";
+	Log::OK::TRACE and log_trace "Adding route: from ".join ", ", caller;
+	Log::OK::TRACE and log_trace "Path matcher: $path_matcher";
 
 	#Add chunked always. Add at start of total middleware
 	# Than means executed first for innerware 
@@ -128,12 +129,12 @@ sub add_route {
 	state @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 
 	#my @non_matching=(qr{[^ ]+});
-	CONFIG::log and log_trace Dumper $method_matcher;
+	Log::OK::TRACE and log_trace Dumper $method_matcher;
 	my @matching=grep { /$method_matcher/ } @methods;
 	my @non_matching=grep { !/$method_matcher/ } @methods;
 	my $sub;
 	local $"=",";
-	CONFIG::log and log_trace "Methods array : @matching";
+	Log::OK::TRACE and log_trace "Methods array : @matching";
 	if(@non_matching){
 		my $headers=[HTTP_ALLOW, join ", ",@matching];
 		$sub = sub { 
@@ -177,9 +178,9 @@ sub add_route {
 
 				if($_[3]){
 					\my @h=$_[3];
-					CONFIG::log and log_trace  "Renderer: doing headers";
-					CONFIG::log and log_trace Dumper $_[3];
-					CONFIG::log and log_trace "CODE: $_[2]";
+					Log::OK::TRACE and log_trace  "Renderer: doing headers";
+					Log::OK::TRACE and log_trace Dumper $_[3];
+					Log::OK::TRACE and log_trace "CODE: $_[2]";
 
 					my $reply=$alloc;#."x";
 					$reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
@@ -245,7 +246,7 @@ sub add_route {
 	my $pm;
 	for my $host (@hosts){
 		for my $method (@matching){
-			CONFIG::log and log_trace "$host=>$method";
+			Log::OK::TRACE and log_trace "$host=>$method";
 			#test if $path_matcher is a regex
 			my $type;
 
@@ -261,7 +262,7 @@ sub add_route {
 			}
 			elsif($path_matcher =~ /\$$/){
 				$pm=substr $path_matcher, 0, -1;
-				CONFIG::log and log_trace "Exact match";
+				Log::OK::TRACE and log_trace "Exact match";
 				$type="exact";
         			$matcher="$method $bp$path_matcher";
 			}
@@ -272,8 +273,8 @@ sub add_route {
 			}
 
 			#$matcher="$method $bp$pm";
-			CONFIG::log and log_trace "Adding matched endpoints";
-			CONFIG::log and log_info "  matching: $host $matcher";                                 #
+			Log::OK::TRACE and log_trace "Adding matched endpoints";
+			Log::OK::TRACE and log_info "  matching: $host $matcher";                                 #
 			$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
 		}
 	}
@@ -287,7 +288,7 @@ sub add_route {
 		for my $method (@non_matching){
 			$unsupported="$method $bp$path_matcher";
 			push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer,0]];
-			CONFIG::log and log_trace "  non matching: $host $unsupported";                                 #
+			Log::OK::TRACE and log_trace "  non matching: $host $unsupported";                                 #
 		}
 	}
 }
@@ -387,8 +388,8 @@ sub construct_middleware {
 	my $parent=$_[0];
 	my @middleware;
 	while($parent){
-		CONFIG::log and log_trace "Middleware from $parent";
-		CONFIG::log and log_trace "Parent_site ". $parent->parent_site;
+		Log::OK::TRACE and log_trace "Middleware from $parent";
+		Log::OK::TRACE and log_trace "Parent_site ". $parent->parent_site;
 		unshift @middleware, @{$parent->innerware//[]};
 		$parent=$parent->parent_site;
 	}
@@ -607,7 +608,7 @@ sub usac_prefix {
         my $prefix=pop;
 	unless($prefix=~m|^/|){
 
-		#CONFIG::log and 
+		#Log::OK::TRACE and 
 		log_info "Prefix '$prefix' needs to start with a '/'. Fixing it...";
 		$prefix="/".$prefix;
 	}
@@ -704,9 +705,9 @@ sub usac_cached_file {
 	}
 	else{
 		my $ext=substr $path, rindex($path, ".")+1;
-		CONFIG::log and log_trace "Extension: $ext";
+		Log::OK::TRACE and log_trace "Extension: $ext";
 		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
-		CONFIG::log and log_trace "type: $type";
+		Log::OK::TRACE and log_trace "type: $type";
 		$options{mime}=$type;
 	}
 
@@ -758,11 +759,15 @@ sub usac_dirname{
 #Makes paths relative to specified root dir
 #Prepends a "./" for relative files.
 sub usac_path {
-	my $path=pop;
+	my $in_path=pop;
 	my %options=@_;
-	return $path if ($path=~m|^/|); #If path is abs, let it be
-	$path=$options{root}."/".$path if $options{root};
+	return $in_path if ($in_path=~m|^/|); #If path is abs, let it be
+	
+	my $path=$options{root} if $options{root};
+	$path.="/".$in_path if $in_path;
+
 	#$path=abs2rel($path, $options{root});
+	#
 	if( $path =~ m|^/|){
 		#abs path. Do nothing more
 	}

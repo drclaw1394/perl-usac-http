@@ -23,6 +23,7 @@ use Crypt::JWT qw<decode_jwt encode_jwt>;
 use Data::Dumper;
 use List::Util qw<first>;
 use Log::ger;
+use Log::OK;
 
 
 
@@ -222,8 +223,8 @@ sub chunked{
 		my $next=shift;
 		#my $bypass;
 		sub {
-			CONFIG::log  and log_trace "Middeware: Chunked Outerware";
-			CONFIG::log  and log_trace "Key count chunked: ". scalar keys %out_ctx;
+			Log::OK::TRACE  and log_trace "Middeware: Chunked Outerware";
+			Log::OK::TRACE  and log_trace "Key count chunked: ". scalar keys %out_ctx;
 			#\my $bypass=\$out_ctx{$_[1]}; #access the statefull info for this instance and requst
 			my $exe;
 
@@ -239,7 +240,7 @@ sub chunked{
 				}
 				$exe=1;
 
-				CONFIG::log and log_trace "Middelware: Chunked execute".($exe//"");
+				Log::OK::TRACE and log_trace "Middelware: Chunked execute".($exe//"");
 				
 				#we actually have  headers and Data. this is the first call
 				#Add to headers the chunked trasfer encoding
@@ -301,18 +302,18 @@ sub deflate {
 		
 			
 
-			CONFIG::log and log_debug "Input data length: ".length  $_[4];
+			Log::OK::TRACE and log_debug "Input data length: ".length  $_[4];
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
 			\my $buf=\$_[4];
 			#Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1)
-			CONFIG::log and log_debug "Context count: ".scalar keys %out_ctx;
-			CONFIG::log and log_debug "Compressor pool: ".scalar @deflate_pool;
+			Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
+			Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
 
-			CONFIG::log  and log_trace "doing deflate";
+			Log::OK::TRACE  and log_trace "doing deflate";
 			my $exe;
 			if($_[3]){
-				CONFIG::log and log_debug "Deflate: in header processing";
+				Log::OK::TRACE and log_debug "Deflate: in header processing";
 				\my @headers=$_[3]; #Alias for easy of use and performance
 				#$ctx->[0]=undef;#reset  for reuse
 
@@ -324,8 +325,8 @@ sub deflate {
                                 #         $exe=0;                                       #
                                 # }                                                     #
                                 #########################################################
-				CONFIG::log and log_trace "deflate: looking for accept";
-				CONFIG::log and log_trace "delfate: Incoming accept_encoding: ".Dumper $_[1]->headers;
+				Log::OK::TRACE and log_trace "deflate: looking for accept";
+				Log::OK::TRACE and log_trace "delfate: Incoming accept_encoding: ".Dumper $_[1]->headers;
 
 				($exe=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa) and return &$next;
 				#unless $exe; #bypass is default
@@ -334,12 +335,12 @@ sub deflate {
 				$exe=1;
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					CONFIG::log and log_trace "Deflate: Testing header: $headers[$k]";
+					Log::OK::TRACE and log_trace "Deflate: Testing header: $headers[$k]";
 					($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;
 				}
 				
-				CONFIG::log  and log_trace "exe ". $exe; 
-				CONFIG::log  and log_trace "Single shot: ". !$_[5];
+				Log::OK::TRACE  and log_trace "exe ". $exe; 
+				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
 
 				$ctx=$exe;
 				#$out_ctx{$_[1]}=$ctx if $_[5]; #save context if more to come
@@ -347,17 +348,18 @@ sub deflate {
 
 				return &$next unless $exe; #bypass is default
 				
-				CONFIG::log  and log_trace "No bypass in headers";
+				Log::OK::TRACE  and log_trace "No bypass in headers";
 
 				#Remove content length as we will rely on chunked encoding
+				$index=undef;
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					CONFIG::log and log_debug "Header testing: $headers[$k]";
-					($headers[$k] eq HTTP_CONTENT_LENGTH) and ($index=$k);
-					last if defined $index;
+					Log::OK::TRACE and log_debug "Header testing: $headers[$k]";
+					if($headers[$k] eq HTTP_CONTENT_LENGTH){$index=$k; last};
+					#last if defined $index;
 				}
 
-				CONFIG::log and log_debug "Content length index: $index";
+				Log::OK::TRACE and log_debug "Content length index: $index";
 
 				splice(@headers, $index, 2) if defined $index;
 				
@@ -375,13 +377,13 @@ sub deflate {
 					#
 					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 
-					CONFIG::log and log_trace "single shot";
+					Log::OK::TRACE and log_trace "single shot";
 					my $scratch=""; 	#new scratch each call
 					my $status=$ctx->deflate($buf, $scratch);
 					$status == Z_OK or log_error "Error creating deflate context";
 					$status=$ctx->flush($scratch);
 					$ctx->deflateReset;
-					CONFIG::log and log_debug "about to push for single shot";
+					Log::OK::TRACE and log_debug "about to push for single shot";
 					push @deflate_pool, $ctx;
 					$next->(@_[0,1,2,3], $scratch, @_[5,6]);
 					return;
@@ -391,22 +393,22 @@ sub deflate {
 					#multiple calls required so setup context
 					my $scratch="";
 					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
-					CONFIG::log and log_trace "Multicalls required $_[1]";
+					Log::OK::TRACE and log_trace "Multicalls required $_[1]";
 					$out_ctx{$_[1]}=$ctx;
 
-					CONFIG::log and log_trace Dumper $out_ctx{$_[1]};
+					Log::OK::TRACE and log_trace Dumper $out_ctx{$_[1]};
 
 				}
 			}
-			CONFIG::log and log_trace "Doing body";
-			CONFIG::log and log_trace "Processing deflate content";
+			Log::OK::TRACE and log_trace "Doing body";
+			Log::OK::TRACE and log_trace "Processing deflate content";
 			# Only process if setup correctly
 			#
-			CONFIG::log and log_trace $_[1];
+			Log::OK::TRACE and log_trace $_[1];
 
 			$ctx//=$out_ctx{$_[1]};
 
-			CONFIG::log and log_trace Dumper $ctx;
+			Log::OK::TRACE and log_trace Dumper $ctx;
 
 			return &$next unless $ctx;
 
@@ -420,22 +422,22 @@ sub deflate {
 
 			# Push to next stage
 			unless($_[5]){
-				CONFIG::log and log_debug "No more data expected";
+				Log::OK::TRACE and log_debug "No more data expected";
 				#if no callback is provided, then this is the last write
 				$status=$ctx->flush($scratch);
 				delete $out_ctx{$_[1]};
 
 				$ctx->deflateReset;
-				CONFIG::log and log_debug "about to push for multicall";
+				Log::OK::TRACE and log_debug "about to push for multicall";
 				push @deflate_pool, $ctx;
-				CONFIG::log and log_trace "delete...".scalar keys %out_ctx;
+				Log::OK::TRACE and log_trace "delete...".scalar keys %out_ctx;
 
 				$next->(@_[0,1,2,3], $scratch, @_[5,6]);
 				return;
 
 			}
 			else {
-				CONFIG::log and log_debug "Expecting more data";
+				Log::OK::TRACE and log_debug "Expecting more data";
 				# more data expected
 				if(length $scratch){
 					#enough data to send out
@@ -469,21 +471,21 @@ sub gzip{
 		
 			
 
-			CONFIG::log and log_debug "Input data length: ".length  $_[4];
+			Log::OK::TRACE and log_debug "Input data length: ".length  $_[4];
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
 			\my $buf=\$_[4];
 			#Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1)
-			CONFIG::log and log_debug "Context count: ".scalar keys %out_ctx;
-			CONFIG::log and log_debug "Compressor pool: ".scalar @deflate_pool;
+			Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
+			Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
 
-			CONFIG::log  and log_trace "doing deflate";
+			Log::OK::TRACE  and log_trace "doing deflate";
 			my $exe;
 			if($_[3]){
-				CONFIG::log and log_debug "gzipin header processing";
+				Log::OK::TRACE and log_debug "gzipin header processing";
 				\my @headers=$_[3]; #Alias for easy of use and performance
-				CONFIG::log and log_trace "gzip: looking for accept";
-				CONFIG::log and log_trace "gzip: Incoming accept_encoding: ".Dumper $_[1]->headers;
+				Log::OK::TRACE and log_trace "gzip: looking for accept";
+				Log::OK::TRACE and log_trace "gzip: Incoming accept_encoding: ".Dumper $_[1]->headers;
 
 				($exe=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa) and return &$next;
 				#unless $exe; #bypass is default
@@ -492,12 +494,12 @@ sub gzip{
 				$exe=1;
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					CONFIG::log and log_trace "gzip: Testing header: $headers[$k]";
+					Log::OK::TRACE and log_trace "gzip: Testing header: $headers[$k]";
 					($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;
 				}
 				
-				CONFIG::log  and log_trace "exe ". $exe; 
-				CONFIG::log  and log_trace "Single shot: ". !$_[5];
+				Log::OK::TRACE  and log_trace "exe ". $exe; 
+				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
 
 				$ctx=$exe;
 				#$out_ctx{$_[1]}=$ctx if $_[5]; #save context if more to come
@@ -505,17 +507,18 @@ sub gzip{
 
 				return &$next unless $exe; #bypass is default
 				
-				CONFIG::log  and log_trace "No bypass in headers";
+				Log::OK::TRACE  and log_trace "No bypass in headers";
 
 				#Remove content length as we will rely on chunked encoding
+				$index=undef;
 				for my $k (@key_indexes){
 					last if $k >= @headers;
-					CONFIG::log and log_debug "Header testing: $headers[$k]";
-					($headers[$k] eq HTTP_CONTENT_LENGTH) and ($index=$k);
-					last if defined $index;
+					Log::OK::TRACE and log_debug "Header testing: $headers[$k]";
+					if($headers[$k] eq HTTP_CONTENT_LENGTH){$index=$k; last};
+					#last if defined $index;
 				}
 
-				CONFIG::log and log_debug "Content length index: $index";
+				Log::OK::TRACE and log_debug "Content length index: $index";
 
 				splice(@headers, $index, 2) if defined $index;
 				
@@ -541,7 +544,7 @@ sub gzip{
                                            '');
 				   #Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 
-					CONFIG::log and log_trace "single shot";
+					Log::OK::TRACE and log_trace "single shot";
 					my $scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER;
 					my $status=$ctx->deflate($buf, $scratch);
 					$status == Z_OK or log_error "Error creating deflate context";
@@ -550,7 +553,7 @@ sub gzip{
 					$scratch.=pack("V V", $ctx->crc32(), $ctx->total_in());
 
 					$ctx->deflateReset;
-					CONFIG::log and log_debug "about to push for single shot";
+					Log::OK::TRACE and log_debug "about to push for single shot";
 					push @deflate_pool, $ctx;
 					$next->(@_[0,1,2,3], $scratch, @_[5,6]);
 					return;
@@ -567,23 +570,23 @@ sub gzip{
                                            4096,
                                            '');
 						#$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
-					CONFIG::log and log_trace "Multicalls required $_[1]";
+					Log::OK::TRACE and log_trace "Multicalls required $_[1]";
 					$out_ctx{$_[1]}=$ctx;
 
-					CONFIG::log and log_trace Dumper $out_ctx{$_[1]};
+					Log::OK::TRACE and log_trace Dumper $out_ctx{$_[1]};
 
 				}
 			}
 
-			CONFIG::log and log_trace "Doing body";
-			CONFIG::log and log_trace "Processing deflate content";
+			Log::OK::TRACE and log_trace "Doing body";
+			Log::OK::TRACE and log_trace "Processing deflate content";
 			# Only process if setup correctly
 			#
-			CONFIG::log and log_trace $_[1];
+			Log::OK::TRACE and log_trace $_[1];
 
 			$ctx//=$out_ctx{$_[1]};
 
-			CONFIG::log and log_trace Dumper $ctx;
+			Log::OK::TRACE and log_trace Dumper $ctx;
 
 			return &$next unless $ctx;
 
@@ -600,7 +603,7 @@ sub gzip{
 
 			# Push to next stage
 			unless($_[5]){
-				CONFIG::log and log_debug "No more data expected";
+				Log::OK::TRACE and log_debug "No more data expected";
 				#if no callback is provided, then this is the last write
 				$status=$ctx->flush($scratch);
 				$scratch.=pack("V V", $ctx->crc32(), $ctx->total_in());
@@ -608,16 +611,16 @@ sub gzip{
 				delete $out_ctx{$_[1]};
 
 				$ctx->deflateReset;
-				CONFIG::log and log_debug "about to push for multicall";
+				Log::OK::TRACE and log_debug "about to push for multicall";
 				push @deflate_pool, $ctx;
-				CONFIG::log and log_trace "delete...".scalar keys %out_ctx;
+				Log::OK::TRACE and log_trace "delete...".scalar keys %out_ctx;
 
 				$next->(@_[0,1,2,3], $scratch, @_[5,6]);
 				return;
 
 			}
 			else {
-				CONFIG::log and log_debug "Expecting more data";
+				Log::OK::TRACE and log_debug "Expecting more data";
 				# more data expected
 				if(length $scratch){
 					#enough data to send out

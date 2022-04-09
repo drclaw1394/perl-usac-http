@@ -5,6 +5,7 @@ use warnings;
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
 use Log::ger;
+use Log::OK;
 use Data::Dumper;
 use JSON;
 #no feature "indirect";
@@ -189,7 +190,7 @@ sub open_cache {
 
 		my $path= $abs_path.($pre?".$pre":"");
 
-		CONFIG::log and log_trace "Searching for: $path";
+		Log::OK::TRACE and log_trace "Searching for: $path";
 
 		next unless stat($path) and -r _ and ! -d _; #undef if stat fails
 		#or incorrect premissions
@@ -216,8 +217,8 @@ sub open_cache {
 			else{
 				$entry[content_encoding_]=[];
 			}
-			CONFIG::log and log_trace "pre com: ".$pre;
-			CONFIG::log and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
+			Log::OK::TRACE and log_trace "pre com: ".$pre;
+			Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
 			my $tp=gmtime($entry[mt_]);
 			$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
 			return $self->[cache_]{$abs_path}=\@entry;
@@ -259,7 +260,7 @@ sub send_file_uri_norange {
                 my $do_sendfile;
 		if($sendfile){
 			$do_sendfile=sub {
-				CONFIG::log  and log_trace "Doing send file";
+				Log::OK::TRACE  and log_trace "Doing send file";
 				#Do send file here?
 				#seek $in_fh,$total,0;
 				#in, out, size, input_offset
@@ -330,7 +331,7 @@ sub send_file_uri_norange {
 		#Add no compress (ie identity) if encoding is not set
 		#and if no_encodingflag is set
 		#
-		CONFIG::log and log_trace "No_compress set to: ".$no_encoding;
+		Log::OK::TRACE and log_trace "No_compress set to: ".$no_encoding;
 		my $out_headers=[
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
@@ -349,7 +350,7 @@ sub send_file_uri_norange {
 
 
 		];
-		CONFIG::log and log_trace join ", ", @$out_headers;
+		Log::OK::TRACE and log_trace join ", ", @$out_headers;
 		
 
 
@@ -365,7 +366,7 @@ sub send_file_uri_norange {
 		#my $sendfile=1;
 		#Enable using send file if content length is greater than threshold
 		if($sendfile and $content_length>=$sendfile){
-			CONFIG::log  and log_trace "Writing sendfile header";
+			Log::OK::TRACE  and log_trace "Writing sendfile header";
 			#Write header out and then issue send file
 
 			#Setup writable event listener
@@ -418,6 +419,7 @@ sub send_file_uri_norange {
 
 sub _html_dir_list {
 	sub {
+		say "html dir list renderer";
 		my $headers=$_[1];
 		my $entries=$_[2];
 
@@ -473,19 +475,20 @@ sub make_list_dir {
 	my @type;
 	#resolve renderer
 	if( !defined $renderer){
-		$renderer=\&_html_dir_list;
+		say "RENDERER WILL BE HTML";
+		$renderer=&_html_dir_list;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
 	elsif(lc $renderer eq "html"){
-		$renderer=\&_html_dir_list;
+		$renderer=&_html_dir_list;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
 	elsif(lc $renderer eq "json"){
-		$renderer= \&_json_dir_list;
+		$renderer= &_json_dir_list;
 		@type=(HTTP_CONTENT_TYPE, "text/json");
 	}
 	else {
-		$renderer=!defined $renderer? \&_html_dir_list: $renderer;
+		$renderer=!defined $renderer? &_html_dir_list: $renderer;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
 	
@@ -493,7 +496,7 @@ sub make_list_dir {
 		my ($line,$rex,$uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
-		my $abs_path=$html_root."/".$uri;
+		my $abs_path=$html_root.$uri;
 		stat $abs_path;
 		unless(-d _ and  -r _){
 			rex_error_not_found $line, $rex;
@@ -503,6 +506,7 @@ sub make_list_dir {
 
 		#build uri from sysroot
 		my @fs_paths;
+		say  "ABS PATH $abs_path";
 		if($abs_path eq "$html_root/"){
 
 			@fs_paths=<$abs_path*>;	
@@ -510,26 +514,21 @@ sub make_list_dir {
 		else{
 			@fs_paths=<$abs_path.* $abs_path*>;	
 		}
-
 		state $labels=[qw<name dev inode mode nlink uid gid rdev size access_time modification_time change_time block_size blocks>];
-		my @results;
-                ################################################################################
-                #         =map {                                                               #
-                #         #say "WORKING ON PATH: $_";                                          #
-                #         #if(-r){                        #only list items we can read         #
-                #                 my $isDir= -d;                                               #
-                #                 s|^$html_root/||;                       #strip out html_root #
-                #                 my $base=(split "/")[-1].($isDir? "/":"");                   #
-                #                                                                              #
-                #                 ["$rex->[uSAC::HTTP::Rex::uri_]$base", $base, stat _]        #
-                # }                                                                            #
-                ################################################################################
+		my @results
+                        =map {
+                        #if(-r){                        #only list items we can read
+                                my $isDir= -d;
+                                s|^$html_root/||;                       #strip out html_root
+                                my $base=(split "/")[-1].($isDir? "/":"");
 
-		#@fs_paths;
-		my $ren=$renderer//\&_html_dir_list;
+                                ["$rex->[uSAC::HTTP::Rex::uri_]$base", $base, stat _]
+                }
+		@fs_paths;
+		my $ren=$renderer//&_html_dir_list;
 
-		my $data="lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
-		#$ren->($data, $labels, \@results);	#Render to output
+		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
+		$ren->($data, $labels, \@results);	#Render to output
 		rex_write $line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , $data;
 	}
 }
@@ -547,12 +546,10 @@ sub send_file_uri_range {
 		#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];	#reuses stat from check_access 
 
 
-		#say "CONTENT Length: $content_length";
 
 		my @ranges=_check_ranges $rex, $content_length;
 		#$,=", ";
 
-		#say "Ranges : ",$ranges[0]->@*;
 		if(@ranges==0){
 			my $response=
 			"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_RANGE_NOT_SATISFIABLE.LF
@@ -621,11 +618,8 @@ sub send_file_uri_range {
 
 		my $reader;$reader= sub {
 			while(1){
-				say "Static loop";
 				for($state){
 					if($_ eq 0){
-						#say "";
-						#say "Updating state"; 
 						#update 
 						$index++;
 						$start=	$ranges[$index][0];
@@ -634,7 +628,6 @@ sub send_file_uri_range {
 						$length=$end-$start+1;
 						$pos=$start;
 
-						#say "doing header";
 						#normal header
 						#we need to write headers
 						$reply="" if $index; #reset the reply to empty stirng
@@ -655,19 +648,12 @@ sub send_file_uri_range {
 
 					elsif($_ == 1){
 						#do data
-						#say "doing data";
 						seek $in_fh,$pos,0 or say "Couldnot seek";
 						$chunk_offset+=$rc=sysread $in_fh, $reply, $length-$chunk_offset, $offset;
 						$pos+=$rc;
-						#say "Range start: $start";
-						#say "Range end: $end";
-						#say "Range offset: $chunk_offset";
-						#say "File pos: $pos";
-						#say "Range length: $length";
 
 						unless($rc//0 or $! == EAGAIN or $! == EINTR){
 							say "READ ERROR from file";
-							#say $rc;
 							say $!;
 							#delete $self->[cache_]{$uri};
 							close $in_fh;
@@ -686,7 +672,6 @@ sub send_file_uri_range {
 							}
 							if($index==@ranges-1){
 								#that was the last read of data .. finish
-								#say "Last range, writing last boundary also";
 								$reply.=LF."--".$boundary."--".LF;
 								$state=0;
 								$session->[uSAC::HTTP::Session::write_]->($reply);
@@ -694,7 +679,6 @@ sub send_file_uri_range {
 							}
 							else{
 								#more ranges to follow
-								#say "End of range. writing boundary";
 								#$reply=LF;#."--".$boundary.LF;
 								$state=0;
 								$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
@@ -742,7 +726,7 @@ sub usac_file_under {
 	my $no_encoding=$options{no_encoding};
 	my $do_dir=$options{list_dir}//$options{do_dir};
 	my $pre_encoded=$options{pre_encoded}//[];
-	CONFIG::log and log_trace "OPTIONS IN: ".join ", ", %options;
+	Log::OK::TRACE and log_trace "OPTIONS IN: ".join ", ", %options;
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
 	\my @indexes=$options{indexes}//[];
@@ -761,7 +745,7 @@ sub usac_file_under {
 		if(!$next and ref($_[0])eq "CODE"){
 		
 				$next=$_[0];
-				CONFIG::log and log_trace "Static file: returning  middle ware";
+				Log::OK::TRACE and log_trace "Static file: returning  middle ware";
 				return __SUB__;
 		}
 			
@@ -773,13 +757,13 @@ sub usac_file_under {
 		my $p;
 		if($_[2]){
 
-			CONFIG::log and log_trace "Static: Input uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
+			Log::OK::TRACE and log_trace "Static: Input uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
 			$p=$_[2];
 			pop;
 		}	
 		else {
 			#$p=&rex_capture->[0];#$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
-			CONFIG::log and log_trace "Static: Stripped uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
+			Log::OK::TRACE and log_trace "Static: Stripped uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
 			#$p=$_[1][uSAC::HTTP::Rex::capture_][0];
 			$p=$rex->[uSAC::HTTP::Rex::uri_stripped_];
 		}
@@ -802,14 +786,14 @@ sub usac_file_under {
 		my @head=@$headers;
                 ##########################################################################
                 # if($no_compress and $path =~ /$no_compress/o){                         #
-                #         CONFIG::log and log_trace "Setting identity content encoding"; #
+                #         Log::OK::TRACE and log_trace "Setting identity content encoding"; #
                 #         push @head, HTTP_CONTENT_ENCODING, "identity";                 #
                 # }                                                                      #
                 ##########################################################################
 		#Ensure we don't attempt to test gz files
-		$pre_encoded=[] if $path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING} !~ /gzip/;		#GZIP is supporte
+		$pre_encoded=[] if $path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/;		#GZIP is supporte
 
-		CONFIG::log and log_trace "static: html_root: $html_root";
+		Log::OK::TRACE and log_trace "static: html_root: $html_root";
 
 
 
@@ -822,7 +806,7 @@ sub usac_file_under {
 			my $entry;
 			for(@indexes){
 				my $path=$html_root.$p.$_;
-				CONFIG::log and log_trace "Static: Index searching PATH: $path";
+				Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
 				$entry=$cache->{$path}//$static->open_cache($path);
 				next unless $entry;
 				if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
@@ -838,13 +822,13 @@ sub usac_file_under {
 			}
 
 			if($do_dir){
-				CONFIG::log and log_trace "Static: Listing dir $p";
+				Log::OK::TRACE and log_trace "Static: Listing dir $p";
 				#dir listing
 				$list_dir->(@_, $p);
 				return;
 			}
 			else {
-				CONFIG::log and log_trace "Static: NO DIR LISTING";
+				Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
 				#no valid index found so 404
 				rex_error_not_found @_;
 				return;
@@ -873,7 +857,6 @@ sub usac_file_under {
 		}
 		else {
 			if($next){
-				#say "CALLING NEXT";
 				return &$next;
 			}
 			else {

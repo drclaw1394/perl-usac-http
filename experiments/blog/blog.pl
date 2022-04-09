@@ -1,13 +1,18 @@
 #!/usr/bin/env perl
-use UV;
-use constant "CONFIG::log"=>1;
-use uSAC::HTTP;
-use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
-
 use Log::ger::Output 'Screen';
 use Log::ger::Util;
 
-Log::ger::Util::set_level "trace";
+use Log::OK {
+		lvl=>"warn",
+		opt=>'verbose',
+
+};
+Log::ger::Util::set_level Log::OK::LEVEL;
+use EV;
+use uSAC::HTTP;
+use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
+
+
 
 
 
@@ -53,10 +58,10 @@ my $server; $server=usac_server {
                         read_size=>4096*32,
 			#pre_encoded=>[qw<gz>],
 			#no_compress=>qr/txt$/,
-                        #do_dir=>1,
+                        do_dir=>1,
                         #indexes=>["index.html"],
                         #sendfile=>4096,
-                        usac_path root=>usac_dirname, "."#, "static"
+                        usac_dirname #, "static"
                 );
 
                 ##############################################

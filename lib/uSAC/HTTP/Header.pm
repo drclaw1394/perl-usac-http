@@ -7,6 +7,7 @@ no warnings qw<experimental>;
 use List::Util qw<first>;
 use Exporter 'import';
 use Log::ger;
+use Log::OK;
 our %const_names;
 our @index_to_name;
 BEGIN {
@@ -118,7 +119,7 @@ sub find_header: lvalue{
 	\my @headers=$_[0];
 	for my $k (@key_indexes){
 		return undef if $k >=@headers;
-		CONFIG::log and do {
+		Log::OK::TRACE and do {
 			log_trace "iteration key is $k, search key is $_[1]";
 			log_trace "serching through headers: ".$index_to_name[$headers[$k]]//$headers[$k];
 			log_trace "lable: $headers[$k]";

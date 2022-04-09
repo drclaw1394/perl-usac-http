@@ -7,6 +7,7 @@ no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
 use Log::ger;
 
+use Log::OK;
 use Carp qw<carp>;
 use File::Basename qw<basename dirname>;
 use File::Spec::Functions qw<rel2abs>;
@@ -312,14 +313,14 @@ sub usac_multipart_slurp{
 sub usac_form_slurp{
 	my ($cb)=pop;
 	my %options=@_;
-	CONFIG::log and  log_trace "Setup usac_form_slurp";
+	Log::OK::TRACE and  log_trace "Setup usac_form_slurp";
 	my $tmp_dir=$options{dir}//"uploads";
 
 	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
 	#convert to abs path to prevent double resolving
 	unless( -d $tmp_dir){
 		my $message= "Could not access directory $tmp_dir for uploads";
-		CONFIG::log and log_error $message;
+		Log::OK::TRACE and log_error $message;
 		die $message;
 	}
 
@@ -627,7 +628,7 @@ sub rex_redirect_internal {
 		return;
 	}
 	undef $_[0];
-	CONFIG::log and  log_trace "Redirecting internal to host: $rex->[host_]";
+	Log::OK::TRACE and  log_trace "Redirecting internal to host: $rex->[host_]";
 	$rex->[session_]->server->current_cb->(
 		$rex->[host_],
 		join(" ", $rex->@[method_, uri_]),
@@ -641,7 +642,7 @@ sub rex_headers {
 
 sub rex_reply_json {
 	my $data=pop;
-	CONFIG::log and log_trace "rex_reply_json caller: ". join ", ", caller;
+	Log::OK::TRACE and log_trace "rex_reply_json caller: ". join ", ", caller;
 	rex_write @_, HTTP_OK, [
 		HTTP_CONTENT_TYPE, "text/json",
 		HTTP_CONTENT_LENGTH, length($data),
