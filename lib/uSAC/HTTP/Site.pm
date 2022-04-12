@@ -389,7 +389,7 @@ sub construct_middleware {
 	my @middleware;
 	while($parent){
 		Log::OK::TRACE and log_trace "Middleware from $parent";
-		Log::OK::TRACE and log_trace "Parent_site ". $parent->parent_site;
+		Log::OK::TRACE and log_trace "Parent_site ". ($parent->parent_site//"");
 		unshift @middleware, @{$parent->innerware//[]};
 		$parent=$parent->parent_site;
 	}

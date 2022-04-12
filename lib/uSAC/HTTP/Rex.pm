@@ -538,7 +538,8 @@ sub query_params {
 #otherwise return the site prefix with no ending slash
 sub rex_site_url {
 	#match_entry->context->site->built_prefix
-	my $url= $_[0][4][0]->built_prefix;
+	#my $url= $_[0][4][0]->built_prefix;
+	my $url= $_[0][1][0]->built_prefix;
 	if($_[2]//""){
 		return "$url/$_[2]";
 	}
@@ -549,7 +550,7 @@ sub rex_site_url {
 #returns the site object associate with this request
 #match, rex, na
 sub rex_site {
-	$_[0][4][0];	
+	$_[0][1][0];	
 }
 
 sub rex_state :lvalue{
