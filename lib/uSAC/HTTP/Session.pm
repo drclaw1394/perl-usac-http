@@ -6,6 +6,7 @@ use uSAC::SIO::AE::SReader;
 use uSAC::SIO::AE::SWriter;
 use Data::Dumper;
 
+
 #require uSAC::HTTP::Server;
 use EV;
 use AnyEvent;
@@ -122,12 +123,14 @@ sub revive {
 	$self->[closeme_]=undef;
 	#$self->[sr_]->start($self->[fh_]);
 	uSAC::SIO::AE::SReader::start $self->[sr_], $self->[fh_];
-	$self->[sw_]=uSAC::SIO::AE::SWriter->new($self->[fh_]);
+	#$self->[sw_]=uSAC::SIO::AE::SWriter->new($self->[fh_]);
+	$self->[sw_]->set_write_handle($self->[fh_]);
 
 	#make writer
 	#$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
-	$self->[sw_]->on_error=$self->[dropper_];
-	$self->[write_]=$self->[sw_]->writer;
+	
+	#$self->[sw_]->on_error=$self->[dropper_];
+	#$self->[write_]=$self->[sw_]->writer;
 	return $self;
 }
 

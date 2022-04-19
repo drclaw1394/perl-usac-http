@@ -6,8 +6,8 @@ use feature qw<current_sub say refaliasing switch state>;
 no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
 use Log::ger;
-
 use Log::OK;
+
 use Carp qw<carp>;
 use File::Basename qw<basename dirname>;
 use File::Spec::Functions qw<rel2abs>;
@@ -81,12 +81,12 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ in_set_ in_used_ out_set_ out_used_ captures_>
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ in_set_ in_used_ out_set_ out_used_ captures_ id_>
 );
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>captures_-version_+1;
+use constant KEY_COUNT=>id_-version_+1;
 
 require uSAC::HTTP::Middleware;
 		
@@ -98,25 +98,16 @@ sub new {
 	#my ($package, $session, $headers, $host, $version, $method, $uri)=@_;
 
 	my $self=[];
+	state $id=0;
 	my $query_string="";
 	if((my $i=index($_[5], "?"))>=0){
 		$query_string=substr $_[5], $i+1;
 	}
 	my $write=$_[1]->[uSAC::HTTP::Session::write_];
 
-	bless [ $_[4], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[]], $_[0];
+	bless [ $_[4], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[], $id++], $_[0];
 
 
-}
-
-sub reply_GZIP {
-
-}
-
-#like simple reply but does a DEFLATE on the data.
-#Sets the headers accordingly
-sub reply_DEFLATE {
-	#call replySimple with extra headers
 }
 
 
@@ -124,23 +115,27 @@ sub reply_DEFLATE {
 #Sub parts can be of different types and possible content encodings?
 sub usac_multipart_stream {
 		my $cb=pop;
-	sub {
-		my $line=$_[0];#shift;
-		my $rex=$_[1];#shift;
-		#shift;		#remove place holder for mime
-		my $session=$rex->[uSAC::HTTP::Rex::session_];
-		#check if content type is correct first
-		unless (index($rex->[headers_]{CONTENT_TYPE},'multipart/form-data')>=0){
-			$session->[uSAC::HTTP::Session::closeme_]=1;
-			rex_write $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
+		sub {
+			my $line=$_[0];#shift;
+			my $rex=$_[1];#shift;
+			#shift;		#remove place holder for mime
+			my $session=$rex->[uSAC::HTTP::Rex::session_];
+			#check if content type is correct first
+			unless (index($rex->[headers_]{CONTENT_TYPE},'multipart/form-data')>=0){
+				$session->[uSAC::HTTP::Session::closeme_]=1;
+				rex_write $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
+				return;
+			}
+			uSAC::HTTP::Session::push_reader
+			$session,
+			make_form_data_reader @_, $session, $cb->() ;
+
+			Log::OK::INFO and log_info "multipart stream";
+			$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
+
+			$session->pump_reader;
 			return;
 		}
-		uSAC::HTTP::Session::push_reader
-		$session,
-		make_form_data_reader @_, $session, $cb ;
-		$session->pump_reader;
-		return;
-	}
 }
 
 #reads a post/put request
@@ -176,7 +171,7 @@ sub usac_data_stream{
 
 				uSAC::HTTP::Session::push_reader
 				$session,
-				make_form_urlencoded_reader @_, $session, $cb ;
+				make_form_urlencoded_reader @_, $session, $cb->() ;
 
 				#check for expects header and send 100 before trying to read
 				if(defined($_->{EXPECT})){
@@ -184,6 +179,10 @@ sub usac_data_stream{
 					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
 					$rex->[uSAC::HTTP::Rex::write_]->($reply);
 				}
+
+				Log::OK::INFO and log_info "data stream";
+				$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
+
 				$session->pump_reader;
 				return;
 			}
@@ -225,25 +224,28 @@ sub usac_urlencoded_slurp{
 	#Expected inputs
 	#	line, rex, data, part header, completeflag
 	usac_urlencoded_stream sub {
-		my $usac=$_[0];
-		my $rex=$_[1];
-		state $part_header=0;
-		state $fields={};
 
-		if($part_header != $_[3]){
-			#new part
-			local $,=", ";
-			$part_header=$_[3];
-			$fields=&parse_form_params;
+		sub {
+			my $usac=$_[0];
+			my $rex=$_[1];
+			state $part_header=0;
+			state $fields={};
 
-			#test for file
-		}
+			if($part_header != $_[3]){
+				#new part
+				local $,=", ";
+				$part_header=$_[3];
+				$fields=&parse_form_params;
 
-		if($_[4]){
-			#that was the last part
-			$cb->($usac, $rex, $fields,1);
-			$part_header=0;
-			$fields={};	#reset 
+				#test for file
+			}
+
+			if($_[4]){
+				#that was the last part
+				$cb->($usac, $rex, $fields,1);
+				$part_header=0;
+				$fields={};	#reset 
+			}
 		}
 	}
 
@@ -262,46 +264,48 @@ sub usac_multipart_slurp{
 	die "Could not open directory $tmp_dir for uploads",unless opendir((my $fh), $tmp_dir);
         my $prefix=$options{prefix}//"uSAC";
 	#The actual sub called
-	 usac_multipart_stream sub {
-		my $usac=$_[0];
-		my $rex=$_[1];
-		state $part_header=0;
+	usac_multipart_stream sub {
+		sub {
+			my $usac=$_[0];
+			my $rex=$_[1];
+			state $part_header=0;
 
-		state $kv;		#Stateful for multiple calls
-		state $fields={};	#
+			state $kv;		#Stateful for multiple calls
+			state $fields={};	#
 
-		state ($handle,$name);
-		if($part_header != $_[3]){
-			#new part
-			local $,=", ";
-			$part_header=$_[3];
-			close $handle if $handle;
-			$name=$handle=undef;
-			{
-			$kv=&parse_form_params;
+			state ($handle,$name);
+			if($part_header != $_[3]){
+				#new part
+				local $,=", ";
+				$part_header=$_[3];
+				close $handle if $handle;
+				$name=$handle=undef;
+				{
+					$kv=&parse_form_params;
+				}
+
+				#test for file
+				if($kv->{filename}){
+					#this is a file
+					#open an file
+					($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
+					$fields->{$kv->{name}}={tmp_file=>$name, filename=>$kv->{filename}, CONTENT_TYPE=>$part_header->{CONTENT_TYPE}};
+				}
+				else {
+					#just a regular form field
+					$fields->{$kv->{name}}=$_[2];
+				}
 			}
 
-			#test for file
-			if($kv->{filename}){
-				#this is a file
-				#open an file
-				($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
-				$fields->{$kv->{name}}={tmp_file=>$name, filename=>$kv->{filename}, CONTENT_TYPE=>$part_header->{CONTENT_TYPE}};
+			#write to file only if its a file
+			my $wc=syswrite $handle, $_[2] if $handle;
+			if($_[4]){
+				#that was the last part
+				$cb->($usac, $rex, $fields,1);
+				$part_header=0;
+				$fields={};	#Reset after callback
+				$kv={};		#Reset after callback
 			}
-			else {
-				#just a regular form field
-				$fields->{$kv->{name}}=$_[2];
-			}
-		}
-
-		#write to file only if its a file
-		my $wc=syswrite $handle, $_[2] if $handle;
-		if($_[4]){
-			#that was the last part
-			$cb->($usac, $rex, $fields,1);
-			$part_header=0;
-			$fields={};	#Reset after callback
-			$kv={};		#Reset after callback
 		}
 	}
 }
@@ -359,15 +363,19 @@ sub usac_data_slurp{
 
         my $prefix=$options{prefix}//"uSAC";
 	die "Could not access directory $tmp_dir for uploads",unless -d $tmp_dir;
-	my $mime=$options{mime};#//"application/x-www-form-urlencoded";
+	#my $mime=$options{mime};#//"application/x-www-form-urlencoded";
 	my $path=$options{path};
 
 	make_path $tmp_dir unless $path;
 
 	usac_data_stream %options, sub {
-		my $matcher=$_[0];
-		my $rex=$_[1];
-		#handle_upload @_, $mime, sub {
+		Log::OK::INFO and log_info "data_slurp";
+		$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
+		sub {
+			my $matcher=$_[0];
+			my $rex=$_[1];
+			state %ctx;
+			#my $ctx=$ctx{$rex->[uSAC::HTTP::Rex::id_]}//=[undef,undef, undef];
 			state $header=0;
 			state ($handle, $name);
 			my $wc;
@@ -391,10 +399,11 @@ sub usac_data_slurp{
 				$header=0;
 				$name=undef;
 				$handle=undef;
-				
+
 			}
 
 			#}
+		}
 	}
 	
 }
@@ -467,6 +476,7 @@ sub rex_write{
 		\my @h=$_[3];
 
 		#If headers are supplied, then  process headers
+		Log::OK::INFO and log_info "Doing rex write";
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
 		if($session->[uSAC::HTTP::Session::closeme_]){

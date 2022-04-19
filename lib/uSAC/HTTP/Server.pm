@@ -354,13 +354,13 @@ sub make_do_client{
 		}
 		else {
 			$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
+			uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 		}
 
 		$sessions{ $id } = $session;
 		#$active_connections++;
 		#$total_connections++;
 
-		uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 	}
 }
 
@@ -636,7 +636,7 @@ sub usac_include {
 		}
 		}";
 		if($@){
-			die "Could not include file";	
+			die "Could not include file $path";	
 		}
 	}
 }

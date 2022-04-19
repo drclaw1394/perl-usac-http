@@ -246,10 +246,11 @@ sub send_file_uri_norange {
 		my $code=HTTP_OK;
 		my $etag="\"$mod_time-$content_length\"";
 
-		my $offset=length($reply);
+		my $offset=0;#=length($reply);
 		my $rc;
 		my $total=0;
 
+		my @ranges;
 
 		#Send file
 		#======
@@ -264,12 +265,24 @@ sub send_file_uri_norange {
 				#Do send file here?
 				#seek $in_fh,$total,0;
 				#in, out, size, input_offset
-				$total+=$rc=sendfile($out_fh, $in_fh, $read_size, $total);
-				#$total+=$rc=sysread $in_fh, $reply, $read_size-$offset, $offset;
-				#$offset=0;
+				$total+=$rc=sendfile($out_fh, $in_fh, $read_size, $offset);
+				$offset+=$rc;
 
 				#non zero read length.. do the write
 				if($total==$content_length){    #end of file
+					#Goto next range,
+					if(@ranges){
+						$total=0;
+						my $r=shift @ranges;
+						$offset=$r->[0];
+						$content_length=$r->[1];
+						
+						#write header
+						
+						&__SUB__;	#restart
+						return;	
+					}
+					#ofr drop if no more
 					#Do dropper as we reached the end
 					$session->[uSAC::HTTP::Session::dropper_]->();
 					$out_fh=undef;
@@ -306,11 +319,6 @@ sub send_file_uri_norange {
 		}
 
 
-
-
-
-
-
 		#TODO: needs testing
 		for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
 			$code=HTTP_OK and last unless $t;
@@ -331,7 +339,8 @@ sub send_file_uri_norange {
 		#Add no compress (ie identity) if encoding is not set
 		#and if no_encodingflag is set
 		#
-		Log::OK::TRACE and log_trace "No_compress set to: ".$no_encoding;
+
+		
 		my $out_headers=[
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
@@ -350,6 +359,28 @@ sub send_file_uri_norange {
 
 
 		];
+		if($headers->{RANGE}){
+			@ranges=_check_ranges $rex, $content_length;
+			unless(@ranges){
+				$code=HTTP_RANGE_NOT_SATISFIABLE;
+				push @$out_headers, HTTP_CONTENT_RANGE, "*/$content_length";
+
+				rex_write $matcher,$rex,$code,$out_headers,"";
+				return;
+			}
+			elsif(@ranges==1){
+				$code=HTTP_PARTIAL_CONTENT;
+				my $total_length=0;
+				$total_length+=($_->[1]-$_->[0]+1) for @ranges;
+				push @$out_headers,
+				HTTP_CONTENT_RANGE, "$ranges[0][0]-$ranges[0][1]/$content_length",
+				HTTP_CONTENT_LENGTH, $total_length;
+			}
+			else{
+
+			}
+		}
+
 		Log::OK::TRACE and log_trace join ", ", @$out_headers;
 		
 
@@ -384,20 +415,36 @@ sub send_file_uri_norange {
 
                 sub {
                         #NON Send file
-                        seek $in_fh,$total,0;
+                        seek $in_fh,$offset,0;
                         $total+=$rc=sysread $in_fh, $reply, $read_size;#, $offset;
-			#$offset=0;
+			$offset+=$rc;
 
                         #non zero read length.. do the write
                         if($total==$content_length){    #end of file
-				rex_write $matcher,$rex,$code,$out_headers,$reply;
-				#$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
-                                return;
+				if(@ranges){
+					#write and use callback
+					my $sub=__SUB__;
+					rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
+						my $r=shift @ranges;
+						$offset=$r->[0];
+						$total=0;
+						$content_length=$r->[1];
+						#write new multipart header
+						$sub->();
+					};
+
+					return
+				} else {
+					#write and done
+					rex_write $matcher,$rex,$code,$out_headers,$reply;
+					return;
+
+				}
+
                         }
 
                         elsif($rc){
-				rex_write $matcher,$rex,$code,$out_headers,$reply,__SUB__;
-				#$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
+				rex_write $matcher, $rex, $code, $out_headers, $reply,__SUB__;
                                 return;
                         }
                         elsif( $! != EAGAIN and  $! != EINTR){
@@ -475,7 +522,6 @@ sub make_list_dir {
 	my @type;
 	#resolve renderer
 	if( !defined $renderer){
-		say "RENDERER WILL BE HTML";
 		$renderer=&_html_dir_list;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
