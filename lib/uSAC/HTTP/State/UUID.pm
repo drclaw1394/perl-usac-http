@@ -2,6 +2,11 @@ package uSAC::HTTP::State::UUID;
 #Module for storting a uuid in http sate
 use strict;
 use warnings;
+
+
+use Log::ger;
+use Log::OK;
+
 use Exporter 'import';
 use feature qw<refaliasing say state current_sub>;
 no warnings "experimental";

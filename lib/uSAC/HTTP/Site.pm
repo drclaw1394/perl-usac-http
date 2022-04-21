@@ -160,6 +160,9 @@ sub add_route {
 			sub{
 				no warnings qw<numeric uninitialized>;
 
+
+				Log::OK::TRACE and log_trace "Main serialiser";
+				Log::OK::TRACE and log_trace join  " ", caller;
 				#my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
 				#The last item in the outerware
 				# renders the headers to the output sub
@@ -186,14 +189,7 @@ sub add_route {
 					$reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
 					for(@index){
 						last if $_ >= @h;
-						#$reply.= ($uSAC::HTTP::Header::index_to_name[$h[$_]]//$h[$_]).": $h[$_+1]".LF;
 						$reply.= $h[$_].": $h[$_+1]".LF;
-                                                ######################
-                                                # $reply.= $h[$_];   #
-                                                # $reply.= ":";      #
-                                                # $reply.= $h[$_+1]; #
-                                                # $reply.= LF;       #
-                                                ######################
 
 					}
 					for(@index){

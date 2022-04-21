@@ -259,22 +259,31 @@ sub chunked{
 
 				}
 				$ctx=$exe;
-				$out_ctx{$_[1]}=$ctx;
-
-
+				$out_ctx{$_[1]}=$ctx if $_[5]; #save context if multishot
+								#no need to save is single shot
 			}
+			#If this is the first call, $ctx will already be set by
+			#the time we get here. So no need to read from hash
+
 			$ctx//=$out_ctx{$_[1]};
 			return &$next unless $ctx;
 
+			Log::OK::TRACE and log_trace "DOING CHUNKS";
+
 			my $scratch="";
 			$scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF if $_[4];
+
 			unless($_[5]){
 				$scratch.="00".LF.LF;
-				delete $out_ctx{$_[1]};	#Last call, delete
+				delete $out_ctx{$_[1]} unless $_[3];	#Last call, delete
+									#only when headers
+									#are not present
+									#(multicall)
 			}
-			return $next->(@_[0,1,2,3],$scratch,@_[5,6]) if $scratch;
 
-			return &$next;
+			return $next->(@_[0,1,2,3],$scratch,@_[5,6]);# if $scratch;
+
+			#return &$next;
 
 		};
 	};

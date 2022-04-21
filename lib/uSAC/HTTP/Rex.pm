@@ -2,11 +2,12 @@ package uSAC::HTTP::Rex;
 use warnings;
 use strict;
 use version; our $VERSION = version->declare('v0.1');
-use feature qw<current_sub say refaliasing switch state>;
+use feature qw<current_sub say refaliasing state try>;
 no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
 use Log::ger;
 use Log::OK;
+
 
 use Carp qw<carp>;
 use File::Basename qw<basename dirname>;
@@ -90,7 +91,239 @@ use constant KEY_COUNT=>id_-version_+1;
 
 require uSAC::HTTP::Middleware;
 		
-sub rex_write;		
+#Main output subroutine
+#Arguments are matcher, rex, code, header, data, cb
+sub rex_write{
+	my $session=$_[1]->[session_];
+	if($_[3]){
+		\my @h=$_[3];
+
+		#If headers are supplied, then  process headers
+		Log::OK::TRACE and log_trace "Doing rex write";
+		$session->[uSAC::HTTP::Session::in_progress_]=1;
+
+		if($session->[uSAC::HTTP::Session::closeme_]){
+			push @h, 
+				HTTP_CONNECTION, "close";
+		}
+
+                ###########################################################
+                # else{                                                   #
+                #         push @h,                                        #
+                #                 HTTP_CONNECTION, "keep-alive",          #
+                #                 HTTP_KEEP_ALIVE,"timeout=10, max=1000"; #
+                # }                                                       #
+                ###########################################################
+
+	}
+
+	#Otherwise this is just a body call
+	#
+	
+
+	&{$_[0][1][2]};	#Execute the outerware for this site/location
+}
+##
+#OO Methods
+#
+
+
+# Returns the headers parsed at connection time
+sub headers {
+	return $_[0]->[headers_];
+}
+sub method {
+	$_[0][method_];
+}
+sub uri{
+	$_[0][uri_];
+}
+sub uri_stripped {
+	$_[0][uri_stripped_];
+}
+
+#Returns parsed query parameters. If they don't exist, they are parse first
+sub query_params {
+	unless($_[1][query_]){
+		#NOTE: This should already be decoded so no double decode
+		#$_[1][query_]={};
+		for ($_[1][query_string_]){
+			#tr/ //d;
+
+                        ##############################################
+                        # for my $pair (split "&"){                  #
+                        #         my ($key,$value)=split "=", $pair; #
+                        #         $_[1][query_]{$key}=$value;        #
+                        #                                            #
+                        # }                                          #
+                        ##############################################
+			$_[1][query_]->%*=map ((split /=/a)[0,1], split /&/a);
+		}
+	}
+
+	$_[1][query_];
+}
+
+#Builds a url based on the url of the current site/group
+#match, rex, partial url
+#Append partial url to end if supplied
+#otherwise return the site prefix with no ending slash
+sub rex_site_url {
+	#match_entry->context->site->built_prefix
+	#my $url= $_[0][4][0]->built_prefix;
+	my $url= $_[0][1][0]->built_prefix;
+	if($_[2]//""){
+		return "$url/$_[2]";
+	}
+	$url;
+	#$_[0][4][0]->built_prefix."/".($_[3]//"");
+}
+
+#returns the site object associate with this request
+#match, rex, na
+sub rex_site {
+	$_[0][1][0];	
+}
+
+sub rex_state :lvalue{
+	$_[1][state_];
+}
+
+#redirect to within site
+#match entry
+#rex
+#partial url
+#code
+sub rex_redirect_see_other{
+	my ($url)=splice @_, 2;
+	rex_write (@_, HTTP_SEE_OTHER,[HTTP_LOCATION,$url, HTTP_CONTENT_LENGTH, 0],"");
+}
+
+sub rex_redirect_found {
+	my ($url)=splice @_, 2;
+	rex_write (@_, HTTP_FOUND,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
+	
+}
+
+sub rex_redirect_temporary {
+
+	my ($url)=splice @_, 2;
+	rex_write (@_, HTTP_TEMPORARY_REDIRECT,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
+	
+}
+sub rex_redirect_not_modified {
+	my ($url)=splice @_, 2;
+	rex_write (@_, HTTP_NOT_MODIFIED,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
+	
+}
+
+sub rex_error_not_found {
+	my ($url)=splice @_, 2;
+	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
+}
+
+sub rex_error_forbidden {
+	my ($url)=splice @_, 2;
+	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
+}
+
+sub rex_error_internal {
+	my ($url)=splice @_, 2;
+	my $session=$_[1][session_];
+	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, [HTTP_CONTENT_LENGTH, 0], '');
+	$session->[uSAC::HTTP::Session::closeme_]=1;
+	$session->[uSAC::HTTP::Session::dropper_]->();
+}
+
+
+#Rewrites the uri and matches through the dispatcher
+#TODO: recursion limit
+sub rex_redirect_internal {
+
+	my ($matcher, $rex, $uri)=@_;
+	state $previous_rex=$rex;
+	state $counter=0;
+	if(substr($uri,0,1) ne "/"){
+		$uri="/".$uri;	
+	}
+	$rex->[uri_]=$uri;
+	$rex->[uri_stripped_]=$uri;
+	if($rex==$previous_rex){
+		$counter++;
+	}
+	else {
+		$previous_rex=$rex;
+	}
+	if($counter>10){
+		$counter=0;
+		carp "Redirections loop detected for $uri";
+		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, [],"");
+		return;
+	}
+	undef $_[0];
+	Log::OK::TRACE and  log_trace "Redirecting internal to host: $rex->[host_]";
+	$rex->[session_]->server->current_cb->(
+		$rex->[host_],
+		join(" ", $rex->@[method_, uri_]),
+		$rex
+	);
+	1;
+}
+sub rex_headers {
+	return $_[1]->[headers_];
+}
+
+sub rex_reply_json {
+	my $data=pop;
+	Log::OK::TRACE and log_trace "rex_reply_json caller: ". join ", ", caller;
+	rex_write @_, HTTP_OK, [
+		HTTP_CONTENT_TYPE, "text/json",
+		HTTP_CONTENT_LENGTH, length($data),
+	], $data;
+}
+sub rex_reply_html {
+	my $data=pop;
+	rex_write @_, HTTP_OK, [
+		HTTP_CONTENT_TYPE, "text/html",
+		HTTP_CONTENT_LENGTH, length($data),
+	], $data;
+}
+sub rex_reply_javascript {
+	my $data=pop;
+	rex_write @_, HTTP_OK, [
+		HTTP_CONTENT_TYPE, "text/javascript",
+		HTTP_CONTENT_LENGTH, length($data),
+	], $data;
+}
+
+sub rex_reply_text {
+	my $data=pop;
+	rex_write @_, HTTP_OK, [
+		HTTP_CONTENT_TYPE, "text/plain",
+		HTTP_CONTENT_LENGTH, length($data),
+	], $data;
+}
+sub rex_captures {
+	$_[1][captures_]
+}
+
+
+#returns parsed cookies from headers
+#Only parses if the internal field is undefined
+#otherwise uses pre parsed values
+#Read only
+sub cookies :lvalue {
+	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE});
+}
+
+#RW accessor
+#Returns the current state information for the rex
+sub state :lvalue { $_[0][state_] }
+sub captures:lvalue { $_[0][captures_] }
+sub writer {
+	$_[0][write_];
+
+}
 	
 
 
@@ -320,7 +553,7 @@ sub usac_form_slurp{
 	Log::OK::TRACE and  log_trace "Setup usac_form_slurp";
 	my $tmp_dir=$options{dir}//"uploads";
 
-	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
+	#$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
 	#convert to abs path to prevent double resolving
 	unless( -d $tmp_dir){
 		my $message= "Could not access directory $tmp_dir for uploads";
@@ -357,27 +590,25 @@ sub usac_data_slurp{
 	my %options=@_;
 
 
-        my $tmp_dir=$options{dir}//"uploads";	#temp dir to save file to
+        my $tmp_dir=$options{dir};#//"uploads";	#temp dir to save file to
 
-	$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
+	#$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
 
         my $prefix=$options{prefix}//"uSAC";
-	die "Could not access directory $tmp_dir for uploads",unless -d $tmp_dir;
+	die "Could not access directory $tmp_dir for file uploads" if $tmp_dir and ! -d $tmp_dir;
 	#my $mime=$options{mime};#//"application/x-www-form-urlencoded";
 	my $path=$options{path};
 
 	make_path $tmp_dir unless $path;
 
 	usac_data_stream %options, sub {
-		Log::OK::INFO and log_info "data_slurp";
-		$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
+		Log::OK::INFO and log_info "wrapper...";
 		sub {
 			my $matcher=$_[0];
 			my $rex=$_[1];
-			state %ctx;
-			#my $ctx=$ctx{$rex->[uSAC::HTTP::Rex::id_]}//=[undef,undef, undef];
 			state $header=0;
 			state ($handle, $name);
+			state $mem="";
 			my $wc;
 			if( $header != $_[3]){
 				#first chunk 
@@ -385,21 +616,50 @@ sub usac_data_slurp{
 				close $handle if $handle;
 				$handle=undef;
 				if($path){
-					open $handle, ">", $path;
+					unless(open $handle, ">", $path){
+
+						Log::OK::INFO and log_info "Opening file";
+						rex_error_internal $matcher, $rex;
+					}
 					$name=(split "/", $path)[-1];
 				}
-				else{
-					($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
+				elsif($tmp_dir){
+					try{
+						($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
+					}
+					catch ($e) {
+						rex_error_internal $matcher, $rex;
+
+					}
+				}
+				else {
+					Log::OK::INFO and log_info "Opening memory";
+
 				}
 			}
-			$wc=syswrite $handle, $_[2];
+			if($path or $tmp_dir){
+				$wc=syswrite $handle, $_[2];
+				unless($wc){
+					rex_error_internal $matcher, $rex;
+				}
+
+			}
+			else {
+				$mem.=$_[2];
+			}
+			Log::OK::INFO and log_info "syswrite result: $wc for data $_[2]";
 			#TODO: error checking and drop connection on write error
 			if($_[4]){
-				$cb->($matcher, $rex, $name,1);
+				unless($path or $tmp_dir){
+					$cb->($matcher, $rex, $mem,1)
+				}
+				else {
+					$cb->($matcher, $rex, $name,1)
+				}
+				$mem="";
 				$header=0;
 				$name=undef;
 				$handle=undef;
-
 			}
 
 			#}
@@ -468,240 +728,7 @@ sub parse_query_params_old {
 
 
 
-#Main output subroutine
-#Arguments are matcher, rex, code, header, data, cb
-sub rex_write{
-	my $session=$_[1]->[session_];
-	if($_[3]){
-		\my @h=$_[3];
-
-		#If headers are supplied, then  process headers
-		Log::OK::INFO and log_info "Doing rex write";
-		$session->[uSAC::HTTP::Session::in_progress_]=1;
-
-		if($session->[uSAC::HTTP::Session::closeme_]){
-			push @h, 
-				HTTP_CONNECTION, "close";
-		}
-
-                ###########################################################
-                # else{                                                   #
-                #         push @h,                                        #
-                #                 HTTP_CONNECTION, "keep-alive",          #
-                #                 HTTP_KEEP_ALIVE,"timeout=10, max=1000"; #
-                # }                                                       #
-                ###########################################################
-
-	}
-
-	#Otherwise this is just a body call
-	#
-	
-
-	&{$_[0][1][2]};	#Execute the outerware for this site/location
-}
 	 
-##
-#OO Methods
-#
-
-
-# Returns the headers parsed at connection time
-sub headers {
-	return $_[0]->[headers_];
-}
-sub method {
-	$_[0][method_];
-}
-sub uri{
-	$_[0][uri_];
-}
-sub uri_stripped {
-	$_[0][uri_stripped_];
-}
-
-#Returns parsed query parameters. If they don't exist, they are parse first
-sub query_params {
-	unless($_[1][query_]){
-		#NOTE: This should already be decoded so no double decode
-		#$_[1][query_]={};
-		for ($_[1][query_string_]){
-			#tr/ //d;
-
-                        ##############################################
-                        # for my $pair (split "&"){                  #
-                        #         my ($key,$value)=split "=", $pair; #
-                        #         $_[1][query_]{$key}=$value;        #
-                        #                                            #
-                        # }                                          #
-                        ##############################################
-			$_[1][query_]->%*=map ((split /=/a)[0,1], split /&/a);
-		}
-	}
-
-	$_[1][query_];
-}
-
-#Builds a url based on the url of the current site/group
-#match, rex, partial url
-#Append partial url to end if supplied
-#otherwise return the site prefix with no ending slash
-sub rex_site_url {
-	#match_entry->context->site->built_prefix
-	#my $url= $_[0][4][0]->built_prefix;
-	my $url= $_[0][1][0]->built_prefix;
-	if($_[2]//""){
-		return "$url/$_[2]";
-	}
-	$url;
-	#$_[0][4][0]->built_prefix."/".($_[3]//"");
-}
-
-#returns the site object associate with this request
-#match, rex, na
-sub rex_site {
-	$_[0][1][0];	
-}
-
-sub rex_state :lvalue{
-	$_[1][state_];
-}
-
-#redirect to within site
-#match entry
-#rex
-#partial url
-#code
-sub rex_redirect_see_other{
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_SEE_OTHER,[HTTP_LOCATION,$url, HTTP_CONTENT_LENGTH, 0],"");
-}
-
-sub rex_redirect_found {
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_FOUND,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
-	
-}
-
-sub rex_redirect_temporary {
-
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_TEMPORARY_REDIRECT,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
-	
-}
-sub rex_redirect_not_modified {
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_MODIFIED,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
-	
-}
-
-sub rex_error_not_found {
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
-}
-
-sub rex_error_forbidden {
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
-}
-
-sub rex_error_internal {
-	my ($url)=splice @_, 2;
-	my $session=$_[1][session_];
-	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, [HTTP_CONTENT_LENGTH, 0], '');
-	$session->[uSAC::HTTP::Session::closeme_]=1;
-	$session->[uSAC::HTTP::Session::dropper_]->();
-}
-
-
-#Rewrites the uri and matches through the dispatcher
-#TODO: recursion limit
-sub rex_redirect_internal {
-
-	my ($matcher, $rex, $uri)=@_;
-	state $previous_rex=$rex;
-	state $counter=0;
-	if(substr($uri,0,1) ne "/"){
-		$uri="/".$uri;	
-	}
-	$rex->[uri_]=$uri;
-	$rex->[uri_stripped_]=$uri;
-	if($rex==$previous_rex){
-		$counter++;
-	}
-	else {
-		$previous_rex=$rex;
-	}
-	if($counter>10){
-		$counter=0;
-		carp "Redirections loop detected for $uri";
-		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, [],"");
-		return;
-	}
-	undef $_[0];
-	Log::OK::TRACE and  log_trace "Redirecting internal to host: $rex->[host_]";
-	$rex->[session_]->server->current_cb->(
-		$rex->[host_],
-		join(" ", $rex->@[method_, uri_]),
-		$rex
-	);
-	1;
-}
-sub rex_headers {
-	return $_[1]->[headers_];
-}
-
-sub rex_reply_json {
-	my $data=pop;
-	Log::OK::TRACE and log_trace "rex_reply_json caller: ". join ", ", caller;
-	rex_write @_, HTTP_OK, [
-		HTTP_CONTENT_TYPE, "text/json",
-		HTTP_CONTENT_LENGTH, length($data),
-	], $data;
-}
-sub rex_reply_html {
-	my $data=pop;
-	rex_write @_, HTTP_OK, [
-		HTTP_CONTENT_TYPE, "text/html",
-		HTTP_CONTENT_LENGTH, length($data),
-	], $data;
-}
-sub rex_reply_javascript {
-	my $data=pop;
-	rex_write @_, HTTP_OK, [
-		HTTP_CONTENT_TYPE, "text/javascript",
-		HTTP_CONTENT_LENGTH, length($data),
-	], $data;
-}
-
-sub rex_reply_text {
-	my $data=pop;
-	rex_write @_, HTTP_OK, [
-		HTTP_CONTENT_TYPE, "text/plain",
-		HTTP_CONTENT_LENGTH, length($data),
-	], $data;
-}
-sub rex_captures {
-	$_[1][captures_]
-}
-
-
-#returns parsed cookies from headers
-#Only parses if the internal field is undefined
-#otherwise uses pre parsed values
-#Read only
-sub cookies :lvalue {
-	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE});
-}
-
-#RW accessor
-#Returns the current state information for the rex
-sub state :lvalue { $_[0][state_] }
-sub captures:lvalue { $_[0][captures_] }
-sub writer {
-	$_[0][write_];
-
-}
 
 *rex_parse_form_params=*parse_form_params;
 *rex_query_params=*query_params;

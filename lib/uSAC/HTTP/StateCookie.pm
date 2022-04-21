@@ -1,6 +1,14 @@
 package uSAC::HTTP::StateCookie;
 use strict;
 use warnings;
+use feature "try";
+
+use Log::ger;
+
+use Log::OK;
+
+#use Try::Catch;
+
 use Exporter 'import';
 use feature qw<refaliasing say state current_sub>;
 no warnings "experimental";
@@ -47,10 +55,16 @@ sub state_cookie_in {
 			#route, rex, 
 			my ($route, $rex)=@_;
 			my $state_value;
+			Log::OK::DEBUG and log_debug "StateCookie innerware";
 			if($state_value=$rex->cookies->{$state_name}){
-				eval {
+				Log::OK::DEBUG and log_debug "StateCookie decoding $state_value";
+				Log::OK::DEBUG and log_debug Dumper $rex->cookies;
+				try {
 					$rex->state->{$state_field}=$state_decode->(decode_base64url($state_value))
-				};
+				}
+				catch ($e){
+					log_error "Could not decode cookie";
+				}
 			}
 			&$inner_next;
 		}
@@ -66,6 +80,7 @@ sub state_cookie_out {
 	my $state_encode=	$options{encode};
 	my $state_name=		$options{name}//"USAC_STATE_ID";
 	my $state_field=	$options{field}//"state_cookie";
+	my $state_path= 	$options{path}//"/";
 
 	sub {
 		my $outer_next=shift;
@@ -79,13 +94,15 @@ sub state_cookie_out {
 				#if it exisits and defined write state
 
 				#Encode the data if it is defined and we have an encoding function
+				Log::OK::DEBUG and log_debug "StateCookie outerware";
+				Log::OK::DEBUG and log_debug join " ",caller;
 				for($rex->state->{$state_field}){
 					$_//return &$outer_next;# Undefined do nothing
 					if($_){
 						if(my $encoded=encode_base64url $state_encode->($_)){
 							push $_[3]->@*,
 							HTTP_SET_COOKIE,
-								new_cookie($state_name=>$encoded)
+								new_cookie($state_name=>$encoded, COOKIE_PATH, $state_path)
 								->serialize_set_cookie
 							;
 						}

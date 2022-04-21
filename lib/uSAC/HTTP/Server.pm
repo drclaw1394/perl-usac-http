@@ -1,8 +1,12 @@
 package uSAC::HTTP::Server; 
-use Log::ger;
-use Log::OK;
 use strict;
 use warnings;
+
+use Log::ger;
+use Log::OK;
+
+use Try::Catch;
+
 #use constant "OS::darwin"=>$^O =~ /darwin/;
 #use constant "OS::linux"=>0;
 #
@@ -627,15 +631,17 @@ sub usac_include {
 	else{
 		#not a dir . do it
 		Log::OK::TRACE and log_info "Including server script from $path";
-		eval "package $options{package} {
-		unless (do \$path){
+		try {
+			eval "package $options{package} {
+			unless (do \$path){
 
-		log_error \$!;
-		log_error \$@;
+			log_error \$!;
+			log_error \$@;
 
+			}
+			}";
 		}
-		}";
-		if($@){
+		catch{
 			die "Could not include file $path";	
 		}
 	}

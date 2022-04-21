@@ -1,6 +1,10 @@
 package uSAC::HTTP::Cookie;
 #use strict;
 #use warnings;
+
+use Log::ger;
+use Log::OK;
+
 use Exporter 'import';
 
 #Please refer to rfc6265 HTTP State Management Mechanism
@@ -97,12 +101,14 @@ sub expire_cookies {
 		$self->[COOKIE_NAME]=$_;
 		$self->[COOKIE_VALUE]="";
 		$self->[COOKIE_EXPIRES]=time-3600;
+		$self->[COOKIE_PATH]="/";
 		$self;
 	} @_;
 }
 
 #used server side to render a set cookie value
 sub serialize_set_cookie{
+	Log::OK::DEBUG and log_debug "Serializing set cookie";	
 	my $self=shift;
 	my $cookie= "$self->[COOKIE_NAME]=$self->[COOKIE_VALUE]";			#Do value
 	for my $index (COOKIE_MAX_AGE, COOKIE_DOMAIN, COOKIE_PATH, COOKIE_SAMESITE){	#Do Attributes
@@ -120,6 +126,7 @@ sub serialize_set_cookie{
 	$cookie.="; Secure" if defined $self->[COOKIE_SECURE];				#Do flag attributes
 	$cookie.="; HTTPOnly" if defined $self->[COOKIE_HTTPONLY];
 
+	Log::OK::DEBUG and log_debug "$cookie";
 	$cookie;
 }
 

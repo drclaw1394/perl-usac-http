@@ -11,7 +11,7 @@ WriteMakefile(
 		JSON		=> 0,
 		'JSON::XS'     	=> 0,
 		enum	    	=> 0,
-		"Hustle::Table" => "0.3.0",
+		"Hustle::Table" => "0.5.0",
 		"uSAC::SIO"	=> 0,
 		"Sys::Sendfile" => 0,
 
