@@ -415,6 +415,8 @@ sub send_file_uri_norange {
 
                 sub {
                         #NON Send file
+			Log::OK::INFO and log_info "Static: recursive read call";
+			Log::OK::INFO and log_info "Static: ".join ",",caller;
                         seek $in_fh,$offset,0;
                         $total+=$rc=sysread $in_fh, $reply, $read_size;#, $offset;
 			$offset+=$rc;
@@ -436,6 +438,7 @@ sub send_file_uri_norange {
 					return
 				} else {
 					#write and done
+					Log::OK::INFO and log_info "Static: total == content_length";
 					rex_write $matcher,$rex,$code,$out_headers,$reply;
 					return;
 
@@ -444,7 +447,8 @@ sub send_file_uri_norange {
                         }
 
                         elsif($rc){
-				rex_write $matcher, $rex, $code, $out_headers, $reply,__SUB__;
+				Log::OK::INFO and log_info "Static: read $rc bytes";
+				rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__;
                                 return;
                         }
                         elsif( $! != EAGAIN and  $! != EINTR){

@@ -225,6 +225,7 @@ sub chunked{
 		sub {
 			Log::OK::TRACE  and log_trace "Middeware: Chunked Outerware";
 			Log::OK::TRACE  and log_trace "Key count chunked: ". scalar keys %out_ctx;
+			Log::OK::TRACE  and log_trace "Chunked: ". join " ", caller;
 			#\my $bypass=\$out_ctx{$_[1]}; #access the statefull info for this instance and requst
 			my $exe;
 
@@ -266,6 +267,9 @@ sub chunked{
 			#the time we get here. So no need to read from hash
 
 			$ctx//=$out_ctx{$_[1]};
+			Log::OK::TRACE and log_trace join ", ",caller;
+
+			Log::OK::TRACE and log_trace "Chunked: Testing for context";
 			return &$next unless $ctx;
 
 			Log::OK::TRACE and log_trace "DOING CHUNKS";

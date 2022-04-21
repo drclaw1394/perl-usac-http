@@ -1,6 +1,9 @@
 package uSAC::HTTP::Session;
 use feature qw<say state refaliasing>;
 no warnings "experimental";
+use Log::ger;
+use Log::OK;
+
 use Scalar::Util 'openhandle','refaddr', 'weaken';
 use uSAC::SIO::AE::SReader;
 use uSAC::SIO::AE::SWriter;
@@ -71,6 +74,7 @@ sub new {
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 	$self->[dropper_]=sub {
+		Log::OK::TRACE and log_trace "Session: Dropper start";
 		return unless $closeme;#||$_[0];
 		$self->[sr_]->pause;
 		$self->[sw_]->pause;;
@@ -82,6 +86,7 @@ sub new {
 
 		#$self->[write_queue_]->@*=();
 		unshift @{$self->[zombies_]}, $self;
+		Log::OK::TRACE and log_trace "Session: Dropper end";
 
 
 	};

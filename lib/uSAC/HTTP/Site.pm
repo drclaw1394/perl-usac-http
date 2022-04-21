@@ -208,6 +208,7 @@ sub add_route {
 				}
 				else{
 					#$_[1]->writer->(@_[4,5,6]);
+					Log::OK::INFO and log_info "serialize callback ". Dumper $_[5];
 					$_[1][uSAC::HTTP::Rex::write_](@_[4,5,6]);
 				}
 			};

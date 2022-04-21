@@ -86,6 +86,10 @@ sub state_cookie_out {
 		my $outer_next=shift;
 
 			sub {
+				Log::OK::DEBUG and log_debug "StateCookie: top";
+				Log::OK::DEBUG and log_debug join " ",caller;
+				return &$outer_next  unless $_[3]; #Call next unless we have headers
+				Log::OK::DEBUG and log_debug "StateCookie: processing";
 				#route, rex, code, headers, body
 				my $rex=$_[1];
 
@@ -94,8 +98,6 @@ sub state_cookie_out {
 				#if it exisits and defined write state
 
 				#Encode the data if it is defined and we have an encoding function
-				Log::OK::DEBUG and log_debug "StateCookie outerware";
-				Log::OK::DEBUG and log_debug join " ",caller;
 				for($rex->state->{$state_field}){
 					$_//return &$outer_next;# Undefined do nothing
 					if($_){
