@@ -492,7 +492,6 @@ sub rebuild_dispatch {
 		my $table=$lookup{$host}//$lookup{"*.*"};
 		(my $route, $rex->[uSAC::HTTP::Rex::captures_])= $table->[0]($input);
 
-
 		$route->[1][4]++;
 		$route->[1][1]($route,$rex);
 

@@ -181,9 +181,6 @@ sub add_route {
 
 				if($_[3]){
 					\my @h=$_[3];
-					Log::OK::TRACE and log_trace  "Renderer: doing headers";
-					Log::OK::TRACE and log_trace Dumper $_[3];
-					Log::OK::TRACE and log_trace "CODE: $_[2]";
 
 					my $reply=$alloc;#."x";
 					$reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
@@ -199,16 +196,14 @@ sub add_route {
 
 					$reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".LF;
 
-					#$reply.=LF;
-
+					Log::OK::DEBUG and log_debug "Serialize: headers:";
+					Log::OK::DEBUG and log_debug $reply;
 
 					$_[3]=undef;	#mark headers as done
 					$reply.=LF.$_[4]//"";
 					$_[1][uSAC::HTTP::Rex::write_]($reply, @_[5,6]);
 				}
 				else{
-					#$_[1]->writer->(@_[4,5,6]);
-					Log::OK::INFO and log_info "serialize callback ". Dumper $_[5];
 					$_[1][uSAC::HTTP::Rex::write_](@_[4,5,6]);
 				}
 			};

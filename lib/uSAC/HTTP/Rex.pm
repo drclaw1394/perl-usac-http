@@ -99,7 +99,8 @@ sub rex_write{
 		\my @h=$_[3];
 
 		#If headers are supplied, then  process headers
-		Log::OK::TRACE and log_trace "Doing rex write";
+		Log::OK::TRACE and log_trace "REX: Doing rex write====";
+		Log::OK::TRACE and log_trace "REX: close me: ".$session->[uSAC::HTTP::Session::closeme_];
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
 		if($session->[uSAC::HTTP::Session::closeme_]){
@@ -647,7 +648,6 @@ sub usac_data_slurp{
 			else {
 				$mem.=$_[2];
 			}
-			Log::OK::INFO and log_info "syswrite result: $wc for data $_[2]";
 			#TODO: error checking and drop connection on write error
 			if($_[4]){
 				unless($path or $tmp_dir){

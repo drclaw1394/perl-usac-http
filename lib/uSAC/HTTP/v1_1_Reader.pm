@@ -191,7 +191,7 @@ sub make_reader{
 				$r->[uSAC::HTTP::Session::rex_]=$req;
 				$r->[uSAC::HTTP::Session::closeme_]=0;
 				
-				$r->[uSAC::HTTP::Session::closeme_]||= $h{CONNECTION}//"" eq "close" ||$version ne "HTTP/1.1";
+				$r->[uSAC::HTTP::Session::closeme_]||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
 
 				#shift buffer
 
