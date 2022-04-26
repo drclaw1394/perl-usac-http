@@ -190,7 +190,7 @@ sub open_cache {
 
 		my $path= $abs_path.($pre?".$pre":"");
 
-		Log::OK::TRACE and log_trace "Searching for: $path";
+		Log::OK::TRACE and log_trace "Static: Searching for: $path";
 
 		next unless stat($path) and -r _ and ! -d _; #undef if stat fails
 		#or incorrect premissions
@@ -233,6 +233,7 @@ sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
 		my ($matcher,$rex,$user_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
+		Log::OK::TRACE and log_TRACE("send file no range");
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 

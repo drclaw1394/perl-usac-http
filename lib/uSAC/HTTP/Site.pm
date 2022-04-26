@@ -9,6 +9,7 @@ no warnings "experimental";
 use Log::ger;
 use Log::OK;
 use Cwd qw<abs_path>;
+use File::Spec::Functions;
 use Exporter "import";
 
 my @redirects=qw<
@@ -743,7 +744,11 @@ sub usac_mime_db{
 #the origina path
 sub usac_dirname{
 	my %options=@_;	
-	my $path=abs_path((caller)[1]);
+	#Use Cwd::abs_path to normalise path
+	#Use File::Spec::Functions::abs2rel to make relative
+	
+	my $path=abs2rel abs_path((caller)[1]);
+	Log::OK::INFO and log_info "dirname: abspath: ".dirname $path;
 	return dirname $path;
 }
 
@@ -755,8 +760,14 @@ sub usac_path {
 	my %options=@_;
 	return $in_path if ($in_path=~m|^/|); #If path is abs, let it be
 	
-	my $path=$options{root} if $options{root};
-	$path.="/".$in_path if $in_path;
+	my $path;
+	if ($options{root}){
+		$path=$options{root};
+		$path.="/".$in_path if $in_path and $path;
+	}
+	else {
+		$path=$in_path;
+	}
 
 	#$path=abs2rel($path, $options{root});
 	#
