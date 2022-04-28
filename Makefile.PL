@@ -16,6 +16,10 @@ WriteMakefile(
 		"Sys::Sendfile" => 0,
 
 		"Crypt::JWT"	=> 0,
+		"Log::ger"	=> 0,
+		"Log::ger::Output::Screen" => 0,
+		"Log::OK"	=> 0,
+
 	},
 	ABSTRACT_FROM     => 'lib/uSAC/HTTP.pod', # retrieve abstract from docs
 	AUTHOR            => 'Ruben Westerberg',
