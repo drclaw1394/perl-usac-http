@@ -96,7 +96,8 @@ require uSAC::HTTP::Middleware;
 sub rex_write{
 	my $session=$_[1]->[session_];
 	if($_[3]){
-		\my @h=$_[3];
+		#\my @h=$_[3];
+
 
 		#If headers are supplied, then  process headers
 		Log::OK::TRACE and log_trace "REX: Doing rex write====";
@@ -104,18 +105,9 @@ sub rex_write{
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
 		if($session->[uSAC::HTTP::Session::closeme_]){
-			push @h, 
+			push $_[3]->@*, 
 				HTTP_CONNECTION, "close";
 		}
-
-                ###########################################################
-                # else{                                                   #
-                #         push @h,                                        #
-                #                 HTTP_CONNECTION, "keep-alive",          #
-                #                 HTTP_KEEP_ALIVE,"timeout=10, max=1000"; #
-                # }                                                       #
-                ###########################################################
-
 	}
 
 	#Otherwise this is just a body call

@@ -748,7 +748,6 @@ sub usac_dirname{
 	#Use File::Spec::Functions::abs2rel to make relative
 	
 	my $path=abs2rel abs_path((caller)[1]);
-	Log::OK::INFO and log_info "dirname: abspath: ".dirname $path;
 	return dirname $path;
 }
 
