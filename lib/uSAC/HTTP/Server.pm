@@ -21,7 +21,7 @@ use Log::OK {
 	lvl=>"warn"
 };
 
-use feature qw<isa refaliasing say state current_sub>;
+use feature qw<isa refaliasing say state current_sub try>;
 #use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
@@ -638,7 +638,8 @@ sub usac_include {
 			}
 			}";
 		}
-		catch{
+		catch($e){
+			log_error $e;
 			die "Could not include file $path";	
 		}
 	}
