@@ -7,7 +7,6 @@ use Log::ger;
 
 use Log::OK;
 
-#use Try::Catch;
 
 use Exporter 'import';
 use feature qw<refaliasing say state current_sub>;

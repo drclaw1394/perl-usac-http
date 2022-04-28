@@ -5,8 +5,6 @@ use warnings;
 use Log::ger;
 use Log::OK;
 
-use Try::Catch;
-
 #use constant "OS::darwin"=>$^O =~ /darwin/;
 #use constant "OS::linux"=>0;
 #
