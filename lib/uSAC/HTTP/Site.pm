@@ -17,6 +17,7 @@ my @redirects=qw<
 	usac_redirect_found
 	usac_redirect_temporary
 	usac_redirect_not_modified
+	usac_redirect_internal
 	>;
 
 my @errors=qw<
@@ -811,6 +812,15 @@ sub usac_redirect_not_modified {
 	sub {
 		rex_write (@_,HTTP_NOT_MODIFIED, [HTTP_LOCATION, $url],"");
 	}
+}
+
+sub usac_redirect_internal {
+	my $url =pop;
+	sub {
+		rex_redirect_internal @_, $uri;
+		#rex_write (@_,HTTP_NOT_MODIFIED, [HTTP_LOCATION, $url],"");
+	}
+
 }
 
 sub usac_error_not_found {
