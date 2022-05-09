@@ -773,6 +773,7 @@ sub usac_file_under {
 	my $no_encoding=$options{no_encoding};
 	my $do_dir=$options{list_dir}//$options{do_dir};
 	my $pre_encoded=$options{pre_encoded}//[];
+	Log::OK::INFO and log_info "Serving file from  $html_root";
 	Log::OK::TRACE and log_trace "OPTIONS IN: ".join ", ", %options;
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
@@ -858,13 +859,13 @@ sub usac_file_under {
 				next unless $entry;
 				if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 					send_file_uri_range @_, $entry;
-					return;
+					return 1;
 				}
 				else{
 					#Send normal
 					#$static->send_file_uri_norange(@_, $p, $root);
 					send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry;
-					return;
+					return 1;
 				}
 			}
 
@@ -872,13 +873,13 @@ sub usac_file_under {
 				Log::OK::TRACE and log_trace "Static: Listing dir $p";
 				#dir listing
 				$list_dir->(@_, $p);
-				return;
+				return 1;
 			}
 			else {
 				Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
 				#no valid index found so 404
 				rex_error_not_found @_;
-				return;
+				return 1;
 			}
 		}
 
@@ -895,11 +896,11 @@ sub usac_file_under {
 		if($entry){
 			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
 				send_file_uri_range @_, $entry;
-				return;
+				return 1;
 			}
 			else{
 				send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
-				return;
+				return 1;
 			}
 		}
 		else {
@@ -909,7 +910,7 @@ sub usac_file_under {
 			else {
 				#no file found so 404
 				&rex_error_not_found;
-				return;
+				return 1;
 			}
 		}
 	}

@@ -817,7 +817,7 @@ sub usac_redirect_not_modified {
 sub usac_redirect_internal {
 	my $url =pop;
 	sub {
-		rex_redirect_internal @_, $uri;
+		rex_redirect_internal @_, $url;
 		#rex_write (@_,HTTP_NOT_MODIFIED, [HTTP_LOCATION, $url],"");
 	}
 

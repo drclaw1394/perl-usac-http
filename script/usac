@@ -4,9 +4,21 @@ use warnings;
 use version; our $VERSION=version->declare("v0.1");
 use feature qw<say>;
 
+use Log::ger;
+use Log::ger::Output "Screen";
+use Log::ger::Util;
+use Log::OK {
+	lvl=>"info",
+	opt=>"verbose",
+};
+
+Log::ger::Util::set_level Log::OK::LEVEL;
+
+
+
 use Data::Dumper;
 use File::Spec::Functions qw<rel2abs>;
-use File::Basename qw<dirname>;
+use File::Basename qw<dirname basename>;
 use Cwd;
 
 #usac-http server command line utility
@@ -65,12 +77,9 @@ GetOptions \%options,
 $options{listen}//=["0.0.0.0:8080"];
 
 my $welcome="uSAC Server version $VERSION";
-say "=" x length $welcome;
-say $welcome;
-say "";
-if ($verbose) {
-	say "Listening on interface:port => $_" for $options{listen}->@*;
-}
+Log::OK::INFO and log_info $welcome;
+
+Log::OK::DEBUG and log_debug "Listening on interface:port => $_" for $options{listen}->@*;
 
 
 my $server;
@@ -114,26 +123,15 @@ $server=usac_server{
 
                 #add static file routes
                 my $static=$options{"static-file"};
+		my @roots;
                 for my $s (@$static){
-                        #expected in key=value
-                        my ($uri, $target)= split '=>', $s;
-			#NOTE: to overcome the relative to 'script' intended behaviour,
-			#convert to abs paths
-			$target=rel2abs($target, getcwd);
-                        usac_route "$uri/$File_Path", usac_file_from $target;
-                }
+                        push @roots, usac_file_under list_dir=>0, $s;
+                } 
+		usac_route "/", @roots;
 
-                #add static dir routes
-                $static=$options{"static-dir"};
-                for my $s (@$static){
-                        #expected in key=value
+		#TODO: fix dir listing so it can be chainable
 
-                        my ($uri, $target)= split '=>', $s;
-			#NOTE: to overcome the relative to 'script' intended behaviour,
-			#convert to abs paths
-			$target=rel2abs($target,getcwd);
-                        usac_route "$uri/$Dir_Path", usac_dir_from $target;
-                }
+
 	};
 
 	#add additional files
