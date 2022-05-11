@@ -233,7 +233,7 @@ sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
 		my ($matcher,$rex,$user_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
-		Log::OK::TRACE and log_TRACE("send file no range");
+		Log::OK::TRACE and log_trace("send file no range");
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
@@ -445,6 +445,9 @@ sub send_file_uri_norange {
                         }
 
                         elsif($rc){
+				#TODO: need to force break deep recursion due to fast fat pipes
+				# Possibly defer the callback every 10 or 100 times to break the chain
+				#
 				rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__;
                                 return;
                         }

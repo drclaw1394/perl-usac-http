@@ -226,7 +226,7 @@ sub prepare {
 			#say "checking id: $_ time: ", $session->[uSAC::HTTP::Session::time_];
 
 			if(($self->[server_clock_]-$session->[uSAC::HTTP::Session::time_])> $timeout){
-				log_info "DROPPING ID: $_";
+				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
 				$session->[uSAC::HTTP::Session::closeme_]=1;
 				$session->[uSAC::HTTP::Session::dropper_]->();
 				#delete $self->[sessions_]{$_};
