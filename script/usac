@@ -25,6 +25,7 @@ use Cwd;
 use uSAC::HTTP;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Static;
+use uSAC::HTTP::Middleware qw<log_simple>;
 
 
 use Getopt::Long;
@@ -38,8 +39,8 @@ GetOptions \%options,
 	"product=s",
 	"preclude=s@",
 	"postclude=s@",
-	"static-file=s@"	,	#serve files from this location
-	"static-dir=s@",		#serve html rendered dir list from this location
+	"www-root=s@"	,	#serve files from this location
+	"list-dir",		#serve html rendered dir list from this location
 	"ws=s%", 		#connect to uri (unix:// tcp:// udp:// ws:// file://) and just spit the information 
 	"mime-add=s%",		#Specifiy a mime type mapping for an extension, add to list
 	"mime=s%",		#Specifiy a file containing a list of mime types
@@ -49,6 +50,8 @@ GetOptions \%options,
 	"quiet",		#quiet flag
 	"watch",		#watch changes to input files, and relauch
 	"verbose",
+	"log",
+
 
 
 	or die "problem with command line arguments";
@@ -79,16 +82,16 @@ $options{listen}//=["0.0.0.0:8080"];
 my $welcome="uSAC Server version $VERSION";
 Log::OK::INFO and log_info $welcome;
 
-Log::OK::DEBUG and log_debug "Listening on interface:port => $_" for $options{listen}->@*;
 
 
 my $server;
 $server=usac_server{
 	#set the sub product
-	
+	usac_middleware log_simple if $options{log};
 	#add all listeners
 	my $listeners=$options{listen};
 	for my $listener (@$listeners){
+		Log::OK::INFO and log_info "Listening on $listener";
 		usac_listen $listener;
 		#"127.0.0.1:8080";
 				
@@ -100,9 +103,7 @@ $server=usac_server{
 	for my $include (@$includes){
 		#convert to abs for intended behaviour	
 		my $target=rel2abs($include,getcwd);
-		if ($verbose){
-			say "Including config from source:\n $target";
-		}
+		Log::OK::INFO and log_info "Including config from source:\n $target";
 		usac_include $target;
 	}
 
@@ -113,19 +114,26 @@ $server=usac_server{
 		#usac_host "127.0.0.1:8080";
 
 		#add additional files
-		my $hosts=$options{preclude};
+		my $hosts=$options{hosts};
 		for my $host (@$hosts){
+			Log::OK::INFO and log_info "Virtual host $host";
 			usac_host $hosts;
+		}
+		unless(@$hosts){
+			Log::OK::WARN and log_warn "No virtual host setup. Accepting for any host";
 		}
 
 		#add the routes
 		#usac_route "/static/$File_Path" => usac_file_from "../data";
 
                 #add static file routes
-                my $static=$options{"static-file"};
+                my $static=$options{"www-root"};
 		my @roots;
                 for my $s (@$static){
-                        push @roots, usac_file_under list_dir=>0, $s;
+			Log::OK::INFO and log_info "Serving files from: $s Listing dir: ".($options{"list_dir"}?"yes":"no");
+
+
+                        push @roots, usac_file_under list_dir=>$options{"list-dir"}, $s;
                 } 
 		usac_route "/", @roots;
 
@@ -139,9 +147,7 @@ $server=usac_server{
 	for my $include (@$includes){
 		#convert to abs for intended behaviour	
 		my $target=rel2abs($include,getcwd);
-		if ($verbose){
-			say "Including config from source: $target";
-		}
+		Log::OK::INFO and log_info "Including config from source: $target";
 		usac_include $target;
 	}
 };

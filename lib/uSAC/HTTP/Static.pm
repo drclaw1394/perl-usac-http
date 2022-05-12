@@ -468,12 +468,13 @@ sub send_file_uri_norange {
 
 }
 
+
+
 sub _html_dir_list {
 	sub {
-		say "html dir list renderer";
 		my $headers=$_[1];
 		my $entries=$_[2];
-
+		#TODO: add basic style to improve the look?
 		if($headers){
 			$_[0].=
 			"<table>\n"
@@ -496,6 +497,7 @@ sub _html_dir_list {
 		$_[0].="</table>";
 	}
 }
+
 sub _json_dir_list {
 	sub {
 		state  $headers;
@@ -556,7 +558,6 @@ sub make_list_dir {
 
 		#build uri from sysroot
 		my @fs_paths;
-		say  "ABS PATH $abs_path";
 		if($abs_path eq "$html_root/"){
 
 			@fs_paths=<$abs_path*>;	
