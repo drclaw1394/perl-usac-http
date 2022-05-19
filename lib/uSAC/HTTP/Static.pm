@@ -303,9 +303,8 @@ sub send_file_uri_norange {
 					return;
 				}
 				elsif( $! != EAGAIN and  $! != EINTR and $! != EBUSY){
-					say "Send file error";
-					#say $rc;
-					say $!;
+					log_error "Send file error";
+					log_error $!;
 					#delete $cache{$abs_path};
 					#close $in_fh;
 					$session->[uSAC::HTTP::Session::dropper_]->();
@@ -313,7 +312,7 @@ sub send_file_uri_norange {
 				}
 
 				else {  
-					say "EAGAIN";
+					Log::OK::TRACE and log_trace "Static file read: EAGAIN";
 				}
 
 			};
@@ -353,7 +352,8 @@ sub send_file_uri_norange {
 			#HTTP_CONTENT_TYPE, "text/plain",
 			#HTTP_CONTENT_ENCODING, "gzip",
 
-			HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
+			#HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
+
 			HTTP_ETAG,$etag,
 			HTTP_ACCEPT_RANGES,"bytes",
 			@$user_headers
@@ -364,7 +364,7 @@ sub send_file_uri_norange {
 			@ranges=_check_ranges $rex, $content_length;
 			unless(@ranges){
 				$code=HTTP_RANGE_NOT_SATISFIABLE;
-				push @$out_headers, HTTP_CONTENT_RANGE, "*/$content_length";
+				push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
 
 				rex_write $matcher,$rex,$code,$out_headers,"";
 				return;
@@ -374,18 +374,24 @@ sub send_file_uri_norange {
 				my $total_length=0;
 				$total_length+=($_->[1]-$_->[0]+1) for @ranges;
 				push @$out_headers,
-				HTTP_CONTENT_RANGE, "$ranges[0][0]-$ranges[0][1]/$content_length",
+				HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
 				HTTP_CONTENT_LENGTH, $total_length;
+				$content_length=$total_length;
+				shift @ranges;
 			}
 			else{
 
 			}
 		}
+		else {
+				push @$out_headers, HTTP_CONTENT_LENGTH, $content_length;
+
+		}
 
 		Log::OK::TRACE and log_trace join ", ", @$out_headers;
 		
 
-
+		say "METHOD: ", $rex->[uSAC::HTTP::Rex::method_];
 		if(
 			$rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
 			or $code==HTTP_NOT_MODIFIED
@@ -407,22 +413,30 @@ sub send_file_uri_norange {
 			#$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
 			return;
 		}
+
 		#else do the normal copy and write
 
 		#Clamp the readsize to the file size if its smaller
 		$read_size=$content_length if $content_length < $read_size;
 
 		#$offset=length($reply);
-
+		my $recursion_limit=10;
                 sub {
+			state $recursion_counter;
+			$recursion_counter++;
+			say "counter $recursion_counter";
+
                         #NON Send file
-                        seek $in_fh,$offset,0;
+                        seek $in_fh, $offset,0;
                         $total+=$rc=sysread $in_fh, $reply, $read_size;#, $offset;
 			$offset+=$rc;
 
+			say "Total: $total size: $content_length";
                         #non zero read length.. do the write
                         if($total==$content_length){    #end of file
 				if(@ranges){
+					say "ranges and done";
+					say Dumper @ranges;
 					#write and use callback
 					my $sub=__SUB__;
 					rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
@@ -437,6 +451,7 @@ sub send_file_uri_norange {
 					return
 				} else {
 					#write and done
+					say "no ranges and done";
 					rex_write $matcher,$rex,$code,$out_headers,$reply;
 					return;
 
@@ -448,13 +463,28 @@ sub send_file_uri_norange {
 				#TODO: need to force break deep recursion due to fast fat pipes
 				# Possibly defer the callback every 10 or 100 times to break the chain
 				#
-				rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__;
+				if($recursion_counter>=$recursion_limit){
+					$recursion_counter=0;
+					#Do asynchronous callback in next event iteration
+					my $sub=__SUB__;
+					my $t;$t=AE::timer 0,0, sub {
+						$t=undef;
+						#say "async";
+						Log::OK::TRACE and log_trace "Static: async file callback";
+						rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
+					};
+
+				}
+				else {
+					#Do synchronous callback
+					#say "sync";
+					rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__;
+				}
                                 return;
                         }
                         elsif( $! != EAGAIN and  $! != EINTR){
-                                say "READ ERROR from file";
-                                #say $rc;
-                                say $!;
+                                log_error "Static files: READ ERROR from file";
+                                log_error "Error: $!";
                                 #delete $cache{$abs_path};
                                 close $in_fh;
                                 $session->[uSAC::HTTP::Session::dropper_]->();
@@ -585,173 +615,6 @@ sub make_list_dir {
 }
 
 
-sub send_file_uri_range {
-		use  integer;
-
-		my ($route,$rex,$entry)=@_;
-		my $session=$rex->[uSAC::HTTP::Rex::session_];
-
-		my $in_fh=$entry->[fh_];
-
-		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
-		#my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];	#reuses stat from check_access 
-
-
-
-		my @ranges=_check_ranges $rex, $content_length;
-		#$,=", ";
-
-		if(@ranges==0){
-			my $response=
-			"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_RANGE_NOT_SATISFIABLE.LF
-			#.$reply
-			.HTTP_CONTENT_RANGE.": */$content_length".LF           #TODO: Multipart had this in each part, not main header
-			.HTTP_CONNECTION.": close".LF
-			.LF;
-			$session->[uSAC::HTTP::Session::closeme_]=1;
-			$session->[uSAC::HTTP::Session::write_]->($response);
-			return;
-		}
-
-
-		#calculate total length from ranges
-		my $total_length=0;
-		$total_length+=($_->[1]-$_->[0]+1) for @ranges;
-
-
-		#$uri=~$path_ext;        #match results in $1;
-
-		my $boundary="THIS_IS THE BOUNDARY";
-		my $reply=
-		"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_PARTIAL_CONTENT.LF
-		#.uSAC::HTTP::Rex::STATIC_HEADERS
-		.HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF
-		.($session->[uSAC::HTTP::Session::closeme_]?
-			HTTP_CONNECTION.": close".LF
-			:(HTTP_CONNECTION.": Keep-Alive".LF
-				.HTTP_KEEP_ALIVE.": ".	"timeout=5, max=1000".LF
-			)
-		)
-		.HTTP_ETAG.": \"$mod_time-$content_length\"".LF
-		.HTTP_ACCEPT_RANGES.": bytes".LF
-		.do {
-			if(@ranges==1){
-				HTTP_CONTENT_RANGE.": $ranges[0][0]-$ranges[0][1]/$content_length".LF
-				.HTTP_CONTENT_LENGTH.": ".$total_length.LF			#need to be length of multipart
-				.HTTP_CONTENT_TYPE.":".$entry->[content_type_header_][1]
-				.LF
-			}
-			else {
-				HTTP_CONTENT_TYPE.": multipart/byteranges; boundary=$boundary".LF
-				#.HTTP_TRANSFER_ENCODING.": chunked".LF
-				.LF
-			}
-		}
-		;
-		#TODO:
-		#
-		# Need to implement the chunked transfer mechanism or precalculate the
-		# entire multipart length (including headers, LF etc)
-		#
-		# Currently only a single byte range is supported (ie no multipart)
-
-
-		#setup write watcher
-		#my $session=$rex->[uSAC::HTTP::Rex::session_];
-		\my $out_fh=\$session->[uSAC::HTTP::Session::fh_];
-
-		my $state=0;#=@ranges==1?1:0;	#0 single header,1 multi header,2 data
-		my $rc;
-
-		my $index=-1;#=0;#index of current range
-		my $offset;#+=length $reply; #total length
-		my ($start,$end, $chunk_offset, $pos, $length);
-
-		my $reader;$reader= sub {
-			while(1){
-				for($state){
-					if($_ eq 0){
-						#update 
-						$index++;
-						$start=	$ranges[$index][0];
-						$end=	$ranges[$index][1];
-						$chunk_offset=0;
-						$length=$end-$start+1;
-						$pos=$start;
-
-						#normal header
-						#we need to write headers
-						$reply="" if $index; #reset the reply to empty stirng
-						if(@ranges>1){
-							$reply.=
-							LF."--".$boundary.LF
-							.HTTP_CONTENT_RANGE.": $ranges[$index][0]-$ranges[$index][1]/$content_length".LF
-							.$entry->[1]
-							.LF
-						}
-						else {
-							$reply.=LF;
-						}
-						$offset=length $reply;
-						$state=1;
-						redo;
-					}
-
-					elsif($_ == 1){
-						#do data
-						seek $in_fh,$pos,0 or say "Couldnot seek";
-						$chunk_offset+=$rc=sysread $in_fh, $reply, $length-$chunk_offset, $offset;
-						$pos+=$rc;
-
-						unless($rc//0 or $! == EAGAIN or $! == EINTR){
-							say "READ ERROR from file";
-							say $!;
-							#delete $self->[cache_]{$uri};
-							close $in_fh;
-							$reader=undef;
-							#uSAC::HTTP::Session::drop $session;
-							$session->[uSAC::HTTP::Session::dropper_]->();
-							return;
-						}
-						$offset=0;
-						#non zero read length.. do the write	
-						if($chunk_offset==$length){	#end of file
-							#add boundary
-							if(@ranges==1){
-								$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
-								return;
-							}
-							if($index==@ranges-1){
-								#that was the last read of data .. finish
-								$reply.=LF."--".$boundary."--".LF;
-								$state=0;
-								$session->[uSAC::HTTP::Session::write_]->($reply);
-								$reader=undef;
-							}
-							else{
-								#more ranges to follow
-								#$reply=LF;#."--".$boundary.LF;
-								$state=0;
-								$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
-							}
-
-							last;
-						}
-
-						else{
-							$session->[uSAC::HTTP::Session::write_]->($reply, $reader);
-							last;
-						}
-					}
-					else{
-
-					}
-				}
-			}
-		};
-		&$reader;#->();
-}
-
 
 
 #Server static files under the specified root dir
@@ -861,16 +724,8 @@ sub usac_file_under {
 				Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
 				$entry=$cache->{$path}//$static->open_cache($path);
 				next unless $entry;
-				if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-					send_file_uri_range @_, $entry;
-					return 1;
-				}
-				else{
-					#Send normal
-					#$static->send_file_uri_norange(@_, $p, $root);
-					send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry;
-					return 1;
-				}
+				send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry;
+				return 1;
 			}
 
 			if($do_dir){
@@ -898,14 +753,8 @@ sub usac_file_under {
 
 		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded);
 		if($entry){
-			if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-				send_file_uri_range @_, $entry;
-				return 1;
-			}
-			else{
-				send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
-				return 1;
-			}
+			send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
+			return 1;
 		}
 		else {
 			if($next){
@@ -920,27 +769,177 @@ sub usac_file_under {
 	}
 }
 
-
-
-
-sub send_file {
-		my $rex=$_[1];
-		#test for ranges
-		if($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-			#send_file_uri_range @_;
-			return;
-		}
-		elsif($_[2]=~m|/$|){
-			#list_dir @_;
-			return;
-		}
-		else{
-			#Send normal
-			#send_file_uri_norange @_;
-			return;
-		}
-	}
-
-	#enable_cache;
-
 1;
+
+
+
+
+##################################################################################################################################################################
+# sub send_file_uri_range {                                                                                                                                      #
+#                 use  integer;                                                                                                                                  #
+#                                                                                                                                                                #
+#                 my ($route,$rex,$entry)=@_;                                                                                                                    #
+#                 my $session=$rex->[uSAC::HTTP::Rex::session_];                                                                                                 #
+#                                                                                                                                                                #
+#                 my $in_fh=$entry->[fh_];                                                                                                                       #
+#                                                                                                                                                                #
+#                 my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);                                                                               #
+#                 #my (undef,undef,undef,undef,undef,undef,undef,$content_length,undef,$mod_time)=stat $in_fh;#(stat _)[7,9];     #reuses stat from check_access #
+#                                                                                                                                                                #
+#                                                                                                                                                                #
+#                                                                                                                                                                #
+#                 my @ranges=_check_ranges $rex, $content_length;                                                                                                #
+#                 #$,=", ";                                                                                                                                      #
+#                                                                                                                                                                #
+#                 if(@ranges==0){                                                                                                                                #
+#                         my $response=                                                                                                                          #
+#                         "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_RANGE_NOT_SATISFIABLE.LF                                                                     #
+#                         #.$reply                                                                                                                               #
+#                         .HTTP_CONTENT_RANGE.": */$content_length".LF           #TODO: Multipart had this in each part, not main header                         #
+#                         .HTTP_CONNECTION.": close".LF                                                                                                          #
+#                         .LF;                                                                                                                                   #
+#                         $session->[uSAC::HTTP::Session::closeme_]=1;                                                                                           #
+#                         $session->[uSAC::HTTP::Session::write_]->($response);                                                                                  #
+#                         return;                                                                                                                                #
+#                 }                                                                                                                                              #
+#                                                                                                                                                                #
+#                                                                                                                                                                #
+#                 #calculate total length from ranges                                                                                                            #
+#                 my $total_length=0;                                                                                                                            #
+#                 $total_length+=($_->[1]-$_->[0]+1) for @ranges;                                                                                                #
+#                                                                                                                                                                #
+#                                                                                                                                                                #
+#                 #$uri=~$path_ext;        #match results in $1;                                                                                                 #
+#                                                                                                                                                                #
+#                 my $boundary="THIS_IS THE BOUNDARY";                                                                                                           #
+#                 my $reply=                                                                                                                                     #
+#                 "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_PARTIAL_CONTENT.LF                                                                                   #
+#                 #.uSAC::HTTP::Rex::STATIC_HEADERS                                                                                                              #
+#                 .HTTP_DATE.": ".$uSAC::HTTP::Session::Date.LF                                                                                                  #
+#                 .($session->[uSAC::HTTP::Session::closeme_]?                                                                                                   #
+#                         HTTP_CONNECTION.": close".LF                                                                                                           #
+#                         :(HTTP_CONNECTION.": Keep-Alive".LF                                                                                                    #
+#                                 .HTTP_KEEP_ALIVE.": ".  "timeout=5, max=1000".LF                                                                               #
+#                         )                                                                                                                                      #
+#                 )                                                                                                                                              #
+#                 .HTTP_ETAG.": \"$mod_time-$content_length\"".LF                                                                                                #
+#                 .HTTP_ACCEPT_RANGES.": bytes".LF                                                                                                               #
+#                 .do {                                                                                                                                          #
+#                         if(@ranges==1){                                                                                                                        #
+#                                 HTTP_CONTENT_RANGE.": $ranges[0][0]-$ranges[0][1]/$content_length".LF                                                          #
+#                                 .HTTP_CONTENT_LENGTH.": ".$total_length.LF                      #need to be length of multipart                                #
+#                                 .HTTP_CONTENT_TYPE.":".$entry->[content_type_header_][1]                                                                       #
+#                                 .LF                                                                                                                            #
+#                         }                                                                                                                                      #
+#                         else {                                                                                                                                 #
+#                                 HTTP_CONTENT_TYPE.": multipart/byteranges; boundary=$boundary".LF                                                              #
+#                                 #.HTTP_TRANSFER_ENCODING.": chunked".LF                                                                                        #
+#                                 .LF                                                                                                                            #
+#                         }                                                                                                                                      #
+#                 }                                                                                                                                              #
+#                 ;                                                                                                                                              #
+#                 #TODO:                                                                                                                                         #
+#                 #                                                                                                                                              #
+#                 # Need to implement the chunked transfer mechanism or precalculate the                                                                         #
+#                 # entire multipart length (including headers, LF etc)                                                                                          #
+#                 #                                                                                                                                              #
+#                 # Currently only a single byte range is supported (ie no multipart)                                                                            #
+#                                                                                                                                                                #
+#                                                                                                                                                                #
+#                 #setup write watcher                                                                                                                           #
+#                 #my $session=$rex->[uSAC::HTTP::Rex::session_];                                                                                                #
+#                 \my $out_fh=\$session->[uSAC::HTTP::Session::fh_];                                                                                             #
+#                                                                                                                                                                #
+#                 my $state=0;#=@ranges==1?1:0;   #0 single header,1 multi header,2 data                                                                         #
+#                 my $rc;                                                                                                                                        #
+#                                                                                                                                                                #
+#                 my $index=-1;#=0;#index of current range                                                                                                       #
+#                 my $offset;#+=length $reply; #total length                                                                                                     #
+#                 my ($start,$end, $chunk_offset, $pos, $length);                                                                                                #
+#                                                                                                                                                                #
+#                 my $reader;$reader= sub {                                                                                                                      #
+#                         while(1){                                                                                                                              #
+#                                 for($state){                                                                                                                   #
+#                                         if($_ eq 0){                                                                                                           #
+#                                                 #update                                                                                                        #
+#                                                 $index++;                                                                                                      #
+#                                                 $start= $ranges[$index][0];                                                                                    #
+#                                                 $end=   $ranges[$index][1];                                                                                    #
+#                                                 $chunk_offset=0;                                                                                               #
+#                                                 $length=$end-$start+1;                                                                                         #
+#                                                 $pos=$start;                                                                                                   #
+#                                                                                                                                                                #
+#                                                 #normal header                                                                                                 #
+#                                                 #we need to write headers                                                                                      #
+#                                                 $reply="" if $index; #reset the reply to empty stirng                                                          #
+#                                                 if(@ranges>1){                                                                                                 #
+#                                                         $reply.=                                                                                               #
+#                                                         LF."--".$boundary.LF                                                                                   #
+#                                                         .HTTP_CONTENT_RANGE.": $ranges[$index][0]-$ranges[$index][1]/$content_length".LF                       #
+#                                                         .$entry->[1]                                                                                           #
+#                                                         .LF                                                                                                    #
+#                                                 }                                                                                                              #
+#                                                 else {                                                                                                         #
+#                                                         $reply.=LF;                                                                                            #
+#                                                 }                                                                                                              #
+#                                                 $offset=length $reply;                                                                                         #
+#                                                 $state=1;                                                                                                      #
+#                                                 redo;                                                                                                          #
+#                                         }                                                                                                                      #
+#                                                                                                                                                                #
+#                                         elsif($_ == 1){                                                                                                        #
+#                                                 #do data                                                                                                       #
+#                                                 seek $in_fh,$pos,0 or say "Couldnot seek";                                                                     #
+#                                                 $chunk_offset+=$rc=sysread $in_fh, $reply, $length-$chunk_offset, $offset;                                     #
+#                                                 $pos+=$rc;                                                                                                     #
+#                                                                                                                                                                #
+#                                                 unless($rc//0 or $! == EAGAIN or $! == EINTR){                                                                 #
+#                                                         say "READ ERROR from file";                                                                            #
+#                                                         say $!;                                                                                                #
+#                                                         #delete $self->[cache_]{$uri};                                                                         #
+#                                                         close $in_fh;                                                                                          #
+#                                                         $reader=undef;                                                                                         #
+#                                                         #uSAC::HTTP::Session::drop $session;                                                                   #
+#                                                         $session->[uSAC::HTTP::Session::dropper_]->();                                                         #
+#                                                         return;                                                                                                #
+#                                                 }                                                                                                              #
+#                                                 $offset=0;                                                                                                     #
+#                                                 #non zero read length.. do the write                                                                           #
+#                                                 if($chunk_offset==$length){     #end of file                                                                   #
+#                                                         #add boundary                                                                                          #
+#                                                         if(@ranges==1){                                                                                        #
+#                                                                 $session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);  #
+#                                                                 return;                                                                                        #
+#                                                         }                                                                                                      #
+#                                                         if($index==@ranges-1){                                                                                 #
+#                                                                 #that was the last read of data .. finish                                                      #
+#                                                                 $reply.=LF."--".$boundary."--".LF;                                                             #
+#                                                                 $state=0;                                                                                      #
+#                                                                 $session->[uSAC::HTTP::Session::write_]->($reply);                                             #
+#                                                                 $reader=undef;                                                                                 #
+#                                                         }                                                                                                      #
+#                                                         else{                                                                                                  #
+#                                                                 #more ranges to follow                                                                         #
+#                                                                 #$reply=LF;#."--".$boundary.LF;                                                                #
+#                                                                 $state=0;                                                                                      #
+#                                                                 $session->[uSAC::HTTP::Session::write_]->($reply, $reader);                                    #
+#                                                         }                                                                                                      #
+#                                                                                                                                                                #
+#                                                         last;                                                                                                  #
+#                                                 }                                                                                                              #
+#                                                                                                                                                                #
+#                                                 else{                                                                                                          #
+#                                                         $session->[uSAC::HTTP::Session::write_]->($reply, $reader);                                            #
+#                                                         last;                                                                                                  #
+#                                                 }                                                                                                              #
+#                                         }                                                                                                                      #
+#                                         else{                                                                                                                  #
+#                                                                                                                                                                #
+#                                         }                                                                                                                      #
+#                                 }                                                                                                                              #
+#                         }                                                                                                                                      #
+#                 };                                                                                                                                             #
+#                 &$reader;#->();                                                                                                                                #
+# }                                                                                                                                                              #
+#                                                                                                                                                                #
+##################################################################################################################################################################
