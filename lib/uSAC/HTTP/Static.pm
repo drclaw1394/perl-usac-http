@@ -10,6 +10,7 @@ use Data::Dumper;
 use JSON;
 #no feature "indirect";
 use Devel::Peek qw<SvREFCNT>;
+use Scalar::Util qw<weaken>;
 #use Errno qw<:POSIX EACCES ENOENT>;
 use Fcntl qw(O_NONBLOCK O_RDONLY);
 #use File::Spec;
@@ -165,7 +166,7 @@ sub disable_cache {
 sub enable_cache {
 	my $self=shift;
 	unless ($self->[cache_timer_]){
-		$self->[cache_timer_]=AE::timer 0,10,sub {
+		$self->[cache_timer_]=AE::timer 0, 10,sub {
 			my $i;
 			for(keys $self->[cache_]->%*){
 				delete $self->[cache_]{$_} if SvREFCNT $self->[cache_]{$_}[0]==1;
@@ -217,7 +218,7 @@ sub open_cache {
 			else{
 				$entry[content_encoding_]=[];
 			}
-			Log::OK::TRACE and log_trace "pre com: ".$pre;
+			Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
 			Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
 			my $tp=gmtime($entry[mt_]);
 			$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
@@ -247,9 +248,9 @@ sub send_file_uri_norange {
 		my $code=HTTP_OK;
 		my $etag="\"$mod_time-$content_length\"";
 
-		my $offset=0;#=length($reply);
+		my $offset=0;	#Current offset in file
+		my $total=0;	#Current total read from file
 		my $rc;
-		my $total=0;
 
 		my @ranges;
 
@@ -284,12 +285,10 @@ sub send_file_uri_norange {
 						return;	
 					}
 					#ofr drop if no more
-					#Do dropper as we reached the end
-					$session->[uSAC::HTTP::Session::dropper_]->();
+					#Do dropper as we reached the end. use keep alive 
+					$session->[uSAC::HTTP::Session::dropper_]->(1);
 					$out_fh=undef;
 					$ww=undef;
-					#$ww=undef;
-					#$session->[uSAC::HTTP::Session::write_]->($reply, $session->[uSAC::HTTP::Session::dropper_]);
 					return;
 				}
 
@@ -360,6 +359,7 @@ sub send_file_uri_norange {
 
 
 		];
+
 		if($headers->{RANGE}){
 			@ranges=_check_ranges $rex, $content_length;
 			unless(@ranges){
@@ -376,7 +376,9 @@ sub send_file_uri_norange {
 				push @$out_headers,
 				HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
 				HTTP_CONTENT_LENGTH, $total_length;
+
 				$content_length=$total_length;
+				$offset= $ranges[0][0];
 				shift @ranges;
 			}
 			else{
@@ -391,7 +393,6 @@ sub send_file_uri_norange {
 		Log::OK::TRACE and log_trace join ", ", @$out_headers;
 		
 
-		say "METHOD: ", $rex->[uSAC::HTTP::Rex::method_];
 		if(
 			$rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
 			or $code==HTTP_NOT_MODIFIED
@@ -419,39 +420,54 @@ sub send_file_uri_norange {
 		#Clamp the readsize to the file size if its smaller
 		$read_size=$content_length if $content_length < $read_size;
 
-		#$offset=length($reply);
 		my $recursion_limit=10;
-                sub {
+		my $sub;
+                $sub=sub {
+			#This is the callback for itself
+			#if no arguments an error occured
+			unless(@_){
+				say "Socket Write error";
+				$session->[uSAC::HTTP::Session::dropper_]->();
+				say "";
+				return;
+			}
+
 			state $recursion_counter;
 			$recursion_counter++;
-			say "counter $recursion_counter";
 
                         #NON Send file
-                        seek $in_fh, $offset,0;
+                        seek $in_fh, $offset, 0;
                         $total+=$rc=sysread $in_fh, $reply, $read_size;#, $offset;
 			$offset+=$rc;
 
-			say "Total: $total size: $content_length";
                         #non zero read length.. do the write
                         if($total==$content_length){    #end of file
+				Log::OK::DEBUG and log_debug "Static: Complete file/range read";
 				if(@ranges){
-					say "ranges and done";
-					say Dumper @ranges;
 					#write and use callback
-					my $sub=__SUB__;
+					#my $sub=__SUB__;
+					#weaken $sub;
 					rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
+						unless(@_){
+							say "ERROR in writing file (last range write call)";
+							return $sub->();
+						}
+
 						my $r=shift @ranges;
 						$offset=$r->[0];
 						$total=0;
 						$content_length=$r->[1];
+
 						#write new multipart header
-						$sub->();
+						return $sub->(undef);		#Call with arg
 					};
 
 					return
+
 				} else {
+
 					#write and done
-					say "no ranges and done";
+					undef $sub;
 					rex_write $matcher,$rex,$code,$out_headers,$reply;
 					return;
 
@@ -466,10 +482,10 @@ sub send_file_uri_norange {
 				if($recursion_counter>=$recursion_limit){
 					$recursion_counter=0;
 					#Do asynchronous callback in next event iteration
-					my $sub=__SUB__;
+					#my $sub=__SUB__;
+					#weaken $sub;
 					my $t;$t=AE::timer 0,0, sub {
 						$t=undef;
-						#say "async";
 						Log::OK::TRACE and log_trace "Static: async file callback";
 						rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
 					};
@@ -477,23 +493,37 @@ sub send_file_uri_norange {
 				}
 				else {
 					#Do synchronous callback
-					#say "sync";
-					rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__;
+					rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
 				}
                                 return;
                         }
-                        elsif( $! != EAGAIN and  $! != EINTR){
+                        elsif( !defined($rc) and $! != EAGAIN and  $! != EINTR){
                                 log_error "Static files: READ ERROR from file";
                                 log_error "Error: $!";
                                 #delete $cache{$abs_path};
                                 close $in_fh;
-                                $session->[uSAC::HTTP::Session::dropper_]->();
+				#error was with input file not socket. So keep socket alive	
+                                $session->[uSAC::HTTP::Session::dropper_]->(1);
+				undef $sub;
                                 return;
                         }
+			else {
+                                log_error "Static files: Range beyond EOF";
+				log_error "REX: ".$rex->uri;
+				log_error "REX: ".Dumper $rex->headers;
+				log_error "REX: total length: $total";;
+
+				#End of file reached but content range not satisfied
+				#DropClose connection
+                                $session->[uSAC::HTTP::Session::dropper_]->();
+				undef $sub;
+                                return;
+			}
 
                         #else {  EAGAIN }
 
-        }->();
+        };
+	$sub->(undef); #call with an argument to prevent error
 
 
 }

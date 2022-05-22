@@ -5,6 +5,7 @@ use warnings;
 no warnings "experimental";
 use EV;
 use Log::ger;
+use Log::OK;
 use Data::Dumper;
 
 use Exporter 'import';
@@ -130,7 +131,7 @@ sub make_reader{
 					#Exit the loop as we nee more data pushed in
 					#
 					if( length($buf) >2048){
-						#TODO: create a rex a responde with bad request
+						#TODO: create a rex a respond with bad request
 						$r->[uSAC::HTTP::Session::closeme_]=1;
 						$r->[uSAC::HTTP::Session::dropper_]->() 
 					}
@@ -170,7 +171,8 @@ sub make_reader{
 					else{
 						#-1	Need more
                                                 if (length($buf) > MAX_READ_SIZE) {
-                                                        return $r->[uSAC::HTTP::Session::dropper_]->( "Too big headers from rhost for request <".substr($buf, 0, 32)."...>");
+							
+                                                        return $r->[uSAC::HTTP::Session::dropper_]->();
                                                 }
                                                 warn "Need more";
                                                 return;
@@ -193,6 +195,8 @@ sub make_reader{
 				
 				$r->[uSAC::HTTP::Session::closeme_]||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
 
+				Log::OK::DEBUG and log_debug "Reading on session: $r->[uSAC::HTTP::Session::id_]";
+				Log::OK::DEBUG and log_debug "$uri";
 				#shift buffer
 
 				#$buf=substr $buf, pos $buf;# $pos;

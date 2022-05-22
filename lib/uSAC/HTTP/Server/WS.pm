@@ -402,7 +402,7 @@ sub new {
 	my $dropper=sub {
 		$self->[pinger_]=undef;
 		$self->[writer_]=sub {};
-		$old_dropper->();
+		&$old_dropper;
 		$self->[on_close_]->();
 	};
 	$session->[uSAC::HTTP::Session::dropper_]=$dropper;

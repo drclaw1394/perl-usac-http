@@ -227,7 +227,7 @@ sub rex_error_internal {
 	my $session=$_[1][session_];
 	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, [HTTP_CONTENT_LENGTH, 0], '');
 	$session->[uSAC::HTTP::Session::closeme_]=1;
-	$session->[uSAC::HTTP::Session::dropper_]->();
+	$session->[uSAC::HTTP::Session::dropper_]->();	#no 'keep alive' so forces close
 }
 
 
@@ -256,7 +256,7 @@ sub rex_redirect_internal {
 		return;
 	}
 	undef $_[0];
-	Log::OK::TRACE and  log_trace "Redirecting internal to host: $rex->[host_]";
+	Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
 	$rex->[session_]->server->current_cb->(
 		$rex->[host_],
 		join(" ", $rex->@[method_, uri_]),
@@ -270,7 +270,7 @@ sub rex_headers {
 
 sub rex_reply_json {
 	my $data=pop;
-	Log::OK::TRACE and log_trace "rex_reply_json caller: ". join ", ", caller;
+	Log::OK::DEBUG and log_debug "rex_reply_json caller: ". join ", ", caller;
 	rex_write @_, HTTP_OK, [
 		HTTP_CONTENT_TYPE, "text/json",
 		HTTP_CONTENT_LENGTH, length($data),
@@ -552,7 +552,7 @@ sub usac_form_slurp{
 	#convert to abs path to prevent double resolving
 	unless( -d $tmp_dir){
 		my $message= "Could not access directory $tmp_dir for uploads";
-		Log::OK::TRACE and log_error $message;
+		Log::OK::FATAL and log_fatal $message;
 		die $message;
 	}
 

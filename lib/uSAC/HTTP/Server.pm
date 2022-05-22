@@ -350,6 +350,7 @@ sub make_do_client{
 		my $id = ++$seq;
 		my $scheme="http";
 
+		Log::OK::DEBUG and log_debug "Server new client connection: id $id";
 		$session=pop @zombies;
 		if($session){
 			uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;

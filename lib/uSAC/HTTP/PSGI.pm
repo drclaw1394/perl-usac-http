@@ -55,7 +55,7 @@ use constant LF => "\015\012";
 		rex_write( $self->{matcher}, $self->{rex}, $self->{code},$self->{headers}, "");
 
 		$session->[uSAC::HTTP::Session::closeme_]=1;
-		$session->[uSAC::HTTP::Session::dropper_]->();
+		$session->[uSAC::HTTP::Session::dropper_]->();	#no keep alive
 
 		$session->pop_reader;
 	}
@@ -175,7 +175,6 @@ sub usac_to_psgi {
 		my $res=$app->(\%env);
 
 		
-		#my $dropper=$session->[uSAC::HTTP::Session::dropper_];
 		if(ref($res) eq  "CODE"){
 			#delayed response
 			$res->(sub {
@@ -215,6 +214,7 @@ sub do_array {
 
 	$session->pop_reader;
 }
+
 sub do_glob {
 	my ($usac,$rex, $res)=@_;
 	my $dropper=$rex->[uSAC::HTTP::Rex::session_][uSAC::HTTP::Session::dropper_];

@@ -47,25 +47,11 @@ sub new {
 	#my $self=[];
 	my $self=\@_;
         $self->[time_]=$Time; 
-        #############################
-        # $self->[id_]=$_[0];       #
-        # $self->[time_]=$Time;     #
-        # $self->[fh_]=$_[1];       #
-        # $self->[sessions_]=$_[2]; #
-        # $self->[zombies_]=$_[3];  #
-        # $self->[server_]=$_[4];   #
-        # $self->[scheme_]=$_[5];   #
-        #############################
 
 	#$self->[read_stack_]=[];
 	$self->[reader_cache_]={};
 
 	$self->[write_stack_]=[];
-	#$self->[writer_cache_]={};
-
-	#$self->[write_queue_]=[];
-	#$self->[on_body_]=undef;	#allocate all the storage now
-	#$self->[dropper_]=make_dropper($self);
 	#
 	my $server=$self->[server_];
 	my $sessions=$self->[sessions_];
@@ -73,9 +59,15 @@ sub new {
 	\my $fh=\$self->[fh_];
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
+
+	#Takes an a bool argument: keepalive
+	#if a true value is present then no dropping is performed
+	#if a false or non existent value is present, session is closed
 	$self->[dropper_]=sub {
-		Log::OK::TRACE and log_trace "Session: Dropper start";
-		return unless $closeme;#||$_[0];
+		Log::OK::DEBUG and log_debug "Session: Dropper start";
+		$fh or return;	#don't drop if already dropped
+		return unless $closeme or !@_;
+		Log::OK::DEBUG and log_debug "Session: Dropper ".$self->[id_];
 		$self->[sr_]->pause;
 		$self->[sw_]->pause;;
 		delete $sessions->{$self->[id_]};
@@ -85,8 +77,8 @@ sub new {
 		#$closeme=undef;
 
 		#$self->[write_queue_]->@*=();
-		unshift @{$self->[zombies_]}, $self;
-		Log::OK::TRACE and log_trace "Session: Dropper end";
+		#unshift @{$self->[zombies_]}, $self;
+		Log::OK::DEBUG and log_debug "Session: Dropper end";
 
 
 	};
@@ -95,7 +87,6 @@ sub new {
 	$sr->max_read_size=4096*16;
 	#$sr->on_read=\$self->[read_];
 	$sr->on_eof = $sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
-	#$sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
 	$sr->timing(\$self->[time_], \$Time);
 	$self->[sr_]=$sr;
 	uSAC::SIO::AE::SReader::start $sr;
@@ -126,16 +117,10 @@ sub revive {
 	#$self->[write_queue_]->@*=();
 	$self->[write_stack_]=[];
 	$self->[closeme_]=undef;
-	#$self->[sr_]->start($self->[fh_]);
 	uSAC::SIO::AE::SReader::start $self->[sr_], $self->[fh_];
-	#$self->[sw_]=uSAC::SIO::AE::SWriter->new($self->[fh_]);
 	$self->[sw_]->set_write_handle($self->[fh_]);
 
-	#make writer
-	#$self->[sw_]=uSAC::SWriter->new($self,$self->[fh_]);
 	
-	#$self->[sw_]->on_error=$self->[dropper_];
-	#$self->[write_]=$self->[sw_]->writer;
 	return $self;
 }
 
