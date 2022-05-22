@@ -5,6 +5,7 @@ use Log::ger;
 use Log::OK;
 
 use Scalar::Util 'openhandle','refaddr', 'weaken';
+use Devel::Peek qw<SvREFCNT>;
 use uSAC::SIO::AE::SReader;
 use uSAC::SIO::AE::SWriter;
 use Data::Dumper;
@@ -60,6 +61,21 @@ sub new {
 	\my $id=\$self->[id_];
 	\my $closeme=\$self->[closeme_];
 
+	#make reader
+	my $sr=uSAC::SIO::AE::SReader->new($self->[fh_]);
+	$sr->max_read_size=4096*16;
+	#$sr->on_read=\$self->[read_];
+	$sr->on_eof = $sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
+	$sr->timing(\$self->[time_], \$Time);
+	$self->[sr_]=$sr;
+
+
+	uSAC::SIO::AE::SReader::start $sr;
+	#$sr->start;
+
+	#make writer
+	$self->[sw_]=uSAC::SIO::AE::SWriter->new($self->[fh_]);
+
 	#Takes an a bool argument: keepalive
 	#if a true value is present then no dropping is performed
 	#if a false or non existent value is present, session is closed
@@ -69,7 +85,7 @@ sub new {
 		return unless $closeme or !@_;
 		Log::OK::DEBUG and log_debug "Session: Dropper ".$self->[id_];
 		$self->[sr_]->pause;
-		$self->[sw_]->pause;;
+		$self->[sw_]->pause;
 		delete $sessions->{$self->[id_]};
 		close $fh;
 		$fh=undef;
@@ -78,26 +94,27 @@ sub new {
 
 		#$self->[write_queue_]->@*=();
 		#unshift @{$self->[zombies_]}, $self;
+		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
+		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self->[dropper_]);	
+		$self->[dropper_]=undef;
+		undef $sr->on_eof;
+		undef $sr->on_error;
+
+		undef $self->[sw_]->on_error;
+		undef $self->[sw_];
+		undef $self->[sr_];
+		undef $self;
+
 		Log::OK::DEBUG and log_debug "Session: Dropper end";
 
 
 	};
-	#make reader
-	my $sr=uSAC::SIO::AE::SReader->new($self->[fh_]);
-	$sr->max_read_size=4096*16;
-	#$sr->on_read=\$self->[read_];
-	$sr->on_eof = $sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
-	$sr->timing(\$self->[time_], \$Time);
-	$self->[sr_]=$sr;
-	uSAC::SIO::AE::SReader::start $sr;
-	#$sr->start;
 
-	#make writer
-	$self->[sw_]=uSAC::SIO::AE::SWriter->new($self->[fh_]);
 	$self->[sw_]->on_error=$self->[dropper_];
 	$self->[sw_]->timing(\$self->[time_], \$Time);
 	$self->[write_]=$self->[sw_]->writer;
 
+	weaken $self->[write_];
 
 	bless $self,$package;
 	#make entry on the write stack
@@ -183,5 +200,9 @@ our $timer=AE::timer 0,1, sub {
 };
 
 
+sub DESTROY {
+
+	Log::OK::DEBUG and log_debug "+++++++Session destroyed: $_[0]->[id_]";
+}
 
 1;

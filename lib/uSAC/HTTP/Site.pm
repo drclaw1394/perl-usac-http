@@ -301,8 +301,16 @@ sub _strip_prefix {
 
 				&$inner_next; #call the next
 				#Check the inprogress flag
-				unless ($_[1][session_][uSAC::HTTP::Session::in_progress_]){
-					log_error("NO ENDPOINT REPLIED for". $_[1]->[uri_]);
+				#TODO: The session can go out of scope here. Need a more
+				#consistent approach to testing if a reply is in progress
+				for($_[1][uSAC::HTTP::Rex::session_]){
+					if($_ and  !$_->[uSAC::HTTP::Session::in_progress_]){
+						log_error("NO ENDPOINT REPLIED for". $_[1]->[uri_]);
+					}
+					else {
+						log_error("SESSION OUT OF SCOPE progress check:". $_[1]->[uri_]);
+
+					}
 				}
 			}
 		},

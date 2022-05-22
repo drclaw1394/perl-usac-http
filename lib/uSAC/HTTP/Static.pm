@@ -236,7 +236,13 @@ sub send_file_uri_norange {
 		my ($matcher,$rex,$user_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
 		Log::OK::TRACE and log_trace("send file no range");
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
+
+		weaken $session;
+		weaken $rex;
+		weaken $matcher;
+
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
+		Log::OK::INFO and log_info( "static: in progress set");
 
 		my $in_fh=$entry->[fh_];
 
@@ -427,6 +433,7 @@ sub send_file_uri_norange {
 			#if no arguments an error occured
 			unless(@_){
 				say "Socket Write error";
+				undef $sub;
 				$session->[uSAC::HTTP::Session::dropper_]->();
 				say "";
 				return;
@@ -435,6 +442,7 @@ sub send_file_uri_norange {
 			state $recursion_counter;
 			$recursion_counter++;
 
+			$reply=""; #reset buffer
                         #NON Send file
                         seek $in_fh, $offset, 0;
                         $total+=$rc=sysread $in_fh, $reply, $read_size;#, $offset;
@@ -453,6 +461,7 @@ sub send_file_uri_norange {
 							return $sub->();
 						}
 
+						#TODO: FIX MULTIPART RANGE RESPONSE
 						my $r=shift @ranges;
 						$offset=$r->[0];
 						$total=0;
@@ -468,11 +477,9 @@ sub send_file_uri_norange {
 
 					#write and done
 					undef $sub;
-					rex_write $matcher,$rex,$code,$out_headers,$reply;
+					rex_write $matcher, $rex, $code, $out_headers, $reply;
 					return;
-
 				}
-
                         }
 
                         elsif($rc){
@@ -484,7 +491,7 @@ sub send_file_uri_norange {
 					#Do asynchronous callback in next event iteration
 					#my $sub=__SUB__;
 					#weaken $sub;
-					my $t;$t=AE::timer 0,0, sub {
+					my $t; $t=AE::timer 0,0, sub {
 						$t=undef;
 						Log::OK::TRACE and log_trace "Static: async file callback";
 						rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;

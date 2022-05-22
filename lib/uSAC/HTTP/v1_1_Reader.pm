@@ -191,6 +191,8 @@ sub make_reader{
 
 
 				$r->[uSAC::HTTP::Session::rex_]=$req;
+				weaken $r->[uSAC::HTTP::Session::rex_];
+
 				$r->[uSAC::HTTP::Session::closeme_]=0;
 				
 				$r->[uSAC::HTTP::Session::closeme_]||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
@@ -208,13 +210,6 @@ sub make_reader{
 					"$method $uri",
 					$req
 				);
-                                #####################################
-                                # $cb->(                            #
-                                #         #"$h{HOST} $method $uri", #
-                                #         "$host $method $uri",     #
-                                #         $req                      #
-                                # );                                #
-                                #####################################
 				return;
 
 			}

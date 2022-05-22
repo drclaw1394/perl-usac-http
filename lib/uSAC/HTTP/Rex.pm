@@ -29,6 +29,7 @@ use Exporter 'import';
 use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
+use Scalar::Util 'weaken';
 use Data::Dumper;
 
 our @EXPORT_OK=qw<rex_headers 
@@ -325,7 +326,6 @@ sub writer {
 sub new {
 	#my ($package, $session, $headers, $host, $version, $method, $uri)=@_;
 
-	my $self=[];
 	state $id=0;
 	my $query_string="";
 	if((my $i=index($_[5], "?"))>=0){
@@ -333,9 +333,12 @@ sub new {
 	}
 	my $write=$_[1]->[uSAC::HTTP::Session::write_];
 
-	bless [ $_[4], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[], $id++], $_[0];
+	my $self=bless [ $_[4], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[], $id++], $_[0];
 
+	weaken $self->[session_];
+	weaken $self->[write_];
 
+	$self;
 }
 
 
@@ -713,7 +716,9 @@ sub parse_query_params_old {
 	return $kv;
 }
 
-
+sub DESTROY {
+	Log::OK::DEBUG and log_debug "+++++++Destroy rex";
+}
 #binary data.
 # might have contetn-encoding apply however ie base64, gzip
 
