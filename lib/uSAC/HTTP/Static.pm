@@ -242,7 +242,6 @@ sub send_file_uri_norange {
 		weaken $matcher;
 
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
-		Log::OK::INFO and log_info( "static: in progress set");
 
 		my $in_fh=$entry->[fh_];
 
@@ -432,10 +431,8 @@ sub send_file_uri_norange {
 			#This is the callback for itself
 			#if no arguments an error occured
 			unless(@_){
-				say "Socket Write error";
 				undef $sub;
 				$session->[uSAC::HTTP::Session::dropper_]->();
-				say "";
 				return;
 			}
 
@@ -457,7 +454,6 @@ sub send_file_uri_norange {
 					#weaken $sub;
 					rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
 						unless(@_){
-							say "ERROR in writing file (last range write call)";
 							return $sub->();
 						}
 

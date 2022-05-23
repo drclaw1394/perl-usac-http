@@ -305,10 +305,10 @@ sub _strip_prefix {
 				#consistent approach to testing if a reply is in progress
 				for($_[1][uSAC::HTTP::Rex::session_]){
 					if($_ and  !$_->[uSAC::HTTP::Session::in_progress_]){
-						log_error("NO ENDPOINT REPLIED for". $_[1]->[uri_]);
+						Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uri_]);
 					}
 					else {
-						log_error("SESSION OUT OF SCOPE progress check:". $_[1]->[uri_]);
+						Log::OK::TRACE and log_trace("SESSION and REX complete and OUT OF SCOPE:". $_[1]->[uri_]);
 
 					}
 				}
