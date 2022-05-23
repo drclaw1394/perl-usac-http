@@ -81,6 +81,7 @@ sub new {
 	#if a false or non existent value is present, session is closed
 	$self->[dropper_]=sub {
 		Log::OK::DEBUG and log_debug "Session: Dropper start";
+		$self->[rex_]=undef;
 		$fh or return;	#don't drop if already dropped
 		return unless $closeme or !@_;
 		Log::OK::DEBUG and log_debug "Session: Dropper ".$self->[id_];
@@ -93,17 +94,21 @@ sub new {
 		#$closeme=undef;
 
 		#$self->[write_queue_]->@*=();
-		#unshift @{$self->[zombies_]}, $self;
+		
+		unshift @{$self->[zombies_]}, $self;
+		
 		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
 		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self->[dropper_]);	
-		$self->[dropper_]=undef;
-		undef $sr->on_eof;
-		undef $sr->on_error;
-
-		undef $self->[sw_]->on_error;
-		undef $self->[sw_];
-		undef $self->[sr_];
-		undef $self;
+                #################################
+                # $self->[dropper_]=undef;      #
+                # undef $sr->on_eof;            #
+                # undef $sr->on_error;          #
+                #                               #
+                # undef $self->[sw_]->on_error; #
+                # undef $self->[sw_];           #
+                # undef $self->[sr_];           #
+                # undef $self;                  #
+                #################################
 
 		Log::OK::DEBUG and log_debug "Session: Dropper end";
 

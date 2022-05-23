@@ -333,10 +333,12 @@ sub new {
 	}
 	my $write=$_[1]->[uSAC::HTTP::Session::write_];
 
+	Log::OK::DEBUG and log_debug "+++++++Create rex: $id";
 	my $self=bless [ $_[4], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[], $id++], $_[0];
 
 	weaken $self->[session_];
-	weaken $self->[write_];
+	$self->[session_][uSAC::HTTP::Session::rex_]=$self;
+	#weaken $self->[write_];
 
 	$self;
 }
@@ -717,7 +719,7 @@ sub parse_query_params_old {
 }
 
 sub DESTROY {
-	Log::OK::DEBUG and log_debug "+++++++Destroy rex";
+	Log::OK::DEBUG and log_debug "+++++++Destroy rex: $_[0][id_],  session $_[0][session_][uSAC::HTTP::Session::id_]";
 }
 #binary data.
 # might have contetn-encoding apply however ie base64, gzip

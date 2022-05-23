@@ -239,7 +239,7 @@ sub send_file_uri_norange {
 
 		weaken $session;
 		weaken $rex;
-		weaken $matcher;
+		#weaken $matcher;
 
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
@@ -433,6 +433,7 @@ sub send_file_uri_norange {
 			unless(@_){
 				undef $sub;
 				$session->[uSAC::HTTP::Session::dropper_]->();
+				undef $rex;
 				return;
 			}
 
@@ -472,8 +473,10 @@ sub send_file_uri_norange {
 				} else {
 
 					#write and done
-					undef $sub;
+					say "Rex: $rex";
 					rex_write $matcher, $rex, $code, $out_headers, $reply;
+					undef $sub;
+					undef $rex;
 					return;
 				}
                         }
@@ -489,14 +492,24 @@ sub send_file_uri_norange {
 					#weaken $sub;
 					my $t; $t=AE::timer 0,0, sub {
 						$t=undef;
-						Log::OK::TRACE and log_trace "Static: async file callback";
-						rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
+						if($rex){
+							Log::OK::DEBUG and log_debug "parital async write of $rc/$total bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
+							rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
+							undef $sub;
+						}
 					};
 
 				}
 				else {
 					#Do synchronous callback
-					rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
+					if($rex){
+						Log::OK::DEBUG and log_debug "parital write of $rc/$total bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
+						rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
+					}
+					else {
+						#If the rex is undef, it was closed by the server sweeping inactive sessions.
+						undef $sub;
+					}
 				}
                                 return;
                         }
@@ -508,6 +521,7 @@ sub send_file_uri_norange {
 				#error was with input file not socket. So keep socket alive	
                                 $session->[uSAC::HTTP::Session::dropper_]->(1);
 				undef $sub;
+				undef $rex;
                                 return;
                         }
 			else {
@@ -520,6 +534,7 @@ sub send_file_uri_norange {
 				#DropClose connection
                                 $session->[uSAC::HTTP::Session::dropper_]->();
 				undef $sub;
+				undef $rex;
                                 return;
 			}
 
@@ -791,6 +806,7 @@ sub usac_file_under {
 
 		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded);
 		if($entry){
+			Log::OK::DEBUG and log_debug "Serving static file: $path on rex: $_[1][uSAC::HTTP::Rex::id_]";
 			send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
 			return 1;
 		}

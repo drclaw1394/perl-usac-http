@@ -162,7 +162,6 @@ sub add_route {
 			sub{
 				no warnings qw<numeric uninitialized>;
 
-
 				Log::OK::TRACE and log_trace "Main serialiser";
 				Log::OK::TRACE and log_trace join  " ", caller;
 				#my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
@@ -176,13 +175,14 @@ sub add_route {
 				state $server=$session->[uSAC::HTTP::Session::server_];
 				state $static_headers=$server->static_headers;
 
-				if($server!=$session->[uSAC::HTTP::Session::server_]){
-					$server=$session->[uSAC::HTTP::Session::server_];
-					$static_headers=$server->static_headers;
-				}
 
 				if($_[3]){
 					\my @h=$_[3];
+					if($server!=$session->[uSAC::HTTP::Session::server_]){
+						say  "session id", $session->[uSAC::HTTP::Session::id_];
+						$server=$session->[uSAC::HTTP::Session::server_];
+						$static_headers=$server->static_headers;
+					}
 
 					my $reply=$alloc;#."x";
 					$reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
