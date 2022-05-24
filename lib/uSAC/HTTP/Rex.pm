@@ -111,6 +111,7 @@ sub rex_write{
 		}
 	}
 
+
 	#Otherwise this is just a body call
 	#
 	
@@ -338,7 +339,8 @@ sub new {
 
 	weaken $self->[session_];
 	$self->[session_][uSAC::HTTP::Session::rex_]=$self;
-	#weaken $self->[write_];
+	weaken $self->[session_][uSAC::HTTP::Session::rex_];
+	weaken $self->[write_];
 
 	$self;
 }
@@ -718,9 +720,11 @@ sub parse_query_params_old {
 	return $kv;
 }
 
-sub DESTROY {
-	Log::OK::DEBUG and log_debug "+++++++Destroy rex: $_[0][id_],  session $_[0][session_][uSAC::HTTP::Session::id_]";
-}
+##############################################################################################################################
+# sub DESTROY {                                                                                                              #
+#         Log::OK::DEBUG and log_debug "+++++++Destroy rex: $_[0][id_],  session $_[0][session_][uSAC::HTTP::Session::id_]"; #
+# }                                                                                                                          #
+##############################################################################################################################
 #binary data.
 # might have contetn-encoding apply however ie base64, gzip
 

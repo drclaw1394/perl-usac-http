@@ -170,7 +170,7 @@ sub add_route {
 				# then calls 
 				#
 				my $session=$_[1]->[uSAC::HTTP::Rex::session_];
-				$_[5]//=$session->[uSAC::HTTP::Session::dropper_];# unless $_[5];	#If no cb, then assume dropper
+				my $cb=$_[5]//$session->[uSAC::HTTP::Session::dropper_];# unless $_[5];	#If no cb, then assume dropper
 
 				state $server=$session->[uSAC::HTTP::Session::server_];
 				state $static_headers=$server->static_headers;
@@ -203,10 +203,10 @@ sub add_route {
 
 					$_[3]=undef;	#mark headers as done
 					$reply.=LF.$_[4]//"";
-					$_[1][uSAC::HTTP::Rex::write_]($reply, @_[5,6]);
+					$_[1][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
 				}
 				else{
-					$_[1][uSAC::HTTP::Rex::write_](@_[4,5,6]);
+					$_[1][uSAC::HTTP::Rex::write_]($_[4],$cb,$_[6]);
 				}
 			};
 	if(@outer){

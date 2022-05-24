@@ -32,7 +32,7 @@ our @EXPORT=@EXPORT_OK;
 use constant LF => "\015\012";
 my $path_ext=	qr{\.([^.]*)$}ao;
 
-my $read_size=4096*16;
+my $read_size=4096;;
 my %stat_cache;
 
 use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_>;
@@ -366,6 +366,7 @@ sub send_file_uri_norange {
 		];
 
 		if($headers->{RANGE}){
+			Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{RANGE}";
 			@ranges=_check_ranges $rex, $content_length;
 			unless(@ranges){
 				$code=HTTP_RANGE_NOT_SATISFIABLE;
@@ -426,16 +427,19 @@ sub send_file_uri_norange {
 		$read_size=$content_length if $content_length < $read_size;
 
 		my $recursion_limit=10;
-		my $sub;
-                $sub=sub {
+		my $t;
+		my $count=0;
+                (sub {
+			$count++;
 			#This is the callback for itself
 			#if no arguments an error occured
 			unless(@_){
-				undef $sub;
+				#undef $sub;
 				$session->[uSAC::HTTP::Session::dropper_]->();
-				undef $rex;
+				#undef $rex;
 				return;
 			}
+			my $sub=__SUB__;
 
 			state $recursion_counter;
 			$recursion_counter++;
@@ -449,34 +453,30 @@ sub send_file_uri_norange {
                         #non zero read length.. do the write
                         if($total==$content_length){    #end of file
 				Log::OK::DEBUG and log_debug "Static: Complete file/range read";
+				undef $t;
 				if(@ranges){
-					#write and use callback
-					#my $sub=__SUB__;
-					#weaken $sub;
-					rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
-						unless(@_){
-							return $sub->();
-						}
+                                        rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
+                                                unless(@_){
+                                                        return $sub->();
+                                                }
 
-						#TODO: FIX MULTIPART RANGE RESPONSE
-						my $r=shift @ranges;
-						$offset=$r->[0];
-						$total=0;
-						$content_length=$r->[1];
+                                                #TODO: FIX MULTIPART RANGE RESPONSE
+                                                my $r=shift @ranges;
+                                                $offset=$r->[0];
+                                                $total=0;
+                                                $content_length=$r->[1];
 
-						#write new multipart header
-						return $sub->(undef);		#Call with arg
-					};
+                                                #write new multipart header
+                                                return $sub->(undef);           #Call with arg
+                                        };
 
 					return
 
 				} else {
 
 					#write and done
-					say "Rex: $rex";
-					rex_write $matcher, $rex, $code, $out_headers, $reply;
-					undef $sub;
-					undef $rex;
+					Log::OK::DEBUG and log_debug "Static: write and done: writer sub ref count: ".SvREFCNT($sub);
+					rex_write $matcher, $rex, $code, $out_headers, $reply, undef;
 					return;
 				}
                         }
@@ -485,16 +485,20 @@ sub send_file_uri_norange {
 				#TODO: need to force break deep recursion due to fast fat pipes
 				# Possibly defer the callback every 10 or 100 times to break the chain
 				#
+				
 				if($recursion_counter>=$recursion_limit){
 					$recursion_counter=0;
 					#Do asynchronous callback in next event iteration
 					#my $sub=__SUB__;
 					#weaken $sub;
-					my $t; $t=AE::timer 0,0, sub {
+					$t=AE::timer 0, 0, sub {
 						$t=undef;
 						if($rex){
-							Log::OK::DEBUG and log_debug "parital async write of $rc/$total bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
+							#Log::OK::DEBUG and log_debug "parital async write of $rc bytes $total/$content_length bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
+							#Log::OK::DEBUG and log_debug "Static: timeout: writer sub ref count: ".SvREFCNT($sub);
 							rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
+						}
+						else {
 							undef $sub;
 						}
 					};
@@ -503,8 +507,10 @@ sub send_file_uri_norange {
 				else {
 					#Do synchronous callback
 					if($rex){
-						Log::OK::DEBUG and log_debug "parital write of $rc/$total bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
-						rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
+						#Log::OK::DEBUG and log_debug "parital write of $rc bytes $total/$content_length bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
+						#Log::OK::DEBUG and log_debug "$sub";
+						#Log::OK::DEBUG and log_debug "Static: writer sub ref count: ".SvREFCNT($sub);
+						rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__;
 					}
 					else {
 						#If the rex is undef, it was closed by the server sweeping inactive sessions.
@@ -521,7 +527,7 @@ sub send_file_uri_norange {
 				#error was with input file not socket. So keep socket alive	
                                 $session->[uSAC::HTTP::Session::dropper_]->(1);
 				undef $sub;
-				undef $rex;
+				#undef $rex;
                                 return;
                         }
 			else {
@@ -534,14 +540,15 @@ sub send_file_uri_norange {
 				#DropClose connection
                                 $session->[uSAC::HTTP::Session::dropper_]->();
 				undef $sub;
-				undef $rex;
+				#undef $rex;
                                 return;
 			}
 
                         #else {  EAGAIN }
 
-        };
-	$sub->(undef); #call with an argument to prevent error
+        })->(undef); #call with an argument to prevent error
+
+	#weaken $sub;	#NOTE: This is very important! Memory leak otherwise
 
 
 }

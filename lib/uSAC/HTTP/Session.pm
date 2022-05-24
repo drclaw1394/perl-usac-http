@@ -65,7 +65,8 @@ sub new {
 	my $sr=uSAC::SIO::AE::SReader->new($self->[fh_]);
 	$sr->max_read_size=4096*16;
 	#$sr->on_read=\$self->[read_];
-	$sr->on_eof = $sr->on_error = sub {$self->[closeme_]=1; $self->[dropper_]->()};
+	($sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]->()});
+	($sr->on_error=$sr->on_eof);
 	$sr->timing(\$self->[time_], \$Time);
 	$self->[sr_]=$sr;
 
@@ -81,9 +82,16 @@ sub new {
 	#if a false or non existent value is present, session is closed
 	$self->[dropper_]=sub {
 		Log::OK::DEBUG and log_debug "Session: Dropper start";
+		Log::OK::DEBUG and log_debug join ", " , caller;
+		#Normal end of transaction operations
 		$self->[rex_]=undef;
+
+
 		$fh or return;	#don't drop if already dropped
 		return unless $closeme or !@_;
+
+		#End of session transactions
+		#
 		Log::OK::DEBUG and log_debug "Session: Dropper ".$self->[id_];
 		$self->[sr_]->pause;
 		$self->[sw_]->pause;
@@ -95,27 +103,34 @@ sub new {
 
 		#$self->[write_queue_]->@*=();
 		
-		unshift @{$self->[zombies_]}, $self;
+		if($self->[zombies_]->@* < 10){
+			unshift @{$self->[zombies_]}, $self;
+		}
+		else{
+			#################################
+			$self->[dropper_]=undef;      #
+			undef $sr->on_eof;            #
+			undef $sr->on_error;          #
+			#                               #
+			 undef $self->[sw_]->on_error; #
+			# undef $self->[sw_];           #
+			# undef $self->[sr_];           #
+			 undef $self;                  #
+			#################################
+
+		}
+
+		Log::OK::DEBUG and log_debug "Session: zombies: ".$self->[zombies_]->@*;
 		
 		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
 		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self->[dropper_]);	
-                #################################
-                # $self->[dropper_]=undef;      #
-                # undef $sr->on_eof;            #
-                # undef $sr->on_error;          #
-                #                               #
-                # undef $self->[sw_]->on_error; #
-                # undef $self->[sw_];           #
-                # undef $self->[sr_];           #
-                # undef $self;                  #
-                #################################
 
 		Log::OK::DEBUG and log_debug "Session: Dropper end";
 
 
 	};
 
-	$self->[sw_]->on_error=$self->[dropper_];
+	($self->[sw_]->on_error=$self->[dropper_]);
 	$self->[sw_]->timing(\$self->[time_], \$Time);
 	$self->[write_]=$self->[sw_]->writer;
 
@@ -205,9 +220,11 @@ our $timer=AE::timer 0,1, sub {
 };
 
 
-sub DESTROY {
-
-	Log::OK::DEBUG and log_debug "+++++++Session destroyed: $_[0]->[id_]";
-}
+##################################################################################
+# sub DESTROY {                                                                  #
+#                                                                                #
+#         Log::OK::DEBUG and log_debug "+++++++Session destroyed: $_[0]->[id_]"; #
+# }                                                                              #
+##################################################################################
 
 1;
