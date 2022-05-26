@@ -29,7 +29,6 @@ use Exporter 'import';
 use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
-use Scalar::Util 'weaken';
 use Data::Dumper;
 
 our @EXPORT_OK=qw<rex_headers 

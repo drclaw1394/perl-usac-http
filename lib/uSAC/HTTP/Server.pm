@@ -340,6 +340,7 @@ sub make_do_client{
 		#while ($fl and ($peer = accept my $fh, $fl)) {
 
 		binmode	$fh, ":raw";
+
 		#Linux does not inherit the socket flags from parent socket. But BSD does.
 		#Compile time disabling with constants
 		OS::linux and fcntl $fh, F_SETFL,O_NONBLOCK;
