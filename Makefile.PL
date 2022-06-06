@@ -14,11 +14,13 @@ WriteMakefile(
 		"Hustle::Table" => "0.5.0",
 		"uSAC::SIO"	=> 0,
 		"Sys::Sendfile" => 0,
+		
 
 		"Crypt::JWT"	=> 0,
 		"Log::ger"	=> 0,
 		"Log::ger::Output::Screen" => 0,
 		"Log::OK"	=> 0,
+		"uSAC::MIME"	=> 0
 
 	},
 	ABSTRACT_FROM     => 'lib/uSAC/HTTP.pod', # retrieve abstract from docs

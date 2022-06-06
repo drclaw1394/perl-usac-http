@@ -104,6 +104,12 @@ sub new {
 		#$self->[write_queue_]->@*=();
 		
 		if($self->[zombies_]->@* < 10){
+			# NOTE: Complete reuses of a zombie may still be causing corruption
+			# Suspect that the rex object is not being release intime 
+			# when service static files.
+			# Forced rex to be undef on IO error in static server.. Lets
+			# see if that fixes the issue.
+			# Otherwise comment out the line below
 			unshift @{$self->[zombies_]}, $self;
 		}
 		else{

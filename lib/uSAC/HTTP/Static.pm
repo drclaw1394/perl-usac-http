@@ -239,7 +239,6 @@ sub send_file_uri_norange {
 
 		weaken $session;
 		weaken $rex;
-		#weaken $matcher;
 
 		$session->[uSAC::HTTP::Session::in_progress_]=1;
 
@@ -436,7 +435,7 @@ sub send_file_uri_norange {
 			unless(@_){
 				#undef $sub;
 				$session->[uSAC::HTTP::Session::dropper_]->();
-				#undef $rex;
+				undef $rex;
 				return;
 			}
 			my $sub=__SUB__;
@@ -482,15 +481,11 @@ sub send_file_uri_norange {
                         }
 
                         elsif($rc){
-				#TODO: need to force break deep recursion due to fast fat pipes
-				# Possibly defer the callback every 10 or 100 times to break the chain
-				#
+				#break deep recursion due to fast fat pipes with shedualed CB every 10 calls
 				
 				if($recursion_counter>=$recursion_limit){
 					$recursion_counter=0;
 					#Do asynchronous callback in next event iteration
-					#my $sub=__SUB__;
-					#weaken $sub;
 					$t=AE::timer 0, 0, sub {
 						$t=undef;
 						if($rex){
@@ -548,7 +543,6 @@ sub send_file_uri_norange {
 
         })->(undef); #call with an argument to prevent error
 
-	#weaken $sub;	#NOTE: This is very important! Memory leak otherwise
 
 
 }
