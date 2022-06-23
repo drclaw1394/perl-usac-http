@@ -84,6 +84,7 @@ sub new {
 #If the server is configured for virtual hosts, the matching mechanism also includes the host matcher
 #specified in the site initialization
 #
+my @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 sub add_route {
 	local $,=" ";
 	my $self=shift;
@@ -128,7 +129,6 @@ sub add_route {
 	unshift @inner, $self->_strip_prefix;# if $self->[prefix_];	#make strip prefix first of middleware
 
 	die "No end point provided" unless $end and ref $end eq "CODE";
-	state @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 
 	#my @non_matching=(qr{[^ ]+});
 	Log::OK::TRACE and log_trace Dumper $method_matcher;

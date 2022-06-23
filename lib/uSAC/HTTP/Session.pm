@@ -213,9 +213,9 @@ sub pump_reader {
 }
 
 #timer for generating timestamps. 1 second resolution for HTTP date
+my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
 our $timer=AE::timer 0,1, sub {
-	state @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
-	state @days= qw(Sun Mon Tue Wed Thu Fri Sat);
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime($Time=time);
 	#export to globally available time?
 	#

@@ -21,7 +21,8 @@ use Log::OK {
 	lvl=>"warn"
 };
 
-use feature qw<isa refaliasing say state current_sub try>;
+use feature qw<refaliasing say state current_sub>;
+use Try::Catch;
 #use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
@@ -44,7 +45,7 @@ use AnyEvent::Handle;
 use Scalar::Util 'refaddr', 'weaken';
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK AF_INET6 fh_nonblocking);
-use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY TCP_FASTOPEN SO_LINGER);
+use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY SO_LINGER);
 
 use File::Basename qw<dirname>;
 use File::Spec::Functions qw<rel2abs catfile catdir>;
@@ -600,7 +601,7 @@ sub usac_server :prototype(&) {
 	my $server=$options{parent}//$uSAC::HTTP::Site;
 
 	#my $server=$uSAC::HTTP::Site;
-	unless(defined $server and ($server isa 'uSAC::HTTP::Site'  )) {
+	unless(defined $server and ($server->isa( 'uSAC::HTTP::Site'  ))) {
 		#only create if one doesn't exist
 		log_info "Creating new server";
 		$server=uSAC::HTTP::Server->new();
@@ -643,10 +644,11 @@ sub usac_include {
 			}
 			}";
 		}
-		catch($e){
-			log_error $e;
+		#catch($e){
+		catch {
+			log_error $_;
 			die "Could not include file $path";	
-		}
+		};
 	}
 }
 

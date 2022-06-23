@@ -101,8 +101,10 @@ sub _check_ranges{
 
 					#validate range
 					if(
-						(0<=$start<$size) and
-						(0<=$end<$size) and
+						(0<=$start) and
+						($start<$size) and
+						(0<=$end) and
+						($end<$size) and
 						($start<=$end)
 					){
 						push @ranges, [$start,$end];

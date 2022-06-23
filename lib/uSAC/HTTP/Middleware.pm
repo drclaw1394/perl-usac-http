@@ -4,7 +4,7 @@ use warnings;
 use Exporter 'import';
 use feature qw<refaliasing say fc switch state current_sub signatures>;
 no warnings "experimental";
-no feature "indirect";
+#no feature "indirect";
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
@@ -162,7 +162,8 @@ sub state_jwt {
 		my $outer_next=shift;
 		(
 			#input sub
-			sub ($matcher, $rex){
+			#sub ($matcher, $rex){
+			sub {
 				&$inner_next;
 			},
 

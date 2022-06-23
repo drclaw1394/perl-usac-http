@@ -2,13 +2,13 @@ package uSAC::HTTP::Rex;
 use warnings;
 use strict;
 use version; our $VERSION = version->declare('v0.1');
-use feature qw<current_sub say refaliasing state try>;
+use feature qw<current_sub say refaliasing state>;
 no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
 use Log::ger;
 use Log::OK;
 
-
+use Try::Catch;
 use Carp qw<carp>;
 use File::Basename qw<basename dirname>;
 use File::Spec::Functions qw<rel2abs>;
@@ -628,10 +628,10 @@ sub usac_data_slurp{
 					try{
 						($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
 					}
-					catch ($e) {
+					catch {
 						rex_error_internal $matcher, $rex;
 
-					}
+					};
 				}
 				else {
 					Log::OK::INFO and log_info "Opening memory";

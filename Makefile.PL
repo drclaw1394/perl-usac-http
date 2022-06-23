@@ -3,7 +3,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
 	NAME              => 'uSAC::HTTP',
 	VERSION_FROM      => 'lib/uSAC/HTTP.pm',
-	MIN_PERL_VERSION  => '5.32.0',		#for isa operator
+	MIN_PERL_VERSION  => '5.26.0',		#for isa operator
 	PREREQ_PM         => {
 		EV		=> 0,
 		AnyEvent 	=> 0,
@@ -20,7 +20,8 @@ WriteMakefile(
 		"Log::ger"	=> 0,
 		"Log::ger::Output::Screen" => 0,
 		"Log::OK"	=> 0,
-		"uSAC::MIME"	=> 0
+		"uSAC::MIME"	=> 0,
+		"Try::Catch"	=> 0,
 
 	},
 	ABSTRACT_FROM     => 'lib/uSAC/HTTP.pod', # retrieve abstract from docs

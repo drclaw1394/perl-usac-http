@@ -20,7 +20,7 @@ sub import {
 	strict->import;
 	warnings->import;
 	feature->import(qw<say state refaliasing current_sub>);
-	feature->unimport(qw<indirect>);
+	#feature->unimport(qw<indirect>);
 	utf8->import;
 
 
