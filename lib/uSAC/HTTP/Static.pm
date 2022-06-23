@@ -446,7 +446,9 @@ sub send_file_uri_norange {
 			$reply=""; #reset buffer
                         #NON Send file
                         seek $in_fh, $offset, 0;
-                        $total+=$rc=sysread $in_fh, $reply, $read_size;#, $offset;
+			my $sz=($content_length-$total);
+			$sz=$read_size if $sz>$read_size;
+                        $total+=$rc=sysread $in_fh, $reply, $sz;#, $offset;
 			$offset+=$rc;
 
                         #non zero read length.. do the write
@@ -525,21 +527,23 @@ sub send_file_uri_norange {
 				#undef $rex;
                                 return;
                         }
-			else {
-                                log_error "Static files: Range beyond EOF";
-				log_error "REX: ".$rex->uri;
-				log_error "REX: ".Dumper $rex->headers;
-				log_error "REX: total length: $total";;
-
-				#End of file reached but content range not satisfied
-				#DropClose connection
-                                $session->[uSAC::HTTP::Session::dropper_]->();
-				undef $sub;
-				#undef $rex;
-                                return;
-			}
-
-                        #else {  EAGAIN }
+                        ################################################################
+                        # else {                                                       #
+                        #         log_error "Static files: Range beyond EOF";          #
+                        #         log_error "REX: ".$rex->uri;                         #
+                        #         log_error "REX: ".Dumper $rex->headers;              #
+                        #         log_error "REX: total length: $total";;              #
+                        #                                                              #
+                        #         #End of file reached but content range not satisfied #
+                        #         #DropClose connection                                #
+                        #         $session->[uSAC::HTTP::Session::dropper_]->();       #
+                        #         undef $sub;                                          #
+                        #         #undef $rex;                                         #
+                        #         return;                                              #
+                        # }                                                            #
+                        #                                                              #
+                        # #else {  EAGAIN }                                            #
+                        ################################################################
 
         })->(undef); #call with an argument to prevent error
 

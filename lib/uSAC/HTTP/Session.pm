@@ -103,7 +103,8 @@ sub new {
 
 		#$self->[write_queue_]->@*=();
 		
-		if($self->[zombies_]->@* < 10){
+		#If the dropper was called with an argument that indicates no error
+		if(@_ and $self->[zombies_]->@* < 100){
 			# NOTE: Complete reuses of a zombie may still be causing corruption
 			# Suspect that the rex object is not being release intime 
 			# when service static files.
@@ -113,6 +114,8 @@ sub new {
 			unshift @{$self->[zombies_]}, $self;
 		}
 		else{
+			#dropper was called without an argument. ERROR. Do not reuse 
+			#
 			#################################
 			$self->[dropper_]=undef;      #
 			undef $sr->on_eof;            #
@@ -123,7 +126,6 @@ sub new {
 			# undef $self->[sr_];           #
 			 undef $self;                  #
 			#################################
-
 		}
 
 		Log::OK::DEBUG and log_debug "Session: zombies: ".$self->[zombies_]->@*;

@@ -199,6 +199,7 @@ sub make_reader{
 
 				Log::OK::DEBUG and log_debug "Reading on session: $r->[uSAC::HTTP::Session::id_]";
 				Log::OK::DEBUG and log_debug "$uri";
+
 				#shift buffer
 
 				#$buf=substr $buf, pos $buf;# $pos;
