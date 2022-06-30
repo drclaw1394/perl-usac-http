@@ -177,7 +177,6 @@ sub make_reader{
                                                 warn "Need more";
                                                 return;
 					}
-					
 				}
 
 				#Done with headers. 

@@ -6,8 +6,8 @@ use Log::OK;
 
 use Scalar::Util 'openhandle','refaddr', 'weaken';
 use Devel::Peek qw<SvREFCNT>;
-use uSAC::SIO::AE::SReader;
-use uSAC::SIO::AE::SWriter;
+use uSAC::IO::SReader;
+use uSAC::IO::SWriter;
 use Data::Dumper;
 
 
@@ -62,7 +62,7 @@ sub new {
 	\my $closeme=\$self->[closeme_];
 
 	#make reader
-	my $sr=uSAC::SIO::AE::SReader->new($self->[fh_]);
+	my $sr=uSAC::IO::SReader->new($self->[fh_]);
 	$sr->max_read_size=4096*16;
 	#$sr->on_read=\$self->[read_];
 	($sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]->()});
@@ -71,11 +71,11 @@ sub new {
 	$self->[sr_]=$sr;
 
 
-	uSAC::SIO::AE::SReader::start $sr;
+	$sr->start;#uSAC::IO::SReader::start $sr;
 	#$sr->start;
 
 	#make writer
-	$self->[sw_]=uSAC::SIO::AE::SWriter->new($self->[fh_]);
+	$self->[sw_]=uSAC::IO::SWriter->new($self->[fh_]);
 
 	#Takes an a bool argument: keepalive
 	#if a true value is present then no dropping is performed
@@ -88,7 +88,7 @@ sub new {
 
 
 		$fh or return;	#don't drop if already dropped
-		return unless $closeme or !@_;
+		return unless $closeme or !@_;	#IF no error or closeme then return
 
 		#End of session transactions
 		#
@@ -102,7 +102,6 @@ sub new {
 		#$closeme=undef;
 
 		#$self->[write_queue_]->@*=();
-		
 		#If the dropper was called with an argument that indicates no error
 		if(@_ and $self->[zombies_]->@* < 100){
 			# NOTE: Complete reuses of a zombie may still be causing corruption
@@ -112,6 +111,7 @@ sub new {
 			# see if that fixes the issue.
 			# Otherwise comment out the line below
 			unshift @{$self->[zombies_]}, $self;
+			Log::OK::DEBUG and log_debug "Pushed zombie";
 		}
 		else{
 			#dropper was called without an argument. ERROR. Do not reuse 
@@ -126,6 +126,7 @@ sub new {
 			# undef $self->[sr_];           #
 			 undef $self;                  #
 			#################################
+			Log::OK::DEBUG and log_debug "NO Pushed zombie";
 		}
 
 		Log::OK::DEBUG and log_debug "Session: zombies: ".$self->[zombies_]->@*;
@@ -162,7 +163,8 @@ sub revive {
 	#$self->[write_queue_]->@*=();
 	$self->[write_stack_]=[];
 	$self->[closeme_]=undef;
-	uSAC::SIO::AE::SReader::start $self->[sr_], $self->[fh_];
+	$self->[sr_]->start($self->[fh_]);
+	#$self->[fh_];
 	$self->[sw_]->set_write_handle($self->[fh_]);
 
 	
