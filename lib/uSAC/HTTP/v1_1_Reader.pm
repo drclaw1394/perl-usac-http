@@ -96,7 +96,7 @@ sub make_reader{
 	#ctx, buffer, flags 
 	#	$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id}= 
 	sub {
-		\my $buf=\$_[1];	#\$r->[uSAC::HTTP::Session::rbuf_];
+		\my $buf=\$_[0];	#\$r->[uSAC::HTTP::Session::rbuf_];
 		my $write=$r->[uSAC::HTTP::Session::write_];
 		use integer;
 		$len=length $buf;
@@ -245,7 +245,7 @@ sub make_form_data_reader {
 	my $form_headers={};
 
 	sub {
-		\my $buf=\$_[1];
+		\my $buf=\$_[0];
 		#my $rex=shift;
 		#my $cb=$session->[uSAC::HTTP::Session::reader_cb_];
 		my $processed=0;
@@ -385,7 +385,7 @@ sub make_form_urlencoded_reader {
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
-		\my $buf=\$_[1];
+		\my $buf=\$_[0];
 		
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];	#
 		my $len =
