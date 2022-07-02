@@ -21,7 +21,8 @@ use uSAC::MIME;
 use Data::Dumper;
 
 my $server; $server=usac_server {
-	usac_listen "127.0.0.1:8082";
+	usac_listen no_hosts=>0, "localhost:8082";
+	#usac_listen "[::1]:8082";
 	#usac_mime_db uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type");
 	#usac_mime_default "some/stuff";
 	#usac_listen "192.168.1.104";
@@ -30,9 +31,9 @@ my $server; $server=usac_server {
 	my $site; $site=usac_site {
 		usac_id "blog";
 		usac_host "127.0.0.1:8082";
-		usac_host "localhost:8082";
+		#usac_host "localhost:8082";
 
-		#usac_middleware log_simple;
+		usac_middleware log_simple;
 		#
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#

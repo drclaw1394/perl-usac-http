@@ -20,6 +20,7 @@ use constant::more {
 use Log::OK {
 	lvl=>"warn"
 };
+use URI;
 
 use feature qw<refaliasing say state current_sub>;
 use Try::Catch;
@@ -45,7 +46,8 @@ use AnyEvent::Handle;
 use Scalar::Util 'refaddr', 'weaken';
 use Errno qw(EAGAIN EINTR);
 use AnyEvent::Util qw(WSAEWOULDBLOCK AF_INET6 fh_nonblocking);
-use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY SO_LINGER);
+use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY SO_LINGER
+inet_pton);
 
 use File::Basename qw<dirname>;
 use File::Spec::Functions qw<rel2abs catfile catdir>;
@@ -136,21 +138,48 @@ sub new {
 	return $self;
 }
 
+sub listen_inet {
+
+}
+
 
 sub listen {
 	my $self = shift;
 	for my $listen (@{ $self->[listen_] }) {
-		my ($host,$service) = split ':',$listen,2;
-		$service = $self->[port_] unless length $service;
-		$host = $self->[host_] unless length $host;
-		$host = $AnyEvent::PROTOCOL{ipv4} < $AnyEvent::PROTOCOL{ipv6} && AF_INET6 ? "::" : "0" unless length $host;
+		say ref $listen;
+		my ($host,$service) =($listen->host, $listen->port);#split ':',$listen,2;
+
+		#$service = $self->[port_] unless length $service;
+		#$host = $self->[host_] unless length $host;
 		
-		my $ipn = parse_address $host
-			or Carp::croak "$self.listen: cannot parse '$host' as host address";
+		#$host = $AnyEvent::PROTOCOL{ipv4} < $AnyEvent::PROTOCOL{ipv6} && AF_INET6 ? "::" : "0" unless length $host;
 		
-		my $af = address_family $ipn;
+		#here we figure out the addressing types
+
+		say "Host: $host, port: $service";
+		my $ipn;
+		my $af;
+		if($ipn=inet_pton(AF_INET6, $host)){
+			
+			$af=AF_INET6;
+		}
+		elsif($ipn=inet_pton(AF_INET, $host)){
+
+			$af=AF_INET;
+		}
+		else{
+			#try unix socket here
+			$af=AF_UNIX;
+		}
+			
+		#my $ipn = parse_address $host
+		#or Carp::croak "$self.listen: cannot parse '$host' as host address";
 		
-		# win32 perl is too stupid to get this right :/
+		#my $af = address_family $ipn;
+
+
+
+		
 		Carp::croak "listen/socket: address family not supported"
 			if AnyEvent::WIN32 && $af == AF_UNIX;
 		
@@ -161,6 +190,7 @@ sub listen {
 			setsockopt $fh, SOL_SOCKET, SO_REUSEADDR, 1
 				or Carp::croak "listen/so_reuseaddr: $!"
 					unless AnyEvent::WIN32; 
+
 			setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, 1
 				or Carp::croak "listen/so_reuseport: $!"
 					unless AnyEvent::WIN32; 
@@ -169,18 +199,20 @@ sub listen {
 				say STDERR "Socket reuse not enabled. (ie only 1 worker)";
 			}
 
-			setsockopt $fh, 6, TCP_NODELAY, 1
+			setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1
 				or Carp::croak "listen/so_nodelay $!"
 					unless AnyEvent::WIN32; 
 			
-			unless ($service =~ /^\d*$/) {
-				$service = (getservbyname $service, "tcp")[2]
-					or Carp::croak "tcp_listen: $service: service unknown"
-			}
+                        ##########################################################################
+                        # unless ($service =~ /^\d*$/) {                                         #
+                        #         $service = (getservbyname $service, "tcp")[2]                  #
+                        #                 or Carp::croak "tcp_listen: $service: service unknown" #
+                        # }                                                                      #
+                        ##########################################################################
 		} elsif ($af == AF_UNIX) {
 			unlink $service;
 		}
-		log_info "Service: $service, host $host, ipn ". length $ipn;
+		log_info "Service: $service, host $host";
 		bind $fh, AnyEvent::Socket::pack_sockaddr( $service, $ipn )
 			or Carp::croak "listen/bind on ".eval{Socket::inet_ntoa($ipn)}.":$service: $!";
 		
@@ -520,24 +552,34 @@ sub run {
 		$self->stop;
 		$sig=undef;
 	});
-	if (exists $self->[listen_]) {
-		$self->[listen_] = [ $self->[listen_] ] unless ref $self->[listen_];
-		my %dup;
-		for (@{ $self->[listen_] }) {
-			if($dup{ lc $_ }++) {
-				croak "Duplicate host $_ in listen\n";
-			}
-			my ($h,$p) = split ':',$_,2;
-			$h = '0.0.0.0' if $h eq '*';
-			$h = length ( $self->[host_] ) ? $self->[host_] : '0.0.0.0' unless length $h;
-			$p = length ( $self->[port_] ) ? $self->[port_] : 8080 unless length $p;
-			$_ = join ':',$h,$p;
-		}
-		($self->[host_],$self->[port_]) = split ':',$self->[listen_][0],2;
+	say "server: $self";
+	say ref for $self->[listen_]->@*;
+	unless($self->[listen_]->@*){
+		Log::OK::FATAL and log_fatal "NO listeners defined";
+		die;
 	}
-	else {
-		$self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];
-	}
+	#TODO: check for duplicates
+	
+        #################################################################################################
+        # if (exists $self->[listen_]) {                                                                #
+        #         $self->[listen_] = [ $self->[listen_] ] unless ref $self->[listen_];                  #
+        #         my %dup;                                                                              #
+        #         for (@{ $self->[listen_] }) {                                                         #
+        #                 if($dup{ lc $_ }++) {                                                         #
+        #                         croak "Duplicate host $_ in listen\n";                                #
+        #                 }                                                                             #
+        #                 my ($h,$p) = split ':',$_,2;                                                  #
+        #                 $h = '0.0.0.0' if $h eq '*';                                                  #
+        #                 $h = length ( $self->[host_] ) ? $self->[host_] : '0.0.0.0' unless length $h; #
+        #                 $p = length ( $self->[port_] ) ? $self->[port_] : 8080 unless length $p;      #
+        #                 $_ = join ':',$h,$p;                                                          #
+        #         }                                                                                     #
+        #         ($self->[host_],$self->[port_]) = split ':',$self->[listen_][0],2;                    #
+        # }                                                                                             #
+        # else {                                                                                        #
+        #         $self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];                       #
+        # }                                                                                             #
+        #################################################################################################
 	
         ###################################################################
         # #=======CATCH ALL                                               #
@@ -667,13 +709,32 @@ sub usac_listen {
 	my $pairs=pop;	#Content is the last item
 	my %options=@_;
 	my $site=$options{parent}//$uSAC::HTTP::Site;
+	my @uri;
 	if(ref($pairs) eq "ARRAY"){
-
-		push $site->[listen_]->@*, @$pairs;
+		@uri= map {URI->new("http://$_")} @$pairs;
+			#push $site->[listen_]->@*, @$pairs;
 	}
 	else {
-		push $site->[listen_]->@*, $pairs;
+		
+		@uri= map {URI->new("http://$_")} ($pairs);
+		#push $site->[listen_]->@*, $pairs;
 	}
+	@uri=map {
+			if(/localhost/){
+				(
+					URI->new("http://127.0.0.1:".$_->port),
+					URI->new("http://[::1]:".$_->port)
+				)
+			}
+			else {
+				($_);
+			}
+		} @uri;
+	unless($options{no_hosts}){
+		push $site->host->@*, map {substr $_->opaque,2 } @uri;
+	}
+	say "HOsts: ", $site->host->@*;
+	push $site->[listen_]->@*, @uri;
 }
 
 sub usac_workers {
