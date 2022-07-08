@@ -238,7 +238,18 @@ sub add_route {
 	push @hosts, "*.*" unless @hosts;
 	#$matcher=qr{^$method_matcher $bp$path_matcher};
 	my $pm;
-	for my $host (@hosts){
+	for my $uri (@hosts){
+		my $host;
+		if(ref $uri){
+			$host=$uri->host;
+			if($uri->port!=80 or $uri->port !=443){
+				$host.=":".$uri->port;
+			}
+		}
+		else {
+			$host=$uri;	#match all
+		}
+
 		for my $method (@matching){
 			Log::OK::TRACE and log_trace "$host=>$method";
 			#test if $path_matcher is a regex
@@ -278,7 +289,17 @@ sub add_route {
 	my $mre=qr{$tmp};
 	my $unsupported=qr{^$mre $bp$path_matcher};
 	#push @hosts, "*.*" unless @hosts;
-	for my $host (@hosts){
+	for my $uri (@hosts){
+		my $host;
+		if(ref $uri){
+			$host=$uri->host;
+			if($uri->port!=80 or $uri->port !=443){
+				$host.=":".$uri->port;
+			}
+		}
+		else {
+			$host=$uri;	#match all
+		}
 		for my $method (@non_matching){
 			$unsupported="$method $bp$path_matcher";
 			push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer,0]];
@@ -625,13 +646,17 @@ sub usac_host {
 	my $host=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
+	my @uri;
 	if(ref($host) eq "ARRAY"){
-
-		push $self->host->@*, @$host;
+		@uri= map {URI->new("http://$_")} @$host;
 	}
 	else{
-		push $self->host->@*, $host;
+		@uri= map {URI->new("http://$_")} ($host);
 	}
+	for(@uri){
+		die "Error parsing hosts: $_ " unless ref;
+	}
+	push $self->host->@*, @uri;
 
 }
 

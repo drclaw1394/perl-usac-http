@@ -62,7 +62,7 @@ sub new {
 	\my $closeme=\$self->[closeme_];
 
 	#make reader
-	my $sr=uSAC::IO::SReader->new($self->[fh_]);
+	my $sr=uSAC::IO::SReader->sreader(rfh=>$self->[fh_]);
 	$sr->max_read_size=4096*16;
 	#$sr->on_read=\$self->[read_];
 	($sr->on_eof = sub {$self->[closeme_]=1; $self->[dropper_]->()});
@@ -75,7 +75,7 @@ sub new {
 	#$sr->start;
 
 	#make writer
-	$self->[sw_]=uSAC::IO::SWriter->new($self->[fh_]);
+	$self->[sw_]=uSAC::IO::SWriter->swriter(wfh=>$self->[fh_]);
 
 	#Takes an a bool argument: keepalive
 	#if a true value is present then no dropping is performed

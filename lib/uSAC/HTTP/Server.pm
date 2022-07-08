@@ -167,9 +167,15 @@ sub listen {
 
 			$af=AF_INET;
 		}
-		else{
+		elsif($host !~ /:\d+$/){
 			#try unix socket here
+			say $host;
+			say "TRY UNIX SOCKET";
 			$af=AF_UNIX;
+		}
+		else{
+			#not supported
+			die "Could not parse address for listener: $_";
 		}
 			
 		#my $ipn = parse_address $host
@@ -710,8 +716,17 @@ sub usac_listen {
 	my %options=@_;
 	my $site=$options{parent}//$uSAC::HTTP::Site;
 	my @uri;
+	my $type=$options{type}//'tcp';
+	#type can be
+	# tcp
+	# unix
+	# quic
+	
+	#Do a check on the scheme type
 	if(ref($pairs) eq "ARRAY"){
-		@uri= map {URI->new("http://$_")} @$pairs;
+		@uri= map {
+			URI->new("http://$_")}
+		@$pairs;
 			#push $site->[listen_]->@*, @$pairs;
 	}
 	else {
@@ -732,6 +747,9 @@ sub usac_listen {
 		} @uri;
 	unless($options{no_hosts}){
 		push $site->host->@*, map {substr $_->opaque,2 } @uri;
+	}
+	for(@uri){
+		die "Error parsing listener: $_ " unless ref;
 	}
 	say "HOsts: ", $site->host->@*;
 	push $site->[listen_]->@*, @uri;
