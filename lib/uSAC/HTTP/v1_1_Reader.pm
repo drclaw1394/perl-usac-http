@@ -78,7 +78,8 @@ sub make_reader{
 	my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
 
 
-	my $self=$r->[uSAC::HTTP::Session::server_];
+	#my $self=$r->[uSAC::HTTP::Session::server_];
+	my $self=$r->server;
 	weaken $r;
 
 	my $cb=$self->current_cb;	
@@ -93,11 +94,8 @@ sub make_reader{
 	#my @hused;
 	
 	my $host;
-	#ctx, buffer, flags 
-	#	$r->[uSAC::HTTP::Session::reader_cache_]{$sub_id}= 
 	sub {
-		\my $buf=\$_[0];	#\$r->[uSAC::HTTP::Session::rbuf_];
-		my $write=$r->[uSAC::HTTP::Session::write_];
+		\my $buf=\$_[0];
 		use integer;
 		$len=length $buf;
 		while ( $len ) {
@@ -132,8 +130,11 @@ sub make_reader{
 					#
 					if( length($buf) >2048){
 						#TODO: create a rex a respond with bad request
-						$r->[uSAC::HTTP::Session::closeme_]=1;
-						$r->[uSAC::HTTP::Session::dropper_]->() 
+
+						#$r->[uSAC::HTTP::Session::closeme_]=1;
+						#$r->[uSAC::HTTP::Session::dropper_]->() 
+						$r->closeme=1;
+						$r->dropper->();
 					}
 					last;
 				}
@@ -172,7 +173,8 @@ sub make_reader{
 						#-1	Need more
                                                 if (length($buf) > MAX_READ_SIZE) {
 							
-                                                        return $r->[uSAC::HTTP::Session::dropper_]->();
+							#return $r->[uSAC::HTTP::Session::dropper_]->();
+                                                        return $r->dropper->();
                                                 }
                                                 warn "Need more";
                                                 return;
@@ -189,14 +191,19 @@ sub make_reader{
 
 
 
-				$r->[uSAC::HTTP::Session::rex_]=$req;
-				weaken $r->[uSAC::HTTP::Session::rex_];
+				#$r->[uSAC::HTTP::Session::rex_]=$req;
+				$r->rex=$req;
 
-				$r->[uSAC::HTTP::Session::closeme_]=0;
+				#weaken $r->[uSAC::HTTP::Session::rex_]i
+				weaken $r->rex;
+
+				#$r->[uSAC::HTTP::Session::closeme_]=0;
 				
-				$r->[uSAC::HTTP::Session::closeme_]||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
+				#$r->[uSAC::HTTP::Session::closeme_]||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
+				$r->closeme=0;
+				$r->closeme||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
 
-				Log::OK::DEBUG and log_debug "Reading on session: $r->[uSAC::HTTP::Session::id_]";
+				#Log::OK::DEBUG and log_debug "Reading on session: $r->[uSAC::HTTP::Session::id_]";
 				Log::OK::DEBUG and log_debug "$uri";
 
 				#shift buffer
@@ -236,7 +243,6 @@ sub make_form_data_reader {
 	use integer;
 
 	my ($usac,$rex,$session,$cb)=@_;	
-	#my $rex=$session->[uSAC::HTTP::Session::rex_];
 
 
 	my $state=0;
@@ -246,8 +252,6 @@ sub make_form_data_reader {
 
 	sub {
 		\my $buf=\$_[0];
-		#my $rex=shift;
-		#my $cb=$session->[uSAC::HTTP::Session::reader_cb_];
 		my $processed=0;
 
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];
@@ -291,7 +295,8 @@ sub make_form_data_reader {
 						$processed+=$offset+4;
 						$buf=substr $buf, $processed;
 						$processed=0;
-						uSAC::HTTP::Session::pop_reader($session);
+						#uSAC::HTTP::Session::pop_reader($session);
+						$session->pop_reader;
 						return;
 					}
 					else{
@@ -380,7 +385,6 @@ sub make_form_urlencoded_reader {
 	#These values are shared for a session
 	#
 	my ($usac,$rex,$session,$cb)=@_;	
-	#my $rex=$session->[uSAC::HTTP::Session::rex_];	#Alias refernce to current rexx
 	my $processed=0;					#stateful position in buffer
 	my $header={};
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
@@ -405,10 +409,9 @@ sub make_form_urlencoded_reader {
 			$cb->($usac, $rex, substr($buf,0,$new,""),$header,1);		#send to cb and shift buffer down
 			$header={};
 			$processed=0;
-			uSAC::HTTP::Session::pop_reader $session;
+			$session->pod_reader;
+			#uSAC::HTTP::Session::pop_reader $session;
 
-			#issue a read since reader has changed
-			#$session->[uSAC::HTTP::Session::read_]->(\$session->[uSAC::HTTP::Session::rbuf_],$rex);
 		}
 		else {
 			#keep on stack until done
