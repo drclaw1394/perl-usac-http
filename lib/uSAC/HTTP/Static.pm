@@ -242,8 +242,8 @@ sub send_file_uri_norange {
 		weaken $session;
 		weaken $rex;
 
-		$session->[uSAC::HTTP::Session::in_progress_]=1;
-
+		#$session->[uSAC::HTTP::Session::in_progress_]=1;
+		$session->in_progress=1;
 		my $in_fh=$entry->[fh_];
 
 		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
@@ -264,7 +264,8 @@ sub send_file_uri_norange {
 		#======
 		# call sendfile. If remaining data to send, setup write watcher to 
 		# trigger next call
-                my $out_fh=$session->[uSAC::HTTP::Session::fh_];
+		#my $out_fh=$session->[uSAC::HTTP::Session::fh_];
+                my $out_fh=$session->fh;
 		my $ww;
                 my $do_sendfile;
 		if($sendfile){
@@ -292,7 +293,8 @@ sub send_file_uri_norange {
 					}
 					#ofr drop if no more
 					#Do dropper as we reached the end. use keep alive 
-					$session->[uSAC::HTTP::Session::dropper_]->(1);
+					#$session->[uSAC::HTTP::Session::dropper_]->(1);
+					$session->drop(1);
 					$out_fh=undef;
 					$ww=undef;
 					return;
@@ -312,7 +314,8 @@ sub send_file_uri_norange {
 					log_error $!;
 					#delete $cache{$abs_path};
 					#close $in_fh;
-					$session->[uSAC::HTTP::Session::dropper_]->();
+					#$session->[uSAC::HTTP::Session::dropper_]->();
+					$session->drop(1);
 					return;
 				}
 
@@ -436,7 +439,8 @@ sub send_file_uri_norange {
 			#if no arguments an error occured
 			unless(@_){
 				#undef $sub;
-				$session->[uSAC::HTTP::Session::dropper_]->();
+				#$session->[uSAC::HTTP::Session::dropper_]->();
+				$session->drop;
 				undef $rex;
 				return;
 			}
@@ -524,7 +528,9 @@ sub send_file_uri_norange {
                                 #delete $cache{$abs_path};
                                 close $in_fh;
 				#error was with input file not socket. So keep socket alive	
-                                $session->[uSAC::HTTP::Session::dropper_]->(1);
+				#$session->[uSAC::HTTP::Session::dropper_]->(1);
+				$session->drop(1);
+
 				undef $sub;
 				#undef $rex;
                                 return;

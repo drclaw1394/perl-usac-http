@@ -82,17 +82,26 @@ use Encode qw<decode encode decode_utf8>;
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ in_set_ in_used_ out_set_ out_used_ captures_ id_>
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ in_set_ in_used_ out_set_ out_used_ captures_ id_
+	closeme_
+	dropper_
+	server_
+	rex_
+	in_progress_
+
+	end_
+	>
 );
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>id_-version_+1;
+use constant KEY_COUNT=>end_-version_+1;
 
 require uSAC::HTTP::Middleware;
 		
 #Main output subroutine
 #Arguments are matcher, rex, code, header, data, cb
+#		0     ,	 1 ,	2,	3,    4,  5
 sub rex_write{
 	my $session=$_[1]->[session_];
 	if($_[3]){
@@ -101,10 +110,12 @@ sub rex_write{
 
 		#If headers are supplied, then  process headers
 		Log::OK::TRACE and log_trace "REX: Doing rex write====";
-		Log::OK::TRACE and log_trace "REX: close me: ".$session->[uSAC::HTTP::Session::closeme_];
-		$session->[uSAC::HTTP::Session::in_progress_]=1;
+		#Log::OK::TRACE and log_trace "REX: close me: ".$session->[uSAC::HTTP::Session::closeme_];
+		#$session->[uSAC::HTTP::Session::in_progress_]=1;
+		$_[1][in_progress_]->$*=1;
 
-		if($session->[uSAC::HTTP::Session::closeme_]){
+		#if($session->[uSAC::HTTP::Session::closeme_]){
+		if($_[1][closeme_]->$*){
 			push $_[3]->@*, 
 				HTTP_CONNECTION, "close";
 		}
@@ -227,8 +238,10 @@ sub rex_error_internal {
 	my ($url)=splice @_, 2;
 	my $session=$_[1][session_];
 	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, [HTTP_CONTENT_LENGTH, 0], '');
-	$session->[uSAC::HTTP::Session::closeme_]=1;
-	$session->[uSAC::HTTP::Session::dropper_]->();	#no 'keep alive' so forces close
+	#$session->[uSAC::HTTP::Session::closeme_]=1;
+	#$session->[uSAC::HTTP::Session::dropper_]->();	#no 'keep alive' so forces close
+	$_[1][closeme_]->$*=1;
+	$_[1][dropper_]();
 }
 
 
@@ -328,17 +341,27 @@ sub new {
 
 	state $id=0;
 	my $query_string="";
-	if((my $i=index($_[5], "?"))>=0){
-		$query_string=substr $_[5], $i+1;
+	if((my $i=index($_[6], "?"))>=0){
+		$query_string=substr $_[6], $i+1;
 	}
-	my $write=$_[1]->[uSAC::HTTP::Session::write_];
-
 	Log::OK::DEBUG and log_debug "+++++++Create rex: $id";
+
+	my $write=undef;
+
 	my $self=bless [ $_[4], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[], $id++], $_[0];
 
+	#my $write=$_[1]->[uSAC::HTTP::Session::write_];
+	my $ex=$_[1]->exports;
+	$self->[closeme_]=$ex->[0];
+	$self->[dropper_]=$ex->[1];
+	$self->[server_]=$ex->[2];
+	$self->[rex_]=$ex->[3];
+	$self->[in_progress_]=$ex->[4];
+	$self->[write_]=$ex->[5];
+
 	weaken $self->[session_];
-	$self->[session_][uSAC::HTTP::Session::rex_]=$self;
-	weaken $self->[session_][uSAC::HTTP::Session::rex_];
+	#	$self->[session_][uSAC::HTTP::Session::rex_]=$self;
+	#weaken $self->[session_][uSAC::HTTP::Session::rex_];
 	weaken $self->[write_];
 
 	$self;
@@ -356,16 +379,21 @@ sub usac_multipart_stream {
 			my $session=$rex->[uSAC::HTTP::Rex::session_];
 			#check if content type is correct first
 			unless (index($rex->[headers_]{CONTENT_TYPE},'multipart/form-data')>=0){
-				$session->[uSAC::HTTP::Session::closeme_]=1;
+				#$session->[uSAC::HTTP::Session::closeme_]=1;
+				$rex->[closeme_]->$*=1;
+
 				rex_write $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
 				return;
 			}
-			uSAC::HTTP::Session::push_reader
-			$session,
-			make_form_data_reader @_, $session, $cb->() ;
+			#uSAC::HTTP::Session::push_reader
+			
+			$session->push_reader(
+				make_form_data_reader @_, $session, $cb->()
+			);
 
 			Log::OK::INFO and log_info "multipart stream";
-			$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
+			#$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
+			$_[1][in_progress_]->$*=1;
 
 			$session->pump_reader;
 			return;
@@ -403,9 +431,10 @@ sub usac_data_stream{
 
 			else{
 
-				uSAC::HTTP::Session::push_reader
-				$session,
-				make_form_urlencoded_reader @_, $session, $cb->() ;
+				#uSAC::HTTP::Session::push_reader
+				$session->push_reader(
+					make_form_urlencoded_reader @_, $session, $cb->()
+				);
 
 				#check for expects header and send 100 before trying to read
 				if(defined($_->{EXPECT})){
@@ -415,20 +444,22 @@ sub usac_data_stream{
 				}
 
 				Log::OK::INFO and log_info "data stream";
-				$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
+				#$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
+				$_[1][in_progress_]->$*=1;
 
 				$session->pump_reader;
 				return;
 			}
 		}
 
-		$session->[uSAC::HTTP::Session::closeme_]=1;
+		#$session->[uSAC::HTTP::Session::closeme_]=1;
+		$_[1][closeme_]->%*=1;
 		rex_write @_, @err_res;#$line,$rex,@err_res; 
 	}
 }
 
 sub usac_urlencoded_stream {
-	my $cb=pop;;
+	my $cb=pop;
 	my %options=@_;
 	$options{mime}="application/x-www-form-urlencoded";
 	usac_data_stream %options, $cb;

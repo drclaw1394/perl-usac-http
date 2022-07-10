@@ -29,7 +29,7 @@ field $_sessions;
 field @_zombies;
 field $_server;
 field $_scheme;
-field $_time;
+field $_time :mutator;
 field $_closeme;
 field $_rw;
 field $_ww;
@@ -61,7 +61,8 @@ sub drop;
 method init {
 	
         $_time=$Time; 
-
+	($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme)=@_;
+	\my @zombies= $zombies;
 	#$self->[read_stack_]=[];
 	#$self->[reader_cache_]={};
 
@@ -177,6 +178,10 @@ method revive {
 	return $self;
 }
 
+method drop {
+	$_dropper->(@_);
+}
+
 #Accessors
 method closeme :lvalue {
 	$_closeme;
@@ -192,6 +197,12 @@ method rex {
 method server {
 	$_server;
 }
+method in_progress: lvalue{
+	$_in_progress;
+}
+method fh :lvalue{
+	$_fh;
+}
 
 
 
@@ -200,13 +211,13 @@ method server {
 #
 
 method push_reader {
-	push @_read_stack, $_read=$_[1];
-	$_sr->on_read=$_[1];
+	push @_read_stack, $_read=$_[0];
+	$_sr->on_read=$_[0];
 }
 
 method push_writer {
 	push @_write_stack, $_write;
-	$_write=$_[1];
+	$_write=$_[0];
 }
 
 method pop_reader {
@@ -223,7 +234,7 @@ method pop_writer {
 }
 
 method set_writer {
-	$_write=$_[1];
+	$_write=$_[0];
 }
 
 method pump_reader {
@@ -246,6 +257,12 @@ our $timer=AE::timer 0,1, sub {
 };
 
 
+#Return an array of references to variables which are publically editable
+#Bypasses method calls for accessors
+method exports {
+	[\$_closeme,$_dropper, \$_server, \$_rex,\$_in_progress, $_write];
+
+}
 ##################################################################################
 # sub DESTROY {                                                                  #
 #                                                                                #

@@ -265,10 +265,13 @@ sub prepare {
 			$session=$self->[sessions_]{$_};
 			#say "checking id: $_ time: ", $session->[uSAC::HTTP::Session::time_];
 
-			if(($self->[server_clock_]-$session->[uSAC::HTTP::Session::time_])> $timeout){
+			#if(($self->[server_clock_]-$session->[uSAC::HTTP::Session::time_])> $timeout){
+			if(($self->[server_clock_]-$session->time)> $timeout){
 				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
-				$session->[uSAC::HTTP::Session::closeme_]=1;
-				$session->[uSAC::HTTP::Session::dropper_]->();
+				#$session->[uSAC::HTTP::Session::closeme_]=1;
+				#$session->[uSAC::HTTP::Session::dropper_]->();
+				$session->closeme=1;
+				$session->drop;
 				#delete $self->[sessions_]{$_};
 			}
 		}
@@ -396,11 +399,15 @@ sub make_do_client{
 		Log::OK::DEBUG and log_debug "Server new client connection: id $id";
 		$session=pop @zombies;
 		if($session){
-			uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
+			#uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
+			$session->revive($id, $fh, $scheme);
 		}
 		else {
-			$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
-			uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+			#$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
+			$session=uSAC::HTTP::Session->new;
+			$session->init($id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
+			#uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+			$session->push_reader(make_reader $session, MODE_SERVER);
 		}
 
 		$sessions{ $id } = $session;

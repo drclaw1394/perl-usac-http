@@ -69,6 +69,8 @@ sub parse_form {
 #
 use enum (qw<MODE_SERVER MODE_CLIENT>);
 use enum (qw<STATE_REQUEST STATE_RESPONSE STATE_HEADERS>);
+
+#make a reader which is bound to a session
 sub make_reader{
 	#say "MAKING BASE HTTP1.1 reader";
 	#take a session and alias the variables to lexicals
@@ -78,12 +80,17 @@ sub make_reader{
 	my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
 
 
+	my $ex=$r->exports;
+	
 	#my $self=$r->[uSAC::HTTP::Session::server_];
-	my $self=$r->server;
+	#$r->server;
+	\my $closeme=$ex->[0];
+	my $dropper=$ex->[1];
+	\my $self=$ex->[2];
+	\my $rex=$ex->[3];
 	weaken $r;
 
 	my $cb=$self->current_cb;	
-	
 	my ($state,$seq) = ($start_state, 0);
 	my ($method,$uri,$version,$len,$pos, $req);
 	my $line;
@@ -133,8 +140,10 @@ sub make_reader{
 
 						#$r->[uSAC::HTTP::Session::closeme_]=1;
 						#$r->[uSAC::HTTP::Session::dropper_]->() 
-						$r->closeme=1;
-						$r->dropper->();
+						#$r->closeme=1;
+						#$r->dropper->();
+						$closeme=1;
+						$dropper->();
 					}
 					last;
 				}
@@ -174,7 +183,8 @@ sub make_reader{
                                                 if (length($buf) > MAX_READ_SIZE) {
 							
 							#return $r->[uSAC::HTTP::Session::dropper_]->();
-                                                        return $r->dropper->();
+							#return $r->dropper->();
+							return $dropper->();
                                                 }
                                                 warn "Need more";
                                                 return;
@@ -192,16 +202,22 @@ sub make_reader{
 
 
 				#$r->[uSAC::HTTP::Session::rex_]=$req;
-				$r->rex=$req;
+				#$r->rex=$req;
+				$rex=$req;
+
 
 				#weaken $r->[uSAC::HTTP::Session::rex_]i
-				weaken $r->rex;
+				#weaken $r->rex;
+				weaken $rex;
+
 
 				#$r->[uSAC::HTTP::Session::closeme_]=0;
 				
 				#$r->[uSAC::HTTP::Session::closeme_]||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
-				$r->closeme=0;
-				$r->closeme||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
+				#$r->closeme=0;
+				#$r->closeme||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
+				$closeme=0;
+				$closeme||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
 
 				#Log::OK::DEBUG and log_debug "Reading on session: $r->[uSAC::HTTP::Session::id_]";
 				Log::OK::DEBUG and log_debug "$uri";

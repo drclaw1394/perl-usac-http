@@ -234,12 +234,12 @@ sub chunked{
 				#$bypass=undef;#reset
 
 				\my @headers=$_[3];
-				@hindexes=@key_indexes[0..@headers/2-1];
-				for(@hindexes){
-					#last if $_ >=@headers;
+				#@hindexes=@key_indexes[0..@headers/2-1];
+				#grep $_ eq HTTP_CONTENT_LENGTH, @headers[@hindexes] and return &$next;
+				#$_ eq HTTP_CONTENT_LENGTH and return &$next for ( @headers[@key_indexes[0..@headers/2-1]]);
+                                        #last if $_ >=@headers;
 
-					(($headers[$_] eq HTTP_CONTENT_LENGTH)) and return &$next;
-				}
+                                (($_ eq HTTP_CONTENT_LENGTH)) and return &$next for(@headers[@key_indexes[0..@headers/2-1]]);
 				$exe=1;
 
 				Log::OK::TRACE and log_trace "Middelware: Chunked execute".($exe//"");

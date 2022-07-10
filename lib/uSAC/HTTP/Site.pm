@@ -158,6 +158,8 @@ sub add_route {
 	my @index=map {$_*2} 0..99;
 
 	state $alloc="x" x 2048;
+	#my $server= $self->[server_];
+	my $static_headers=$self->[server_]->static_headers;
 	my $serialize=
 			sub{
 				no warnings qw<numeric uninitialized>;
@@ -169,20 +171,29 @@ sub add_route {
 				# renders the headers to the output sub
 				# then calls 
 				#
-				my $session=$_[1]->[uSAC::HTTP::Rex::session_];
-				my $cb=$_[5]//$session->[uSAC::HTTP::Session::dropper_];# unless $_[5];	#If no cb, then assume dropper
+				#my $session=$_[1]->[uSAC::HTTP::Rex::session_];
+				#my $cb=$_[5]//$session->[uSAC::HTTP::Session::dropper_];# unless $_[5];	#If no cb, then assume dropper
+				#my $cb=$_[5]//$session->dropper;
+				#say $_[1];
+				#say $_[1][uSAC::HTTP::Rex::dropper_];
+				my $cb=$_[5]//$_[1][uSAC::HTTP::Rex::dropper_];
 
-				state $server=$session->[uSAC::HTTP::Session::server_];
-				state $static_headers=$server->static_headers;
+				#state $server=$session->[uSAC::HTTP::Session::server_];
+				#state $server=$session->server;
+				#state $static_headers=$server->static_headers;
 
 
-				if($_[3]){
+				if(defined $_[3]){
 					\my @h=$_[3];
-					if($server!=$session->[uSAC::HTTP::Session::server_]){
-						say  "session id", $session->[uSAC::HTTP::Session::id_];
-						$server=$session->[uSAC::HTTP::Session::server_];
-						$static_headers=$server->static_headers;
-					}
+                                        #####################################################################
+                                        # #if($server!=$session->[uSAC::HTTP::Session::server_]){           #
+                                        # if($server!=$session->server){                                    #
+                                        #         #say  "session id", $session->[uSAC::HTTP::Session::id_]; #
+                                        #         #$server=$session->[uSAC::HTTP::Session::server_];        #
+                                        #         $server=$session->server;                                 #
+                                        #         $static_headers=$server->static_headers;                  #
+                                        # }                                                                 #
+                                        #####################################################################
 
 					my $reply=$alloc;#."x";
 					$reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
@@ -316,24 +327,31 @@ sub _strip_prefix {
 	sub {
 		my $inner_next=shift;
 		sub {
-			package uSAC::HTTP::Rex {
-				$_[1][uri_stripped_]= substr($_[1]->[uri_], $len); #strip the url
+			#package uSAC::HTTP::Rex {
+				$_[1][uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len); #strip the url
 				#$_[1][capture_]=[@{^CAPTURE}];	#save the capture 
 
 				&$inner_next; #call the next
 				#Check the inprogress flag
 				#TODO: The session can go out of scope here. Need a more
 				#consistent approach to testing if a reply is in progress
-				for($_[1][uSAC::HTTP::Rex::session_]){
-					if($_ and  !$_->[uSAC::HTTP::Session::in_progress_]){
-						Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uri_]);
-					}
-					else {
-						Log::OK::TRACE and log_trace("SESSION and REX complete and OUT OF SCOPE:". $_[1]->[uri_]);
+			
+				!$_[1][uSAC::HTTP::Rex::in_progress_] and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uSAC::HTTP::Rex::uri_]);
 
-					}
-				}
-			}
+                                ###############################################################################################################################
+                                # for($_[1][uSAC::HTTP::Rex::session_]){                                                                                      #
+                                #         #if($_ and  !$_->[uSAC::HTTP::Session::in_progress_]){                                                              #
+                                #         #if($_ and  !$_->in_progress){                                                                                      #
+                                #         if(!$_->[uSAC::HTTP::Rex::in_progress_]){                                                                           #
+                                #                 Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uSAC::HTTP::Rex::uri_]);                    #
+                                #         }                                                                                                                   #
+                                #         else {                                                                                                              #
+                                #                 Log::OK::TRACE and log_trace("SESSION and REX complete and OUT OF SCOPE:". $_[1]->[uSAC::HTTP::Rex::uri_]); #
+                                #                                                                                                                             #
+                                #         }                                                                                                                   #
+                                # }                                                                                                                           #
+                                ###############################################################################################################################
+				#}
 		},
 
 	}
