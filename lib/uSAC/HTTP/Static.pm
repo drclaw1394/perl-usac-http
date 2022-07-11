@@ -237,13 +237,15 @@ sub send_file_uri_norange {
 		use  integer;
 		my ($matcher,$rex,$user_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
 		Log::OK::TRACE and log_trace("send file no range");
-		my $session=$rex->[uSAC::HTTP::Rex::session_];
+		#my $session=$rex->[uSAC::HTTP::Rex::session_];
 
-		weaken $session;
-		weaken $rex;
+		
+		#weaken $session;
+		#weaken $rex;
 
 		#$session->[uSAC::HTTP::Session::in_progress_]=1;
-		$session->in_progress=1;
+		#$session->in_progress=1;
+		$rex->[uSAC::HTTP::Rex::in_progress_]->$*=1;
 		my $in_fh=$entry->[fh_];
 
 		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
@@ -265,10 +267,11 @@ sub send_file_uri_norange {
 		# call sendfile. If remaining data to send, setup write watcher to 
 		# trigger next call
 		#my $out_fh=$session->[uSAC::HTTP::Session::fh_];
-                my $out_fh=$session->fh;
-		my $ww;
-                my $do_sendfile;
+		my $do_sendfile;
 		if($sendfile){
+			my $session=$rex->[uSAC::HTTP::Rex::session_];
+			my $out_fh=$session->fh;
+			my $ww;
 			$do_sendfile=sub {
 				Log::OK::TRACE  and log_trace "Doing send file";
 				#Do send file here?
@@ -294,7 +297,8 @@ sub send_file_uri_norange {
 					#ofr drop if no more
 					#Do dropper as we reached the end. use keep alive 
 					#$session->[uSAC::HTTP::Session::dropper_]->(1);
-					$session->drop(1);
+					#$session->drop(1);
+					$rex->[uSAC::HTTP::Rex::dropper_]->(1);
 					$out_fh=undef;
 					$ww=undef;
 					return;
@@ -315,7 +319,8 @@ sub send_file_uri_norange {
 					#delete $cache{$abs_path};
 					#close $in_fh;
 					#$session->[uSAC::HTTP::Session::dropper_]->();
-					$session->drop(1);
+					#$session->drop(1);
+					$rex->[uSAC::HTTP::Rex::dropper_]->(1);
 					return;
 				}
 
@@ -403,14 +408,9 @@ sub send_file_uri_norange {
 		Log::OK::TRACE and log_trace join ", ", @$out_headers;
 		
 
-		if(
-			$rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
-			or $code==HTTP_NOT_MODIFIED
-			){
-			rex_write $matcher,$rex,$code,$out_headers,"";
-			#$session->[uSAC::HTTP::Session::write_]->($reply);
-			return;
-		}
+		rex_write $matcher,$rex,$code,$out_headers,"" and return
+			if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
+				or $code==HTTP_NOT_MODIFIED);
 
 		#my $sendfile=1;
 		#Enable using send file if content length is greater than threshold
@@ -440,7 +440,8 @@ sub send_file_uri_norange {
 			unless(@_){
 				#undef $sub;
 				#$session->[uSAC::HTTP::Session::dropper_]->();
-				$session->drop;
+				#$session->drop;
+				$rex->[uSAC::HTTP::Rex::dropper_]->(1);
 				undef $rex;
 				return;
 			}
@@ -477,14 +478,14 @@ sub send_file_uri_norange {
                                                 return $sub->(undef);           #Call with arg
                                         };
 
-					return
+					#return
 
 				} else {
 
 					#write and done
 					Log::OK::DEBUG and log_debug "Static: write and done: writer sub ref count: ".SvREFCNT($sub);
 					rex_write $matcher, $rex, $code, $out_headers, $reply, undef;
-					return;
+					#return;
 				}
                         }
 
@@ -520,7 +521,7 @@ sub send_file_uri_norange {
 						undef $sub;
 					}
 				}
-                                return;
+				#return;
                         }
                         elsif( !defined($rc) and $! != EAGAIN and  $! != EINTR){
                                 log_error "Static files: READ ERROR from file";
@@ -529,11 +530,12 @@ sub send_file_uri_norange {
                                 close $in_fh;
 				#error was with input file not socket. So keep socket alive	
 				#$session->[uSAC::HTTP::Session::dropper_]->(1);
-				$session->drop(1);
+				#$session->drop(1);
+				$rex->[uSAC::HTTP::Rex::dropper_]->(1);
 
 				undef $sub;
 				#undef $rex;
-                                return;
+				#return;
                         }
                         ################################################################
                         # else {                                                       #
