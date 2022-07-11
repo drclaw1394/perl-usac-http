@@ -30,6 +30,8 @@ use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
 use Data::Dumper;
+use URL::Encode::XS;
+use URL::Encode qw<url_decode_utf8>;
 
 our @EXPORT_OK=qw<rex_headers 
 
@@ -128,7 +130,7 @@ sub rex_write{
 
 	&{$_[0][1][2]};	#Execute the outerware for this site/location
 
-	1;	#always return true
+	#1;	#always return true
 }
 ##
 #OO Methods
@@ -336,21 +338,24 @@ sub writer {
 	
 
 
+my $id=0;	#Instead of using state
 sub new {
 	#my ($package, $session, $headers, $host, $version, $method, $uri)=@_;
 
-	state $id=0;
+	#state $id=0;
 	my $query_string="";
 	if((my $i=index($_[6], "?"))>=0){
 		$query_string=substr $_[6], $i+1;
 	}
 	Log::OK::DEBUG and log_debug "+++++++Create rex: $id";
 
-	my $write=undef;
+	#my $write=undef;
 
-	my $self=bless [ $_[4], $_[1], $_[2], $write, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[], $id++], $_[0];
+	my $self=bless [ $_[4], $_[1], $_[2], undef, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[], $id++], $_[0];
 
 	#my $write=$_[1]->[uSAC::HTTP::Session::write_];
+	#
+	#NOTE: A single call to Session export. give references to important variables
 	my $ex=$_[1]->exports;
 	$self->[closeme_]=$ex->[0];
 	$self->[dropper_]=$ex->[1];
@@ -723,7 +728,7 @@ sub parse_form_params {
 		}
 		elsif($_ eq 'application/x-www-form-urlencoded'){
 			my $kv={};
-			for(split "&", uri_decode $_[2]){
+			for(split "&", uri_decode_utf8 $_[2]){
 				my ($key,$value)=split "=";
 				$kv->{$key}=$value;
 			}

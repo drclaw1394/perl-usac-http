@@ -183,7 +183,7 @@ sub add_route {
 				#state $static_headers=$server->static_headers;
 
 
-				if(defined $_[3]){
+				if($_[3]){
 					\my @h=$_[3];
                                         #####################################################################
                                         # #if($server!=$session->[uSAC::HTTP::Session::server_]){           #
@@ -195,17 +195,15 @@ sub add_route {
                                         # }                                                                 #
                                         #####################################################################
 
-					my $reply=$alloc;#."x";
-					$reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
-					for(@index){
-						last if $_ >= @h;
-						$reply.= $h[$_].": $h[$_+1]".LF;
+					#my $reply=$alloc;#."x";
+					my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
+						#last if $_ >= @h;
+					$reply.= $h[$_].": $h[$_+1]".LF 
+					for(@index[0..@h/2-1]);
 
-					}
-					for(@index){
-						last if  $_ >= $static_headers->@*;
-						$reply.="$static_headers->[$_]:$static_headers->[$_+1]".LF;
-					}
+						#last if  $_ >= $static_headers->@*;
+					$reply.="$static_headers->[$_]:$static_headers->[$_+1]".LF
+					for(@index[0..$static_headers->@*/2-1]);
 
 					$reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".LF;
 
@@ -222,9 +220,7 @@ sub add_route {
 			};
 	if(@outer){
 		my $middler=uSAC::HTTP::Middler->new();
-		for(@outer){
-			$middler->register($_);
-		}
+		$middler->register($_) for(@outer);
 
 		$outer=$middler->link($serialize);
 	}
@@ -730,7 +726,7 @@ sub usac_static_content {
 			@$headers
 		],
 		$static; 
-		return
+		#return
 	}
 }
 

@@ -10,12 +10,13 @@ use Data::Dumper;
 
 use Exporter 'import';
 use Encode qw<find_encoding decode encode decode_utf8>;
+use URL::Encode::XS;
+use URL::Encode qw<url_decode_utf8>;
 our @EXPORT_OK=qw<
 		make_reader
 		make_form_data_reader
 		make_form_urlencoded_reader
 		make_socket_writer
-		uri_decode
 		parse_form
 		MODE_SERVER
 		MODE_CLIENT
@@ -51,7 +52,8 @@ sub uri_decode {
 sub uri_decode_inplace {
 	$_[0]=~ tr/+/ /;
 	$_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
-	return $UTF_8->decode($_[0]);
+	#$UTF_8->decode($_[0]);
+	Encode::utf8::decode $UTF_8, @_;
 	#decode_utf8($_[0]);
 	#return decode("utf8", $octets);
 }
@@ -123,7 +125,8 @@ sub make_reader{
 				if($pos3>=0){
 					($method,$uri,$version)=split " ", substr($buf,0,$pos3);
 					#$uri=uri_decode $uri;
-					uri_decode_inplace $uri;
+					#uri_decode_inplace $uri;
+					$uri=url_decode_utf8 $uri;
 					#end of line found
 						$state   = STATE_HEADERS;
 						%h=();
@@ -233,7 +236,7 @@ sub make_reader{
 					"$method $uri",
 					$req
 				);
-				return;
+				#return;
 
 			}
 			else {
