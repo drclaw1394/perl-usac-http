@@ -79,7 +79,7 @@ method init {
 	$_sr=uSAC::IO::SReader->sreader(rfh=>$_fh);
 	$_sr->max_read_size=4096*16;
 	#$sr->on_read=\$self->[read_];
-	($_sr->on_eof = sub {$_closeme=1; $_dropper->()});
+	($_sr->on_eof = sub {$_closeme=1; $_dropper->(1)});
 	($_sr->on_error=$_sr->on_eof);
 	$_sr->timing(\$_time, \$Time);
 	#$self->[sr_]=$sr;
@@ -117,14 +117,14 @@ method init {
 
 		#$self->[write_queue_]->@*=();
 		#If the dropper was called with an argument that indicates no error
-		if(@_ and @_zombies < 100){
+		if(@_ and @zombies < 100){
 			# NOTE: Complete reuses of a zombie may still be causing corruption
 			# Suspect that the rex object is not being release intime 
 			# when service static files.
 			# Forced rex to be undef on IO error in static server.. Lets
 			# see if that fixes the issue.
 			# Otherwise comment out the line below
-			unshift @_zombies, $self;
+			unshift @zombies, $self;
 			Log::OK::DEBUG and log_debug "Pushed zombie";
 		}
 		else{
@@ -143,7 +143,7 @@ method init {
 			Log::OK::DEBUG and log_debug "NO Pushed zombie";
 		}
 
-		Log::OK::DEBUG and log_debug "Session: zombies: ".@_zombies;
+		Log::OK::DEBUG and log_debug "Session: zombies: ".@zombies;
 		
 		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
 		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
@@ -175,7 +175,7 @@ method revive {
 	$_sr->start($_fh);
 	$_sw->set_write_handle($_fh);
 	
-	return $self;
+	#return $self;
 }
 
 method drop {

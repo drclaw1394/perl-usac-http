@@ -117,10 +117,7 @@ sub rex_write{
 		$_[1][in_progress_]->$*=1;
 
 		#if($session->[uSAC::HTTP::Session::closeme_]){
-		if($_[1][closeme_]->$*){
-			push $_[3]->@*, 
-				HTTP_CONNECTION, "close";
-		}
+		push $_[3]->@*, HTTP_CONNECTION, "close" if($_[1][closeme_]->$*);
 	}
 
 
@@ -243,7 +240,7 @@ sub rex_error_internal {
 	#$session->[uSAC::HTTP::Session::closeme_]=1;
 	#$session->[uSAC::HTTP::Session::dropper_]->();	#no 'keep alive' so forces close
 	$_[1][closeme_]->$*=1;
-	$_[1][dropper_]();
+	$_[1][dropper_](undef);
 }
 
 

@@ -9,9 +9,8 @@ use Log::OK;
 #use constant "OS::linux"=>0;
 #
 use constant::more {
-	"OS::darwin"=>"darwin",
-	"OS::linux"=>"linux",
-	"OS::bsd"=>"bsd",
+	"CONFIG::set_nonblock"=> $^O eq "linux",
+	"CONFIG::set_no_delay"=> 1
 };
 use constant::more {
 	"CONFIG::single_process"=>1,
@@ -348,16 +347,16 @@ sub accept {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
 			while(($peer = accept my $fh, $fl)){
-				last unless $fh;
+				#last unless $fh;
 
-				CONFIG::kernel_loadbalancing and $do_client->($fh);
+				CONFIG::kernel_loadbalancing and $do_client->($fh) and next;
 
-				!CONFIG::kernel_loadbalancing and IO::FDPass::send $children[$child_index++%@children], $fh;
+				#!CONFIG::kernel_loadbalancing and IO::FDPass::send $children[$child_index++%@children], $fh;
 			}
 		};
 	}
-	return;
 }
+
 sub as_satellite {
 	#Connect to unix socket, which master is listening to
 }
@@ -381,15 +380,15 @@ sub make_do_client{
 
 		#while ($fl and ($peer = accept my $fh, $fl)) {
 
-		binmode	$fh, ":raw";
+		#binmode	$fh, ":raw";
 
 		#Linux does not inherit the socket flags from parent socket. But BSD does.
 		#Compile time disabling with constants
-		OS::linux and fcntl $fh, F_SETFL,O_NONBLOCK;
+		CONFIG::set_nonblock and fcntl $fh, F_SETFL,O_NONBLOCK;
 
 		#TODO:
 		# Need to do OS check here
-		setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1 or Carp::croak "listen/so_nodelay $!";
+		CONFIG::set_no_delay and setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1 or Carp::croak "listen/so_nodelay $!";
 		#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
 
 
@@ -397,8 +396,8 @@ sub make_do_client{
 		my $scheme="http";
 
 		Log::OK::DEBUG and log_debug "Server new client connection: id $id";
-		$session=pop @zombies;
-		if($session){
+		if(@zombies){
+			$session=pop @zombies;
 			#uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
 			$session->revive($id, $fh, $scheme);
 		}

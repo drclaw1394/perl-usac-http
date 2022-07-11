@@ -288,7 +288,7 @@ sub  _make_websocket_server_reader {
 					$self->[pinger_]=undef;
 					$self->[on_close_]->($self);
 					$session->[uSAC::HTTP::Session::closeme_]=1;
-					$session->[uSAC::HTTP::Session::dropper_]->();
+					$session->[uSAC::HTTP::Session::dropper_]->(undef);
 
 				}
 				else{
