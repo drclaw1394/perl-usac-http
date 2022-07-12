@@ -500,9 +500,11 @@ sub send_file_uri_norange {
 						if($rex){
 							#Log::OK::DEBUG and log_debug "parital async write of $rc bytes $total/$content_length bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
 							#Log::OK::DEBUG and log_debug "Static: timeout: writer sub ref count: ".SvREFCNT($sub);
+                                			Log::OK::TRACE and log_trace "Static: asynchronous rex";
 							rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
 						}
 						else {
+                                			Log::OK::TRACE and log_trace "Static: asynchronous no rex";
 							undef $sub;
 						}
 					};
@@ -514,10 +516,12 @@ sub send_file_uri_norange {
 						#Log::OK::DEBUG and log_debug "parital write of $rc bytes $total/$content_length bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
 						#Log::OK::DEBUG and log_debug "$sub";
 						#Log::OK::DEBUG and log_debug "Static: writer sub ref count: ".SvREFCNT($sub);
+                                		Log::OK::TRACE and log_trace "Static: synchronous rex";
 						rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__;
 					}
 					else {
 						#If the rex is undef, it was closed by the server sweeping inactive sessions.
+                                		Log::OK::TRACE and log_trace "Static: synchronous no rex";
 						undef $sub;
 					}
 				}

@@ -454,8 +454,12 @@ sub deflate {
 				Log::OK::TRACE and log_debug "Expecting more data";
 				# more data expected
 				if(length $scratch){
+					Log::OK::TRACE and log_debug "Writing what we have";
 					#enough data to send out
 					$next->(@_[0,1,2,3], $scratch,$dummy);# @_[5,6]);
+					$_[5]->($_[6]);	#execute callback to force feed
+				}
+				else{
 					$_[5]->($_[6]);	#execute callback to force feed
 				}
 			}
@@ -640,6 +644,10 @@ sub gzip{
 					#enough data to send out
 					$next->(@_[0,1,2,3], $scratch,$dummy);# @_[5,6]);
 					$_[5]->($_[6]);	#execute callback to force feed
+				}
+				else {
+					$_[5]->($_[6]);	#execute callback to force feed
+
 				}
 			}
 		},

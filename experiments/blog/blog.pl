@@ -56,7 +56,7 @@ my $server; $server=usac_server {
                 #                                                                                                            #
                 usac_route "/static"=>gzip()=>usac_file_under (
 			#filter=>'txt$',
-                        read_size=>4096*32,
+                        read_size=>1024,
 			#pre_encoded=>[qw<gz>],
 			#no_compress=>qr/txt$/,
                         do_dir=>1,
