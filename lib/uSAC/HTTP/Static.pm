@@ -706,7 +706,7 @@ sub usac_file_under {
 	my $sendfile=$options{sendfile}//0;
 	my $open_modes=$options{open_flags}//0;
 	my $filter=$options{filter};
-	my $no_encoding=$options{no_encoding};
+	my $no_encoding=$options{no_encoding}//"";
 	my $do_dir=$options{list_dir}//$options{do_dir};
 	my $pre_encoded=$options{pre_encoded}//[];
 	Log::OK::INFO and log_info "Serving file from  $html_root";

@@ -116,8 +116,12 @@ sub rex_write{
 		#$session->[uSAC::HTTP::Session::in_progress_]=1;
 		$_[1][in_progress_]->$*=1;
 
-		#if($session->[uSAC::HTTP::Session::closeme_]){
+		#Tell the other end the connection will be closed
 		push $_[3]->@*, HTTP_CONNECTION, "close" if($_[1][closeme_]->$*);
+
+		#Hack to get HTTP/1.0 With keepalive working
+		push $_[3]->@*, HTTP_CONNECTION, "Keep-Alive" if($_[1][version_] eq "HTTP/1.0" and !$_[1][closeme_]->$*);
+
 	}
 
 

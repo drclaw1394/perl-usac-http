@@ -171,16 +171,7 @@ sub add_route {
 				# renders the headers to the output sub
 				# then calls 
 				#
-				#my $session=$_[1]->[uSAC::HTTP::Rex::session_];
-				#my $cb=$_[5]//$session->[uSAC::HTTP::Session::dropper_];# unless $_[5];	#If no cb, then assume dropper
-				#my $cb=$_[5]//$session->dropper;
-				#say $_[1];
-				#say $_[1][uSAC::HTTP::Rex::dropper_];
 				my $cb=$_[5]//$_[1][uSAC::HTTP::Rex::dropper_];
-
-				#state $server=$session->[uSAC::HTTP::Session::server_];
-				#state $server=$session->server;
-				#state $static_headers=$server->static_headers;
 
 
 				if($_[3]){

@@ -96,6 +96,8 @@ method init {
 	#if a false or non existent value is present, session is closed
 	$_dropper=sub {
 		Log::OK::DEBUG and log_debug "Session: Dropper start";
+		Log::OK::DEBUG and log_debug "Session: args: @_";
+		Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";
 		Log::OK::DEBUG and log_debug join ", " , caller;
 		#Normal end of transaction operations
 		$_rex=undef;
@@ -162,7 +164,6 @@ method init {
 
 #take a zombie session and revive it
 method revive {
-	#say "revive  session";
 	$_id=$_[0];	
 	$_in_progress=undef;
 	$_time=$Time;
@@ -251,9 +252,6 @@ our $timer=AE::timer 0,1, sub {
 	#Format Tue, 15 Nov 1994 08:12:31 GMT
 	#TODO: 0 padding of hour min sec
 	$Date="$days[$wday], $mday $months[$mon] ".($year+1900).sprintf(" %02d:%02d:%02d",$hour, $min, $sec)." GMT";
-	#say $Date;
-	#say scalar $self->[zombies_]->@*;
-	#say "Session count : ",scalar keys $self->[sessions_]->%*;
 };
 
 

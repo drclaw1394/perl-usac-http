@@ -41,14 +41,16 @@ use constant MAX_READ_SIZE => 128 * 1024;
 
 use constant LF=>"\015\012";
 
-sub uri_decode {
-	my $octets= shift;
-	$octets=~ s/\+/ /sg;
-	$octets=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
-	return $UTF_8->decode($octets); #decode_utf8 calls this internally?
-	#return decode_utf8($octets);
-	#return decode("utf8", $octets);
-}
+###############################################################################
+# sub uri_decode {                                                            #
+#         my $octets= shift;                                                  #
+#         $octets=~ s/\+/ /sg;                                                #
+#         $octets=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;                     #
+#         return $UTF_8->decode($octets); #decode_utf8 calls this internally? #
+#         #return decode_utf8($octets);                                       #
+#         #return decode("utf8", $octets);                                    #
+# }                                                                           #
+###############################################################################
 sub uri_decode_inplace {
 	$_[0]=~ tr/+/ /;
 	$_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
@@ -74,7 +76,6 @@ use enum (qw<STATE_REQUEST STATE_RESPONSE STATE_HEADERS>);
 
 #make a reader which is bound to a session
 sub make_reader{
-	#say "MAKING BASE HTTP1.1 reader";
 	#take a session and alias the variables to lexicals
 	my $r=shift;
 	my $mode=shift; #Client or server
@@ -84,8 +85,6 @@ sub make_reader{
 
 	my $ex=$r->exports;
 	
-	#my $self=$r->[uSAC::HTTP::Session::server_];
-	#$r->server;
 	\my $closeme=$ex->[0];
 	my $dropper=$ex->[1];
 	\my $self=$ex->[2];
@@ -98,9 +97,6 @@ sub make_reader{
 	my $line;
 
 	my %h;		#Define the header storage here, once per connection
-	#my @headers;
-	#my @hset;
-	#my @hused;
 	
 	my $host;
 	sub {
@@ -196,32 +192,21 @@ sub make_reader{
 
 				#Done with headers. 
 
-				#($uri,my $query)=split('\?', $uri);
-				#
-				#my $host=$h{HOST};#$hset[HTTP_HOST];#find_header \@headers, HTTP_HOST;
-				
 				$req=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri);
 
-
-
-				#$r->[uSAC::HTTP::Session::rex_]=$req;
-				#$r->rex=$req;
 				$rex=$req;
 
+				my $tmp=$h{CONNECTION}//"";
+				if($version eq "HTTP/1.0"){
+					$closeme=$tmp !~ /keep-alive/i;
+				}
+				else {
 
-				#weaken $r->[uSAC::HTTP::Session::rex_]i
-				#weaken $r->rex;
-				weaken $rex;
-
-
-				#$r->[uSAC::HTTP::Session::closeme_]=0;
+					$closeme=$tmp =~ /close/i;
+				}
 				
-				#$r->[uSAC::HTTP::Session::closeme_]||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
-				#$r->closeme=0;
-				#$r->closeme||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
-				$closeme=0;
-				$closeme||= ($h{CONNECTION}//"") eq "close" ||$version ne "HTTP/1.1";
 
+				Log::OK::DEBUG and log_debug "CLose me set to: $closeme";
 				#Log::OK::DEBUG and log_debug "Reading on session: $r->[uSAC::HTTP::Session::id_]";
 				Log::OK::DEBUG and log_debug "$uri";
 

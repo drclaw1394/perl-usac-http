@@ -262,9 +262,7 @@ sub prepare {
 		my $session;
 		for(keys $self->[sessions_]->%*){
 			$session=$self->[sessions_]{$_};
-			#say "checking id: $_ time: ", $session->[uSAC::HTTP::Session::time_];
 
-			#if(($self->[server_clock_]-$session->[uSAC::HTTP::Session::time_])> $timeout){
 			if(($self->[server_clock_]-$session->time)> $timeout){
 				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
 				#$session->[uSAC::HTTP::Session::closeme_]=1;
@@ -313,9 +311,7 @@ sub make_sysaccept {
 	my $packed_address=" " x $addr_len;
 	my $i=pack("i*",$addr_len);
 	my $fn=fileno($fh);
-	#say length $packed_address;
 
-	#say "Listed fd ", fileno($fh);
 	sub {
 		my $handle;
 		my $result=syscall $syscall_number, $fn, $packed_address, $i;
@@ -323,7 +319,6 @@ sub make_sysaccept {
 			#say "Syscall error: $result: $!";
 		}
 		else {
-			#say "syscal ok";
 			#open from fd
 			$handle=IO::Handle->new_from_fd($result ,"<");
 			#open $handle, "<&=$result";
