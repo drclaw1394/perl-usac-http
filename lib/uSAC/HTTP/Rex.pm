@@ -361,10 +361,10 @@ sub new {
 	$self->[in_progress_]=$ex->[4];
 	$self->[write_]=$ex->[5];
 
-	weaken $self->[session_];
+	#weaken $self->[session_];
 	#	$self->[session_][uSAC::HTTP::Session::rex_]=$self;
 	#weaken $self->[session_][uSAC::HTTP::Session::rex_];
-	weaken $self->[write_];
+	#weaken $self->[write_];
 
 	$self;
 }

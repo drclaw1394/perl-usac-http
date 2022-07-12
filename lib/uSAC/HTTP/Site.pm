@@ -185,15 +185,6 @@ sub add_route {
 
 				if($_[3]){
 					\my @h=$_[3];
-                                        #####################################################################
-                                        # #if($server!=$session->[uSAC::HTTP::Session::server_]){           #
-                                        # if($server!=$session->server){                                    #
-                                        #         #say  "session id", $session->[uSAC::HTTP::Session::id_]; #
-                                        #         #$server=$session->[uSAC::HTTP::Session::server_];        #
-                                        #         $server=$session->server;                                 #
-                                        #         $static_headers=$server->static_headers;                  #
-                                        # }                                                                 #
-                                        #####################################################################
 
 					#my $reply=$alloc;#."x";
 					my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;

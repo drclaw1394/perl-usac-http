@@ -785,7 +785,8 @@ sub usac_file_under {
 		#
 		#=========================================
 		
-		if($do_dir || @indexes and $path =~ m|/$|){
+		#if($do_dir || @indexes and $path =~ m|/$|){
+		if($do_dir || @indexes and substr($path, -1) eq "/") {
 			#attempt to do automatic index file.
 			my $entry;
 			for(@indexes){
