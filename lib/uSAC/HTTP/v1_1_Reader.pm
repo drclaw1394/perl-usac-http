@@ -151,7 +151,7 @@ sub make_reader{
 			elsif ($state == STATE_HEADERS) {
 				# headers
 				my $k;
-				my $v;
+				my $val;
 				my $pos3;
 				while () {
 					$pos3=index $buf, LF;
@@ -161,18 +161,24 @@ sub make_reader{
 							last;
 						};	#empty line.
 
-						($k,$v)=split ":", substr($buf,0,$pos3), 2;
-						$k=uc $k=~tr/-/_/r;	
-						my $val=$v=~tr/\t //dr;
+						($k,$val)=split ":", substr($buf,0,$pos3), 2;
+						$k=~tr/-/_/;
+						$k=uc $k;
+						#my $val=
+						$val=~tr/\t //d;
 						\my $e=\$h{$k};
-						if($e){
-							$e.=",$val";
-						}
-						else {
-							$e=$val;
-							$host=$val if $k eq "HOST";
-						}
+						$e?$e.=",$val":$e=$val;
+                                                #######################################
+                                                # if($e){                             #
+                                                #         $e.=",$val";                #
+                                                # }                                   #
+                                                # else {                              #
+                                                #         $e=$val;                    #
+                                                #         $host=$val if $k eq "HOST"; #
+                                                # }                                   #
+                                                #######################################
 
+						$host=$val if !$host and $k eq "HOST";
 						$buf=substr $buf, $pos3+2;
 						redo;
 					}

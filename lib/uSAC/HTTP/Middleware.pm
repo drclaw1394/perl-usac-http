@@ -218,7 +218,6 @@ sub chunked{
 
 	my %out_ctx;
 	my $ctx;
-	my @hindexes;
 	my $chunked_out=
 	sub {
 		my $next=shift;
@@ -248,10 +247,15 @@ sub chunked{
 				#Add to headers the chunked trasfer encoding
 				#
 				my $index;
-				for(@hindexes){
-						#last if $_ >=@headers;
-					$index=$_+1  and last if ($headers[$_] eq HTTP_TRANSFER_ENCODING);
-				}
+                                ##############################################################################
+                                # for(@key_indexes){                                                         #
+                                #                 #last if $_ >=@headers;                                    #
+                                #         $index=$_+1  and last if ($headers[$_] eq HTTP_TRANSFER_ENCODING); #
+                                # }                                                                          #
+                                ##############################################################################
+				$_ eq HTTP_TRANSFER_ENCODING and ($index=$_+1, last)
+					for @headers[@key_indexes[0..@headers/2-1]];
+
 				unless($index){	
 					push @headers, HTTP_TRANSFER_ENCODING, "chunked";
 
@@ -275,8 +279,8 @@ sub chunked{
 
 			Log::OK::TRACE and log_trace "DOING CHUNKS";
 
-			my $scratch="";
-			$scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF if $_[4];
+			#my $scratch="";
+			my $scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF if $_[4];
 
 			unless($_[5]){
 				$scratch.="00".LF.LF;
@@ -286,7 +290,7 @@ sub chunked{
 									#(multicall)
 			}
 
-			return $next->(@_[0,1,2,3],$scratch,@_[5,6]);# if $scratch;
+			$next->(@_[0,1,2,3],$scratch,@_[5,6]);# if $scratch;
 
 			#return &$next;
 
@@ -347,11 +351,14 @@ sub deflate {
 
 				#Also disable if we are already encoded
 				$exe=1;
-				for my $k (@key_indexes){
-					last if $k >= @headers;
-					Log::OK::TRACE and log_trace "Deflate: Testing header: $headers[$k]";
-					($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;
-				}
+                                #################################################################################
+                                # for my $k (@key_indexes){                                                     #
+                                #         last if $k >= @headers;                                               #
+                                #         Log::OK::TRACE and log_trace "Deflate: Testing header: $headers[$k]"; #
+                                #         ($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;      #
+                                # }                                                                             #
+                                #################################################################################
+				$_ eq HTTP_CONTENT_ENCODING  and ($exe=undef) or last for @headers[@key_indexes[0.. @headers/2-1]];
 				
 				Log::OK::TRACE  and log_trace "exe ". $exe; 
 				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
@@ -364,22 +371,27 @@ sub deflate {
 				
 				Log::OK::TRACE  and log_trace "No bypass in headers";
 
+				$index=@headers;#undef;
 				#Remove content length as we will rely on chunked encoding
-				$index=undef;
-				for my $k (@key_indexes){
-					last if $k >= @headers;
-					Log::OK::TRACE and log_debug "Header testing: $headers[$k]";
-					if($headers[$k] eq HTTP_CONTENT_LENGTH){$index=$k; last};
-					#last if defined $index;
-				}
+                                ########################################################################
+                                # $index=undef;                                                        #
+                                # for my $k (@key_indexes){                                            #
+                                #         last if $k >= @headers;                                      #
+                                #         Log::OK::TRACE and log_debug "Header testing: $headers[$k]"; #
+                                #         if($headers[$k] eq HTTP_CONTENT_LENGTH){$index=$k; last};    #
+                                #         #last if defined $index;                                     #
+                                # }                                                                    #
+                                ########################################################################
+				$headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
+				for @key_indexes[0..@headers/2-1];
 
 				Log::OK::TRACE and log_debug "Content length index: $index";
 
-				splice(@headers, $index, 2) if defined $index;
+				splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "deflate");# if defined $index;
 				
 
 				#Set our encoding header
-				push @headers, HTTP_CONTENT_ENCODING, "deflate";
+				#push @headers, HTTP_CONTENT_ENCODING, "deflate";
 
 
 				unless($_[5]){
@@ -447,7 +459,7 @@ sub deflate {
 				Log::OK::TRACE and log_trace "delete...".scalar keys %out_ctx;
 
 				$next->(@_[0,1,2,3], $scratch, @_[5,6]);
-				return;
+				#return;
 
 			}
 			else {
@@ -510,11 +522,14 @@ sub gzip{
 
 				#Also disable if we are already encoded
 				$exe=1;
-				for my $k (@key_indexes){
-					last if $k >= @headers;
-					Log::OK::TRACE and log_trace "gzip: Testing header: $headers[$k]";
-					($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;
-				}
+                                ##############################################################################
+                                # for my $k (@key_indexes){                                                  #
+                                #         last if $k >= @headers;                                            #
+                                #         Log::OK::TRACE and log_trace "gzip: Testing header: $headers[$k]"; #
+                                #         ($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;   #
+                                # }                                                                          #
+                                ##############################################################################
+				$_ eq HTTP_CONTENT_ENCODING  and ($exe=undef) or last for @headers[@key_indexes[0.. @headers/2-1]];
 				
 				Log::OK::TRACE  and log_trace "exe ". $exe; 
 				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
@@ -528,21 +543,26 @@ sub gzip{
 				Log::OK::TRACE  and log_trace "No bypass in headers";
 
 				#Remove content length as we will rely on chunked encoding
-				$index=undef;
-				for my $k (@key_indexes){
-					last if $k >= @headers;
-					Log::OK::TRACE and log_debug "Header testing: $headers[$k]";
-					if($headers[$k] eq HTTP_CONTENT_LENGTH){$index=$k; last};
-					#last if defined $index;
-				}
+				$index=@headers;#undef;
+                                ########################################################################
+                                # for my $k (@key_indexes){                                            #
+                                #         last if $k >= @headers;                                      #
+                                #         Log::OK::TRACE and log_debug "Header testing: $headers[$k]"; #
+                                #         if($headers[$k] eq HTTP_CONTENT_LENGTH){$index=$k; last};    #
+                                #         #last if defined $index;                                     #
+                                # }                                                                    #
+                                ########################################################################
+
+				$headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
+				for @key_indexes[0..@headers/2-1];
 
 				Log::OK::TRACE and log_debug "Content length index: $index";
 
-				splice(@headers, $index, 2) if defined $index;
+				splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "gzip");# if defined $index;
 				
 
 				#Set our encoding header
-				push @headers, HTTP_CONTENT_ENCODING, "gzip";
+				#push @headers, HTTP_CONTENT_ENCODING, "gzip";
 
 
 				unless($_[5]){
@@ -611,9 +631,9 @@ sub gzip{
 
 			# Append comppressed data to the scratch when its ready
 			#
-			my $scratch=""; 	#new scratch each call
+			#my $scratch=""; 	#new scratch each call
 
-			$scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER if $_[3];
+			my $scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER if $_[3];
 
 			$status=$ctx->deflate($buf, $scratch);
 			$status == Z_OK or log_error "Error creating deflate context";
@@ -634,7 +654,7 @@ sub gzip{
 				Log::OK::TRACE and log_trace "delete...".scalar keys %out_ctx;
 
 				$next->(@_[0,1,2,3], $scratch, @_[5,6]);
-				return;
+				#return;
 
 			}
 			else {

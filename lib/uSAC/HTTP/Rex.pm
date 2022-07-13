@@ -340,14 +340,15 @@ sub writer {
 
 
 my $id=0;	#Instead of using state
+my $_i;
 sub new {
 	#my ($package, $session, $headers, $host, $version, $method, $uri)=@_;
 
 	#state $id=0;
 	my $query_string="";
-	if((my $i=index($_[6], "?"))>=0){
-		$query_string=substr $_[6], $i+1;
-	}
+	$query_string=substr($_[6], $_i+1)
+		if(($_i=index($_[6], "?"))>=0);
+	
 	Log::OK::DEBUG and log_debug "+++++++Create rex: $id";
 
 	#my $write=undef;

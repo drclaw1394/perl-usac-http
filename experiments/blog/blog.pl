@@ -54,9 +54,9 @@ my $server; $server=usac_server {
                 #                                                                                                            #
                 # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; #
                 #                                                                                                            #
-                usac_route "/static"=>gzip()=>usac_file_under (
+                usac_route "/static"=>deflate()=>gzip()=>usac_file_under (
 			#filter=>'txt$',
-                        read_size=>1024,
+                        read_size=>4096,#1024,
 			#pre_encoded=>[qw<gz>],
 			#no_compress=>qr/txt$/,
                         do_dir=>1,
