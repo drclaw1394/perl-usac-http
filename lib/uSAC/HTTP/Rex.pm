@@ -358,18 +358,9 @@ sub new {
 	#my $write=$_[1]->[uSAC::HTTP::Session::write_];
 	#
 	#NOTE: A single call to Session export. give references to important variables
-	my $ex=$_[1]->exports;
-	$self->[closeme_]=$ex->[0];
-	$self->[dropper_]=$ex->[1];
-	$self->[server_]=$ex->[2];
-	$self->[rex_]=$ex->[3];
-	$self->[in_progress_]=$ex->[4];
-	$self->[write_]=$ex->[5];
+	
+	($self->[closeme_], $self->[dropper_], $self->[server_], $self->[rex_], $self->[in_progress_], $self->[write_])= $_[1]->exports->@*;
 
-	#weaken $self->[session_];
-	#	$self->[session_][uSAC::HTTP::Session::rex_]=$self;
-	#weaken $self->[session_][uSAC::HTTP::Session::rex_];
-	#weaken $self->[write_];
 
 	$self;
 }

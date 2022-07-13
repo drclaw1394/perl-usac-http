@@ -153,15 +153,15 @@ sub make_reader{
 				my $k;
 				my $val;
 				my $pos3;
+				#my $index;
 				while () {
 					$pos3=index $buf, LF;
-					if($pos3>=0){
-						if($pos3 == 0){
-							$buf=substr($buf, $pos3+2);
-							last;
-						};	#empty line.
-
+					if($pos3>0){
+						#$index=index substr($buf,0,$pos3), ":";
+						#$k=substr($buf,0,$index);
+						#$val=substr($buf, $index+1,$pos3-$index);
 						($k,$val)=split ":", substr($buf,0,$pos3), 2;
+						#say $k,", ",$val;
 						$k=~tr/-/_/;
 						$k=uc $k;
 						#my $val=
@@ -180,8 +180,12 @@ sub make_reader{
 
 						$host=$val if !$host and $k eq "HOST";
 						$buf=substr $buf, $pos3+2;
-						redo;
+						#redo;
 					}
+					elsif($pos3 == 0){
+							$buf=substr($buf, $pos3+2);
+							last;
+					}	#empty line.
 
 					else{
 						#-1	Need more
