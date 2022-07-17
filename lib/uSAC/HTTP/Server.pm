@@ -131,6 +131,8 @@ sub new {
 	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
 
+	$self->[listen_]=[];
+
 	$self->mime_db=uSAC::MIME->new;
 	$self->mime_default="application/octet-stream";
 	#$self->[mime_lookup_]=$self->mime_db->index;
@@ -144,6 +146,7 @@ sub listen_inet {
 
 sub listen {
 	my $self = shift;
+	Log::OK::INFO and log_info __PACKAGE__." setting up listeners...";
 	for my $listen (@{ $self->[listen_] }) {
 		say ref $listen;
 		my ($host,$service) =($listen->host, $listen->port);#split ':',$listen,2;
@@ -330,6 +333,7 @@ sub make_sysaccept {
 
 sub accept {
 	state $seq=0;
+	Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
 	weaken( my $self = shift );
 	\my @zombies=$self->[zombies_];
 	\my %sessions=$self->[sessions_];
@@ -487,6 +491,7 @@ sub site {
 sub rebuild_dispatch {
 	my $self=shift;
 
+	Log::OK::INFO and log_info(__PACKAGE__. "rebuilding dispatch...");
 	#here we add the unsupported methods to the table before building it
 	#Note: this is different to a unfound URL resource.
 	#These give a method not supported error, while an unfound resource is a
@@ -554,16 +559,15 @@ sub stop {
 sub run {
 	my $self=shift;
 	my $cv=AE::cv;
+	Log::OK::INFO and log_info(__PACKAGE__. " starting server...");
 	$self->[cv_]=$cv;
 	my $sig; $sig=AE::signal(INT=>sub {
 		$self->stop;
 		$sig=undef;
 	});
-	say "server: $self";
-	say ref for $self->[listen_]->@*;
-	unless($self->[listen_]->@*){
+	unless($self->[listen_] and $self->[listen_]->@*){
 		Log::OK::FATAL and log_fatal "NO listeners defined";
-		die;
+		die "no Listeners defined";
 	}
 	#TODO: check for duplicates
 	

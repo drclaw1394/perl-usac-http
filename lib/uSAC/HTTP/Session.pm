@@ -63,33 +63,19 @@ method init {
         $_time=$Time; 
 	($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme)=@_;
 	\my @zombies= $zombies;
-	#$self->[read_stack_]=[];
-	#$self->[reader_cache_]={};
-
-	#$self->[write_stack_]=[];
-	#
-	#my $server=$self->[server_];
-	#my $sessions=$self->[sessions_];
-	#my $zombies=$self->[zombies_];
-	#\my $fh=\$self->[fh_];
-	#\my $id=\$self->[id_];
-	#\my $closeme=\$self->[closeme_];
 
 	#make reader
-	$_sr=uSAC::IO::SReader->sreader(rfh=>$_fh);
+	$_sr=uSAC::IO::SReader->create($_fh);
 	$_sr->max_read_size=4096*16;
-	#$sr->on_read=\$self->[read_];
 	($_sr->on_eof = sub {$_closeme=1; $_dropper->(1)});
 	($_sr->on_error=$_sr->on_eof);
 	$_sr->timing(\$_time, \$Time);
-	#$self->[sr_]=$sr;
 
 
-	$_sr->start;#uSAC::IO::SReader::start $sr;
-	#$sr->start;
+	$_sr->start;
 
 	#make writer
-	$_sw=uSAC::IO::SWriter->swriter(wfh=>$_fh);
+	$_sw=uSAC::IO::SWriter->create($_fh);
 
 	#Takes an a bool argument: keepalive
 	#if a true value is present then no dropping is performed
@@ -191,16 +177,18 @@ method closeme :lvalue {
 method dropper :lvalue {
 	$_dropper;
 }
-method rex {
+method rex :lvalue {
 	$_rex;
 }
 
 method server {
 	$_server;
 }
+
 method in_progress: lvalue{
 	$_in_progress;
 }
+
 method fh :lvalue{
 	$_fh;
 }

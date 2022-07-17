@@ -234,7 +234,7 @@ sub rex_error_not_found {
 
 sub rex_error_forbidden {
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
+	rex_write (@_, HTTP_FORBIDDEN, [HTTP_CONTENT_LENGTH, 0], '');
 }
 
 sub rex_error_internal {
@@ -451,7 +451,7 @@ sub usac_data_stream{
 		}
 
 		#$session->[uSAC::HTTP::Session::closeme_]=1;
-		$_[1][closeme_]->%*=1;
+		$_[1][closeme_]->$*=1;
 		rex_write @_, @err_res;#$line,$rex,@err_res; 
 	}
 }
@@ -586,7 +586,7 @@ sub usac_form_slurp{
 	#$tmp_dir=uSAC::HTTP::Site::usac_path(%options, $tmp_dir);
 	#convert to abs path to prevent double resolving
 	unless( -d $tmp_dir){
-		my $message= "Could not access directory $tmp_dir for uploads";
+		my $message= "Could not access directory $tmp_dir for uploads. Does it exist?";
 		Log::OK::FATAL and log_fatal $message;
 		die $message;
 	}

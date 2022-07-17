@@ -113,11 +113,13 @@ sub usac_websocket {
 
 				#write reply	
 				DEBUG and say "setting in progress flag";
-				$session->[uSAC::HTTP::Session::in_progress_]=1;
+				#$session->[uSAC::HTTP::Session::in_progress_]=1;
+				$rex->[uSAC::HTTP::Rex::in_progress_]=1;
 				local $/=", ";
-				for($session->[uSAC::HTTP::Session::write_]){
-					$_->($reply.LF , sub {
+				#for($session->[uSAC::HTTP::Session::write_]){
 
+				for($rex->[uSAC::HTTP::Rex::write_]){
+					$_->($reply.LF , sub {
 							my $ws=uSAC::HTTP::Server::WS->new($session);
 							#$ws->[PMD_]=$deflate_flag;
 							$ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);
@@ -135,7 +137,8 @@ sub usac_websocket {
 			else{
 				DEBUG && say "Websocket did not match";
 				#reply
-				$session->[uSAC::HTTP::Session::closeme_]=1;
+				#$session->[uSAC::HTTP::Session::closeme_]=1;
+				$rex->[uSAC::HTTP::Rex::closeme_]->$*=1;
 				uSAC::HTTP::Rex::rex_error_forbidden $line, $rex;
 				return;
 			}
@@ -150,8 +153,8 @@ sub  _make_websocket_server_reader {
 	my $session=shift;	#session
 	#my $ws=shift;		#websocket
 
-	\my $fh=$session->[uSAC::HTTP::Session::fh_];
-	my $rex=$session->[uSAC::HTTP::Session::rex_];
+	\my $fh=$session->fh;#[uSAC::HTTP::Session::fh_];
+	my $rex=$session->rex;#[uSAC::HTTP::Session::rex_];
 	my $writer=$rex->[uSAC::HTTP::Rex::write_];
 
 	my ($fin, $rsv1, $rsv2, $rsv3,$op, $mask, $len);
@@ -287,8 +290,10 @@ sub  _make_websocket_server_reader {
 					#TODO: drop the session, undef any read/write subs
 					$self->[pinger_]=undef;
 					$self->[on_close_]->($self);
-					$session->[uSAC::HTTP::Session::closeme_]=1;
-					$session->[uSAC::HTTP::Session::dropper_]->(undef);
+					#$session->[uSAC::HTTP::Session::closeme_]=1;
+					$rex->[uSAC::HTTP::Rex::closeme_]->$*=1;
+					#$session->[uSAC::HTTP::Session::dropper_]->(undef);
+					$session->[uSAC::HTTP::Rex::dropper_]->(undef);
 
 				}
 				else{
@@ -373,7 +378,7 @@ sub _make_websocket_server_writer {
 
 	my ($entry_point,$stack)=uSAC::HTTP::Middler->new()
 		->register(\&_websocket_writer)
-		->link($session->[uSAC::HTTP::Session::write_]);
+		->link($session->[uSAC::HTTP::Rex::write_]);
 	return $entry_point;
 }
 
@@ -386,8 +391,9 @@ sub new {
 	$self->@[(id_, session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_, on_open_)]=($id++, $session, 1024**2, 0, 5, OPEN, sub {}, sub {}, sub {}, sub{});
 
 	bless $self, $pkg;
-	$session->[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
-	$session->[uSAC::HTTP::Session::closeme_]=1;	#At the end of the session close the socket
+	$session->rex=$self;#[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
+	#$session->[uSAC::HTTP::Rex::closeme_]=1;	#At the end of the session close the socket
+	$session->closeme=1;
 
 	$self->[writer_]=_make_websocket_server_writer $self, $session;	#create a writer and store in ws
 
@@ -398,14 +404,15 @@ sub new {
 	$self->ping_interval($self->[ping_interval_]);
 
 	#override dropper
-	my $old_dropper=$session->[uSAC::HTTP::Session::dropper_];
+	my $old_dropper=$session->dropper;#[uSAC::HTTP::Session::dropper_];
 	my $dropper=sub {
 		$self->[pinger_]=undef;
 		$self->[writer_]=sub {};
 		&$old_dropper;
 		$self->[on_close_]->();
 	};
-	$session->[uSAC::HTTP::Session::dropper_]=$dropper;
+	#$session->[uSAC::HTTP::Session::dropper_]=$dropper;
+	$session->dropper=$dropper;
 
 	return $self;
 }
@@ -414,7 +421,6 @@ sub new {
 sub _decode_message {
 	#use current opcode and flags to aggregate fragmented messages and then call on_message
 }
-
 
 
 

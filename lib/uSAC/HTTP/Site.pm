@@ -316,20 +316,6 @@ sub _strip_prefix {
 			
 				!$_[1][uSAC::HTTP::Rex::in_progress_] and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uSAC::HTTP::Rex::uri_]);
 
-                                ###############################################################################################################################
-                                # for($_[1][uSAC::HTTP::Rex::session_]){                                                                                      #
-                                #         #if($_ and  !$_->[uSAC::HTTP::Session::in_progress_]){                                                              #
-                                #         #if($_ and  !$_->in_progress){                                                                                      #
-                                #         if(!$_->[uSAC::HTTP::Rex::in_progress_]){                                                                           #
-                                #                 Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uSAC::HTTP::Rex::uri_]);                    #
-                                #         }                                                                                                                   #
-                                #         else {                                                                                                              #
-                                #                 Log::OK::TRACE and log_trace("SESSION and REX complete and OUT OF SCOPE:". $_[1]->[uSAC::HTTP::Rex::uri_]); #
-                                #                                                                                                                             #
-                                #         }                                                                                                                   #
-                                # }                                                                                                                           #
-                                ###############################################################################################################################
-				#}
 		},
 
 	}
@@ -857,5 +843,8 @@ sub usac_error_not_found {
 		&rex_error_not_found;
 	};
 }
+
+
+#Error Pages
 
 1;

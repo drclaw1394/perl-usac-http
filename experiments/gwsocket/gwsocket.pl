@@ -2,11 +2,25 @@
 #
 use Data::Dumper;
 
+use Log::ger;
+use Log::ger::Output "Screen";
+use Log::OK {
+	lvl=>"warn",
+	opt=>"verbose"
+};
+Log::ger::Util::set_level Log::OK::LEVEL;
+
 use uSAC::HTTP;
+use uSAC::HTTP::Middleware qw<log_simple>;
 use uSAC::HTTP::Server::WS;
 
-use uSAC::SIO;
+use uSAC::IO;
+use constant ENABLE=>1;
+
 my $server;$server=usac_server{
+	usac_listen no_hosts=>1, "0.0.0.0:9090";
+	usac_middleware log_simple;
+
 	usac_route GET=>"/ws"=>usac_websocket sub {
 		my $ws=shift;
 		my $state=0;	#idle, connecting, connected,
@@ -92,41 +106,53 @@ my $server;$server=usac_server{
 		</body>
 		</html>
 		|;
-		rex_reply_simple @_, HTTP_OK,[],$form;
+		rex_write @_, HTTP_OK,[], $form;
 		
 	};
 
-	usac_route POST=>"/form1"=>usac_form_slurp sub{
+	usac_route POST=>"/form1"=>usac_form_slurp
+		dir=>usac_path(root=>usac_dirname, "uploads"),
+		sub{
 		my ($matcher, $rex, $data, $headers, $end)=@_;
 		say Dumper $data;
-		rex_reply_simple $matcher, $rex,  HTTP_OK, [], "GOT A FORM";
+		rex_write $matcher, $rex,  HTTP_OK, [], "GOT A FORM";
 		
 	};
 
+	my $static_path=usac_path root=>usac_dirname, "static";
+	
 	usac_route GET=>"/hot/$File_Path"=>		usac_static_content "Hello there";
-	usac_route GET=>"/$File_Path"=>			usac_file_under "static";
-	usac_route GET=>"/$Dir_Path"=>			usac_index_under indexes=>[qw<index.html>],  "static";
+
+	usac_route GET=>"/$File_Path"=>			usac_file_under $static_path;
+
+	usac_route GET=>"/$Dir_Path"=>			usac_file_under indexes=>[qw<index.html>],  $static_path;
 
 	usac_route [qw<POST PUT>]=>"/upload"=>
-		usac_data_slurp mime=>"text/plain", byte_limit=>4096*1024, sub {
-			my ($matcher, $rex, $data, $headers, $last)=@_;
-			say Dumper $headers;
-			rex_reply_simple $matcher, $rex, HTTP_OK, [], "sdf";
-	};
+		usac_data_slurp mime=>"text/plain", byte_limit=>4096*1024,
+			dir=>usac_path(root=>usac_dirname, "uploads"),
+			sub {
+				my ($matcher, $rex, $data, $headers, $last)=@_;
+				say Dumper $headers;
+				rex_write $matcher, $rex, HTTP_OK, [], "sdf";
+			};
 
 	usac_route [qw<POST PUT>]=>"/multi"=>
-		usac_multipart_slurp byte_limit=>4096*1024, sub {
-			my ($matcher, $rex, $data, $headers, $last)=@_;
-			say Dumper $data;
-			rex_reply_simple $matcher, $rex, HTTP_OK, [], "sdf";
-	};
+		usac_multipart_slurp byte_limit=>4096*1024,
+			dir=>usac_path(root=>usac_dirname, "uploads"),
+			sub {
+				my ($matcher, $rex, $data, $headers, $last)=@_;
+				say Dumper $data;
+				rex_write $matcher, $rex, HTTP_OK, [], "sdf";
+			};
 
 	usac_route [qw<POST PUT>]=>"/urlencoded"=>
-		usac_urlencoded_slurp byte_limit=>4096*1024, sub {
-			my ($matcher, $rex, $data, $headers, $last)=@_;
-			say Dumper $data;
-			rex_reply_simple $matcher, $rex, HTTP_OK, [], "sdf";
-	};
+		usac_urlencoded_slurp byte_limit=>4096*1024, 
+			dir=>usac_path(root=>usac_dirname, "uploads"),
+			sub {
+				my ($matcher, $rex, $data, $headers, $last)=@_;
+				say Dumper $data;
+				rex_write $matcher, $rex, HTTP_OK, [], "sdf";
+			};
 };
 
 $server->run;
