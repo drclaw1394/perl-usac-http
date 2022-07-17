@@ -267,8 +267,8 @@ sub add_route {
 			}
 
 			#$matcher="$method $bp$pm";
-			Log::OK::TRACE and log_trace "Adding matched endpoints";
-			Log::OK::TRACE and log_info "  matching: $host $matcher";                                 #
+			Log::OK::DEBUG and log_debug"Adding matched endpoints";
+			Log::OK::DEBUG and log_debug"  matching: $host $matcher";                                 #
 			$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
 		}
 	}
@@ -628,6 +628,26 @@ sub usac_host {
 	my $host=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
+        ######################################################
+        # my @uri;                                           #
+        # if(ref($host) eq "ARRAY"){                         #
+        #         @uri= map {URI->new("http://$_")} @$host;  #
+        # }                                                  #
+        # else{                                              #
+        #         @uri= map {URI->new("http://$_")} ($host); #
+        # }                                                  #
+        # for(@uri){                                         #
+        #         die "Error parsing hosts: $_ " unless ref; #
+        # }                                                  #
+        # push $self->host->@*, @uri;                        #
+        ######################################################
+	$self->add_host(%options,$host);
+}
+
+sub add_host {
+	my $self=shift;
+	my $host=pop;	#Content is the last item
+	my %options=@_;
 	my @uri;
 	if(ref($host) eq "ARRAY"){
 		@uri= map {URI->new("http://$_")} @$host;
@@ -642,13 +662,21 @@ sub usac_host {
 
 }
 
+
 sub usac_middleware {
 	#my $self=$_;
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
+	$self->add_middleware(%options, $mw);
+}
+sub add_middleware {
+	my $self=shift;
+	my $mw=pop;	#Content is the last item
+	my %options=@_;
 	push $self->innerware->@*, $mw->[0];
 	push $self->outerware->@*, $mw->[1];
+
 }
 sub usac_innerware{
 	#my $self=$_;

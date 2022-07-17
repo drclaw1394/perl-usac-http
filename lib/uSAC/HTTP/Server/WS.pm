@@ -3,6 +3,8 @@ use strict;
 use warnings;
 no warnings "experimental";
 use feature qw<bitwise state say refaliasing current_sub>;
+use Log::ger;
+use Log::OK;
 
 use Exporter 'import';
 use MIME::Base64;		
@@ -70,7 +72,7 @@ sub usac_websocket {
 	my $cb=shift;
 
 	sub {
-		DEBUG and say  "Testing for websocket";
+		Log::OK::TRACE and log_trace "Testing for websocket";
 		my ($line, $rex)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#attempt to do the match
@@ -103,7 +105,7 @@ sub usac_websocket {
 				for($_->{SEC_WEBSOCKET_EXTENSIONS}){
 					if(/permessage-deflate/){
 						$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
-						say  "DEFLATE SUPPORTED";
+						Log::OK::DEBUG and log_debug(  __PACKAGE__." DEFLATE SUPPORTED");
 						$deflate_flag=1;
 
 					}
@@ -112,12 +114,13 @@ sub usac_websocket {
 				}
 
 				#write reply	
-				DEBUG and say "setting in progress flag";
+				Log::OK::DEBUG and log_debug __PACKAGE__." setting in progress flag";
 				#$session->[uSAC::HTTP::Session::in_progress_]=1;
 				$rex->[uSAC::HTTP::Rex::in_progress_]=1;
 				local $/=", ";
 				#for($session->[uSAC::HTTP::Session::write_]){
 
+				
 				for($rex->[uSAC::HTTP::Rex::write_]){
 					$_->($reply.LF , sub {
 							my $ws=uSAC::HTTP::Server::WS->new($session);
@@ -135,7 +138,7 @@ sub usac_websocket {
 			}
 
 			else{
-				DEBUG && say "Websocket did not match";
+				Log::OK::DEBUG and log_debug __PACKAGE__." Websocket did not match";
 				#reply
 				#$session->[uSAC::HTTP::Session::closeme_]=1;
 				$rex->[uSAC::HTTP::Rex::closeme_]->$*=1;
@@ -155,7 +158,7 @@ sub  _make_websocket_server_reader {
 
 	\my $fh=$session->fh;#[uSAC::HTTP::Session::fh_];
 	my $rex=$session->rex;#[uSAC::HTTP::Session::rex_];
-	my $writer=$rex->[uSAC::HTTP::Rex::write_];
+	my $writer=$session->write;#$rex->[uSAC::HTTP::Rex::write_];
 
 	my ($fin, $rsv1, $rsv2, $rsv3,$op, $mask, $len);
 	my $head;
@@ -365,7 +368,7 @@ sub _websocket_writer {
 
 		# Payload
 		$frame .= $payload;
-		$next->($frame,$cb,$arg);
+		$next->($frame, $cb, $arg);
 		return;
 	}
 }
@@ -376,9 +379,11 @@ sub _make_websocket_server_writer {
 	my $self=shift;
 	my $session=shift;	#session
 
+	say  "SESSSION REX WRITE: ", $session->rex->[uSAC::HTTP::Rex::write_];
+	sleep 1;
 	my ($entry_point,$stack)=uSAC::HTTP::Middler->new()
 		->register(\&_websocket_writer)
-		->link($session->[uSAC::HTTP::Rex::write_]);
+		->link($session->write);#rex->[uSAC::HTTP::Rex::write_]);
 	return $entry_point;
 }
 

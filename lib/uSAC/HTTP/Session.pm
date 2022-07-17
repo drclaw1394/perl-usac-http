@@ -36,7 +36,7 @@ field $_ww;
 field $_wcb;
 field $_left;
 field $_read;
-field $_write;
+field $_write :mutator;
 field $_request_count;
 field @_read_stack;
 field @_write_stack;

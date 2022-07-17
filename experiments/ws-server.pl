@@ -14,6 +14,7 @@ use EV;
 use AnyEvent;
 
 use uSAC::HTTP;
+use uSAC::HTTP::Middleware qw<log_simple>;
 use uSAC::HTTP::Server::WS;
 
 my %clients;
@@ -24,6 +25,12 @@ my $server=uSAC::HTTP::Server->new(
 	port=>9090,
 );
 
+#FIXME:
+#the listeners and hosts needs to be setup before adding routes
+
+$server->add_listener( "127.0.0.1:9090");
+$server->add_host("localhost:9090");
+
 $server->add_route('GET'=>"/\$"=>sub {
 	local $/=undef; state $data; $data=<DATA> unless $data;	
 
@@ -33,19 +40,22 @@ $server->add_route('GET'=>"/\$"=>sub {
 	return;
 });
 
+
+
+$server->add_middleware(log_simple);
+
 $server->add_route(GET=>"/ws"=> usac_websocket sub{
-		my (undef, undef, $ws)=@_;
+		my ($matcher, $rex, $ws)=@_;
+		say " IN usac websocket  callback: ",join ", ", @_;
 		my $timer;
-		$ws->ping_interval(0);
+		#$ws->ping_interval(0);
 		$ws->on_open=sub {
 			$clients{$_[0]}=$_[0];
-                        ################################################
-                        #  $timer=AE::timer 0, 1, sub {                #
-                        #         $ws->send_text_message("hello",sub { #
-                        #                 say "CALLBACK";              #
-                        #         });                                  #
-                        # };                                           #
-                        ################################################
+                         $timer=AE::timer 0, 1, sub {
+                                $ws->send_text_message("hello",sub {
+                                        say "CALLBACK";
+                                });
+                        };
 		};
 
 		$ws->on_message=sub {

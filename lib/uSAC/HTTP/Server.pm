@@ -107,6 +107,9 @@ sub _welcome {
 sub _default_handler {
 		state $sub=sub {
 			#Log::OK::TRACE and log_trace "DEFAULT HANDLER FOR TABLE";
+			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
+			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[1]->headers->%*;
+			say join ", ", @_;
 			&rex_error_not_found;
 		};
 }
@@ -491,7 +494,7 @@ sub site {
 sub rebuild_dispatch {
 	my $self=shift;
 
-	Log::OK::INFO and log_info(__PACKAGE__. "rebuilding dispatch...");
+	Log::OK::INFO and log_info(__PACKAGE__. " rebuilding dispatch...");
 	#here we add the unsupported methods to the table before building it
 	#Note: this is different to a unfound URL resource.
 	#These give a method not supported error, while an unfound resource is a
@@ -720,6 +723,19 @@ sub usac_listen {
 	my $pairs=pop;	#Content is the last item
 	my %options=@_;
 	my $site=$options{parent}//$uSAC::HTTP::Site;
+	$site->add_listener(%options, $pairs);
+}
+
+#TODO:
+# We wany to either specifiy the interface name (ie eth0 wlan0 etc)
+# or the specific address which exists on an interface.
+# need to look at GETIFADDRS library/syscall;
+#
+sub add_listener {
+	my $site=shift;
+	my $pairs=pop;	#Content is the last item
+	my %options=@_;
+
 	my @uri;
 	my $type=$options{type}//'tcp';
 	#type can be
