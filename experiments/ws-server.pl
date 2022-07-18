@@ -20,16 +20,15 @@ use uSAC::HTTP::Server::WS;
 my %clients;
 
 
-my $server=uSAC::HTTP::Server->new(
-	host=>"0.0.0.0",
-	port=>9090,
-);
+my $server=uSAC::HTTP::Server->new();
 
 #FIXME:
 #the listeners and hosts needs to be setup before adding routes
 
 $server->add_listener( "127.0.0.1:9090");
 $server->add_host("localhost:9090");
+$server->set_mime_default;
+$server->add_middleware(log_simple);
 
 $server->add_route('GET'=>"/\$"=>sub {
 	local $/=undef; state $data; $data=<DATA> unless $data;	
@@ -41,8 +40,12 @@ $server->add_route('GET'=>"/\$"=>sub {
 });
 
 
+$server->set_error_page(404=>"/error/404.html");	#Url to redirect to
+$server->add_route("/errors/$File_Path", sub {
 
-$server->add_middleware(log_simple);
+});
+
+
 
 $server->add_route(GET=>"/ws"=> usac_websocket sub{
 		my ($matcher, $rex, $ws)=@_;

@@ -531,7 +531,9 @@ sub rebuild_dispatch {
 
 	my %lookup=map {
 		$_, [
+			#table
 			$self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
+			#cache for table
 			$self->[host_tables_]{$_}[1]
 			]
 		}
@@ -543,10 +545,21 @@ sub rebuild_dispatch {
 		my $table=$lookup{$host}//$lookup{"*.*"};
 		(my $route, $rex->[uSAC::HTTP::Rex::captures_])= $table->[0]($input);
 
-		$route->[1][4]++;
+		#Hustle table route structure
+		#[matcher, value, type default]
+		#
+		#ctx/value structure has
+		#[site, linked_innerware, linked_outerware, counter]
+		#  0 ,		1 	,	2		,3	, 4
+
+		say "ROUTE: ".join " ,",$route->@*;
+		$route->[1][4]++;	
 		$route->[1][1]($route,$rex);
 
 		#TODO: Better Routing Cache management.
+		#if the is_default flag is set, this is an unkown match.
+		#so do not cache it
+		#
 		if($route->[3]){
 			say "deleting default";
 			delete $table->[1]{$route->[0]}

@@ -227,9 +227,14 @@ sub rex_redirect_not_modified {
 	
 }
 
+sub rex_redirect_internal;
 sub rex_error_not_found {
 	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
+	#Redirect to url specified in site
+	my $site=$_[0][0];
+
+	rex_redirect_internal @_, $site->error_uris->{404};
+	#rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
 }
 
 sub rex_error_forbidden {
@@ -281,6 +286,7 @@ sub rex_redirect_internal {
 	);
 	1;
 }
+
 sub rex_headers {
 	return $_[1]->[headers_];
 }
@@ -315,6 +321,7 @@ sub rex_reply_text {
 		HTTP_CONTENT_LENGTH, length($data),
 	], $data;
 }
+
 sub rex_captures {
 	$_[1][captures_]
 }

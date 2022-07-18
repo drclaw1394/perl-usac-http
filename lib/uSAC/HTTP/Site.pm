@@ -47,10 +47,10 @@ use File::Basename qw<dirname>;
 
 use Data::Dumper;
 #Class attribute keys
-use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_));
+use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ error_uris_ end_));
 
 use constant KEY_OFFSET=>	0;
-use constant KEY_COUNT=>	built_prefix_-server_+1;
+use constant KEY_COUNT=>	end_-server_+1;
 
 use constant LF=>"\015\012";
 
@@ -63,7 +63,7 @@ sub new {
 	$self->[server_]=	$options{server}//$self;
 	$self->[id_]=		$options{id};
 	$self->[prefix_]=	$options{prefix}//"";
-	$self->[host_]=		$options{host}?[$options{host}]:[];
+	$self->[host_]=[];	#	$options{host}?[$options{host}]:[];
 	$self->[cors_]=		$options{cors}//"";
 	$self->[innerware_]=	$options{middleware}//[];
 	$self->[outerware_]=	$options{outerware}//[];
@@ -85,7 +85,7 @@ sub new {
 #specified in the site initialization
 #
 my @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
-sub add_route {
+sub _add_route {
 	local $,=" ";
 	my $self=shift;
 	my $end=pop @_;
@@ -225,6 +225,7 @@ sub add_route {
         ####################################################################
 
 	push @hosts, "*.*" unless @hosts;
+	Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ",@hosts;
 	#$matcher=qr{^$method_matcher $bp$path_matcher};
 	my $pm;
 	for my $uri (@hosts){
@@ -552,21 +553,25 @@ sub find_root {
 sub usac_route {
 	#my $self=$_;	#The site to use
 	my $self=$uSAC::HTTP::Site;
+	$self->add_route(@_);
+}
+sub add_route {
+	my $self=shift;
 	#first element is tested for short cut get use
 	if(ref($_[0]) eq "ARRAY"){
 		#Methods specified as an array ref
 		my $a=shift;
 		unshift @_, "(?:".join("|", @$a).")";
-		$self->add_route(@_);
+		$self->_add_route(@_);
 	}
 	elsif(ref($_[0]) eq "Regexp"){
 		unshift @_, "GET";
-		$self->add_route(@_);
+		$self->_add_route(@_);
 	}
 	elsif($_[0]=~m|^/|){
 		#starting with a slash, short cut for GET and head
 		unshift @_, "GET";
-		$self->add_route(@_);
+		$self->_add_route(@_);
 	}
 	elsif(!($_[0]=~m|^[/]|) and !($_[0]=~m|^$Any_Method|)){
 		#not starting with a forward slash but with a method
@@ -578,7 +583,7 @@ sub usac_route {
 		unshift @_, $url;
 
 		unshift @_, "GET";
-		$self->add_route(@_);
+		$self->_add_route(@_);
 
 	}
 	elsif(
@@ -593,24 +598,37 @@ sub usac_route {
 		$url="/".$url if $url ne "";
 		unshift @_, $method, $url;
 
-		$self->add_route(@_);
+		$self->_add_route(@_);
 	}
 	else{
 		#normal	
-		$self->add_route(@_);
+		$self->_add_route(@_);
 	}
 }
 
 sub usac_id {
-	my $self=$uSAC::HTTP::Site;
-	#my $self=$_;
+	my $id=pop;
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	$self->set_id(%options, $id);
+}
+sub set_id {
+	my $self=shift;
+	my $id=pop;
 	$self->[id_]=shift;
 }
 
 sub usac_prefix {
-	my $self=$uSAC::HTTP::Site;
-	#my $self=$_;
+	my $prefix=pop;
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+	$self->set_prefix(%options,$prefix);
+}
+
+sub set_prefix {
+	my $self=shift;
         my $prefix=pop;
+	my %options=@_;
 	unless($prefix=~m|^/|){
 
 		#Log::OK::TRACE and 
@@ -621,6 +639,7 @@ sub usac_prefix {
 	$self->[prefix_]=$prefix;#$uSAC::HTTP::Site;
 	$self->[built_prefix_]=undef;	#force rebuilding
 	$self->built_prefix;		#build abs prefix
+
 }
 
 
@@ -678,40 +697,66 @@ sub add_middleware {
 	push $self->outerware->@*, $mw->[1];
 
 }
-sub usac_innerware{
-	#my $self=$_;
-	my $mw=pop;	#Content is the last item
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	if(ref($mw)eq"ARRAY"){
-		push $self->innerware->@*, @$mw;
-	}
-	else{
-		push $self->innerware->@*, $mw;
-	}
-}
-sub usac_outerware {
-	#my $self=$_;
-	my $mw=pop;	#Content is the last item
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	if(ref($mw)eq"ARRAY"){
-		push $self->outerware->@*, @$mw;
-	}
-	else{
-		push $self->outerware->@*, $mw;
-	}
-}
+
+#########################################################
+# sub usac_innerware{                                   #
+#         #my $self=$_;                                 #
+#         my $mw=pop;     #Content is the last item     #
+#         my %options=@_;                               #
+#         my $self=$options{parent}//$uSAC::HTTP::Site; #
+#         if(ref($mw)eq"ARRAY"){                        #
+#                 push $self->innerware->@*, @$mw;      #
+#         }                                             #
+#         else{                                         #
+#                 push $self->innerware->@*, $mw;       #
+#         }                                             #
+# }                                                     #
+# sub usac_outerware {                                  #
+#         #my $self=$_;                                 #
+#         my $mw=pop;     #Content is the last item     #
+#         my %options=@_;                               #
+#         my $self=$options{parent}//$uSAC::HTTP::Site; #
+#         if(ref($mw)eq"ARRAY"){                        #
+#                 push $self->outerware->@*, @$mw;      #
+#         }                                             #
+#         else{                                         #
+#                 push $self->outerware->@*, $mw;       #
+#         }                                             #
+# }                                                     #
+#########################################################
 
 sub usac_error_page {
+	my $self=$uSAC::HTTP::Site->set_error_page(@_);
+	
+	$self->set_error_page(@_);
+}
+
+sub set_error_page {
+	my $self=shift;
+
+	for my($k,$v)(@_){
+		$self->[error_uris_]{$k}=$v;
+	}
 		
 }
+sub error_uris {
+	$_[0][error_uris_]
+}
+
 #returns a sub which always renders the same content.
 #http code is always
 sub usac_static_content {
 	my $static=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
+
+	$self->add_static_content(%options, $static);
+}
+
+sub add_static_content {
+	my $self=shift;
+	my $static=pop;	#Content is the last item
+	my %options=@_;
 	my $mime=$options{mime}//$self->resolve_mime_default;
 	my $headers=$options{headers}//[];
 	#my $type=[HTTP_CONTENT_TYPE, $mime];
@@ -724,6 +769,7 @@ sub usac_static_content {
 		$static; 
 		#return
 	}
+
 }
 
 sub usac_cached_file {
@@ -731,6 +777,14 @@ sub usac_cached_file {
 	my $path=pop;
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
+
+	$self->add_cached_file(%options, $path);
+}
+
+sub add_cached_file {
+	my $self=shift;
+	my $path=pop;
+	my %options=@_;
 	#resolve the file relative path or 
 	#$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
 
@@ -765,12 +819,21 @@ sub usac_cached_file {
 		log_error "Could not add hot path: $path";
 	}
 }
+
 #set the default mime for this level
 sub usac_mime_default{
 	my $default=pop;
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
+	$self->set_mime_default(%options, $self);
+}
+
+sub set_mime_default {
+	my $self=shift;
+	my $default=pop;
+	my %options=@_;
 	$self->mime_default=$default//"application/octet-stream";
+
 }
 
 #Set the mime db for this level
@@ -779,9 +842,21 @@ sub usac_mime_db{
 	my $db=pop;
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
+	$self->set_mime_db(%options, $db);
+}
+
+sub set_mime_db {
+	my $self=shift;
+	my $db=pop;
+	my %options=@_;
 	$self->mime_db=$db;
 	($self->mime_lookup)=$self->mime_db->index;
+
 }
+
+#HELPERS..
+#
+#
 
 #returns the dir of the caller.
 #Path is abs path, so files loaded via a symlink will refer to 
@@ -873,6 +948,5 @@ sub usac_error_not_found {
 }
 
 
-#Error Pages
 
 1;
