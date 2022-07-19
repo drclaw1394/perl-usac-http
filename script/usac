@@ -92,7 +92,7 @@ $server=usac_server{
 	my $listeners=$options{listen};
 	for my $listener (@$listeners){
 		Log::OK::INFO and log_info "Listening on $listener";
-		usac_listen $listener;
+		usac_listen no_hosts=>1, $listener;
 		#"127.0.0.1:8080";
 				
 	}

@@ -35,20 +35,15 @@ $server->add_route('GET'=>"/\$"=>sub {
 
 	#TODO: bug. <> operator not working with state
 	
-	rex_write(@_, HTTP_OK, [], $data);
+	rex_write(@_, $data);
 	return;
 });
 
 
-$server->set_error_page(404=>"/error/404.html");	#Url to redirect to
-$server->add_route("/errors/$File_Path", sub {
-
-});
-
 
 
 $server->add_route(GET=>"/ws"=> usac_websocket sub{
-		my ($matcher, $rex, $ws)=@_;
+		my ($matcher, $rex, $code, $headers, $ws)=@_;
 		say " IN usac websocket  callback: ",join ", ", @_;
 		my $timer;
 		#$ws->ping_interval(0);
@@ -82,26 +77,25 @@ $server->add_route(GET=>"/ws"=> usac_websocket sub{
 
 $server->add_route("GET"=>"/large"=>()=>sub {
 	state $data= "x"x(4096*4096);
-	rex_write @_,HTTP_OK,undef,$data;
+	rex_write @_, $data;
 });
 
 $server->add_route("GET"=>"/chunks"=>()=>sub {
 	state $data= "x" x (4096*4096);
 	my $size=4096*128;
 	my $offset=0;#-$size;;
-	rex_write @_, HTTP_OK, undef, sub {
-		return unless $_[0];
+	my @g=@_;
 
+	my $sub=sub {
 		my $d=substr($data, $offset, $size);	#Data to send
+
 		$offset+=$size;				#update offset
+		rex_write @g, $data, $offset<length($data)?__SUB__:undef;
 		
-		$_[0]->($d, $offset<length $data?__SUB__:undef);	#send substr
 	};
+	$sub->();
 });
 
-$server->add_route("GET"=>"/array"=>()=>sub {
-	rex_write @_, HTTP_OK, undef, [qw<this is a set of data>];
-});
 
 $server->run;
 

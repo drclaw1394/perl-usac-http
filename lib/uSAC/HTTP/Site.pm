@@ -761,12 +761,11 @@ sub add_static_content {
 	my $headers=$options{headers}//[];
 	#my $type=[HTTP_CONTENT_TYPE, $mime];
 	sub {
-		rex_write @_, HTTP_OK, [
+		push $_[3]->@*, 
 			HTTP_CONTENT_TYPE, $mime,
 			HTTP_CONTENT_LENGTH, length($static),
-			@$headers
-		],
-		$static; 
+			@$headers;
+		rex_write @_, $static; 
 		#return
 	}
 

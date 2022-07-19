@@ -73,7 +73,7 @@ sub usac_websocket {
 
 	sub {
 		Log::OK::TRACE and log_trace "Testing for websocket";
-		my ($line, $rex)=@_;
+		my ($line, $rex, $code, $headers)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 		#attempt to do the match
 		
@@ -126,7 +126,7 @@ sub usac_websocket {
 							my $ws=uSAC::HTTP::Server::WS->new($session);
 							#$ws->[PMD_]=$deflate_flag;
 							$ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);
-							$cb->($line, $rex, $ws);
+							$cb->($line, $rex, $code, $headers, $ws);
 							#defer the open callback
 							AnyEvent::postpone {$ws->[on_open_]->($ws)};
 

@@ -22,7 +22,7 @@ my $server;$server=usac_server{
 	usac_middleware log_simple;
 
 	usac_route GET=>"/ws"=>usac_websocket sub {
-		my $ws=shift;
+		my ($matcherm $rex, $code, $headers, $ws)=@_;
 		my $state=0;	#idle, connecting, connected,
 
 		my @queue;
@@ -106,16 +106,16 @@ my $server;$server=usac_server{
 		</body>
 		</html>
 		|;
-		rex_write @_, HTTP_OK,[], $form;
+		rex_write @_, $form;
 		
 	};
 
 	usac_route POST=>"/form1"=>usac_form_slurp
 		dir=>usac_path(root=>usac_dirname, "uploads"),
 		sub{
-		my ($matcher, $rex, $data, $headers, $end)=@_;
+		my ($matcher, $rex, $code, $head, $data, $headers, $end)=@_;
 		say Dumper $data;
-		rex_write $matcher, $rex,  HTTP_OK, [], "GOT A FORM";
+		rex_write $matcher, $rex,  $code, $head, "GOT A FORM";
 		
 	};
 
@@ -131,7 +131,7 @@ my $server;$server=usac_server{
 		usac_data_slurp mime=>"text/plain", byte_limit=>4096*1024,
 			dir=>usac_path(root=>usac_dirname, "uploads"),
 			sub {
-				my ($matcher, $rex, $data, $headers, $last)=@_;
+				my ($matcher, $rex, $code, $head, $data, $headers, $last)=@_;
 				say Dumper $headers;
 				rex_write $matcher, $rex, HTTP_OK, [], "sdf";
 			};
@@ -140,7 +140,7 @@ my $server;$server=usac_server{
 		usac_multipart_slurp byte_limit=>4096*1024,
 			dir=>usac_path(root=>usac_dirname, "uploads"),
 			sub {
-				my ($matcher, $rex, $data, $headers, $last)=@_;
+				my ($matcher, $rex, $code, $head, $data, $headers, $last)=@_;
 				say Dumper $data;
 				rex_write $matcher, $rex, HTTP_OK, [], "sdf";
 			};
@@ -149,7 +149,7 @@ my $server;$server=usac_server{
 		usac_urlencoded_slurp byte_limit=>4096*1024, 
 			dir=>usac_path(root=>usac_dirname, "uploads"),
 			sub {
-				my ($matcher, $rex, $data, $headers, $last)=@_;
+				my ($matcher, $rex, $code, $head, $data, $headers, $last)=@_;
 				say Dumper $data;
 				rex_write $matcher, $rex, HTTP_OK, [], "sdf";
 			};

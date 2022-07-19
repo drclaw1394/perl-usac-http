@@ -235,7 +235,7 @@ sub open_cache {
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
-		my ($matcher,$rex,$user_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
+		my ($matcher, $rex, $code, $head, $user_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
 		Log::OK::TRACE and log_trace("send file no range");
 		#my $session=$rex->[uSAC::HTTP::Rex::session_];
 
@@ -253,7 +253,7 @@ sub send_file_uri_norange {
 		my $reply="";
 		#process caching headers
 		my $headers=$_[1][uSAC::HTTP::Rex::headers_];#$rex->headers;
-		my $code=HTTP_OK;
+		#my $code=HTTP_OK;
 		my $etag="\"$mod_time-$content_length\"";
 
 		my $offset=0;	#Current offset in file
@@ -331,22 +331,25 @@ sub send_file_uri_norange {
 			};
 		}
 
+		#Ignore caching headers if we are processing as an error
+		my $as_error= HTTP_BAD_REQUEST<=$code;
+		if(!$as_error){
+			#TODO: needs testing
+			for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
+				$code=HTTP_OK and last unless $t;
+				$code=HTTP_OK and last if  $etag !~ /$t/;
+				$code=HTTP_NOT_MODIFIED and last;	#no body to be sent
 
-		#TODO: needs testing
-		for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
-			$code=HTTP_OK and last unless $t;
-			$code=HTTP_OK and last if  $etag !~ /$t/;
-			$code=HTTP_NOT_MODIFIED and last;	#no body to be sent
+			}
 
-		}
-
-		#TODO: needs testing
-		for(my $time=$headers->{"IF-MODIFIED-SINCE"}){
-			#attempt to parse
-			$code=HTTP_OK and last unless $time;
-			my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
-			$code=HTTP_OK  and last if $mod_time>$tp->epoch;
-			$code=HTTP_NOT_MODIFIED;	#no body to be sent
+			#TODO: needs testing
+			for(my $time=$headers->{"IF-MODIFIED-SINCE"}){
+				#attempt to parse
+				$code=HTTP_OK and last unless $time;
+				my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
+				$code=HTTP_OK  and last if $mod_time>$tp->epoch;
+				$code=HTTP_NOT_MODIFIED;	#no body to be sent
+			}
 		}
 			
 		#Add no compress (ie identity) if encoding is not set
@@ -374,7 +377,7 @@ sub send_file_uri_norange {
 
 		];
 
-		if($headers->{RANGE}){
+		if(!$as_error and $headers->{RANGE}){
 			Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{RANGE}";
 			@ranges=_check_ranges $rex, $content_length;
 			unless(@ranges){
@@ -648,6 +651,7 @@ sub make_list_dir {
 		my $abs_path=$html_root.$uri;
 		stat $abs_path;
 		unless(-d _ and  -r _){
+
 			rex_error_not_found $line, $rex;
 			#rex_write $line, $rex, HTTP_NOT_FOUND, {},"";
 			return;
@@ -743,10 +747,10 @@ sub usac_file_under {
 		my $rex=$_[1];
 		#my $p=$1;
 		my $p;
-		if($_[2]){
+		if($_[4]){
 
 			Log::OK::TRACE and log_trace "Static: Input uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
-			$p=$_[2];
+			$p=$_[4];
 			pop;
 		}	
 		else {
@@ -760,7 +764,6 @@ sub usac_file_under {
 		my $path=$html_root.$p;
 		if($filter and $path !~ /$filter/o){
 			return &$next if $next;
-			
 			&rex_error_not_found;
 			return 1;
 		}
@@ -798,7 +801,7 @@ sub usac_file_under {
 				Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
 				$entry=$cache->{$path}//$static->open_cache($path);
 				next unless $entry;
-				send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry;
+				send_file_uri_norange(@_,\@head, $read_size, $sendfile, $entry);
 				return 1;
 			}
 

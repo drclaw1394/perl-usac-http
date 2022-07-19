@@ -33,6 +33,7 @@ use version;our $VERSION = version->declare('v0.1');
 no warnings "experimental";
 use parent 'uSAC::HTTP::Site';
 use uSAC::HTTP::Site;
+use uSAC::HTTP::Code ":constants";
 
 use Hustle::Table;		#dispatching of endpoints
 
@@ -542,7 +543,10 @@ sub rebuild_dispatch {
 	$self->[cb_]=sub {
 		my ($host, $input, $rex)=@_;
 
+		Log::OK::DEBUG and log_debug __PACKAGE__." Looking for host: $host";
 		my $table=$lookup{$host}//$lookup{"*.*"};
+		Log::OK::DEBUG and log_debug __PACKAGE__." table for lookup :".join ", ", @$table;
+		Log::OK::DEBUG and log_debug __PACKAGE__." Input: $input";
 		(my $route, $rex->[uSAC::HTTP::Rex::captures_])= $table->[0]($input);
 
 		#Hustle table route structure
@@ -552,9 +556,10 @@ sub rebuild_dispatch {
 		#[site, linked_innerware, linked_outerware, counter]
 		#  0 ,		1 	,	2		,3	, 4
 
-		say "ROUTE: ".join " ,",$route->@*;
+		Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route->@*;
 		$route->[1][4]++;	
-		$route->[1][1]($route,$rex);
+
+		$route->[1][1]($route, $rex, my $code=HTTP_OK, []);
 
 		#TODO: Better Routing Cache management.
 		#if the is_default flag is set, this is an unkown match.

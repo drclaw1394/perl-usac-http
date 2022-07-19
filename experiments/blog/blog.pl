@@ -43,14 +43,14 @@ my $server; $server=usac_server {
 
 		usac_route "/test/$Comp/$Comp" => sub {
 			my $captures=&rex_captures;
-			rex_write @_, HTTP_OK,[], $captures->[0];
+			rex_write @_, $captures->[0];
 		};
 
                 usac_route '/statictest$'=> usac_static_content "This is some data";
 
                 usac_route 'testing.txt'=>deflate()=>sub {
-                                rex_write @_, HTTP_OK, [HTTP_CONTENT_TYPE, "text/plain"], "HELLO";
-                                #rex_write @_, HTTP_OK, [HTTP_CONTENT_LENGTH, 5], "HELLO";
+			push $_[3]->@*, HTTP_CONTENT_TYPE, "text/plain";
+                                rex_write @_, "HELLO";
                 };
                 #                                                                                                            #
                 # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; #
@@ -63,7 +63,7 @@ my $server; $server=usac_server {
                         do_dir=>1,
                         #indexes=>["index.html"],
                         #sendfile=>4096,
-                        usac_dirname #, "static"
+                        usac_dirname #  "static"
                 );
 
                 ##############################################

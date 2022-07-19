@@ -91,6 +91,8 @@ use enum (
 	rex_
 	in_progress_
 
+	response_code_
+
 	end_
 	>
 );
@@ -205,49 +207,63 @@ sub rex_state :lvalue{
 #partial url
 #code
 sub rex_redirect_see_other{
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_SEE_OTHER,[HTTP_LOCATION,$url, HTTP_CONTENT_LENGTH, 0],"");
+	my $url=pop;#splice @_, 2;
+	$_[2]=HTTP_SEE_OTHER;
+	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+	rex_write (@_,"");
 }
 
 sub rex_redirect_found {
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_FOUND,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
+	my $url=pop;
+	$_[2]=HTTP_FOUND;
+	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+
+	rex_write (@_,"");
 	
 }
 
 sub rex_redirect_temporary {
+	my $url=pop;
+	$_[2]=HTTP_TEMPORARY_REDIRECT;
+	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
 
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_TEMPORARY_REDIRECT,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
+	rex_write (@_,"");
 	
 }
 sub rex_redirect_not_modified {
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_NOT_MODIFIED,[HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0],"");
-	
+	my $url=pop;
+	$_[2]=HTTP_NOT_MODIFIED;
+	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+
 }
 
 sub rex_redirect_internal;
+
 sub rex_error_not_found {
-	my ($url)=splice @_, 2;
+	#my ($url)=splice @_, 2;
 	#Redirect to url specified in site
 	my $site=$_[0][0];
+	#rex_redirect_internal @_, $site->error_uris->{404};
 
-	rex_redirect_internal @_, $site->error_uris->{404};
-	#rex_write (@_, HTTP_NOT_FOUND, [HTTP_CONTENT_LENGTH, 0], '');
+	$_[2]=HTTP_NOT_FOUND;
+	push $_[3]->@*, HTTP_CONTENT_LENGTH,0;
+	rex_write (@_, '');
 }
 
 sub rex_error_forbidden {
-	my ($url)=splice @_, 2;
-	rex_write (@_, HTTP_FORBIDDEN, [HTTP_CONTENT_LENGTH, 0], '');
+	my $url=pop;
+	$_[2]=HTTP_FORBIDDEN;
+	push $_[3]->@*, HTTP_CONTENT_LENGTH, 0;
+	rex_write (@_, '');
 }
 
 sub rex_error_internal {
-	my ($url)=splice @_, 2;
+	my $url=pop;
 	my $session=$_[1][session_];
-	rex_write (@_, HTTP_INTERNAL_SERVER_ERROR, [HTTP_CONTENT_LENGTH, 0], '');
-	#$session->[uSAC::HTTP::Session::closeme_]=1;
-	#$session->[uSAC::HTTP::Session::dropper_]->();	#no 'keep alive' so forces close
+
+	$_[2]=HTTP_INTERNAL_SERVER_ERROR;
+	push $_[3]->@*, HTTP_CONTENT_LENGTH, 0;
+	rex_write (@_, '');
 	$_[1][closeme_]->$*=1;
 	$_[1][dropper_](undef);
 }
@@ -257,7 +273,7 @@ sub rex_error_internal {
 #TODO: recursion limit
 sub rex_redirect_internal {
 
-	my ($matcher, $rex, $uri)=@_;
+	my ($matcher, $rex, $code, $headers, $uri)=@_;
 	state $previous_rex=$rex;
 	state $counter=0;
 	if(substr($uri,0,1) ne "/"){
@@ -498,6 +514,9 @@ sub usac_urlencoded_slurp{
 		sub {
 			my $usac=$_[0];
 			my $rex=$_[1];
+			my $code=$_[2];
+			my $head=$_[3];
+
 			state $part_header=0;
 			state $fields={};
 
@@ -512,7 +531,7 @@ sub usac_urlencoded_slurp{
 
 			if($_[4]){
 				#that was the last part
-				$cb->($usac, $rex, $fields,1);
+				$cb->($usac, $rex, $code, $head, $fields,1);
 				$part_header=0;
 				$fields={};	#reset 
 			}
@@ -538,6 +557,8 @@ sub usac_multipart_slurp{
 		sub {
 			my $usac=$_[0];
 			my $rex=$_[1];
+			my $code=$_[2];
+			my $head=$_[3];
 			state $part_header=0;
 
 			state $kv;		#Stateful for multiple calls
@@ -571,7 +592,7 @@ sub usac_multipart_slurp{
 			my $wc=syswrite $handle, $_[2] if $handle;
 			if($_[4]){
 				#that was the last part
-				$cb->($usac, $rex, $fields,1);
+				$cb->($usac, $rex, $code, $head, $fields,1);
 				$part_header=0;
 				$fields={};	#Reset after callback
 				$kv={};		#Reset after callback
@@ -643,6 +664,8 @@ sub usac_data_slurp{
 		sub {
 			my $matcher=$_[0];
 			my $rex=$_[1];
+			my $code=$_[2];
+			my $head=$_[3];
 			state $header=0;
 			state ($handle, $name);
 			state $mem="";
@@ -687,10 +710,10 @@ sub usac_data_slurp{
 			#TODO: error checking and drop connection on write error
 			if($_[4]){
 				unless($path or $tmp_dir){
-					$cb->($matcher, $rex, $mem,1)
+					$cb->($matcher, $rex, $code, $head, $mem,1)
 				}
 				else {
-					$cb->($matcher, $rex, $name,1)
+					$cb->($matcher, $rex, $code, $head, $name,1)
 				}
 				$mem="";
 				$header=0;
