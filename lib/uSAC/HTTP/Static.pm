@@ -199,33 +199,28 @@ sub open_cache {
 		#or incorrect premissions
 
 
-		unless(sysopen $in_fh,$path,O_RDONLY|O_NONBLOCK|($mode//0)){
-			#undef;
-			return;
-		}
-		else {
-			#lookup mime type
-			#
-			my $ext=substr $abs_path, rindex($abs_path, ".")+1;
-			#next if $ext==$pre;
+		sysopen $in_fh,$path,O_RDONLY|O_NONBLOCK|($mode//0) or return;
+		#lookup mime type
+		#
+		my $ext=substr $abs_path, rindex($abs_path, ".")+1;
+		#next if $ext==$pre;
 
-			my @entry;
-			$entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
-			$entry[fh_]=$in_fh;
-			$entry[size_]=(stat _)[7];
-			$entry[mt_]=(stat _)[9];
-			if($pre){
-				$entry[content_encoding_]=[HTTP_CONTENT_ENCODING, $encoding_map{$pre}];
-			}
-			else{
-				$entry[content_encoding_]=[];
-			}
-			Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
-			Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
-			my $tp=gmtime($entry[mt_]);
-			$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
-			return $self->[cache_]{$abs_path}=\@entry;
+		my @entry;
+		$entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
+		$entry[fh_]=$in_fh;
+		$entry[size_]=(stat _)[7];
+		$entry[mt_]=(stat _)[9];
+		if($pre){
+			$entry[content_encoding_]=[HTTP_CONTENT_ENCODING, $encoding_map{$pre}];
 		}
+		else{
+			$entry[content_encoding_]=[];
+		}
+		Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
+		Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
+		my $tp=gmtime($entry[mt_]);
+		$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
+		return $self->[cache_]{$abs_path}=\@entry;
 	}
 }
 
@@ -458,110 +453,54 @@ sub send_file_uri_norange {
                         seek $in_fh, $offset, 0;
 			my $sz=($content_length-$total);
 			$sz=$read_size if $sz>$read_size;
-                        $total+=$rc=sysread $in_fh, $reply, $sz;#, $offset;
+                        $total+=$rc=read $in_fh, $reply, $sz;#, $offset;
 			$offset+=$rc;
 
                         #non zero read length.. do the write
-                        if($total==$content_length){    #end of file
-				Log::OK::DEBUG and log_debug "Static: Complete file/range read";
-				undef $t;
-				if(@ranges){
-                                        rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
-                                                unless(@_){
-                                                        return $sub->();
-                                                }
-
-                                                #TODO: FIX MULTIPART RANGE RESPONSE
-                                                my $r=shift @ranges;
-                                                $offset=$r->[0];
-                                                $total=0;
-                                                $content_length=$r->[1];
-
-                                                #write new multipart header
-                                                return $sub->(undef);           #Call with arg
-                                        };
-
-					#return
-
-				} else {
-
-					#write and done
-					Log::OK::DEBUG and log_debug "Static: write and done: writer sub ref count: ".SvREFCNT($sub);
-					rex_write $matcher, $rex, $code, $out_headers, $reply, undef;
-					#return;
-				}
-                        }
-
-                        elsif($rc){
-				#break deep recursion due to fast fat pipes with shedualed CB every 10 calls
-				
-				if($recursion_counter>=$recursion_limit){
-					$recursion_counter=0;
-					#Do asynchronous callback in next event iteration
-					$t=AE::timer 0, 0, sub {
-						$t=undef;
-						if($rex){
-							#Log::OK::DEBUG and log_debug "parital async write of $rc bytes $total/$content_length bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
-							#Log::OK::DEBUG and log_debug "Static: timeout: writer sub ref count: ".SvREFCNT($sub);
-                                			Log::OK::TRACE and log_trace "Static: asynchronous rex";
-							rex_write $matcher, $rex, $code, $out_headers, $reply, $sub;
-						}
-						else {
-                                			Log::OK::TRACE and log_trace "Static: asynchronous no rex";
-							undef $sub;
-						}
-					};
-
-				}
-				else {
-					#Do synchronous callback
-					if($rex){
-						#Log::OK::DEBUG and log_debug "parital write of $rc bytes $total/$content_length bytes on rex $rex->[uSAC::HTTP::Rex::id_]";
-						#Log::OK::DEBUG and log_debug "$sub";
-						#Log::OK::DEBUG and log_debug "Static: writer sub ref count: ".SvREFCNT($sub);
-                                		Log::OK::TRACE and log_trace "Static: synchronous rex";
-						rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__;
+			$total==$content_length and
+			(@ranges
+				?return rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
+					unless(@_){
+						return $sub->();
 					}
-					else {
-						#If the rex is undef, it was closed by the server sweeping inactive sessions.
-                                		Log::OK::TRACE and log_trace "Static: synchronous no rex";
-						undef $sub;
-					}
+
+					#TODO: FIX MULTIPART RANGE RESPONSE
+					my $r=shift @ranges;
+					$offset=$r->[0];
+					$total=0;
+					$content_length=$r->[1];
+
+					#write new multipart header
+					return $sub->(undef);           #Call with arg
 				}
-				#return;
-                        }
-                        elsif( !defined($rc) and $! != EAGAIN and  $! != EINTR){
+				:return rex_write $matcher, $rex, $code, $out_headers, $reply, undef);
+
+
+			$rc and	
+			($recursion_counter>=$recursion_limit
+			?($t=AE::timer 0, 0, sub {
+				$t=undef;
+				$rex
+					?return(rex_write $matcher, $rex, $code, $out_headers, $reply,$sub)
+					:return(undef $sub);
+
+			} and $recursion_counter= 0 or return)
+
+			:($rex
+				?return rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__
+				:return undef $sub)
+			);
+
+			#if ($rc);
+
+
+                        if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
                                 log_error "Static files: READ ERROR from file";
                                 log_error "Error: $!";
-                                #delete $cache{$abs_path};
                                 close $in_fh;
-				#error was with input file not socket. So keep socket alive	
-				#$session->[uSAC::HTTP::Session::dropper_]->(1);
-				#$session->drop(1);
-				$rex->[uSAC::HTTP::Rex::dropper_]->(1);
-
-				undef $sub;
-				#undef $rex;
-				#return;
+                                $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+                                undef $sub;
                         }
-                        ################################################################
-                        # else {                                                       #
-                        #         log_error "Static files: Range beyond EOF";          #
-                        #         log_error "REX: ".$rex->uri;                         #
-                        #         log_error "REX: ".Dumper $rex->headers;              #
-                        #         log_error "REX: total length: $total";;              #
-                        #                                                              #
-                        #         #End of file reached but content range not satisfied #
-                        #         #DropClose connection                                #
-                        #         $session->[uSAC::HTTP::Session::dropper_]->();       #
-                        #         undef $sub;                                          #
-                        #         #undef $rex;                                         #
-                        #         return;                                              #
-                        # }                                                            #
-                        #                                                              #
-                        # #else {  EAGAIN }                                            #
-                        ################################################################
-
         })->(undef); #call with an argument to prevent error
 
 
