@@ -40,6 +40,7 @@ use constant KEY_OFFSET=>0;
 
 use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ end_>);
 use constant KET_COUNT=>end_-mime_+1;
+use constant RECURSION_LIMIT=>10;
 
 sub new {
 	my $package=shift//__PACKAGE__;
@@ -182,6 +183,8 @@ my %encoding_map =(
 	gz=>"gzip",
 );
 
+use constant OPEN_MODE=>O_RDONLY|O_NONBLOCK;
+
 sub open_cache {
 	my ($self, $abs_path, $mode, $pre_encoded)=@_;
 	my $in_fh;
@@ -199,7 +202,7 @@ sub open_cache {
 		#or incorrect premissions
 
 
-		sysopen $in_fh,$path,O_RDONLY|O_NONBLOCK|($mode//0) or return;
+		sysopen $in_fh,$path,OPEN_MODE|($mode//0) or return;
 		#lookup mime type
 		#
 		my $ext=substr $abs_path, rindex($abs_path, ".")+1;
@@ -230,7 +233,7 @@ sub open_cache {
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
-		my ($matcher, $rex, $code, $head, $user_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
+		my ($matcher, $rex, $code, $out_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
 		Log::OK::TRACE and log_trace("send file no range");
 		#my $session=$rex->[uSAC::HTTP::Rex::session_];
 
@@ -352,7 +355,7 @@ sub send_file_uri_norange {
 		#
 
 		
-		my $out_headers=[
+		unshift @$out_headers,
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
 			$entry->[content_type_header_]->@*,
@@ -366,11 +369,12 @@ sub send_file_uri_norange {
 			#HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
 
 			HTTP_ETAG,$etag,
-			HTTP_ACCEPT_RANGES,"bytes",
-			@$user_headers
+			HTTP_ACCEPT_RANGES,"bytes"
+			;
+			#@$user_headers
 
 
-		];
+			#];
 
 		if(!$as_error and $headers->{RANGE}){
 			Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{RANGE}";
@@ -428,7 +432,7 @@ sub send_file_uri_norange {
 		#Clamp the readsize to the file size if its smaller
 		$read_size=$content_length if $content_length < $read_size;
 
-		my $recursion_limit=10;
+		#my $recursion_limit=10;
 		my $t;
 		my $count=0;
                 (sub {
@@ -477,7 +481,7 @@ sub send_file_uri_norange {
 
 
 			$rc and	
-			($recursion_counter>=$recursion_limit
+			($recursion_counter>=RECURSION_LIMIT
 			?($t=AE::timer 0, 0, sub {
 				$t=undef;
 				$rex
@@ -656,6 +660,8 @@ sub usac_file_under {
 	my $no_encoding=$options{no_encoding}//"";
 	my $do_dir=$options{list_dir}//$options{do_dir};
 	my $pre_encoded=$options{pre_encoded}//[];
+	#TODO: Need to check only supported encodings are provided.
+	
 	Log::OK::INFO and log_info "Serving file from  $html_root";
 	Log::OK::TRACE and log_trace "OPTIONS IN: ".join ", ", %options;
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
@@ -669,10 +675,12 @@ sub usac_file_under {
 	#check for mime type in parent 
 
 	#create the sub to use the static files here
+	my $next;
+	my $p;	#tmp variable
 	sub {
 		#Do a check here. if first argment is a sub ref we are being used as middleware
 		#But this should only happen once.
-		state $next;
+		#state $next;
 		if(!$next and ref($_[0])eq "CODE"){
 		
 				$next=$_[0];
@@ -683,55 +691,31 @@ sub usac_file_under {
 		
 
 		#matcher, rex, code, headers, uri if not in $_
-		my $rex=$_[1];
+		#my $rex=$_[1];
 		#my $p=$1;
-		my $p;
-		if($_[4]){
+		#my $p;
 
-			Log::OK::TRACE and log_trace "Static: Input uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
-			$p=$_[4];
-			pop;
-		}	
-		else {
-			#$p=&rex_capture->[0];#$1;#//$rex->[uSAC::HTTP::Rex::uri_stripped_];
-			Log::OK::TRACE and log_trace "Static: Stripped uri: ". $rex->[uSAC::HTTP::Rex::uri_stripped_];
-			#$p=$_[1][uSAC::HTTP::Rex::capture_][0];
-			$p=$rex->[uSAC::HTTP::Rex::uri_stripped_];
-		}
+		$_[4]
+			?$p=pop 
+			:$p=$_[1]->[uSAC::HTTP::Rex::uri_stripped_];
 
 		
 		my $path=$html_root.$p;
-		if($filter and $path !~ /$filter/o){
-			return &$next if $next;
-			&rex_error_not_found;
-			return 1;
-		}
+		
+		$filter and $path !~ /$filter/o and 
+			$next 
+				? return &$next
+				: return &rex_error_not_found;
 
-		#If compress option is enabled then do not set the content-encoding header
-		#Otherwise we set to identity
-		#check that the requested file matches the the pre compressed 
-		#
-
-		#
-		my @head=@$headers;
-                ##########################################################################
-                # if($no_compress and $path =~ /$no_compress/o){                         #
-                #         Log::OK::TRACE and log_trace "Setting identity content encoding"; #
-                #         push @head, HTTP_CONTENT_ENCODING, "identity";                 #
-                # }                                                                      #
-                ##########################################################################
-		#Ensure we don't attempt to test gz files
-		$pre_encoded=[] if $path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/;		#GZIP is supporte
+		#Push any user static headers
+		push $_[3]->@*, @$headers;
 
 		Log::OK::TRACE and log_trace "static: html_root: $html_root";
-
-
 
 		#Server dir listing if option is specified
 		#
 		#=========================================
 		
-		#if($do_dir || @indexes and $path =~ m|/$|){
 		if($do_dir || @indexes and substr($path, -1) eq "/") {
 			#attempt to do automatic index file.
 			my $entry;
@@ -740,7 +724,7 @@ sub usac_file_under {
 				Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
 				$entry=$cache->{$path}//$static->open_cache($path);
 				next unless $entry;
-				send_file_uri_norange(@_,\@head, $read_size, $sendfile, $entry);
+				send_file_uri_norange(@_, $read_size, $sendfile, $entry);
 				return 1;
 			}
 
@@ -765,28 +749,19 @@ sub usac_file_under {
 		#
 		# Attempts to open the file and send it. If it fails, the next static middleware is called if present
 		
+		my $pre_encoded_ok=($path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
+			?$pre_encoded
+			:[];
 
-		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded);
-		if($entry){
-			Log::OK::DEBUG and log_debug "Serving static file: $path on rex: $_[1][uSAC::HTTP::Rex::id_]";
-			send_file_uri_norange @_, \@head, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
-			return 1;
-		}
-		else {
-			if($next){
-				return &$next;
-			}
-			else {
-				#no file found so 404
-				&rex_error_not_found;
-				return 1;
-			}
-		}
+		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
+
+		$entry and return send_file_uri_norange @_, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
+
+		#Middle ware setup. Should not get here normally
+		$next
+			? return &$next
+			: return &rex_error_not_found;
 	}
 }
 
 1;
-
-
-
-
