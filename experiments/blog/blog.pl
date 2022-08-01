@@ -18,7 +18,7 @@ use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
 
 
 
-use uSAC::MIME;
+#use uSAC::MIME;
 use Data::Dumper;
 
 my $server; $server=usac_server {
@@ -39,6 +39,7 @@ my $server; $server=usac_server {
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
 		
+		#error route forces a get method to the resource
 		usac_error_route "/error/404" => sub {
 			rex_write (@_, "An error occored: $_[2]");
 		};

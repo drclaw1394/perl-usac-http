@@ -243,6 +243,7 @@ sub rex_redirect_internal;
 sub rex_error_not_found {
 	#my ($url)=splice @_, 2;
 	#Redirect to url specified in site
+	#[args=0][ctx=1][site=0]
 	my $site=$_[0][1][0];
 	
 	$_[1][method_]="GET";

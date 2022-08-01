@@ -288,7 +288,7 @@ sub _add_route {
 
 	my $tmp=join "|", @non_matching;
 	my $mre=qr{$tmp};
-	my $unsupported=qr{^$mre $bp$path_matcher};
+	#my $unsupported=qr{^$mre $bp$path_matcher};
 	#push @hosts, "*.*" unless @hosts;
 	for my $uri (@hosts){
 		my $host;
@@ -302,7 +302,7 @@ sub _add_route {
 			$host=$uri;	#match all
 		}
 		for my $method (@non_matching){
-			$unsupported="$method $bp$path_matcher";
+			my $unsupported="$method $bp$path_matcher";
 			push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer,0]];
 			Log::OK::TRACE and log_trace "  non matching: $host $unsupported";                                 #
 		}
@@ -736,6 +736,8 @@ sub add_middleware {
 # }                                                     #
 #########################################################
 
+########## Error handling
+
 sub usac_error_route {
 	$uSAC::HTTP::Site->add_error_route(@_);
 }
@@ -763,6 +765,8 @@ sub set_error_page {
 sub error_uris {
 	$_[0][error_uris_]
 }
+
+#########
 
 #returns a sub which always renders the same content.
 #http code is always
