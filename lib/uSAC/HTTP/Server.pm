@@ -496,15 +496,19 @@ sub rebuild_dispatch {
 	my $self=shift;
 
 	Log::OK::INFO and log_info(__PACKAGE__. " rebuilding dispatch...");
-	#here we add the unsupported methods to the table before building it
-	#Note: this is different to a unfound URL resource.
-	#These give a method not supported error, while an unfound resource is a
+	#NOTE:
+	#Here we add the unsupported methods to the table before building it
+	#This is different to a unfound URL resource.
+	#These give a 'method not supported error', while an unfound resource is a
 	#not found error
 	#
 	#Because of the general matching, they are added to the table after all sites
 	#have positive matches installed.
 	#
 	for(keys $self->[sites_]->%*){
+		#NOTE: url/path is wrapped in a array
+		$self->[sites_]{$_}->add_route([$Any_Method], undef, _default_handler);
+
 		for ($self->[sites_]{$_}->unsupported->@*){
 			Log::OK::TRACE and log_trace "Adding Unmatched endpoints";
 			$self->add_host_end_point($_->@*);
@@ -519,18 +523,24 @@ sub rebuild_dispatch {
 		#$self->register_site($site);
 		Log::OK::TRACE and log_trace "Adding default handler to $host";
 
-		$site->add_route($Any_Method, qr|.*|, _default_handler);
+		#$site->add_route($Any_Method, qr|.*|, _default_handler);
+		$site->add_route([$Any_Method], undef, _default_handler);
 	}
 
-	my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self);
-	$site->parent_site=$self;
-	#$self->register_site($site);
-	Log::OK::TRACE and log_trace "Adding default handler to *.*";
+	#Add  catch all host and catch all route in the case of a host mismatch 
+	#of hosts not supported
+        my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self);
+        $site->parent_site=$self;
+        #$self->register_site($site);
+        Log::OK::TRACE and log_trace "Adding default handler to *.*";
 
-	$site->add_route($Any_Method, qr|.*|, _default_handler);
-
+        #$site->add_route($Any_Method, qr|.*|, _default_handler);
+        $site->add_route([$Any_Method], undef, _default_handler);
 
 	my %lookup=map {
+			map {
+				say $_->[0];
+			}	$self->[host_tables_]{$_}[0]->@*;
 		$_, [
 			#table
 			$self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
@@ -541,7 +551,7 @@ sub rebuild_dispatch {
 		keys $self->[host_tables_]->%*;
 
 	$self->[cb_]=sub {
-		my ($host, $input, $rex)=@_;
+		my ($host, $input, $rex, $rcode, $rheaders)=@_;
 
 		Log::OK::DEBUG and log_debug __PACKAGE__." Looking for host: $host";
 		my $table=$lookup{$host}//$lookup{"*.*"};
@@ -555,20 +565,23 @@ sub rebuild_dispatch {
 		#ctx/value structure has
 		#[site, linked_innerware, linked_outerware, counter]
 		#  0 ,		1 	,	2		,3	, 4
+		$Data::Dumper::Deparse=1;
+		#say Dumper $table;
 
+		Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route;
 		Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route->@*;
 		$route->[1][4]++;	
 
-		$route->[1][1]($route, $rex, my $code=HTTP_OK, []);
+		#NOTE: MAIN ENTRY TO REX RENDERING SYSTEM
+		# The linked innerware, the route handler and outerware are
+		# triggered from here
+		# Default Result code is HTTP_OK and a new set of empty headers which
+		$route->[1][1]($route, $rex, my $code=$rcode//HTTP_OK, $rheaders//[]);
 
 		#TODO: Better Routing Cache management.
 		#if the is_default flag is set, this is an unkown match.
 		#so do not cache it
-		#
-		if($route->[3]){
-			say "deleting default";
-			delete $table->[1]{$route->[0]}
-		}
+		delete $table->[1]{$input} if $route->[3];
 	};
 }
 
@@ -749,6 +762,26 @@ sub usac_listen {
 # or the specific address which exists on an interface.
 # need to look at GETIFADDRS library/syscall;
 #
+# Use getaddrinfo on supplied arguments. 
+#  try for numeric interfaces first  for supplied args
+#  then try for hostnames. For each hostname add the numeric  listener
+#
+#  Stream, dgram listeners And then add protocols
+#
+#	usac_listener type=>"http3", ssl=>cert,
+#		socketopts=>(
+#			SOL_SOCKET=>SO_REUSEADDR,	#
+#			SOL_SOCKET=>SO_REUSEPORT,	#Important for load balancing
+#			IPPROTO_TCP=>TCP_NODELAY,
+#		),
+#		"address:port";
+#
+#		#sets up initial server reader, udp port listener and ssl processing
+#		#address can be either a hostname, path or ipv4 ipv6 address
+#
+#	usac_listener type=>"http2", ssl=>cert, "address::port";
+#	usac_listener type=>"http1", ssl=>undef, "address::port";
+#	
 sub add_listener {
 	my $site=shift;
 	my $pairs=pop;	#Content is the last item

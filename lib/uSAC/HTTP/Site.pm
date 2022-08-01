@@ -24,7 +24,10 @@ my @errors=qw<
 usac_error_not_found
 >;	
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method), @redirects);
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
+	usac_error_page
+	usac_error_route
+	), @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -68,6 +71,7 @@ sub new {
 	$self->[innerware_]=	$options{middleware}//[];
 	$self->[outerware_]=	$options{outerware}//[];
 	$self->[unsupported_]=[];
+	$self->[error_uris_]={};
 
 	#die "No server provided" unless $self->[server_];
 	#die "No id provided" unless $self->[id_];
@@ -96,8 +100,9 @@ sub _add_route {
 	Log::OK::TRACE and log_trace "Adding route: from ".join ", ", caller;
 	Log::OK::TRACE and log_trace "Path matcher: $path_matcher";
 
+
+
 	#Add chunked always. Add at start of total middleware
-	# Than means executed first for innerware 
 	# and last for outerware
 	unshift @_, chunked();
 	for(@_){
@@ -157,7 +162,6 @@ sub _add_route {
 	}
 	my @index=map {$_*2} 0..99;
 
-	state $alloc="x" x 2048;
 	#my $server= $self->[server_];
 	my $static_headers=$self->[server_]->static_headers;
 	my $serialize=
@@ -177,7 +181,6 @@ sub _add_route {
 				if($_[3]){
 					\my @h=$_[3];
 
-					#my $reply=$alloc;#."x";
 					my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
 						#last if $_ >= @h;
 					$reply.= $h[$_].": $h[$_+1]".LF 
@@ -250,11 +253,19 @@ sub _add_route {
 				#$pm=$path_matcher;
         			$matcher=qr{$method $bp$path_matcher};
 			}
+			elsif(!defined $path_matcher){
+				$type=undef;
+				#$pm=$path_matcher;
+				$matcher=undef;
+				#$matcher=qr{$method $bp$path_matcher};
+			}
+			#is this right?
 			elsif($path_matcher =~ /[(\^\$]/){
 				$type=undef;
 				#$pm=$path_matcher;
         			$matcher=qr{$method $bp$path_matcher};
 			}
+			
 			elsif($path_matcher =~ /\$$/){
 				$pm=substr $path_matcher, 0, -1;
 				Log::OK::TRACE and log_trace "Exact match";
@@ -725,10 +736,20 @@ sub add_middleware {
 # }                                                     #
 #########################################################
 
+sub usac_error_route {
+	$uSAC::HTTP::Site->add_error_route(@_);
+}
+
+sub add_error_route {
+	my $self=shift;
+	#Force the method to match GET
+	unshift @_, "GET";
+	$self->add_route(@_);
+}
+
 sub usac_error_page {
-	my $self=$uSAC::HTTP::Site->set_error_page(@_);
-	
-	$self->set_error_page(@_);
+	#my $self=
+	$uSAC::HTTP::Site->set_error_page(@_);
 }
 
 sub set_error_page {
@@ -907,27 +928,29 @@ sub usac_path {
 sub usac_redirect_see_other {
 	my $url =pop;
 	sub {
-		rex_write (@_, HTTP_SEE_OTHER, [HTTP_LOCATION, $url],"");
+		rex_redirect_see_other @_, $url;
 	}
 
 }
+
 sub usac_redirect_found{
 	my $url =pop;
 	sub {
-		rex_write (@_, HTTP_FOUND, [HTTP_LOCATION, $url],"");
+		rex_redirect_found @_, $url;
 	}
 }
+
 sub usac_redirect_temporary {
 	my $url =pop;
 	sub {
-		rex_write (@_, HTTP_TEMPORARY_REDIRECT, [HTTP_LOCATION, $url],"");
+		rex_redirect_temporary @_, $url;
 	}
 }
 
 sub usac_redirect_not_modified {
 	my $url =pop;
 	sub {
-		rex_write (@_,HTTP_NOT_MODIFIED, [HTTP_LOCATION, $url],"");
+		rex_redirect_not_modified @_, $url;
 	}
 }
 
@@ -941,9 +964,7 @@ sub usac_redirect_internal {
 }
 
 sub usac_error_not_found {
-	sub {
-		&rex_error_not_found;
-	};
+	\&rex_error_not_found;
 }
 
 

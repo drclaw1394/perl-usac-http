@@ -29,16 +29,17 @@ use Exporter 'import';
 our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_file_under list_dir>;
 our @EXPORT=@EXPORT_OK;
 
-use constant LF => "\015\012";
-my $path_ext=	qr{\.([^.]*)$}ao;
+#use constant LF => "\015\012";
+#my $path_ext=	qr{\.([^.]*)$}ao;
 
-my $read_size=4096;;
-my %stat_cache;
+use constant  READ_SIZE=>4096;
+
+#my %stat_cache;
 
 use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_>;
 use constant KEY_OFFSET=>0;
 
-use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ end_>);
+use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
 use constant KET_COUNT=>end_-mime_+1;
 use constant RECURSION_LIMIT=>10;
 
@@ -53,6 +54,7 @@ sub new {
 	$self->[cache_]={};#$options{mime_lookup}//{};		#A mime lookup hash
 	$self->[cache_sweep_size_]=$options{cache_sweep_size}//100;
 	$self->[cache_timer_]=undef;
+	$self->[cache_sweep_interval_]=$options{cache_sweep_interval}//120;
 	$self->[cache_size_]=$options{cache_size};
 	bless $self, $package;
 	$self->enable_cache;
@@ -169,7 +171,7 @@ sub disable_cache {
 sub enable_cache {
 	my $self=shift;
 	unless ($self->[cache_timer_]){
-		$self->[cache_timer_]=AE::timer 0, 10,sub {
+		$self->[cache_timer_]=AE::timer 0, $self->[cache_sweep_interval_], sub {
 			my $i;
 			for(keys $self->[cache_]->%*){
 				delete $self->[cache_]{$_} if SvREFCNT $self->[cache_]{$_}[0]==1;
@@ -223,6 +225,7 @@ sub open_cache {
 		Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
 		my $tp=gmtime($entry[mt_]);
 		$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
+
 		return $self->[cache_]{$abs_path}=\@entry;
 	}
 }
@@ -653,7 +656,7 @@ sub usac_file_under {
 	$options{default_mime}=$parent->resolve_mime_default;
 
 	my $headers=$options{headers}//[];
-	my $read_size=$options{read_size}//$read_size;
+	my $read_size=$options{read_size}//READ_SIZE;
 	my $sendfile=$options{sendfile}//0;
 	my $open_modes=$options{open_flags}//0;
 	my $filter=$options{filter};

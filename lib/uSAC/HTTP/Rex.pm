@@ -230,11 +230,12 @@ sub rex_redirect_temporary {
 	rex_write (@_,"");
 	
 }
+
 sub rex_redirect_not_modified {
 	my $url=pop;
 	$_[2]=HTTP_NOT_MODIFIED;
 	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-
+	rex_write (@_,"");
 }
 
 sub rex_redirect_internal;
@@ -242,28 +243,45 @@ sub rex_redirect_internal;
 sub rex_error_not_found {
 	#my ($url)=splice @_, 2;
 	#Redirect to url specified in site
-	my $site=$_[0][0];
-	#rex_redirect_internal @_, $site->error_uris->{404};
-
-	$_[2]=HTTP_NOT_FOUND;
-	push $_[3]->@*, HTTP_CONTENT_LENGTH,0;
-	rex_write (@_, '');
+	my $site=$_[0][1][0];
+	
+	$_[1][method_]="GET";
+	$_[2]=HTTP_NOT_FOUND; #Set the code for the error
+	
+	#Locate applicable site urls to handle the error
+	my $uri=$site->error_uris->{HTTP_NOT_FOUND()};
+	return rex_redirect_internal @_, $uri if $uri;
+	
+	#If one wasn't found, then make an ugly one
+	rex_write (@_, 'Error: '.HTTP_NOT_FOUND);
 }
 
 sub rex_error_forbidden {
-	my $url=pop;
-	$_[2]=HTTP_FORBIDDEN;
-	push $_[3]->@*, HTTP_CONTENT_LENGTH, 0;
-	rex_write (@_, '');
+	my $site=$_[0][1][0];
+	
+	$_[1][method_]="GET";
+	$_[2]=HTTP_FORBIDDEN; #Set the code for the error
+	
+	#Locate applicable site urls to handle the error
+	my $uri=$site->error_uris->{HTTP_FORBIDDEN()};
+	return rex_redirect_internal @_, $uri if $uri;
+	
+	#If one wasn't found, then make an ugly one
+	rex_write (@_, 'Error: '.HTTP_FORBIDDEN);
 }
 
 sub rex_error_internal {
-	my $url=pop;
-	my $session=$_[1][session_];
-
-	$_[2]=HTTP_INTERNAL_SERVER_ERROR;
-	push $_[3]->@*, HTTP_CONTENT_LENGTH, 0;
-	rex_write (@_, '');
+	my $site=$_[0][1][0];
+	
+	$_[1][method_]="GET";
+	$_[2]=HTTP_INTERNAL_SERVER_ERROR; #Set the code for the error
+	
+	#Locate applicable site urls to handle the error
+	my $uri=$site->error_uris->{HTTP_INTERNAL_SERVER_ERROR()};
+	return rex_redirect_internal @_, $uri if $uri;
+	
+	#If one wasn't found, then make an ugly one
+	rex_write (@_, 'Error: '.HTTP_INTERNAL_SERVER_ERROR);
 	$_[1][closeme_]->$*=1;
 	$_[1][dropper_](undef);
 }
@@ -298,7 +316,8 @@ sub rex_redirect_internal {
 	$rex->[session_]->server->current_cb->(
 		$rex->[host_],
 		join(" ", $rex->@[method_, uri_]),
-		$rex
+		$rex,
+		$code,$headers
 	);
 	1;
 }

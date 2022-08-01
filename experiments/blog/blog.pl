@@ -38,6 +38,12 @@ my $server; $server=usac_server {
 		#
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
+		
+		usac_error_route "/error/404" => sub {
+			rex_write (@_, "An error occored: $_[2]");
+		};
+
+		usac_error_page 404 => "/error/404";
 
 		usac_route '/static/hot.txt' =>	usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
 
@@ -57,7 +63,7 @@ my $server; $server=usac_server {
                 #                                                                                                            #
                 usac_route "/static"=>deflate()=>gzip()=>usac_file_under (
 			#filter=>'txt$',
-                        read_size=>4096,#1024,
+                        read_size=>4096,
 			#pre_encoded=>[qw<gz>],
 			#no_compress=>qr/txt$/,
                         do_dir=>1,

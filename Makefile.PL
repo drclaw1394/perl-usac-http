@@ -11,7 +11,7 @@ WriteMakefile(
 		JSON		=> 0,
 		'JSON::XS'     	=> 0,
 		enum	    	=> 0,
-		"Hustle::Table" => "0.5.3",
+		"Hustle::Table" => "0.5.5",	#Bug fix for updating default matcher
 		"uSAC::SIO"	=> 0,
 		"Sys::Sendfile" => 0,
 		
