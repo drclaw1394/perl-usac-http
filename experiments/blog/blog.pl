@@ -45,7 +45,7 @@ my $server; $server=usac_server {
 
 		usac_error_page 404 => "/error/404";
 
-		usac_route '/static/hot.txt' =>	usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
+		usac_route '/static/hot.txt' =>	gzip()=>deflate()=>usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
 
 		usac_route "/test/$Comp/$Comp" => sub {
 			my $captures=&rex_captures;
@@ -61,7 +61,7 @@ my $server; $server=usac_server {
                 #                                                                                                            #
                 # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; #
                 #                                                                                                            #
-                usac_route "/static"=>deflate()=>gzip()=>usac_file_under (
+                usac_route "/static"=>gzip()=>deflate()=>usac_file_under (
 			#filter=>'txt$',
                         read_size=>4096,
 			#pre_encoded=>[qw<gz>],

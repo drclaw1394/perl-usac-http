@@ -358,7 +358,9 @@ sub deflate {
                                 #         ($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;      #
                                 # }                                                                             #
                                 #################################################################################
-				$_ eq HTTP_CONTENT_ENCODING  and ($exe=undef) or last for @headers[@key_indexes[0.. @headers/2-1]];
+				my $bypass;
+				($bypass= $_ ne HTTP_CONTENT_ENCODING) and last for @headers[@key_indexes[0.. @headers/2-1]];
+				$exe&&=!$bypass;	
 				
 				Log::OK::TRACE  and log_trace "exe ". $exe; 
 				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
@@ -529,8 +531,9 @@ sub gzip{
                                 #         ($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;   #
                                 # }                                                                          #
                                 ##############################################################################
-				$_ eq HTTP_CONTENT_ENCODING  and ($exe=undef) or last for @headers[@key_indexes[0.. @headers/2-1]];
-				
+				my $bypass;
+				($bypass = $_ eq HTTP_CONTENT_ENCODING)  and last for @headers[@key_indexes[0.. @headers/2-1]];
+				$exe&&=!$bypass;	
 				Log::OK::TRACE  and log_trace "exe ". $exe; 
 				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
 
