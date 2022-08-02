@@ -92,7 +92,7 @@ use enum (
 	in_progress_
 
 	response_code_
-
+	recursion_count_
 	end_
 	>
 );
@@ -206,8 +206,18 @@ sub rex_state :lvalue{
 #rex
 #partial url
 #code
+	
+#TODO: "Multiple Choice"=>300,
+
+sub rex_redirect_moved{
+	my $url=pop;
+	$_[2]=HTTP_MOVED_PERMANENTLY;
+	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+	rex_write (@_,"");
+}
+
 sub rex_redirect_see_other{
-	my $url=pop;#splice @_, 2;
+	my $url=pop;
 	$_[2]=HTTP_SEE_OTHER;
 	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
 	rex_write (@_,"");
@@ -230,6 +240,13 @@ sub rex_redirect_temporary {
 	rex_write (@_,"");
 	
 }
+sub rex_redirect_permanent {
+	my $url=pop;
+	$_[2]=HTTP_PERMANENT_REDIRECT;
+	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+	rex_write (@_,"");
+	
+}
 
 sub rex_redirect_not_modified {
 	my $url=pop;
@@ -240,49 +257,34 @@ sub rex_redirect_not_modified {
 
 sub rex_redirect_internal;
 
-sub rex_error_not_found {
-	#my ($url)=splice @_, 2;
-	#Redirect to url specified in site
-	#[args=0][ctx=1][site=0]
+
+#General error call, Takes an additional argument of new status code
+sub rex_error {
 	my $site=$_[0][1][0];
-	
 	$_[1][method_]="GET";
-	$_[2]=HTTP_NOT_FOUND; #Set the code for the error
+	$_[2]=pop//HTTP_NOT_FOUND;	#New return code is appened at end
 	
 	#Locate applicable site urls to handle the error
-	my $uri=$site->error_uris->{HTTP_NOT_FOUND()};
+	my $uri=$site->error_uris->{$_[2]};
 	return rex_redirect_internal @_, $uri if $uri;
 	
 	#If one wasn't found, then make an ugly one
-	rex_write (@_, 'Error: '.HTTP_NOT_FOUND);
+	rex_write (@_, 'Error: '.$_[2]);
+
+}
+
+sub rex_error_not_found {
+	push @_, HTTP_NOT_FOUND;
+	&rex_error;
 }
 
 sub rex_error_forbidden {
-	my $site=$_[0][1][0];
-	
-	$_[1][method_]="GET";
-	$_[2]=HTTP_FORBIDDEN; #Set the code for the error
-	
-	#Locate applicable site urls to handle the error
-	my $uri=$site->error_uris->{HTTP_FORBIDDEN()};
-	return rex_redirect_internal @_, $uri if $uri;
-	
-	#If one wasn't found, then make an ugly one
-	rex_write (@_, 'Error: '.HTTP_FORBIDDEN);
+	push @_, HTTP_FORBIDDEN;
+	&rex_error;
 }
-
-sub rex_error_internal {
-	my $site=$_[0][1][0];
-	
-	$_[1][method_]="GET";
-	$_[2]=HTTP_INTERNAL_SERVER_ERROR; #Set the code for the error
-	
-	#Locate applicable site urls to handle the error
-	my $uri=$site->error_uris->{HTTP_INTERNAL_SERVER_ERROR()};
-	return rex_redirect_internal @_, $uri if $uri;
-	
-	#If one wasn't found, then make an ugly one
-	rex_write (@_, 'Error: '.HTTP_INTERNAL_SERVER_ERROR);
+sub rex_error_internal_server_error {
+	push @_, HTTP_INTERNAL_SERVER_ERROR;
+	&rex_error;
 	$_[1][closeme_]->$*=1;
 	$_[1][dropper_](undef);
 }
@@ -293,32 +295,29 @@ sub rex_error_internal {
 sub rex_redirect_internal {
 
 	my ($matcher, $rex, $code, $headers, $uri)=@_;
-	state $previous_rex=$rex;
-	state $counter=0;
+	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	
 	}
 	$rex->[uri_]=$uri;
 	$rex->[uri_stripped_]=$uri;
-	if($rex==$previous_rex){
-		$counter++;
-	}
-	else {
-		$previous_rex=$rex;
-	}
-	if($counter>10){
-		$counter=0;
-		carp "Redirections loop detected for $uri";
-		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, [],"");
+	if(($rex->[recursion_count_]) > 10){
+		$rex->[recursion_count_]=0;
+		#carp "Redirections loop detected for $uri";
+		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
+		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, [HTTP_CONTENT_LENGTH, 0],"");
 		return;
 	}
+
+	#Here we reenter the main processing chain with a  new url, potentiall
+	#new headers and status code
 	undef $_[0];
 	Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
 	$rex->[session_]->server->current_cb->(
-		$rex->[host_],
-		join(" ", $rex->@[method_, uri_]),
-		$rex,
-		$code,$headers
+		$rex->[host_],			#Internal redirects are to same host
+		join(" ", $rex->@[method_, uri_]),#New method and url
+		$rex,				#Same rex
+		$code,$headers			#New code and headers
 	);
 	1;
 }
@@ -335,6 +334,7 @@ sub rex_reply_json {
 		HTTP_CONTENT_LENGTH, length($data),
 	], $data;
 }
+
 sub rex_reply_html {
 	my $data=pop;
 	rex_write @_, HTTP_OK, [

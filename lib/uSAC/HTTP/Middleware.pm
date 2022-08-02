@@ -310,16 +310,12 @@ sub deflate {
 
 	state @deflate_pool;
 	my %out_ctx; #stores bypass and  compressor
-	my $ctx;
 	my $dummy=sub{};
 	my $out=sub {
 		my $next=shift;
 		my $status;
 		my $index;
 		(sub {
-		
-			
-
 			Log::OK::TRACE and log_debug "Input data length: ".length  $_[4];
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
@@ -327,82 +323,41 @@ sub deflate {
 			#Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1)
 			Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
 			Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
-
 			Log::OK::TRACE  and log_trace "doing deflate";
+
 			my $exe;
+			my $ctx;
 			if($_[3]){
 				Log::OK::TRACE and log_debug "Deflate: in header processing";
 				\my @headers=$_[3]; #Alias for easy of use and performance
-				#$ctx->[0]=undef;#reset  for reuse
-
-				#if this is a one shot write then we don't need to store a context
-				#
-                                #########################################################
-                                # unless($_[4]){                                        #
-                                #         #If empty or undefined body, then we disable. #
-                                #         $exe=0;                                       #
-                                # }                                                     #
-                                #########################################################
 				Log::OK::TRACE and log_trace "deflate: looking for accept";
 				Log::OK::TRACE and log_trace "delfate: Incoming accept_encoding: ".Dumper $_[1]->headers;
 
-				($exe=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa) and return &$next;
-				#unless $exe; #bypass is default
-
+				($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa and return &$next;
 				#Also disable if we are already encoded
 				$exe=1;
-                                #################################################################################
-                                # for my $k (@key_indexes){                                                     #
-                                #         last if $k >= @headers;                                               #
-                                #         Log::OK::TRACE and log_trace "Deflate: Testing header: $headers[$k]"; #
-                                #         ($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;      #
-                                # }                                                                             #
-                                #################################################################################
 				my $bypass;
-				($bypass= $_ ne HTTP_CONTENT_ENCODING) and last for @headers[@key_indexes[0.. @headers/2-1]];
+				($bypass= $_ eq HTTP_CONTENT_ENCODING) and last for @headers[@key_indexes[0.. @headers/2-1]];
 				$exe&&=!$bypass;	
 				
 				Log::OK::TRACE  and log_trace "exe ". $exe; 
 				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
 
 				$ctx=$exe;
-				#$out_ctx{$_[1]}=$ctx if $_[5]; #save context if more to come
-						
 
 				return &$next unless $exe; #bypass is default
 				
 				Log::OK::TRACE  and log_trace "No bypass in headers";
 
-				$index=@headers;#undef;
-				#Remove content length as we will rely on chunked encoding
-                                ########################################################################
-                                # $index=undef;                                                        #
-                                # for my $k (@key_indexes){                                            #
-                                #         last if $k >= @headers;                                      #
-                                #         Log::OK::TRACE and log_debug "Header testing: $headers[$k]"; #
-                                #         if($headers[$k] eq HTTP_CONTENT_LENGTH){$index=$k; last};    #
-                                #         #last if defined $index;                                     #
-                                # }                                                                    #
-                                ########################################################################
+				$index=@headers;
+
 				$headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
-				for @key_indexes[0..@headers/2-1];
+					for @key_indexes[0..@headers/2-1];
 
 				Log::OK::TRACE and log_debug "Content length index: $index";
 
 				splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "deflate");# if defined $index;
-				
-
-				#Set our encoding header
-				#push @headers, HTTP_CONTENT_ENCODING, "deflate";
-
-
 				unless($_[5]){
-					# no callback...single shot	
-					#
-					#
-					#TODO: Compress::Zlib->memGzip is how to do
-					#gzip and deflate and remove some overheads
-					#
 					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 
 					Log::OK::TRACE and log_trace "single shot";
@@ -419,7 +374,7 @@ sub deflate {
 				}
 				else{
 					#multiple calls required so setup context
-					my $scratch="";
+					#my $scratch="";
 					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 					Log::OK::TRACE and log_trace "Multicalls required $_[1]";
 					$out_ctx{$_[1]}=$ctx;
@@ -428,12 +383,15 @@ sub deflate {
 
 				}
 			}
+			say "+++++++++++++++++";
+			say "";
 			Log::OK::TRACE and log_trace "Doing body";
 			Log::OK::TRACE and log_trace "Processing deflate content";
 			# Only process if setup correctly
 			#
 			Log::OK::TRACE and log_trace $_[1];
 
+			Log::OK::TRACE and log_trace Dumper $ctx;
 			$ctx//=$out_ctx{$_[1]};
 
 			Log::OK::TRACE and log_trace Dumper $ctx;
@@ -493,44 +451,35 @@ sub gzip{
 
 	state @deflate_pool;
 	my %out_ctx; #stores bypass and  compressor
-	my $ctx;
 	my $dummy=sub{};
 	my $out=sub {
 		my $next=shift;
 		my $status;
 		my $index;
 		(sub {
-		
-			
-
 			Log::OK::TRACE and log_debug "Input data length: ".length  $_[4];
 			# 0	1 	2   3	    4     5
 			# usac, rex, code, headers, data, cb
 			\my $buf=\$_[4];
-			#Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1)
+
 			Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
 			Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
 
-			Log::OK::TRACE  and log_trace "doing deflate";
+			Log::OK::TRACE  and log_trace "doing gzip";
+			Log::OK::TRACE and log_trace "SIZE OF INCOMING DATA: ". length $_[4];
+
 			my $exe;
+			my $ctx;
 			if($_[3]){
 				Log::OK::TRACE and log_debug "gzipin header processing";
 				\my @headers=$_[3]; #Alias for easy of use and performance
-				Log::OK::TRACE and log_trace "gzip: looking for accept";
+				Log::OK::TRACE and log_trace "gzip: looking for accept encoding";
 				Log::OK::TRACE and log_trace "gzip: Incoming accept_encoding: ".Dumper $_[1]->headers;
 
 				($exe=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa) and return &$next;
-				#unless $exe; #bypass is default
 
 				#Also disable if we are already encoded
 				$exe=1;
-                                ##############################################################################
-                                # for my $k (@key_indexes){                                                  #
-                                #         last if $k >= @headers;                                            #
-                                #         Log::OK::TRACE and log_trace "gzip: Testing header: $headers[$k]"; #
-                                #         ($exe = undef or last )if $headers[$k] eq HTTP_CONTENT_ENCODING;   #
-                                # }                                                                          #
-                                ##############################################################################
 				my $bypass;
 				($bypass = $_ eq HTTP_CONTENT_ENCODING)  and last for @headers[@key_indexes[0.. @headers/2-1]];
 				$exe&&=!$bypass;	
@@ -538,43 +487,21 @@ sub gzip{
 				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
 
 				$ctx=$exe;
-				#$out_ctx{$_[1]}=$ctx if $_[5]; #save context if more to come
-						
 
 				return &$next unless $exe; #bypass is default
 				
 				Log::OK::TRACE  and log_trace "No bypass in headers";
 
-				#Remove content length as we will rely on chunked encoding
-				$index=@headers;#undef;
-                                ########################################################################
-                                # for my $k (@key_indexes){                                            #
-                                #         last if $k >= @headers;                                      #
-                                #         Log::OK::TRACE and log_debug "Header testing: $headers[$k]"; #
-                                #         if($headers[$k] eq HTTP_CONTENT_LENGTH){$index=$k; last};    #
-                                #         #last if defined $index;                                     #
-                                # }                                                                    #
-                                ########################################################################
+				$index=@headers;
 
 				$headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
-				for @key_indexes[0..@headers/2-1];
+					for @key_indexes[0..@headers/2-1];
 
+				Log::OK::TRACE and log_debug join ", ", @headers;	
 				Log::OK::TRACE and log_debug "Content length index: $index";
 
 				splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "gzip");# if defined $index;
-				
-
-				#Set our encoding header
-				#push @headers, HTTP_CONTENT_ENCODING, "gzip";
-
-
 				unless($_[5]){
-					# no callback...single shot	
-					#
-					#
-					#TODO: Compress::Zlib->memGzip is how to do
-					#gzip and deflate and remove some overheads
-					#
 					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::_deflateInit(FLAG_APPEND|FLAG_CRC,
                                            Z_BEST_COMPRESSION,
                                            Z_DEFLATED,
@@ -583,7 +510,6 @@ sub gzip{
                                            Z_DEFAULT_STRATEGY,
                                            4096,
                                            '');
-				   #Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 
 					Log::OK::TRACE and log_trace "single shot";
 					my $scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER;
@@ -610,7 +536,6 @@ sub gzip{
                                            Z_DEFAULT_STRATEGY,
                                            4096,
                                            '');
-						#$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 					Log::OK::TRACE and log_trace "Multicalls required $_[1]";
 					$out_ctx{$_[1]}=$ctx;
 
@@ -619,8 +544,7 @@ sub gzip{
 				}
 			}
 
-			Log::OK::TRACE and log_trace "Doing body";
-			Log::OK::TRACE and log_trace "Processing deflate content";
+			Log::OK::TRACE and log_trace "Processing gzip content";
 			# Only process if setup correctly
 			#
 			Log::OK::TRACE and log_trace $_[1];
@@ -634,9 +558,9 @@ sub gzip{
 
 			# Append comppressed data to the scratch when its ready
 			#
-			#my $scratch=""; 	#new scratch each call
+			my $scratch=""; 	#new scratch each call
 
-			my $scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER if $_[3];
+			$scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER if $_[3];
 
 			$status=$ctx->deflate($buf, $scratch);
 			$status == Z_OK or log_error "Error creating deflate context";

@@ -57,7 +57,7 @@ my $server; $server=usac_server {
 
                 usac_route 'testing.txt'=>deflate()=>sub {
 			push $_[3]->@*, HTTP_CONTENT_TYPE, "text/plain";
-                                rex_write @_, "HELLO";
+                        rex_write @_, "HELLO";
                 };
                 #                                                                                                            #
                 # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; #
