@@ -3,7 +3,9 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
 	NAME              => 'uSAC::HTTP',
 	VERSION_FROM      => 'lib/uSAC/HTTP.pm',
-	MIN_PERL_VERSION  => '5.26.0',		#for isa operator
+	MIN_PERL_VERSION  => '5.36.0',		
+	EXE_FILES	=> ['script/usac'],
+	
 	PREREQ_PM         => {
 		EV		=> 0,
 		AnyEvent 	=> 0,
@@ -12,7 +14,7 @@ WriteMakefile(
 		'JSON::XS'     	=> 0,
 		enum	    	=> 0,
 		"Hustle::Table" => "0.5.5",	#Bug fix for updating default matcher
-		"uSAC::SIO"	=> 0,
+		"uSAC::IO"	=> 0,
 		"Sys::Sendfile" => 0,
 		
 

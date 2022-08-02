@@ -1,8 +1,11 @@
 uSAC-HTTP-v.*\.tar\.gz
+artwork
 uploads2
 data
 site
 experiments
+templates
+benchmarks
 nytprof
 ex
 rfc

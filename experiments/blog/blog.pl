@@ -68,7 +68,7 @@ my $server; $server=usac_server {
 			#pre_encoded=>[qw<gz>],
 			#no_compress=>qr/txt$/,
                         do_dir=>1,
-                        #indexes=>["index.html"],
+                        indexes=>["index.html"],
                         #sendfile=>4096,
                         usac_dirname #  "static"
                 );

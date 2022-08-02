@@ -591,7 +591,7 @@ sub make_list_dir {
 	}
 	
 	sub{
-		my ($line,$rex,$uri)=@_;
+		my ($line, $rex, $code, $headers, $uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
 		my $abs_path=$html_root.$uri;
@@ -665,7 +665,10 @@ sub usac_file_under {
 	my $pre_encoded=$options{pre_encoded}//[];
 	#TODO: Need to check only supported encodings are provided.
 	
-	Log::OK::INFO and log_info "Serving file from  $html_root";
+	Log::OK::INFO and log_info "Serving files from: $html_root";
+	Log::OK::INFO and log_info "->Listing dir: ".($options{list_dir}?"yes":"no");
+	Log::OK::INFO and log_info "->Filter:".($options{filter}) if $options{filter};
+	
 	Log::OK::TRACE and log_trace "OPTIONS IN: ".join ", ", %options;
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 

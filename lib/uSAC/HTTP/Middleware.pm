@@ -383,8 +383,6 @@ sub deflate {
 
 				}
 			}
-			say "+++++++++++++++++";
-			say "";
 			Log::OK::TRACE and log_trace "Doing body";
 			Log::OK::TRACE and log_trace "Processing deflate content";
 			# Only process if setup correctly
@@ -476,7 +474,7 @@ sub gzip{
 				Log::OK::TRACE and log_trace "gzip: looking for accept encoding";
 				Log::OK::TRACE and log_trace "gzip: Incoming accept_encoding: ".Dumper $_[1]->headers;
 
-				($exe=($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa) and return &$next;
+				($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa and return &$next;
 
 				#Also disable if we are already encoded
 				$exe=1;

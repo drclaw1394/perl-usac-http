@@ -110,7 +110,6 @@ sub _default_handler {
 			#Log::OK::TRACE and log_trace "DEFAULT HANDLER FOR TABLE";
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
 			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[1]->headers->%*;
-			say join ", ", @_;
 			&rex_error_not_found;
 		};
 }
@@ -152,7 +151,6 @@ sub listen {
 	my $self = shift;
 	Log::OK::INFO and log_info __PACKAGE__." setting up listeners...";
 	for my $listen (@{ $self->[listen_] }) {
-		say ref $listen;
 		my ($host,$service) =($listen->host, $listen->port);#split ':',$listen,2;
 
 		#$service = $self->[port_] unless length $service;
@@ -162,7 +160,6 @@ sub listen {
 		
 		#here we figure out the addressing types
 
-		say "Host: $host, port: $service";
 		my $ipn;
 		my $af;
 		if($ipn=inet_pton(AF_INET6, $host)){
@@ -175,8 +172,6 @@ sub listen {
 		}
 		elsif($host !~ /:\d+$/){
 			#try unix socket here
-			say $host;
-			say "TRY UNIX SOCKET";
 			$af=AF_UNIX;
 		}
 		else{
@@ -538,9 +533,6 @@ sub rebuild_dispatch {
         $site->add_route([$Any_Method], undef, _default_handler);
 
 	my %lookup=map {
-			map {
-				say $_->[0];
-			}	$self->[host_tables_]{$_}[0]->@*;
 		$_, [
 			#table
 			$self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
@@ -823,7 +815,6 @@ sub add_listener {
 	for(@uri){
 		die "Error parsing listener: $_ " unless ref;
 	}
-	say "HOsts: ", $site->host->@*;
 	push $site->[listen_]->@*, @uri;
 }
 

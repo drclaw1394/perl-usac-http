@@ -77,7 +77,7 @@ GetOptions \%options,
 #load any config file specified
 
 #set default listener if non provided
-$options{listen}//=["0.0.0.0:8080"];
+$options{listen}//=["localhost:8080"];
 
 my $welcome="uSAC Server version $VERSION";
 Log::OK::INFO and log_info $welcome;
@@ -130,9 +130,6 @@ $server=usac_server{
                 my $static=$options{"www-root"};
 		my @roots;
                 for my $s (@$static){
-			Log::OK::INFO and log_info "Serving files from: $s Listing dir: ".($options{"list_dir"}?"yes":"no");
-
-
                         push @roots, usac_file_under list_dir=>$options{"list-dir"}, $s;
                 } 
 		usac_route ["GET","HEAD"],"/", @roots;

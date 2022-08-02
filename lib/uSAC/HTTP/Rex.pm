@@ -58,7 +58,7 @@ rex_redirect_temporary
 rex_redirect_not_modified
 
 rex_error_not_found
-rex_error_internal 
+rex_error_internal_server_error 
 
 rex_redirect_internal
 
@@ -282,6 +282,7 @@ sub rex_error_forbidden {
 	push @_, HTTP_FORBIDDEN;
 	&rex_error;
 }
+
 sub rex_error_internal_server_error {
 	push @_, HTTP_INTERNAL_SERVER_ERROR;
 	&rex_error;
@@ -699,7 +700,7 @@ sub usac_data_slurp{
 					unless(open $handle, ">", $path){
 
 						Log::OK::INFO and log_info "Opening file";
-						rex_error_internal $matcher, $rex;
+						rex_error_internal_server_error $matcher, $rex;
 					}
 					$name=(split "/", $path)[-1];
 				}
@@ -708,7 +709,7 @@ sub usac_data_slurp{
 						($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
 					}
 					catch {
-						rex_error_internal $matcher, $rex;
+						rex_error_internal_server_error $matcher, $rex;
 
 					};
 				}
@@ -720,7 +721,7 @@ sub usac_data_slurp{
 			if($path or $tmp_dir){
 				$wc=syswrite $handle, $_[2];
 				unless($wc){
-					rex_error_internal $matcher, $rex;
+					rex_error_internal_server_error $matcher, $rex;
 				}
 
 			}
