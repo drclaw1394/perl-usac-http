@@ -460,7 +460,7 @@ sub send_file_uri_norange {
                         seek $in_fh, $offset, 0;
 			my $sz=($content_length-$total);
 			$sz=$read_size if $sz>$read_size;
-                        $total+=$rc=read $in_fh, $reply, $sz;#, $offset;
+                        $total+=$rc=sysread $in_fh, $reply, $sz;#, $offset;
 			$offset+=$rc;
 
                         #non zero read length.. do the write
