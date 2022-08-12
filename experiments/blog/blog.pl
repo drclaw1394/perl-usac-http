@@ -1,6 +1,8 @@
 #!/usr/bin/env perl
 use Log::ger::Output 'Screen';
 use Log::ger::Util;
+use EV;
+use AnyEvent;
 
 use Log::OK {
 		lvl=>"warn",
@@ -22,7 +24,7 @@ use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
 use Data::Dumper;
 
 my $server; $server=usac_server {
-	usac_listen no_hosts=>1, ["127.0.0.1:8084", "[::1]:8084"];
+	usac_listen no_hosts=>1, ["127.0.0.1:8084"];#, "[::1]:8084"];
 	#usac_listen "[::1]:8082";
 	#usac_mime_db uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type");
 	#usac_mime_default "some/stuff";

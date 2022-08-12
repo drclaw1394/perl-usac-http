@@ -1,10 +1,14 @@
 package uSAC::HTTP::Server; 
 use strict;
 use warnings;
+no warnings;
 
 use Log::ger;
 use Log::OK;
-
+use EV;
+use AnyEvent;
+use Socket ":all";
+use IO::FD;
 #use constant "OS::darwin"=>$^O =~ /darwin/;
 #use constant "OS::linux"=>0;
 #
@@ -147,9 +151,10 @@ sub listen_inet {
 }
 
 
-sub listen {
+sub do_listen {
 	my $self = shift;
 	Log::OK::INFO and log_info __PACKAGE__." setting up listeners...";
+	say STDERR $self;
 	for my $listen (@{ $self->[listen_] }) {
 		my ($host,$service) =($listen->host, $listen->port);#split ':',$listen,2;
 
@@ -190,15 +195,17 @@ sub listen {
 		Carp::croak "listen/socket: address family not supported"
 			if AnyEvent::WIN32 && $af == AF_UNIX;
 		
-		socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";
-		
+		my $addr;
+		IO::FD::socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";
+		say STDERR "LISTENER FD: $fh";	
 		if ($af == AF_INET || $af == AF_INET6) {
+			$addr=pack_sockaddr_in($service,$ipn);
 			if($self->[workers_]>1 or 1){
-			setsockopt $fh, SOL_SOCKET, SO_REUSEADDR, 1
+				IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1)
 				or Carp::croak "listen/so_reuseaddr: $!"
 					unless AnyEvent::WIN32; 
 
-			setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, 1
+					IO::FD::setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, pack "i", 1
 				or Carp::croak "listen/so_reuseport: $!"
 					unless AnyEvent::WIN32; 
 			}
@@ -206,7 +213,7 @@ sub listen {
 				say STDERR "Socket reuse not enabled. (ie only 1 worker)";
 			}
 
-			setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1
+			IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1
 				or Carp::croak "listen/so_nodelay $!"
 					unless AnyEvent::WIN32; 
 			
@@ -219,8 +226,11 @@ sub listen {
 		} elsif ($af == AF_UNIX) {
 			unlink $service;
 		}
+
 		log_info "Service: $service, host $host";
-		bind $fh, AnyEvent::Socket::pack_sockaddr( $service, $ipn )
+		#AnyEvent::Socket::pack_sockaddr( $service, $ipn )
+		print "Packed: ", unpack "H*", $addr;
+		IO::FD::bind $fh, $addr
 			or Carp::croak "listen/bind on ".eval{Socket::inet_ntoa($ipn)}.":$service: $!";
 		
 		if ($host eq 'unix/') {
@@ -228,7 +238,8 @@ sub listen {
 				or warn "chmod $service failed: $!";
 		}
 		
-		fh_nonblocking $fh, 1;
+		#fh_nonblocking $fh, 1;
+		IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
 	
 		$self->[fh_] ||= $fh; # compat
 		$self->[fhs_]{fileno $fh} = $fh;
@@ -237,8 +248,8 @@ sub listen {
 	$self->prepare();
 	
 	for ( values  %{ $self->[fhs_] } ) {
-		listen $_, $self->[backlog_]
-			or Carp::croak "listen/listen on ".(fileno $_).": $!";
+		IO::FD::listen $_, $self->[backlog_]
+			or Carp::croak "listen/listen on ".(IO::FD::fileno $_).": $!";
 	}
 	
 	return wantarray ? do {
@@ -330,7 +341,7 @@ sub make_sysaccept {
 
 }
 
-sub accept {
+sub do_accept {
 	state $seq=0;
 	Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
 	weaken( my $self = shift );
@@ -344,9 +355,8 @@ sub accept {
 	for my $fl ( values %{ $self->[fhs_] }) {
 		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
 			my $peer;
-			while(($peer = accept my $fh, $fl)){
+			while(($peer = IO::FD::accept my $fh, $fl)){
 				#last unless $fh;
-
 				CONFIG::kernel_loadbalancing and $do_client->($fh) and next;
 
 				#!CONFIG::kernel_loadbalancing and IO::FDPass::send $children[$child_index++%@children], $fh;
@@ -382,11 +392,11 @@ sub make_do_client{
 
 		#Linux does not inherit the socket flags from parent socket. But BSD does.
 		#Compile time disabling with constants
-		CONFIG::set_nonblock and fcntl $fh, F_SETFL,O_NONBLOCK;
+		CONFIG::set_nonblock and IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
 
 		#TODO:
 		# Need to do OS check here
-		CONFIG::set_no_delay and setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, 1 or Carp::croak "listen/so_nodelay $!";
+		CONFIG::set_no_delay and IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1 or Carp::croak "listen/so_nodelay $!";
 		#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
 
 
@@ -635,8 +645,9 @@ sub run {
 
 
 	$self->rebuild_dispatch;
-	$self->listen;
-	$self->accept;
+	say STDERR "SELF IS: ", $self;
+	$self->do_listen;
+	$self->do_accept;
 
 	$cv->recv();
 }

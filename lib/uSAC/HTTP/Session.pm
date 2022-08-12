@@ -11,6 +11,7 @@ use Devel::Peek qw<SvREFCNT>;
 
 use uSAC::IO::SReader;
 use uSAC::IO::SWriter;
+use IO::FD;
 use Data::Dumper;
 
 
@@ -98,7 +99,7 @@ method init {
 		$_sr->pause;
 		$_sw->pause;
 		delete $_sessions->{$_id};
-		close $_fh;
+		IO::FD::close $_fh;
 		$_fh=undef;
 		$_id=undef;
 		#$closeme=undef;
