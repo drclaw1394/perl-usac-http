@@ -404,7 +404,7 @@ sub new {
 	#NOTE: A single call to Session export. give references to important variables
 	
 	($self->[closeme_], $self->[dropper_], $self->[server_], $self->[rex_], $self->[in_progress_], $self->[write_])= $_[1]->exports->@*;
-
+	$self->[recursion_count_]=0;
 
 	$self;
 }

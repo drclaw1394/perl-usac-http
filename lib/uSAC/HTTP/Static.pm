@@ -42,6 +42,8 @@ use constant KEY_OFFSET=>0;
 use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
 use constant KET_COUNT=>end_-mime_+1;
 use constant RECURSION_LIMIT=>10;
+use POSIX;
+use constant POSIX=>undef;
 
 sub new {
 	my $package=shift//__PACKAGE__;
@@ -203,8 +205,6 @@ sub open_cache {
 		next unless stat($path) and -r _ and ! -d _; #undef if stat fails
 		#or incorrect premissions
 
-
-		sysopen $in_fh,$path,OPEN_MODE|($mode//0) or return;
 		#lookup mime type
 		#
 		my $ext=substr $abs_path, rindex($abs_path, ".")+1;
@@ -212,7 +212,7 @@ sub open_cache {
 
 		my @entry;
 		$entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
-		$entry[fh_]=$in_fh;
+		say stat _;
 		$entry[size_]=(stat _)[7];
 		$entry[mt_]=(stat _)[9];
 		if($pre){
@@ -221,6 +221,14 @@ sub open_cache {
 		else{
 			$entry[content_encoding_]=[];
 		}
+		if(POSIX){
+			$in_fh=POSIX::open $path,OPEN_MODE|($mode//0) or return;
+		}
+		else{
+			sysopen $in_fh,$path,OPEN_MODE|($mode//0) or return;
+			#open $in_fh,"<:mmap", $path or return;
+		}
+		$entry[fh_]=$in_fh;
 		Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
 		Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
 		my $tp=gmtime($entry[mt_]);
@@ -457,10 +465,22 @@ sub send_file_uri_norange {
 
 			$reply=""; #reset buffer
                         #NON Send file
-                        seek $in_fh, $offset, 0;
+			#
+			if(POSIX){
+				POSIX::lseek $in_fh, $offset,POSIX::SEEK_SET;
+			}
+			else{
+                        	seek $in_fh, $offset, 0;
+			}
+
 			my $sz=($content_length-$total);
 			$sz=$read_size if $sz>$read_size;
-                        $total+=$rc=sysread $in_fh, $reply, $sz;#, $offset;
+			if(POSIX){
+				$total+= $rc=POSIX::read $in_fh, $reply, $sz;
+			}
+			else {
+                        	$total+=$rc=sysread $in_fh, $reply, $sz;#, $offset;
+			}
 			$offset+=$rc;
 
                         #non zero read length.. do the write
@@ -504,7 +524,12 @@ sub send_file_uri_norange {
                         if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
                                 log_error "Static files: READ ERROR from file";
                                 log_error "Error: $!";
-                                close $in_fh;
+                                if(POSIX){
+					POSIX::close $in_fh;
+				}
+				else {
+					close $in_fh;
+				}
                                 $rex->[uSAC::HTTP::Rex::dropper_]->(1);
                                 undef $sub;
                         }
@@ -760,6 +785,7 @@ sub usac_file_under {
 			:[];
 
 		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
+		#my $entry=$static->open_cache($path,$open_modes, $pre_encoded_ok);
 
 		$entry and return send_file_uri_norange @_, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
 
