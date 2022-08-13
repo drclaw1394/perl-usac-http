@@ -38,7 +38,8 @@ use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::v1_1_Reader;
-use uSAC::HTTP::Static;
+#use uSAC::HTTP::Static;
+#
 #use uSAC::HTTP::Server::WS;
 #use Hustle::Table;
 #

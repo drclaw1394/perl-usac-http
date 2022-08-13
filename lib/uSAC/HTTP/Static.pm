@@ -43,7 +43,9 @@ use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ ca
 use constant KET_COUNT=>end_-mime_+1;
 use constant RECURSION_LIMIT=>10;
 use POSIX;
+use IO::FD::DWIM; #":all";
 use constant POSIX=>undef;
+use constant DISABLE_CACHE=>undef;
 
 sub new {
 	my $package=shift//__PACKAGE__;
@@ -212,7 +214,7 @@ sub open_cache {
 
 		my @entry;
 		$entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
-		say stat _;
+		#say stat _;
 		$entry[size_]=(stat _)[7];
 		$entry[mt_]=(stat _)[9];
 		if($pre){
@@ -470,7 +472,7 @@ sub send_file_uri_norange {
 				POSIX::lseek $in_fh, $offset,POSIX::SEEK_SET;
 			}
 			else{
-                        	seek $in_fh, $offset, 0;
+                        	sysseek $in_fh, $offset, 0;
 			}
 
 			my $sz=($content_length-$total);
@@ -784,7 +786,9 @@ sub usac_file_under {
 			?$pre_encoded
 			:[];
 
-		my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
+		my $entry;
+		$entry=$cache->{$path} unless DISABLE_CACHE;
+		$entry//=$static->open_cache($path,$open_modes, $pre_encoded_ok);
 		#my $entry=$static->open_cache($path,$open_modes, $pre_encoded_ok);
 
 		$entry and return send_file_uri_norange @_, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;

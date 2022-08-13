@@ -583,7 +583,9 @@ sub rebuild_dispatch {
 		#TODO: Better Routing Cache management.
 		#if the is_default flag is set, this is an unkown match.
 		#so do not cache it
+		#say STDERR join ", ", $route->@[0,1,2,3];
 		delete $table->[1]{$input} if $route->[3];
+		1;
 	};
 }
 
