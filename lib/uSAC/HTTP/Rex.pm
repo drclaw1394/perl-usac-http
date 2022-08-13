@@ -77,14 +77,14 @@ our @EXPORT=@EXPORT_OK;
 
 use Time::HiRes qw/gettimeofday/;
 use Scalar::Util qw(weaken);
-use Encode qw<decode encode decode_utf8>;
+#use Encode qw<decode encode decode_utf8>;
 
 
 #Class attribute keys
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ time_ cookies_ handle_ attrs_ host_ method_ uri_stripped_ uri_ state_ in_set_ in_used_ out_set_ out_used_ captures_ id_
+	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ cookies_ host_ method_ uri_stripped_ uri_ state_ captures_ id_
 	closeme_
 	dropper_
 	server_
@@ -398,7 +398,7 @@ sub new {
 
 	#my $write=undef;
 
-	my $self=bless [ $_[4], $_[1], $_[2], undef, undef, $query_string, 1 ,undef,undef,undef,$_[3], $_[5], $_[6], $_[6], {}, [],[],[],[],[], $id++], $_[0];
+	my $self=bless [ $_[4], $_[1], $_[2], undef, undef, $query_string ,undef,$_[3], $_[5], $_[6], $_[6], {}, [], $id++], $_[0];
 
 	#my $write=$_[1]->[uSAC::HTTP::Session::write_];
 	#

@@ -98,7 +98,13 @@ sub make_reader{
 
 	my %h;		#Define the header storage here, once per connection
 	
+	#Temp variables
 	my $host;
+	my $tmp;
+	my $pos3;
+	my $k;
+	my $val;
+
 	sub {
 		\my $buf=\$_[0];
 		use integer;
@@ -116,7 +122,7 @@ sub make_reader{
 			#	$version => comment
 			#
 			if ($state == STATE_REQUEST) {
-				my $pos3=index $buf, LF;
+				$pos3=index $buf, LF;
 				
 				if($pos3>=0){
 					($method,$uri,$version)=split " ", substr($buf,0,$pos3);
@@ -150,9 +156,7 @@ sub make_reader{
 
 			elsif ($state == STATE_HEADERS) {
 				# headers
-				my $k;
-				my $val;
-				my $pos3;
+				#my $pos3;
 				#my $index;
 				while () {
 					$pos3=index $buf, LF;
@@ -202,18 +206,14 @@ sub make_reader{
 
 				#Done with headers. 
 
-				$req=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri, $ex);
+				$rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri, $ex);
 
-				$rex=$req;
+				#$rex=$req;
 
-				my $tmp=$h{CONNECTION}//"";
-				if($version eq "HTTP/1.0"){
-					$closeme=$tmp !~ /keep-alive/i;
-				}
-				else {
-
-					$closeme=$tmp =~ /close/i;
-				}
+				$tmp=$h{CONNECTION}//"";
+				$version eq "HTTP/1.0"
+					? $closeme=$tmp !~ /keep-alive/ai
+					: $closeme=$tmp =~ /close/ai;
 				
 
 				Log::OK::DEBUG and log_debug "CLose me set to: $closeme";
@@ -229,15 +229,15 @@ sub make_reader{
 				$cb->(
 					$host,
 					"$method $uri",
-					$req
+					$rex
 				);
 				#return;
 
 			}
 			else {
 			}
-		} # while read
-	}; # io
+		}
+	};
 
 }
 
