@@ -43,7 +43,8 @@ use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ ca
 use constant KET_COUNT=>end_-mime_+1;
 use constant RECURSION_LIMIT=>10;
 use POSIX;
-use IO::FD::DWIM; #":all";
+#use IO::FD::DWIM;# ":all";
+use IO::FD;
 use constant POSIX=>undef;
 use constant DISABLE_CACHE=>undef;
 
@@ -227,7 +228,8 @@ sub open_cache {
 			$in_fh=POSIX::open $path,OPEN_MODE|($mode//0) or return;
 		}
 		else{
-			sysopen $in_fh,$path,OPEN_MODE|($mode//0) or return;
+			IO::FD::sysopen $in_fh,$path,OPEN_MODE|($mode//0) or return;
+			#say $in_fh;
 			#open $in_fh,"<:mmap", $path or return;
 		}
 		$entry[fh_]=$in_fh;
@@ -472,7 +474,7 @@ sub send_file_uri_norange {
 				POSIX::lseek $in_fh, $offset,POSIX::SEEK_SET;
 			}
 			else{
-                        	sysseek $in_fh, $offset, 0;
+				IO::FD::sysseek $in_fh, $offset, 0;
 			}
 
 			my $sz=($content_length-$total);
@@ -481,11 +483,13 @@ sub send_file_uri_norange {
 				$total+= $rc=POSIX::read $in_fh, $reply, $sz;
 			}
 			else {
-                        	$total+=$rc=sysread $in_fh, $reply, $sz;#, $offset;
+                        	$total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
 			}
 			$offset+=$rc;
 
                         #non zero read length.. do the write
+			POSIX and DISABLE_CACHE and $total==$content_length and POSIX::close $in_fh;
+			!POSIX and DISABLE_CACHE and $total==$content_length and IO::FD::close $in_fh;
 			$total==$content_length and
 			(@ranges
 				?return rex_write $matcher, $rex, $code, $out_headers, $reply, sub {

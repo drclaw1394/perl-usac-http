@@ -202,7 +202,7 @@ sub make_reader{
 
 				#Done with headers. 
 
-				$req=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri);
+				$req=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri, $ex);
 
 				$rex=$req;
 

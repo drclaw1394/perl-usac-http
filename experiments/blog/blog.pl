@@ -1,7 +1,12 @@
 #!/usr/bin/env perl
 use Log::ger::Output 'Screen';
 use Log::ger::Util;
+BEGIN{
+	$ENV{LIBEV_FLAGS}=1; #POLL
+}
 use EV;
+#set the event model of ev
+#
 use AnyEvent;
 
 use Log::OK {
@@ -64,7 +69,9 @@ my $server; $server=usac_server {
                 #                                                                                                            #
                 # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; #
                 #                                                                                                            #
-                usac_route "/static"=>gzip()=>deflate()=>usac_file_under (
+                usac_route "/static"=>
+		gzip()=>deflate()=>
+		usac_file_under (
 			#filter=>'txt$',
                         read_size=>4096,
 			#pre_encoded=>[qw<gz>],

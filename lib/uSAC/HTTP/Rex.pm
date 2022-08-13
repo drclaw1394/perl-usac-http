@@ -386,7 +386,8 @@ sub writer {
 my $id=0;	#Instead of using state
 my $_i;
 sub new {
-	#my ($package, $session, $headers, $host, $version, $method, $uri)=@_;
+	#my ($package, $session, $headers, $host, $version, $method, $uri, $ex)=@_;
+	#	0	1	  2	    3		4	5	6   7
 
 	#state $id=0;
 	my $query_string="";
@@ -403,7 +404,7 @@ sub new {
 	#
 	#NOTE: A single call to Session export. give references to important variables
 	
-	($self->[closeme_], $self->[dropper_], $self->[server_], $self->[rex_], $self->[in_progress_], $self->[write_])= $_[1]->exports->@*;
+	($self->[closeme_], $self->[dropper_], $self->[server_], $self->[rex_], $self->[in_progress_], $self->[write_])= $_[7]->@*;#$_[1]->exports->@*;
 	$self->[recursion_count_]=0;
 
 	$self;
