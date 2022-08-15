@@ -158,48 +158,27 @@ sub do_listen {
 	for my $listen (@{ $self->[listen_] }) {
 		my ($host,$service) =($listen->host, $listen->port);#split ':',$listen,2;
 
-		#$service = $self->[port_] unless length $service;
-		#$host = $self->[host_] unless length $host;
+		my ($error,@results)=getaddrinfo($host,$service, {
+				hints=>AI_PASSIVE,
+				socktype=>SOCK_STREAM
+			});
+
+		say Dumper @results;
+		die "Error getting address info for $host:$service" if $error;
+
+		my $addr=$results[0]{addr};
+		my $af=$results[0]{family};
 		
-		#$host = $AnyEvent::PROTOCOL{ipv4} < $AnyEvent::PROTOCOL{ipv6} && AF_INET6 ? "::" : "0" unless length $host;
-		
-		#here we figure out the addressing types
-
-		my $ipn;
-		my $af;
-		if($ipn=inet_pton(AF_INET6, $host)){
-			
-			$af=AF_INET6;
-		}
-		elsif($ipn=inet_pton(AF_INET, $host)){
-
-			$af=AF_INET;
-		}
-		elsif($host !~ /:\d+$/){
-			#try unix socket here
-			$af=AF_UNIX;
-		}
-		else{
-			#not supported
-			die "Could not parse address for listener: $_";
-		}
-			
-		#my $ipn = parse_address $host
-		#or Carp::croak "$self.listen: cannot parse '$host' as host address";
-		
-		#my $af = address_family $ipn;
-
-
 
 		
 		Carp::croak "listen/socket: address family not supported"
 			if AnyEvent::WIN32 && $af == AF_UNIX;
 		
-		my $addr;
+			#my $addr;
 		IO::FD::socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";
 		say STDERR "LISTENER FD: $fh";	
 		if ($af == AF_INET || $af == AF_INET6) {
-			$addr=pack_sockaddr_in($service,$ipn);
+			#$addr=pack_sockaddr_in($service,$addr);
 			if($self->[workers_]>1 or 1){
 				IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1)
 				or Carp::croak "listen/so_reuseaddr: $!"
@@ -217,12 +196,6 @@ sub do_listen {
 				or Carp::croak "listen/so_nodelay $!"
 					unless AnyEvent::WIN32; 
 			
-                        ##########################################################################
-                        # unless ($service =~ /^\d*$/) {                                         #
-                        #         $service = (getservbyname $service, "tcp")[2]                  #
-                        #                 or Carp::croak "tcp_listen: $service: service unknown" #
-                        # }                                                                      #
-                        ##########################################################################
 		} elsif ($af == AF_UNIX) {
 			unlink $service;
 		}
@@ -231,7 +204,7 @@ sub do_listen {
 		#AnyEvent::Socket::pack_sockaddr( $service, $ipn )
 		print "Packed: ", unpack "H*", $addr;
 		IO::FD::bind $fh, $addr
-			or Carp::croak "listen/bind on ".eval{Socket::inet_ntoa($ipn)}.":$service: $!";
+			or Carp::croak "listen/bind: $!";
 		
 		if ($host eq 'unix/') {
 			chmod oct('0777'), $service
@@ -314,32 +287,6 @@ sub prepare {
         };
 }
 
-sub make_sysaccept {
-	#attempt a syscall to accept
-	#
-	my $fh=shift;
-
-	my $syscall_number =30; #macos
-	my $addr_len=length AnyEvent::Socket::pack_sockaddr( 80, parse_address("127.0.0.1"));
-	my $packed_address=" " x $addr_len;
-	my $i=pack("i*",$addr_len);
-	my $fn=fileno($fh);
-
-	sub {
-		my $handle;
-		my $result=syscall $syscall_number, $fn, $packed_address, $i;
-		if($result<0){
-			#say "Syscall error: $result: $!";
-		}
-		else {
-			#open from fd
-			$handle=IO::Handle->new_from_fd($result ,"<");
-			#open $handle, "<&=$result";
-		}
-		return $handle;
-	}
-
-}
 
 sub do_accept {
 	state $seq=0;
@@ -794,8 +741,15 @@ sub add_listener {
 
 	my @uri;
 	my $type=$options{type}//'tcp';
+	
 	#type can be
+	# family=> unix, INET INET6 	Default is inet
+	# socktype=>stream or datagram default is stream
+	# interface=>address		defaul is 0.0.0.0
+	# port=>number
+	#
 	# tcp
+	#
 	# unix
 	# quic
 	

@@ -10,7 +10,7 @@ use Data::Dumper;
 use JSON;
 #no feature "indirect";
 use Devel::Peek qw<SvREFCNT>;
-use Scalar::Util qw<weaken>;
+#use Scalar::Util qw<weaken>;
 #use Errno qw<:POSIX EACCES ENOENT>;
 use Fcntl qw(O_NONBLOCK O_RDONLY);
 #use File::Spec;
