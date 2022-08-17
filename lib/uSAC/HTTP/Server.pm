@@ -803,7 +803,13 @@ sub usac_sub_product {
 	HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )];
 }
 
-
+sub process_listeners {
+	#A listener binds to a particular socket type and family
+	#Sets up the callback to call when a new connection is available
+	#or how to process datagrams
+	
+	
+}
 
 1; 
 __DATA__
