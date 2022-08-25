@@ -394,18 +394,21 @@ sub make_form_data_reader {
 #Content-Type: application/x-www-form-urlencoded
 #
 sub make_form_urlencoded_reader {
-	say "MAKING URL ENCODED READER";
 	use integer;
 	#These values are shared for a session
 	#
-	my ($usac,$rex,$session,$cb)=@_;	
+	my ($usac, $rex, $code, $out_header, $header, $cb)=@_;	
+	my $session=$rex->session;
 	my $processed=0;					#stateful position in buffer
-	my $header={};
+	#my $header={};
+
+	#NOTE: Reader HTTP Parsing chain, called from event system
 	#Actual Reader. Uses the input buffer stored in the session. call back is also pushed
 	sub {
 		\my $buf=\$_[0];
 		
 		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];	#
+
 		my $len =
 		$header->{CONTENT_LENGTH}=		#copy header to part header
 		$h{CONTENT_LENGTH}//0; #number of bytes to read, or 0 if undefined
@@ -420,16 +423,16 @@ sub make_form_urlencoded_reader {
 
 		#when the remaining length is 0, pop this sub from the stack
 		if($processed==$len){
-			$cb->($usac, $rex, substr($buf,0,$new,""),$header,1);		#send to cb and shift buffer down
-			$header={};
+			$cb->($usac, $rex, $code, $out_header, $header, substr($buf,0,$new,""), 1);		#send to cb and shift buffer down
+			#$header={};
 			$processed=0;
-			$session->pod_reader;
+			$session->pop_reader;
 			#uSAC::HTTP::Session::pop_reader $session;
 
 		}
 		else {
 			#keep on stack until done
-			$cb->($usac, $rex, substr($buf,0,$new,""),$header);		#send to cb and shift buffer down
+			$cb->($usac, $rex, $code, $header, substr($buf,0,$new,""));		#send to cb and shift buffer down
 		}
 
 	}

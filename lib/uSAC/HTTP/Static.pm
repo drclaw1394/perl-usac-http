@@ -700,7 +700,7 @@ sub usac_file_under {
 	Log::OK::INFO and log_info "->Listing dir: ".($options{list_dir}?"yes":"no");
 	Log::OK::INFO and log_info "->Filter:".($options{filter}) if $options{filter};
 	
-	Log::OK::TRACE and log_trace "OPTIONS IN: ".join ", ", %options;
+	Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
 	\my @indexes=$options{indexes}//[];
@@ -725,16 +725,9 @@ sub usac_file_under {
 				return __SUB__;
 		}
 			
-		
-
-		#matcher, rex, code, headers, uri if not in $_
-		#my $rex=$_[1];
-		#my $p=$1;
-		#my $p;
-
-		$_[4]
-			?$p=pop 
-			:$p=$_[1]->[uSAC::HTTP::Rex::uri_stripped_];
+		$p=$_[4]
+			?pop 
+			:$_[1]->[uSAC::HTTP::Rex::uri_stripped_];
 
 		
 		my $path=$html_root.$p;

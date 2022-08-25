@@ -380,6 +380,9 @@ sub writer {
 	$_[0][write_];
 
 }
+sub session {
+	$_[0][session_];
+}
 	
 
 
@@ -459,6 +462,9 @@ sub usac_data_stream{
 		#my $line=shift;
 		my $matcher=$_[0];
 		my $rex=$_[1];#shift;	#rex object
+		my $code =$_[2];
+		my $out_header=$_[3];
+		my $header={};	#Header from parsing this input
 
 		my $session=$rex->[session_];
 		my @err_res;
@@ -475,9 +481,13 @@ sub usac_data_stream{
 			else{
 
 				#uSAC::HTTP::Session::push_reader
+				Log::OK::TRACE and log_trace "PUSHING FORM READER\n";
 				$session->push_reader(
-					make_form_urlencoded_reader @_, $session, $cb->()
+
+					#Creates a reader/parser and  merges config with runtime
+					make_form_urlencoded_reader $matcher, $rex, $code, $out_header, $header, $cb->()
 				);
+				Log::OK::TRACE and log_trace "After PUSHING FORM READER\n";
 
 				#check for expects header and send 100 before trying to read
 				if(defined($_->{EXPECT})){
@@ -532,20 +542,25 @@ sub usac_urlencoded_slurp{
 	#Expected inputs
 	#	line, rex, data, part header, completeflag
 	usac_urlencoded_stream sub {
+			Log::OK::TRACE and log_trace "creating new url encoded streamer";
+			Log::OK::TRACE and log_trace caller;
 
 		sub {
+			Log::OK::TRACE and log_trace "Executing stream callback";
+			Log::OK::TRACE and log_trace caller;
 			my $usac=$_[0];
 			my $rex=$_[1];
 			my $code=$_[2];
-			my $head=$_[3];
+			my $out_head=$_[3];
+			Log::OK::TRACE and log_trace  join ", ", @_;
 
 			state $part_header=0;
 			state $fields={};
 
-			if($part_header != $_[3]){
+			if($part_header != $_[4]){
 				#new part
 				local $,=", ";
-				$part_header=$_[3];
+				$part_header=$_[4];
 				$fields=&parse_form_params;
 
 				#test for file
@@ -553,13 +568,14 @@ sub usac_urlencoded_slurp{
 
 			if($_[4]){
 				#that was the last part
-				$cb->($usac, $rex, $code, $head, $fields,1);
+				Log::OK::TRACE and log_trace "Last part, send to application";
+				Log::OK::TRACE and log_trace  Dumper $fields;
+				$cb->($usac, $rex, $code, $out_head, $fields,1);
 				$part_header=0;
 				$fields={};	#reset 
 			}
 		}
 	}
-
 }
 
 #Writes any file attachments to temp files 
@@ -653,6 +669,7 @@ sub usac_form_slurp{
 				return
 			}
 			elsif($_ eq 'application/x-www-form-urlencoded'){
+				Log::OK::TRACE and log_trace "FORM SLURP form url encoded";
 				&$url;
 				return
 			}
@@ -684,6 +701,8 @@ sub usac_data_slurp{
 	usac_data_stream %options, sub {
 		Log::OK::INFO and log_info "wrapper...";
 		sub {
+			Log::OK::TRACE and log_trace "data_slurp callback";
+			sleep 10;
 			my $matcher=$_[0];
 			my $rex=$_[1];
 			my $code=$_[2];
@@ -708,6 +727,7 @@ sub usac_data_slurp{
 				elsif($tmp_dir){
 					try{
 						($handle, $name)=tempfile($prefix. ("X"x10), DIR=>$tmp_dir);
+						Log::OK::TRACE and log_trace "CREated temp path: $name";
 					}
 					catch {
 						rex_error_internal_server_error $matcher, $rex;
@@ -732,9 +752,11 @@ sub usac_data_slurp{
 			#TODO: error checking and drop connection on write error
 			if($_[4]){
 				unless($path or $tmp_dir){
+					Log::OK::TRACE and log_trace "Callback with memory";
 					$cb->($matcher, $rex, $code, $head, $mem,1)
 				}
 				else {
+					Log::OK::TRACE and log_trace "Callback with file";
 					$cb->($matcher, $rex, $code, $head, $name,1)
 				}
 				$mem="";
@@ -757,15 +779,17 @@ sub parse_form_params {
 	my $rex=$_[1];
 	#0=>line
 	#1=>rex
-	#2=>data
-	#3=>section header
+	#2=>code
+	#3=>out_header
+	#4=>section header
+	#5=>data
 	#
 	#parse the fields	
 	for ($rex->[headers_]{CONTENT_TYPE}){
 		if(/multipart\/form-data/){
 			#parse content disposition (name, filename etc)
 			my $kv={};
-			for(map tr/ //dr, split ";", $_[3]->{CONTENT_DISPOSITION}){
+			for(map tr/ //dr, split ";", $_[4]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
 				$kv->{$key}=defined($value)?$value=~tr/"//dr : undef;
 			}
@@ -773,7 +797,7 @@ sub parse_form_params {
 		}
 		elsif($_ eq 'application/x-www-form-urlencoded'){
 			my $kv={};
-			for(split "&", uri_decode_utf8 $_[2]){
+			for(split "&", url_decode_utf8 $_[5]){
 				my ($key,$value)=split "=";
 				$kv->{$key}=$value;
 			}

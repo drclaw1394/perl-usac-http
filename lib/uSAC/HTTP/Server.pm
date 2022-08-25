@@ -202,7 +202,6 @@ sub do_listen {
 
 		log_info "Service: $service, host $host";
 		#AnyEvent::Socket::pack_sockaddr( $service, $ipn )
-		print "Packed: ", unpack "H*", $addr;
 		IO::FD::bind $fh, $addr
 			or Carp::croak "listen/bind: $!";
 		
