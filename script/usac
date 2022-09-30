@@ -20,6 +20,7 @@ use Data::Dumper;
 use File::Spec::Functions qw<rel2abs>;
 use File::Basename qw<dirname basename>;
 use Cwd;
+use Pod::Usage;
 
 #usac-http server command line utility
 use uSAC::HTTP;
@@ -34,7 +35,8 @@ my $verbose=0;
 $options{quiet}=sub {$verbose=0};
 $options{verbose}=\$verbose;
 GetOptions \%options,
-	"hosts=s@",
+	"help",
+	"host=s@",
 	"listen=s@",
 	"product=s",
 	"preclude=s@",
@@ -54,9 +56,9 @@ GetOptions \%options,
 
 
 
-	or die "problem with command line arguments";
+	or pod2usage verbose=>1;
 
-
+pod2usage verbose=>2 if $options{help};
 # TODO:
 #	--ws my/uri=file://file_to_watch
 #	--ws my/ws=unix://named_fifo
@@ -150,3 +152,52 @@ $server=usac_server{
 };
 
 $server->run();
+__END__
+
+=head1 TITLE
+
+usac - Serve files via HTTP
+
+=head1 SYNOPSIS
+
+	usac [options]
+
+
+=head1 DESCRIPTION
+
+usac is a HTTP server easiliy configured for serving static files. It is a
+application wrapper around the uSAC::HTTP module.
+
+
+=head1 OPTIONS
+
+
+=over
+
+=item help
+
+Show detailed usage information
+
+=item host
+
+Virtual hosts server will respond to. Multiple accepted.
+
+=item listen
+
+Network interfaces to listen on. Multiple accepted.
+
+=item www-root
+
+Directory to serve files from. Multiple accepted.
+
+=item list-dir
+
+Allow listing of directories
+
+=item log
+
+Enable logging of requests
+
+
+=back
+

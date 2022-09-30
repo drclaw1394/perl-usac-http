@@ -9,6 +9,7 @@ use EV;
 use AnyEvent;
 use Socket ":all";
 use IO::FD;
+use Error::ShowMe;
 #use constant "OS::darwin"=>$^O =~ /darwin/;
 #use constant "OS::linux"=>0;
 #
@@ -644,6 +645,7 @@ sub usac_server :prototype(&) {
 		log_info "Creating new server";
 		$server=uSAC::HTTP::Server->new();
 	}
+
 	#Push the server as the lastest 'site'
 	local $uSAC::HTTP::Site=$server;
 	$sub->();		#run the configuration for the server
@@ -671,22 +673,15 @@ sub usac_include {
 	}
 	else{
 		#not a dir . do it
-		Log::OK::TRACE and log_info "Including server script from $path";
-		try {
-			eval "package $options{package} {
-			unless (do \$path){
+		Log::OK::INFO and log_info "Including server script from $path";
+		say $path;
+		my $result=eval "require '$path'";
 
-			log_error \$!;
-			log_error \$@;
-
+			if(my $context=Error::ShowMe::context $path){
+				log_error "Could not include file $path: $context";
+				die "Could not include file $path $!";	
 			}
-			}";
-		}
-		#catch($e){
-		catch {
-			log_error $_;
-			die "Could not include file $path";	
-		};
+
 	}
 }
 

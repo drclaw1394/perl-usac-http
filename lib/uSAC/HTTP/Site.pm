@@ -98,11 +98,16 @@ sub _add_route {
 	my $path_matcher=shift;
 	my @inner;
 	my @outer;
-	Log::OK::TRACE and log_trace "Adding route: from ".join ", ", caller;
-	Log::OK::TRACE and log_trace "Path matcher: $path_matcher";
+
+	Log::OK::INFO and log_info (join "\n", "Adding Route: ".($path_matcher?$path_matcher:"**DEFAULT**"),
+		"Method: $method_matcher",
+		"Another line"
+	)
+		;
 
 
 
+	my @names;
 	#Add chunked always. Add at start of total middleware
 	# and last for outerware
 	unshift @_, chunked();
@@ -112,15 +117,18 @@ sub _add_route {
 			push @inner, $_;
 		}
 		#if its an array ref, then it might contain both inner
-		#and outerware
+		#and outerware and possible a name
 		elsif(ref($_) eq "ARRAY"){
 			push @inner, $_->[0];
 			push @outer, $_->[1];
+			push @names, $_->[2];
 		}
 		else {
 			#Ignore anything else
 		}
 	}
+
+	Log::OK::INFO and log_info "Middleware: ".join(", ", map {defined ? $_ :"unkown"} @names);
 
 	
 	# Innerware run form parent to child to route in

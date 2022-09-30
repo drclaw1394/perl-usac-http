@@ -499,23 +499,25 @@ sub gzip{
 				Log::OK::TRACE and log_debug "Content length index: $index";
 
 				splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "gzip");# if defined $index;
+				$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::_deflateInit(FLAG_APPEND|FLAG_CRC,
+				   Z_BEST_COMPRESSION,
+				   Z_DEFLATED,
+				   15+16 , #-MAX_WBITS(),
+				   MAX_MEM_LEVEL,
+				   Z_DEFAULT_STRATEGY,
+				   4096,
+				   '');
 				unless($_[5]){
-					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::_deflateInit(FLAG_APPEND|FLAG_CRC,
-                                           Z_BEST_COMPRESSION,
-                                           Z_DEFLATED,
-                                           -MAX_WBITS(),
-                                           MAX_MEM_LEVEL,
-                                           Z_DEFAULT_STRATEGY,
-                                           4096,
-                                           '');
 
 					Log::OK::TRACE and log_trace "single shot";
-					my $scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER;
+					my $scratch=IO::FD::SV(4096*4);
+					#$scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER;
+					#my $scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER;
 					my $status=$ctx->deflate($buf, $scratch);
 					$status == Z_OK or log_error "Error creating deflate context";
 					$status=$ctx->flush($scratch);
 
-					$scratch.=pack("V V", $ctx->crc32(), $ctx->total_in());
+					#$scratch.=pack("V V", $ctx->crc32(), $ctx->total_in());
 
 					$ctx->deflateReset;
 					Log::OK::TRACE and log_debug "about to push for single shot";
@@ -526,14 +528,6 @@ sub gzip{
 				}
 				else{
 					#multiple calls required so setup context
-					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::_deflateInit(FLAG_APPEND|FLAG_CRC,
-                                           Z_BEST_COMPRESSION,
-                                           Z_DEFLATED,
-                                           -MAX_WBITS(),
-                                           MAX_MEM_LEVEL,
-                                           Z_DEFAULT_STRATEGY,
-                                           4096,
-                                           '');
 					Log::OK::TRACE and log_trace "Multicalls required $_[1]";
 					$out_ctx{$_[1]}=$ctx;
 
@@ -558,7 +552,7 @@ sub gzip{
 			#
 			my $scratch=""; 	#new scratch each call
 
-			$scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER if $_[3];
+			#$scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER if $_[3];
 
 			$status=$ctx->deflate($buf, $scratch);
 			$status == Z_OK or log_error "Error creating deflate context";
@@ -569,7 +563,7 @@ sub gzip{
 				Log::OK::TRACE and log_debug "No more data expected";
 				#if no callback is provided, then this is the last write
 				$status=$ctx->flush($scratch);
-				$scratch.=pack("V V", $ctx->crc32(), $ctx->total_in());
+				#$scratch.=pack("V V", $ctx->crc32(), $ctx->total_in());
 
 				delete $out_ctx{$_[1]};
 

@@ -694,16 +694,21 @@ sub usac_file_under {
 	my $no_encoding=$options{no_encoding}//"";
 	my $do_dir=$options{list_dir}//$options{do_dir};
 	my $pre_encoded=$options{pre_encoded}//[];
+	\my @indexes=$options{indexes}//[];
 	#TODO: Need to check only supported encodings are provided.
 	
-	Log::OK::INFO and log_info "Serving files from: $html_root";
-	Log::OK::INFO and log_info "->Listing dir: ".($options{list_dir}?"yes":"no");
-	Log::OK::INFO and log_info "->Filter:".($options{filter}) if $options{filter};
+	Log::OK::INFO and log_info "Static files from: $html_root";
+	Log::OK::INFO and log_info "DIR Listing: ".($do_dir?"yes":"no");
+	Log::OK::INFO and log_info "DIR index: ".(@indexes?join(", ", @indexes):"no");
+	Log::OK::INFO and log_info "Filename Filter: ".($filter?$filter: "**NONE**");
+	Log::OK::INFO and log_info "Readsize: $read_size";
+	Log::OK::INFO and log_info "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
+	Log::OK::INFO and log_info "Preencoding filter: ".($pre_encoded?$pre_encoded:"**NONE**");
+	Log::OK::INFO and log_info "Sendfile: ".($sendfile?"yes $sendfile":"no");
 	
 	Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
 	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
-	\my @indexes=$options{indexes}//[];
 	my $cache=$static->[cache_];
 	$html_root=$static->[html_root_];
 	my $list_dir=$static->make_list_dir(%options);

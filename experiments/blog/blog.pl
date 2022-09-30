@@ -82,6 +82,7 @@ my $server; $server=usac_server {
                         #sendfile=>4096,
                         usac_dirname #  "static"
                 );
+		usac_include usac_path root=>usac_dirname, "admin/usac.pl";
 
                 ##############################################
                 # => usac_file_under (                       #

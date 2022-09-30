@@ -23,12 +23,13 @@ my $server; $server=usac_server {
 		#usac_host "127.0.0.1:8080";
 		#usac_host "localhost:8080";
 		#usac_innerware log_simple;
-		usac_route "/static$Path"   => usac_static_from "static";
+		usac_route "/static"   => usac_file_under usac_dirname;
 	};
-
 	#usac_route "/static/$Path" => static_file_from "static";
 	
 	#usac_route  "/static/$Path"=> static_file_from "static", cache_size=>10;
 };
 #say Dumper $server;
-$server->run();
+#$server->run();
+1;
+
