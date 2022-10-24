@@ -1,5 +1,5 @@
-use Object::Pad;
 package uSAC::HTTP::Session;
+use Object::Pad;
 class uSAC::HTTP::Session;
 use feature qw<say state refaliasing>;
 no warnings "experimental";
@@ -66,17 +66,30 @@ method init {
 	\my @zombies= $zombies;
 
 	#make reader
-	$_sr=uSAC::IO::SReader->create($_fh);
-	$_sr->max_read_size=4096*16;
-	($_sr->on_eof = sub {$_closeme=1; $_dropper->(1)});
-	($_sr->on_error=$_sr->on_eof);
-	$_sr->timing(\$_time, \$Time);
+        #######################################################
+        # $_sr=uSAC::IO::SReader->create(fh=>$_fh);           #
+        # $_sr->max_read_size=4096*16;                        #
+        # ($_sr->on_eof = sub {$_closeme=1; $_dropper->(1)}); #
+        # ($_sr->on_error=$_sr->on_eof);                      #
+        # $_sr->timing(\$_time, \$Time);                      #
+        #######################################################
+
+        my $s=sub {$_closeme=1; $_dropper->(1)};
+        $_sr=uSAC::IO::SReader->create(
+                fh=>$_fh,
+                max_read_size=>4096*16,
+                on_eof =>$s,
+                on_error=>$s,
+                time=>\$_time,
+                clock=>\$Time
+        );
+		
 
 
 	$_sr->start;
 
 	#make writer
-	$_sw=uSAC::IO::SWriter->create($_fh);
+	#$_sw=uSAC::IO::SWriter->create(fh=>$_fh);
 
 	#Takes an a bool argument: keepalive
 	#if a true value is present then no dropping is performed
@@ -142,11 +155,22 @@ method init {
 
 	};
 
-	$_sw->on_error=$_dropper;
-	$_sw->timing(\$_time, \$Time);
+        $_sw=uSAC::IO::SWriter->create(
+                fh=>$_fh,
+                on_error=>$_dropper,
+                time=>\$_time,
+                clock=>\$Time,
+        );
+	
+        ##############################################
+        # $_sw=uSAC::IO::SWriter->create( fh=>$_fh); #
+        # $_sw->on_error=$_dropper;                  #
+        # $_sw->timing(\$_time, \$Time);             #
+        ##############################################
+
 	$_write=$_sw->writer;
 
-	weaken $_write;
+	#weaken $_write;
 }
 
 #take a zombie session and revive it
