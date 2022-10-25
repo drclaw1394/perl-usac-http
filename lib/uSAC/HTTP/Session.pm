@@ -81,7 +81,8 @@ method init {
                 on_eof =>$s,
                 on_error=>$s,
                 time=>\$_time,
-                clock=>\$Time
+                clock=>\$Time,
+		on_read=>undef
         );
 		
 

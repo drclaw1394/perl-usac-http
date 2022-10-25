@@ -8,6 +8,7 @@ use Log::OK;
 use EV;
 use AnyEvent;
 use Socket ":all";
+use Socket::More qw<sockaddr_passive>;
 use IO::FD;
 use Error::ShowMe;
 #use constant "OS::darwin"=>$^O =~ /darwin/;
@@ -68,7 +69,7 @@ use Data::Dumper;
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ host_tables_ cb_ listen_ graceful_ aws_ fh_ fhs_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
+	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
 );
 
 use constant KEY_COUNT=> total_requests_ - host_+1;
@@ -82,7 +83,7 @@ use uSAC::HTTP::Rex;
 use uSAC::MIME;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_mime_map usac_mime_default usac_sub_product>;
+our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_listen2 usac_mime_map usac_mime_default usac_sub_product>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -140,6 +141,7 @@ sub new {
 	$self->[sessions_]={};
 
 	$self->[listen_]=[];
+	$self->[listen2_]=[];
 
 	$self->mime_db=uSAC::MIME->new;
 	$self->mime_default="application/octet-stream";
@@ -147,10 +149,95 @@ sub new {
 	return $self;
 }
 
-sub listen_inet {
+sub _setup_dgram_passive {
+	my ($self,$l)=@_;
+	#Create a socket from results from interface
+	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocols} or Carp::croak "listen/socket: $!";
 
+	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
+	
+	if($l->{family}== AF_UNIX){
+		unlink $;
+	}
+	else{
+		IO::FD::setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, pack "i", 1;
+
+	}
+
+	IO::FD::bind $fh, $l->{addr}
+		or Carp::croak "listen/bind: $!";
+
+	if($l->{family}== AF_UNIX){
+		chmod oct('0777'), $l->{path}
+			or warn "chmod $l->{path} failed: $!";
+	}
+	else {
+
+	}
+
+	IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
+	$self->[fhs3_]{$fh} = $fh;
 }
 
+sub _setup_stream_passive{
+	my ($self,$l)=@_;
+
+	#Create a socket from results from interface
+	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocols} or Carp::croak "listen/socket: $!";
+
+	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
+	
+	if($l->{family}== AF_UNIX){
+		unlink $;
+	}
+	else{
+		IO::FD::setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, pack "i", 1;
+	}
+
+
+	IO::FD::bind $fh, $l->{addr}
+		or Carp::croak "listen/bind: $!";
+	#Log::OK::INFO and log_info("Stream bind ok");
+	
+	if($l->{family}== AF_UNIX){
+		chmod oct('0777'), $l->{path}
+			or warn "chmod $l->{path} failed: $!";
+	}
+	else {
+		IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
+	}
+
+	IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
+	$self->[fhs2_]{$fh} = $fh;
+
+
+	#Finally run the listener
+	for ( values  %{ $self->[fhs2_] } ) {
+		IO::FD::listen $_, $self->[backlog_]
+			or Carp::croak "listen/listen on ".( $_).": $!";
+	}
+}
+
+
+#Filter the interface listeners to the right place
+sub do_listen2 {
+	my $self = shift;
+	#Listeners are in interface format
+	die "No listeners could be found" unless $self->[listen2_]->@*;
+	for my $l ($self->[listen2_]->@*){
+		#Need to associate user protocol handler to listener type... how?
+		if($l->{type}==SOCK_STREAM){
+			$self->_setup_stream_passive($l);
+		}
+		elsif($l->{type}==SOCK_DGRAM){
+			$self->_setup_dgram_passive($l);
+		}
+		else {
+			die "Unsupported socket type";
+		}
+	}
+
+}
 
 sub do_listen {
 	my $self = shift;
@@ -241,7 +328,7 @@ sub prepare {
 
 	#Timeout timer
 	#
-	$self->[stream_timer_]=AE::timer 0,$interval, sub {
+	$self->[stream_timer_]=AE::timer 0, $interval, sub {
 		#iterate through all connections and check the difference between the last update
 		$self->[server_clock_]+=$interval;
 		#and the current tick
@@ -287,6 +374,42 @@ sub prepare {
         };
 }
 
+#Iterate over passive sockets are run the required code
+sub do_passive {
+	#Accept is only for SOCK_STREAM 
+	state $seq=0;
+	Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
+	weaken( my $self = shift );
+	\my @zombies=$self->[zombies_]; #Alias to the zombie sessions for reuse
+	\my %sessions=$self->[sessions_];	#Keep track of the sessions
+
+	my $do_client=$self->make_do_client;
+
+	for my $fl ( values %{ $self->[fhs2_] }) {
+		Log::OK::INFO and log_info( "do passive oaijsd;kasd;lkjasdl;kfj: $fl");
+		$self->[aws_]{ $fl } = AE::io $fl, 0, sub {
+			my $peer;
+			while(($peer = IO::FD::accept my $fh, $fl)){
+				CONFIG::kernel_loadbalancing and $do_client->($fh) and next;
+			}
+		};
+	}
+
+	Log::OK::INFO and log_info "SETUP DGRAM PASSIVE";
+	for my $fl (values $self->[fhs3_]->%*){
+		$self->[aws2_]{ $fl } = AE::io $fl, 0, sub {
+			my $buf="";
+			while(IO::FD::recv($fl,$buf,4069)){
+				#TODO: should this be a special session which spawns new
+				#sessions
+					#call the decoder
+			}
+		};
+
+	}
+	Log::OK::INFO and log_info "SETUP PASSIVE COMPLETE";
+}
+
 
 sub do_accept {
 	state $seq=0;
@@ -320,7 +443,10 @@ sub as_central {
 	
 }
 
-
+sub make_do_dgram_client {
+	#A single dgram listener is all thats required. it needs to call.
+	#todo
+}
 
 sub make_do_client{
 
@@ -550,32 +676,13 @@ sub run {
 		$self->stop;
 		$sig=undef;
 	});
-	unless($self->[listen_] and $self->[listen_]->@*){
-		Log::OK::FATAL and log_fatal "NO listeners defined";
-		die "no Listeners defined";
-	}
+
+#unless($self->[listen_] and $self->[listen_]->@*){
+#Log::OK::FATAL and log_fatal "NO listeners defined";
+#die "no Listeners defined";
+#}
 	#TODO: check for duplicates
 	
-        #################################################################################################
-        # if (exists $self->[listen_]) {                                                                #
-        #         $self->[listen_] = [ $self->[listen_] ] unless ref $self->[listen_];                  #
-        #         my %dup;                                                                              #
-        #         for (@{ $self->[listen_] }) {                                                         #
-        #                 if($dup{ lc $_ }++) {                                                         #
-        #                         croak "Duplicate host $_ in listen\n";                                #
-        #                 }                                                                             #
-        #                 my ($h,$p) = split ':',$_,2;                                                  #
-        #                 $h = '0.0.0.0' if $h eq '*';                                                  #
-        #                 $h = length ( $self->[host_] ) ? $self->[host_] : '0.0.0.0' unless length $h; #
-        #                 $p = length ( $self->[port_] ) ? $self->[port_] : 8080 unless length $p;      #
-        #                 $_ = join ':',$h,$p;                                                          #
-        #         }                                                                                     #
-        #         ($self->[host_],$self->[port_]) = split ':',$self->[listen_][0],2;                    #
-        # }                                                                                             #
-        # else {                                                                                        #
-        #         $self->[listen_] = [ join(':',$self->[host_],$self->[port_]) ];                       #
-        # }                                                                                             #
-        #################################################################################################
 	
         ###################################################################
         # #=======CATCH ALL                                               #
@@ -595,8 +702,10 @@ sub run {
 
 	$self->rebuild_dispatch;
 	say STDERR "SELF IS: ", $self;
-	$self->do_listen;
-	$self->do_accept;
+	#$self->do_listen;
+	$self->do_listen2;
+	#$self->do_accept;
+	$self->do_passive;
 
 	$cv->recv();
 }
@@ -695,6 +804,13 @@ sub usac_include {
 #         $server->[port_]=$_[0]; #
 # }                               #
 ###################################
+sub usac_listen2 {
+	my $spec=pop;		#The spec for interface matching
+	my %options=@_;		#Options for creating hosts
+	my $site=$options{parent}//$uSAC::HTTP::Site;
+	$site->add_listeners(%options,$spec);
+}
+
 sub usac_listen {
 	#specify a interface and port number	
 	my $pairs=pop;	#Content is the last item
@@ -728,6 +844,17 @@ sub usac_listen {
 #	usac_listener type=>"http2", ssl=>cert, "address::port";
 #	usac_listener type=>"http1", ssl=>undef, "address::port";
 #	
+
+sub add_listeners {
+	my $site=shift;
+	my $spec=pop;
+	my %options=@_;
+
+	my @addresses=sockaddr_passive($spec);
+	Log::OK::INFO and  log_info Dumper $_ for @addresses;
+	push $site->[listen2_]->@*, @addresses;
+}
+
 sub add_listener {
 	my $site=shift;
 	my $pairs=pop;	#Content is the last item

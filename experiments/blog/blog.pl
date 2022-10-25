@@ -21,6 +21,7 @@ Log::ger::Util::set_level Log::OK::LEVEL;
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
 
+use Socket ":all";
 
 
 
@@ -29,8 +30,26 @@ use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
 #use uSAC::MIME;
 use Data::Dumper;
 
-my $server; $server=usac_server {
-	usac_listen no_hosts=>1, ["0.0.0.0:8084"];#,"[::1]:8084"];
+my $server; $server=usac_server {;
+
+	usac_listen2( {
+			interface=>"lo0",
+			port=>[8084],
+			family=>AF_INET,
+			type=>SOCK_STREAM,
+			data=> {
+				#Info here on setup. like ca and server keys, hostname
+				address_host=>1,	#if true use address as and additional virtual host an force enable
+							#virtual hosts
+				host=>undef,		#key present: add the hosts as virual hosts  and enable virtual hosts
+							#No key: do not add any hosts
+				ca=> "path",	#path to ca file
+				key=> "key",	#path to key file
+			}
+		}
+	);
+
+	#usac_listen no_hosts=>1, ["0.0.0.0:8084"];#,"[::1]:8084"];
 	#usac_listen "[::1]:8082";
 	#usac_mime_db uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type");
 	#usac_mime_default "some/stuff";
