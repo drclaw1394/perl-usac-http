@@ -207,7 +207,11 @@ sub _setup_stream_passive{
 		IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
 	}
 
-	IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
+	my $flags=IO::FD::fcntl $fh, F_GETFL, 0;
+	$flags|=O_NONBLOCK;
+
+	defined IO::FD::fcntl $fh, F_SETFL, $flags or die "COULD NOT SET NON BLOCK on $fh: $!";
+
 	$self->[fhs2_]{$fh} = $fh;
 
 
@@ -385,13 +389,20 @@ sub do_passive {
 
 	my $do_client=$self->make_do_client;
 
+	my @peers;
+	my @afh;
+
 	for my $fl ( values %{ $self->[fhs2_] }) {
 		Log::OK::INFO and log_info( "do passive oaijsd;kasd;lkjasdl;kfj: $fl");
 		$self->[aws_]{ $fl } = AE::io $fl, 0, sub {
-			my $peer;
-			while(($peer = IO::FD::accept my $fh, $fl)){
-				CONFIG::kernel_loadbalancing and $do_client->($fh) and next;
-			}
+			#my $peer;
+			#my $fh;
+			#$do_client->([$fh]) while($peer = IO::FD::accept $fh, $fl);
+
+				
+				
+			IO::FD::accept_multiple(@afh, @peers, $fl, 1);
+			$do_client->(\@afh,\@peers);
 		};
 	}
 
@@ -400,9 +411,11 @@ sub do_passive {
 		$self->[aws2_]{ $fl } = AE::io $fl, 0, sub {
 			my $buf="";
 			while(IO::FD::recv($fl,$buf,4069)){
-				#TODO: should this be a special session which spawns new
-				#sessions
-					#call the decoder
+				#TODO: a table of peer addresses needs to be stored in a hash
+				#The key being a new session
+				#If the key didn't exist, create a new session
+				#
+				#if it did, use existing session
 			}
 		};
 
@@ -427,7 +440,7 @@ sub do_accept {
 			my $peer;
 			while(($peer = IO::FD::accept my $fh, $fl)){
 				#last unless $fh;
-				CONFIG::kernel_loadbalancing and $do_client->($fh) and next;
+				CONFIG::kernel_loadbalancing and $do_client->($fh);
 
 				#!CONFIG::kernel_loadbalancing and IO::FDPass::send $children[$child_index++%@children], $fh;
 			}
@@ -457,7 +470,9 @@ sub make_do_client{
 	my $session;
 	my $seq=0;
 	sub {
-		my $fh=shift;
+		my ($fhs,$peers)=@_;
+
+		for my $fh(@$fhs){#=shift;
 
 		#while ($fl and ($peer = accept my $fh, $fl)) {
 
@@ -465,7 +480,7 @@ sub make_do_client{
 
 		#Linux does not inherit the socket flags from parent socket. But BSD does.
 		#Compile time disabling with constants
-		CONFIG::set_nonblock and IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
+		#CONFIG::set_nonblock and IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
 
 		#TODO:
 		# Need to do OS check here
@@ -495,6 +510,9 @@ sub make_do_client{
 		#$total_connections++;
 
 	}
+	@{$fhs}=();
+	@{$peers}=();
+}
 }
 
 sub current_cb {

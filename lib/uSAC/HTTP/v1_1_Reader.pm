@@ -212,11 +212,11 @@ sub make_reader{
 
 				$tmp=$h{CONNECTION}//"";
 				$version eq "HTTP/1.0"
-					? $closeme=$tmp !~ /keep-alive/ai
-					: $closeme=$tmp =~ /close/ai;
+					? ($closeme=$tmp !~ /keep-alive/ai)
+					: ($closeme=$tmp =~ /close/ai);
 				
 
-				Log::OK::DEBUG and log_debug "CLose me set to: $closeme";
+				Log::OK::DEBUG and log_debug "Version: $version, Close me set to: $closeme";
 				#Log::OK::DEBUG and log_debug "Reading on session: $r->[uSAC::HTTP::Session::id_]";
 				Log::OK::DEBUG and log_debug "$uri";
 

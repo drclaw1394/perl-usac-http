@@ -33,21 +33,18 @@ use Data::Dumper;
 my $server; $server=usac_server {;
 
 	usac_listen2( {
-			interface=>"lo0",
+			interface=>["lo0", "en12"],
 			port=>[8084],
 			family=>AF_INET,
 			type=>SOCK_STREAM,
 			data=> {
-				#Info here on setup. like ca and server keys, hostname
-				address_host=>1,	#if true use address as and additional virtual host an force enable
-							#virtual hosts
-				host=>undef,		#key present: add the hosts as virual hosts  and enable virtual hosts
-							#No key: do not add any hosts
-				ca=> "path",	#path to ca file
-				key=> "key",	#path to key file
+				hosts=>"dfs"
 			}
 		}
 	);
+
+
+	
 
 	#usac_listen no_hosts=>1, ["0.0.0.0:8084"];#,"[::1]:8084"];
 	#usac_listen "[::1]:8082";
@@ -56,6 +53,7 @@ my $server; $server=usac_server {;
 	#usac_listen "192.168.1.104";
 	usac_sub_product "blog";
 	#usac_middleware log_simple dump_headers=>1;
+	
 	my $site; $site=usac_site {
 		usac_id "blog";
 		#usac_host "127.0.0.1:8082";

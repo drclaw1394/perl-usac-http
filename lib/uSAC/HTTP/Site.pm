@@ -224,7 +224,7 @@ sub _add_route {
 
 	my @hosts;
 	my $matcher;
-	@hosts=$self->build_hosts;
+	@hosts=$self->build_hosts;	#List of hosts (as urls) 
         my $bp=$self->built_prefix;                                      #
 
         ####################################################################
@@ -237,7 +237,8 @@ sub _add_route {
         ####################################################################
 
 	push @hosts, "*.*" unless @hosts;
-	Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ",@hosts;
+	#$hosts{"*.*"}//= {};
+	Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
 	#$matcher=qr{^$method_matcher $bp$path_matcher};
 	my $pm;
 	for my $uri (@hosts){
@@ -667,22 +668,10 @@ sub usac_host {
 	my $host=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
-        ######################################################
-        # my @uri;                                           #
-        # if(ref($host) eq "ARRAY"){                         #
-        #         @uri= map {URI->new("http://$_")} @$host;  #
-        # }                                                  #
-        # else{                                              #
-        #         @uri= map {URI->new("http://$_")} ($host); #
-        # }                                                  #
-        # for(@uri){                                         #
-        #         die "Error parsing hosts: $_ " unless ref; #
-        # }                                                  #
-        # push $self->host->@*, @uri;                        #
-        ######################################################
 	$self->add_host(%options,$host);
 }
 
+#Options could include CA and server key paths
 sub add_host {
 	my $self=shift;
 	my $host=pop;	#Content is the last item
@@ -698,7 +687,6 @@ sub add_host {
 		die "Error parsing hosts: $_ " unless ref;
 	}
 	push $self->host->@*, @uri;
-
 }
 
 
@@ -709,6 +697,7 @@ sub usac_middleware {
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	$self->add_middleware(%options, $mw);
 }
+
 sub add_middleware {
 	my $self=shift;
 	my $mw=pop;	#Content is the last item

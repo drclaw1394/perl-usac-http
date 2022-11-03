@@ -15,6 +15,7 @@ WriteMakefile(
 		enum	    	=> 0,
 		"Hustle::Table" => "0.5.5",	#Bug fix for updating default matcher
 		"uSAC::IO"	=> 0,
+		"IO::FD"	=> "0.1.3",
 		"Sys::Sendfile" => 0,
 		
 
