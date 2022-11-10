@@ -183,6 +183,10 @@ sub make_reader{
                                                 #######################################
 
 						$host=$val if !$host and $k eq "HOST";
+
+						#TODO what about proxied requests with X-Forwarded-for?
+						#Shoult this set the host as well
+						#
 						$buf=substr $buf, $pos3+2;
 						#redo;
 					}

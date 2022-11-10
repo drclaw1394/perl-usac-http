@@ -33,9 +33,9 @@ use Data::Dumper;
 my $server; $server=usac_server {;
 
 	usac_listen2( {
-			interface=>["lo0", "en12"],
+			interface=>["lo", "en"],
 			port=>[8084],
-			family=>AF_INET,
+			family=>[AF_INET, AF_INET6],
 			type=>SOCK_STREAM,
 			data=> {
 				hosts=>"dfs"
@@ -51,6 +51,7 @@ my $server; $server=usac_server {;
 	#usac_mime_db uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type");
 	#usac_mime_default "some/stuff";
 	#usac_listen "192.168.1.104";
+	
 	usac_sub_product "blog";
 	#usac_middleware log_simple dump_headers=>1;
 	

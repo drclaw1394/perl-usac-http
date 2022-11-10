@@ -23,6 +23,7 @@ WriteMakefile(
 		"Log::ger"	=> 0,
 		"Log::ger::Output::Screen" => 0,
 		"Log::OK"	=> 0,
+		"Socket::More"	=> 0,
 		"uSAC::MIME"	=> 0,
 		"Try::Catch"	=> 0,
 		"URI"		=> 0,

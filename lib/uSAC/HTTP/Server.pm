@@ -1,14 +1,13 @@
+use v5.36;
 package uSAC::HTTP::Server; 
-use strict;
-use warnings;
-no warnings;
+use feature "try";
 
 use Log::ger;
 use Log::OK;
 use EV;
 use AnyEvent;
 use Socket ":all";
-use Socket::More qw<sockaddr_passive>;
+use Socket::More qw<sockaddr_passive family_to_string>;
 use IO::FD;
 use Error::ShowMe;
 #use constant "OS::darwin"=>$^O =~ /darwin/;
@@ -28,7 +27,7 @@ use Log::OK {
 use URI;
 
 use feature qw<refaliasing say state current_sub>;
-use Try::Catch;
+#use Try::Catch;
 #use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
@@ -152,7 +151,7 @@ sub new {
 sub _setup_dgram_passive {
 	my ($self,$l)=@_;
 	#Create a socket from results from interface
-	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocols} or Carp::croak "listen/socket: $!";
+	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or Carp::croak "listen/socket: $!";
 
 	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
 	
@@ -183,7 +182,7 @@ sub _setup_stream_passive{
 	my ($self,$l)=@_;
 
 	#Create a socket from results from interface
-	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocols} or Carp::croak "listen/socket: $!";
+	defined IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or Carp::croak "listen/socket: $!";
 
 	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
 	
@@ -243,85 +242,87 @@ sub do_listen2 {
 
 }
 
-sub do_listen {
-	my $self = shift;
-	Log::OK::INFO and log_info __PACKAGE__." setting up listeners...";
-	say STDERR $self;
-	for my $listen (@{ $self->[listen_] }) {
-		my ($host,$service) =($listen->host, $listen->port);#split ':',$listen,2;
-
-		my ($error,@results)=getaddrinfo($host,$service, {
-				hints=>AI_PASSIVE,
-				socktype=>SOCK_STREAM
-			});
-
-		say Dumper @results;
-		die "Error getting address info for $host:$service" if $error;
-
-		my $addr=$results[0]{addr};
-		my $af=$results[0]{family};
-		
-
-		
-		Carp::croak "listen/socket: address family not supported"
-			if AnyEvent::WIN32 && $af == AF_UNIX;
-		
-			#my $addr;
-		IO::FD::socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";
-		say STDERR "LISTENER FD: $fh";	
-		if ($af == AF_INET || $af == AF_INET6) {
-			#$addr=pack_sockaddr_in($service,$addr);
-			if($self->[workers_]>1 or 1){
-				IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1)
-				or Carp::croak "listen/so_reuseaddr: $!"
-					unless AnyEvent::WIN32; 
-
-					IO::FD::setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, pack "i", 1
-				or Carp::croak "listen/so_reuseport: $!"
-					unless AnyEvent::WIN32; 
-			}
-			else {
-				say STDERR "Socket reuse not enabled. (ie only 1 worker)";
-			}
-
-			IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1
-				or Carp::croak "listen/so_nodelay $!"
-					unless AnyEvent::WIN32; 
-			
-		} elsif ($af == AF_UNIX) {
-			unlink $service;
-		}
-
-		log_info "Service: $service, host $host";
-		#AnyEvent::Socket::pack_sockaddr( $service, $ipn )
-		IO::FD::bind $fh, $addr
-			or Carp::croak "listen/bind: $!";
-		
-		if ($host eq 'unix/') {
-			chmod oct('0777'), $service
-				or warn "chmod $service failed: $!";
-		}
-		
-		#fh_nonblocking $fh, 1;
-		IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
-	
-		$self->[fh_] ||= $fh; # compat
-		$self->[fhs_]{fileno $fh} = $fh;
-	}
-	
-	$self->prepare();
-	
-	for ( values  %{ $self->[fhs_] } ) {
-		IO::FD::listen $_, $self->[backlog_]
-			or Carp::croak "listen/listen on ".(IO::FD::fileno $_).": $!";
-	}
-	
-	return wantarray ? do {
-		#my ($service, $host) = AnyEvent::Socket::unpack_sockaddr( getsockname $self->[fh_] );
-		#(format_address $host, $service);
-		();
-	} : ();
-}
+##########################################################################################################
+# sub do_listen {                                                                                        #
+#         my $self = shift;                                                                              #
+#         Log::OK::INFO and log_info __PACKAGE__." setting up listeners...";                             #
+#         say STDERR $self;                                                                              #
+#         for my $listen (@{ $self->[listen_] }) {                                                       #
+#                 my ($host,$service) =($listen->host, $listen->port);#split ':',$listen,2;              #
+#                                                                                                        #
+#                 my ($error,@results)=getaddrinfo($host,$service, {                                     #
+#                                 hints=>AI_PASSIVE,                                                     #
+#                                 socktype=>SOCK_STREAM                                                  #
+#                         });                                                                            #
+#                                                                                                        #
+#                 say Dumper @results;                                                                   #
+#                 die "Error getting address info for $host:$service" if $error;                         #
+#                                                                                                        #
+#                 my $addr=$results[0]{addr};                                                            #
+#                 my $af=$results[0]{family};                                                            #
+#                                                                                                        #
+#                                                                                                        #
+#                                                                                                        #
+#                 Carp::croak "listen/socket: address family not supported"                              #
+#                         if AnyEvent::WIN32 && $af == AF_UNIX;                                          #
+#                                                                                                        #
+#                         #my $addr;                                                                     #
+#                 IO::FD::socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";         #
+#                 say STDERR "LISTENER FD: $fh";                                                         #
+#                 if ($af == AF_INET || $af == AF_INET6) {                                               #
+#                         #$addr=pack_sockaddr_in($service,$addr);                                       #
+#                         if($self->[workers_]>1 or 1){                                                  #
+#                                 IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1)         #
+#                                 or Carp::croak "listen/so_reuseaddr: $!"                               #
+#                                         unless AnyEvent::WIN32;                                        #
+#                                                                                                        #
+#                                         IO::FD::setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, pack "i", 1  #
+#                                 or Carp::croak "listen/so_reuseport: $!"                               #
+#                                         unless AnyEvent::WIN32;                                        #
+#                         }                                                                              #
+#                         else {                                                                         #
+#                                 say STDERR "Socket reuse not enabled. (ie only 1 worker)";             #
+#                         }                                                                              #
+#                                                                                                        #
+#                         IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1                  #
+#                                 or Carp::croak "listen/so_nodelay $!"                                  #
+#                                         unless AnyEvent::WIN32;                                        #
+#                                                                                                        #
+#                 } elsif ($af == AF_UNIX) {                                                             #
+#                         unlink $service;                                                               #
+#                 }                                                                                      #
+#                                                                                                        #
+#                 log_info "Service: $service, host $host";                                              #
+#                 #AnyEvent::Socket::pack_sockaddr( $service, $ipn )                                     #
+#                 IO::FD::bind $fh, $addr                                                                #
+#                         or Carp::croak "listen/bind: $!";                                              #
+#                                                                                                        #
+#                 if ($host eq 'unix/') {                                                                #
+#                         chmod oct('0777'), $service                                                    #
+#                                 or warn "chmod $service failed: $!";                                   #
+#                 }                                                                                      #
+#                                                                                                        #
+#                 #fh_nonblocking $fh, 1;                                                                #
+#                 IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;                                                 #
+#                                                                                                        #
+#                 $self->[fh_] ||= $fh; # compat                                                         #
+#                 $self->[fhs_]{fileno $fh} = $fh;                                                       #
+#         }                                                                                              #
+#                                                                                                        #
+#         $self->prepare();                                                                              #
+#                                                                                                        #
+#         for ( values  %{ $self->[fhs_] } ) {                                                           #
+#                 IO::FD::listen $_, $self->[backlog_]                                                   #
+#                         or Carp::croak "listen/listen on ".(IO::FD::fileno $_).": $!";                 #
+#         }                                                                                              #
+#                                                                                                        #
+#         return wantarray ? do {                                                                        #
+#                 #my ($service, $host) = AnyEvent::Socket::unpack_sockaddr( getsockname $self->[fh_] ); #
+#                 #(format_address $host, $service);                                                     #
+#                 ();                                                                                    #
+#         } : ();                                                                                        #
+# }                                                                                                      #
+##########################################################################################################
 
 sub prepare {
 	#setup timer for constructing date header once a second
@@ -355,31 +356,33 @@ sub prepare {
 
         # FD recieve
         #open child pipe
-        my $sfd;
-        my $rfd;
-        my $socket;
-	return unless $socket;
-	my $do_client=$self->make_do_client;
-        my $watcher; $watcher=AE::io $socket, 0, sub {
-                #fd is readable.. attempt to read
-                $rfd=IO::FDPass::recv $sfd;
-                if(defined $rfd){
-                        #New fd to play with
-			$do_client->($rfd);
-                }
-                elsif($! == EAGAIN or $! ==EINTR){
-                        return;
-                }
-                else {
-                        #Actuall error
-                        #TODO
-                }
-
-        };
+        ##################################################
+        # my $sfd;                                       #
+        # my $rfd;                                       #
+        # my $socket;                                    #
+        # return unless $socket;                         #
+        # my $do_client=$self->make_do_client;           #
+        # my $watcher; $watcher=AE::io $socket, 0, sub { #
+        #         #fd is readable.. attempt to read      #
+        #         $rfd=IO::FDPass::recv $sfd;            #
+        #         if(defined $rfd){                      #
+        #                 #New fd to play with           #
+        #                 $do_client->($rfd);            #
+        #         }                                      #
+        #         elsif($! == EAGAIN or $! ==EINTR){     #
+        #                 return;                        #
+        #         }                                      #
+        #         else {                                 #
+        #                 #Actuall error                 #
+        #                 #TODO                          #
+        #         }                                      #
+        #                                                #
+        # };                                             #
+        ##################################################
 }
 
 #Iterate over passive sockets are run the required code
-sub do_passive {
+sub do_accept2{
 	#Accept is only for SOCK_STREAM 
 	state $seq=0;
 	Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
@@ -393,7 +396,6 @@ sub do_passive {
 	my @afh;
 
 	for my $fl ( values %{ $self->[fhs2_] }) {
-		Log::OK::INFO and log_info( "do passive oaijsd;kasd;lkjasdl;kfj: $fl");
 		$self->[aws_]{ $fl } = AE::io $fl, 0, sub {
 			#my $peer;
 			#my $fh;
@@ -406,7 +408,6 @@ sub do_passive {
 		};
 	}
 
-	Log::OK::INFO and log_info "SETUP DGRAM PASSIVE";
 	for my $fl (values $self->[fhs3_]->%*){
 		$self->[aws2_]{ $fl } = AE::io $fl, 0, sub {
 			my $buf="";
@@ -685,6 +686,7 @@ sub stop {
 	my $self=shift;
 	$self->[cv_]->send;
 }
+
 sub run {
 	my $self=shift;
 	my $cv=AE::cv;
@@ -719,17 +721,47 @@ sub run {
 
 
 	$self->rebuild_dispatch;
-	say STDERR "SELF IS: ", $self;
 	#$self->do_listen;
 	$self->do_listen2;
 	#$self->do_accept;
-	$self->do_passive;
+	$self->do_accept2;
 
+	$self->dump_listeners;
 	$cv->recv();
 }
 
 
 
+sub dump_listeners {
+	#Generate a table of all the listeners
+	
+	my ($self)=@_;
+	try {
+		require Text::Table;
+		my $tab=Text::Table->new("Interface", "Address", "Family", "Port", "Path");
+			$tab->load([
+				$_->{interface},
+				$_->{address},
+				family_to_string($_->{family}),
+				$_->{port},
+				$_->{path}
+
+				])
+			for $self->[listen2_]->@*;
+			#$tab->load(@data);
+		Log::OK::INFO and log_info join "", $tab->table;
+
+	}
+	catch($e){
+		Log::OK::ERROR and log_error "Could not load Text::Table for listener dumping";
+	}
+}
+
+sub dump_routes {
+	#Make seperate tables by site?
+	#sort by group by method
+
+}
 
 sub list_routes {
 	#dump all routes	
@@ -829,13 +861,15 @@ sub usac_listen2 {
 	$site->add_listeners(%options,$spec);
 }
 
-sub usac_listen {
-	#specify a interface and port number	
-	my $pairs=pop;	#Content is the last item
-	my %options=@_;
-	my $site=$options{parent}//$uSAC::HTTP::Site;
-	$site->add_listener(%options, $pairs);
-}
+#########################################################
+# sub usac_listen {                                     #
+#         #specify a interface and port number          #
+#         my $pairs=pop;  #Content is the last item     #
+#         my %options=@_;                               #
+#         my $site=$options{parent}//$uSAC::HTTP::Site; #
+#         $site->add_listener(%options, $pairs);        #
+# }                                                     #
+#########################################################
 
 #TODO:
 # We wany to either specifiy the interface name (ie eth0 wlan0 etc)
@@ -869,60 +903,61 @@ sub add_listeners {
 	my %options=@_;
 
 	my @addresses=sockaddr_passive($spec);
-	Log::OK::INFO and  log_info Dumper $_ for @addresses;
 	push $site->[listen2_]->@*, @addresses;
 }
 
-sub add_listener {
-	my $site=shift;
-	my $pairs=pop;	#Content is the last item
-	my %options=@_;
-
-	my @uri;
-	my $type=$options{type}//'tcp';
-	
-	#type can be
-	# family=> unix, INET INET6 	Default is inet
-	# socktype=>stream or datagram default is stream
-	# interface=>address		defaul is 0.0.0.0
-	# port=>number
-	#
-	# tcp
-	#
-	# unix
-	# quic
-	
-	#Do a check on the scheme type
-	if(ref($pairs) eq "ARRAY"){
-		@uri= map {
-			URI->new("http://$_")}
-		@$pairs;
-			#push $site->[listen_]->@*, @$pairs;
-	}
-	else {
-		
-		@uri= map {URI->new("http://$_")} ($pairs);
-		#push $site->[listen_]->@*, $pairs;
-	}
-	@uri=map {
-			if(/localhost/){
-				(
-					URI->new("http://127.0.0.1:".$_->port),
-					URI->new("http://[::1]:".$_->port)
-				)
-			}
-			else {
-				($_);
-			}
-		} @uri;
-	unless($options{no_hosts}){
-		push $site->host->@*, map {substr $_->opaque,2 } @uri;
-	}
-	for(@uri){
-		die "Error parsing listener: $_ " unless ref;
-	}
-	push $site->[listen_]->@*, @uri;
-}
+###################################################################################
+# sub add_listener {                                                              #
+#         my $site=shift;                                                         #
+#         my $pairs=pop;  #Content is the last item                               #
+#         my %options=@_;                                                         #
+#                                                                                 #
+#         my @uri;                                                                #
+#         my $type=$options{type}//'tcp';                                         #
+#                                                                                 #
+#         #type can be                                                            #
+#         # family=> unix, INET INET6     Default is inet                         #
+#         # socktype=>stream or datagram default is stream                        #
+#         # interface=>address            defaul is 0.0.0.0                       #
+#         # port=>number                                                          #
+#         #                                                                       #
+#         # tcp                                                                   #
+#         #                                                                       #
+#         # unix                                                                  #
+#         # quic                                                                  #
+#                                                                                 #
+#         #Do a check on the scheme type                                          #
+#         if(ref($pairs) eq "ARRAY"){                                             #
+#                 @uri= map {                                                     #
+#                         URI->new("http://$_")}                                  #
+#                 @$pairs;                                                        #
+#                         #push $site->[listen_]->@*, @$pairs;                    #
+#         }                                                                       #
+#         else {                                                                  #
+#                                                                                 #
+#                 @uri= map {URI->new("http://$_")} ($pairs);                     #
+#                 #push $site->[listen_]->@*, $pairs;                             #
+#         }                                                                       #
+#         @uri=map {                                                              #
+#                         if(/localhost/){                                        #
+#                                 (                                               #
+#                                         URI->new("http://127.0.0.1:".$_->port), #
+#                                         URI->new("http://[::1]:".$_->port)      #
+#                                 )                                               #
+#                         }                                                       #
+#                         else {                                                  #
+#                                 ($_);                                           #
+#                         }                                                       #
+#                 } @uri;                                                         #
+#         unless($options{no_hosts}){                                             #
+#                 push $site->host->@*, map {substr $_->opaque,2 } @uri;          #
+#         }                                                                       #
+#         for(@uri){                                                              #
+#                 die "Error parsing listener: $_ " unless ref;                   #
+#         }                                                                       #
+#         push $site->[listen_]->@*, @uri;                                        #
+# }                                                                               #
+###################################################################################
 
 sub usac_workers {
 	my $workers=pop;	#Content is the last item
