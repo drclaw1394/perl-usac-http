@@ -231,7 +231,8 @@ sub chunked{
 
 			if($_[3]){
 				#$bypass=undef;#reset
-
+				say "CHUNKING";
+				say join ", ", @_;
 				\my @headers=$_[3];
 				#@hindexes=@key_indexes[0..@headers/2-1];
 				#grep $_ eq HTTP_CONTENT_LENGTH, @headers[@hindexes] and return &$next;

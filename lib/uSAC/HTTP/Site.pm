@@ -60,19 +60,27 @@ use constant LF=>"\015\012";
 
 
 
+my $id=0;
 sub new {
 	my $self=[];
 	my $package=shift//__PACKAGE__;
 	my %options=@_;
 	$self->[server_]=	$options{server}//$self;
-	$self->[id_]=		$options{id};
+	$self->[id_]=		$options{id}//$id++;
 	$self->[prefix_]=	$options{prefix}//"";
-	$self->[host_]=[];	#	$options{host}?[$options{host}]:[];
 	$self->[cors_]=		$options{cors}//"";
 	$self->[innerware_]=	$options{middleware}//[];
 	$self->[outerware_]=	$options{outerware}//[];
 	$self->[unsupported_]=[];
 	$self->[error_uris_]={};
+
+	if(ref($options{host}) eq "ARRAY"){
+		$self->[host_]=$options{host};
+
+	}
+	else{
+		$self->[host_]=[$options{host}];
+	}
 
 	#die "No server provided" unless $self->[server_];
 	#die "No id provided" unless $self->[id_];
@@ -101,7 +109,6 @@ sub _add_route {
 
 	Log::OK::INFO and log_info (join "\n", "Adding Route: ".($path_matcher?$path_matcher:"**DEFAULT**"),
 		"Method: $method_matcher",
-		"Another line"
 	)
 		;
 
@@ -224,7 +231,9 @@ sub _add_route {
 
 	my @hosts;
 	my $matcher;
+	
 	@hosts=$self->build_hosts;	#List of hosts (as urls) 
+	say "HOSTS for ",join ", ", $self->[id_],@hosts;
         my $bp=$self->built_prefix;                                      #
 
         ####################################################################
@@ -237,6 +246,7 @@ sub _add_route {
         ####################################################################
 
 	push @hosts, "*.*" unless @hosts;
+	say "Detected hosts in add_route", join ", ", @hosts;
 	#$hosts{"*.*"}//= {};
 	Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
 	#$matcher=qr{^$method_matcher $bp$path_matcher};
@@ -287,11 +297,9 @@ sub _add_route {
 				#$pm=$path_matcher;
         			$matcher="$method $bp$path_matcher";
 			}
-
-			#$matcher="$method $bp$pm";
-			Log::OK::DEBUG and log_debug"Adding matched endpoints";
-			Log::OK::DEBUG and log_debug"  matching: $host $matcher";                                 #
+			say "Calling add host end point",$host, $matcher,;
 			$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
+			last unless defined $matcher;
 		}
 	}
 
@@ -403,6 +411,7 @@ sub build_hosts {
 	my $parent=$_[0];
 	my @hosts;
 	while($parent) {
+		say $parent;
 		push @hosts, $parent->host->@*;	
 		last if @hosts;		#Stop if next level specified a host
 		$parent=$parent->parent_site;
@@ -549,6 +558,7 @@ sub usac_site :prototype(&) {
 	my $sub=shift;
 	my $self= uSAC::HTTP::Site->new(server=>$server);
 	$self->[parent_]=$uSAC::HTTP::Site;
+	$self->[id_]=join ", ", caller;
 	#$self->[parent_]=$_;
 	
 	local  $uSAC::HTTP::Site=$self;
@@ -628,7 +638,7 @@ sub add_route {
 }
 
 sub usac_id {
-	my $id=pop;
+	my $id=pop;	
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 	$self->set_id(%options, $id);
@@ -636,7 +646,7 @@ sub usac_id {
 sub set_id {
 	my $self=shift;
 	my $id=pop;
-	$self->[id_]=shift;
+	$self->[id_]=$id;
 }
 
 sub usac_prefix {
@@ -754,12 +764,12 @@ sub usac_error_page {
 
 sub set_error_page {
 	my $self=shift;
-
-	for my($k,$v)(@_){
+	say "set error page:", $self;
+	for my($k, $v)(@_){
 		$self->[error_uris_]{$k}=$v;
 	}
-		
 }
+
 sub error_uris {
 	$_[0][error_uris_]
 }

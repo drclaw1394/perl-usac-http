@@ -26,6 +26,7 @@ use constant MAX_READ_SIZE => 128 * 1024;
 
 field $_id;
 field $_fh;
+field $_peer;
 field $_sessions;
 field @_zombies;
 field $_server;
@@ -62,7 +63,7 @@ sub drop;
 method init {
 	
         $_time=$Time; 
-	($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme)=@_;
+	($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme, $_peer)=@_;
 	\my @zombies= $zombies;
 
 	#make reader
@@ -181,6 +182,7 @@ method revive {
 	$_time=$Time;
 	$_fh=$_[1];	
 	$_scheme=$_[2];
+	$_peer=$_[3];
 
 	$_rex=undef;
 	@_write_stack=();
@@ -272,7 +274,7 @@ our $timer=AE::timer 0,1, sub {
 #Return an array of references to variables which are publically editable
 #Bypasses method calls for accessors
 method exports {
-	[\$_closeme,$_dropper, \$_server, \$_rex,\$_in_progress, $_write];
+	[\$_closeme,$_dropper, \$_server, \$_rex,\$_in_progress, $_write, $_peer];
 
 }
 ##################################################################################

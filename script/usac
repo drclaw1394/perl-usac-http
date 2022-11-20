@@ -16,7 +16,6 @@ Log::ger::Util::set_level Log::OK::LEVEL;
 
 
 
-use Data::Dumper;
 use File::Spec::Functions qw<rel2abs>;
 use File::Basename qw<dirname basename>;
 use Cwd;
@@ -27,13 +26,19 @@ use uSAC::HTTP;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Static;
 use uSAC::HTTP::Middleware qw<log_simple>;
+use Socket ":all";
+use Socket::More ":all";
 
+
+use uSAC::HTTP::State::JSON qw<state_json>;
 
 use Getopt::Long;
 my %options;
 my $verbose=0;
 $options{quiet}=sub {$verbose=0};
 $options{verbose}=\$verbose;
+$options{listen}=[];
+
 GetOptions \%options,
 	"help",
 	"host=s@",
@@ -44,6 +49,7 @@ GetOptions \%options,
 	"www-root=s@"	,	#serve files from this location
 	"list-dir",		#serve html rendered dir list from this location
 	"ws=s%", 		#connect to uri (unix:// tcp:// udp:// ws:// file://) and just spit the information 
+
 	"mime-add=s%",		#Specifiy a mime type mapping for an extension, add to list
 	"mime=s%",		#Specifiy a file containing a list of mime types
 				#on a websocket
@@ -53,6 +59,10 @@ GetOptions \%options,
 	"watch",		#watch changes to input files, and relauch
 	"verbose",
 	"log",
+
+	"interface=s@",
+	"group=s@",
+	"address=s@",
 
 
 
@@ -79,7 +89,6 @@ pod2usage verbose=>2 if $options{help};
 #load any config file specified
 
 #set default listener if non provided
-$options{listen}//=["localhost:8080"];
 
 my $welcome="uSAC Server version $VERSION";
 Log::OK::INFO and log_info $welcome;
@@ -91,17 +100,31 @@ $server=usac_server{
 	#set the sub product
 	usac_middleware log_simple dump_headers=>1 if $options{log};
 	#add all listeners
+	my @spec;
 	my $listeners=$options{listen};
-	for my $listener (@$listeners){
-		Log::OK::INFO and log_info "Listening on $listener";
-		usac_listen no_hosts=>1, $listener;
-		#"127.0.0.1:8080";
-				
+
+	if(@$listeners){
+		for my $listener (@$listeners){
+			push @spec, parse_passive_spec($listener);
+		}
 	}
+	else {
+		#Add the default listener on all INET.* interfaces, port 5000
+		push @spec, {
+			#interface=>[".*"],
+			address=>["localhost"],
+			family=>[AF_INET, AF_INET6],
+			type=>[SOCK_STREAM],
+			port=>5000
+		};
+	}
+
+	usac_listen($_) for @spec;
 	usac_sub_product "test";
 
 	#add additional files
 	my $includes=$options{preclude};
+
 	for my $include (@$includes){
 		#convert to abs for intended behaviour	
 		my $target=rel2abs($include,getcwd);
@@ -112,8 +135,6 @@ $server=usac_server{
 	usac_site {
 		#add the hosts we respond to (add all listeners)
 		usac_id "test";
-		#usac_host "localhost:8080";
-		#usac_host "127.0.0.1:8080";
 
 		#add additional files
 		my $hosts=$options{hosts};
@@ -134,7 +155,7 @@ $server=usac_server{
                 for my $s (@$static){
                         push @roots, usac_file_under list_dir=>$options{"list-dir"}, $s;
                 } 
-		usac_route ["GET","HEAD"],"/", @roots;
+		usac_route ["GET", "HEAD"],"/", state_json, @roots;
 
 		#TODO: fix dir listing so it can be chainable
 

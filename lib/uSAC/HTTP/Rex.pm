@@ -93,6 +93,7 @@ use enum (
 
 	response_code_
 	recursion_count_
+	peer_
 	end_
 	>
 );
@@ -261,19 +262,25 @@ sub rex_redirect_internal;
 #General error call, Takes an additional argument of new status code
 sub rex_error {
 	my $site=$_[0][1][0];
+	say "rex_error called", join ", ", caller;
 	$_[1][method_]="GET";
 	$_[2]=pop//HTTP_NOT_FOUND;	#New return code is appened at end
 	
 	#Locate applicable site urls to handle the error
+	say "site in rex_error: $site";
+	say Dumper $site->error_uris;
+
 	my $uri=$site->error_uris->{$_[2]};
 	return rex_redirect_internal @_, $uri if $uri;
 	
 	#If one wasn't found, then make an ugly one
-	rex_write (@_, 'Error: '.$_[2]);
+	rex_write (@_, $site->id.': Error: '.$_[2]);
 
 }
 
+
 sub rex_error_not_found {
+	#$_[2]=HTTP_NOT_FOUND;
 	push @_, HTTP_NOT_FOUND;
 	&rex_error;
 }
@@ -296,6 +303,7 @@ sub rex_error_internal_server_error {
 sub rex_redirect_internal {
 
 	my ($matcher, $rex, $code, $headers, $uri)=@_;
+	say "rex_redirect_internal called";
 	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	
@@ -407,7 +415,7 @@ sub new {
 	#
 	#NOTE: A single call to Session export. give references to important variables
 	
-	($self->[closeme_], $self->[dropper_], $self->[server_], $self->[rex_], $self->[in_progress_], $self->[write_])= $_[7]->@*;#$_[1]->exports->@*;
+	($self->[closeme_], $self->[dropper_], $self->[server_], $self->[rex_], $self->[in_progress_], $self->[write_], $self->[peer_])= $_[7]->@*;#$_[1]->exports->@*;
 	$self->[recursion_count_]=0;
 
 	$self;

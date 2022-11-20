@@ -7,7 +7,7 @@ use Log::OK;
 use EV;
 use AnyEvent;
 use Socket ":all";
-use Socket::More qw<sockaddr_passive family_to_string>;
+use Socket::More qw<sockaddr_passive family_to_string sock_to_string>;
 use IO::FD;
 use Error::ShowMe;
 #use constant "OS::darwin"=>$^O =~ /darwin/;
@@ -59,6 +59,7 @@ use File::Spec::Functions qw<rel2abs catfile catdir>;
 use Carp 'croak';
 
 use Data::Dumper;
+$Data::Dumper::Deparse=1;
 #use constant MAX_READ_SIZE => 128 * 1024;
 
 #Class attribute keys
@@ -132,7 +133,10 @@ sub new {
 	$self->[zombies_]=[];
 	$self->[zombie_limit_]=$options{"zombie_limit"}//100;
 	$self->[static_headers_]=[];#STATIC_HEADERS;
-	$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*"));#,host=>'[^ ]+'));
+
+	my $default=$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", server=>$self));
+	$default->add_route([$Any_Method], undef, _default_handler);
+
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	$self->[workers_]=1;
@@ -156,7 +160,7 @@ sub _setup_dgram_passive {
 	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
 	
 	if($l->{family}== AF_UNIX){
-		unlink $;
+		unlink $l->{path};
 	}
 	else{
 		IO::FD::setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, pack "i", 1;
@@ -187,7 +191,7 @@ sub _setup_stream_passive{
 	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
 	
 	if($l->{family}== AF_UNIX){
-		unlink $;
+		unlink $l->{path};
 	}
 	else{
 		IO::FD::setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, pack "i", 1;
@@ -198,7 +202,7 @@ sub _setup_stream_passive{
 		or Carp::croak "listen/bind: $!";
 	#Log::OK::INFO and log_info("Stream bind ok");
 	
-	if($l->{family}== AF_UNIX){
+	if($l->{family} == AF_UNIX){
 		chmod oct('0777'), $l->{path}
 			or warn "chmod $l->{path} failed: $!";
 	}
@@ -473,6 +477,7 @@ sub make_do_client{
 	sub {
 		my ($fhs,$peers)=@_;
 
+		my $i=0;
 		for my $fh(@$fhs){#=shift;
 
 		#while ($fl and ($peer = accept my $fh, $fl)) {
@@ -496,16 +501,16 @@ sub make_do_client{
 		if(@zombies){
 			$session=pop @zombies;
 			#uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
-			$session->revive($id, $fh, $scheme);
+			$session->revive($id, $fh, $scheme, $peers->[$i]);
 		}
 		else {
 			#$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
 			$session=uSAC::HTTP::Session->new;
-			$session->init($id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
+			$session->init($id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme, $peers->[$i]);
 			#uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
 			$session->push_reader(make_reader $session, MODE_SERVER);
 		}
-
+		$i++;
 		$sessions{ $id } = $session;
 		#$active_connections++;
 		#$total_connections++;
@@ -535,12 +540,37 @@ sub static_headers {
 sub add_host_end_point{
 	my ($self, $host, $matcher, $ctx, $type)=@_;
 
+	#ctx is array
+	#[$site, $endpoint, $outer, $default_flag]
+	#This becomes the value field in hustle table entry
+	#[matcher, value, type, default]
 	Log::OK::TRACE and log_trace Dumper $matcher;
 	my $table=$self->[host_tables_]{$host}//=[
-		Hustle::Table->new(sub {log_error "Should not use table default dispatcher: ". $_[1]->[uSAC::HTTP::Rex::uri_]})
-		,{}
+		Hustle::Table->new("kkkkk: asdf"),{}
 	];
-	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
+        ##################################################################################################################
+        #                 uSAC::HTTP::Site->new(id=>"TABLE_FALLBACK"),                                                   #
+        #                 sub {                                                                                          #
+        #                         say "IN TABLE FALLBACK";                                                               #
+        #                         &rex_error_not_found;                                                                  #
+        #                         #log_error "Should not use table default dispatcher: ". $_[1]->[uSAC::HTTP::Rex::uri_] #
+        #                 },                                                                                             #
+        #                 undef,  #No outerware linking                                                                  #
+        #                 0                                                                                              #
+        #         ]),                                                                                                    #
+        #         {}                                                                                                     #
+        # ];                                                                                                             #
+        ##################################################################################################################
+	#$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
+	say "MATCHER: $matcher";
+	say "CTX: $ctx";
+	if($matcher){
+		$table->[0]->add([$matcher, $ctx, $type]);
+	}
+	else {
+		say "lkjasdlkjasdf: $host";
+		$table->[0]->set_default($ctx);
+	}
 }
 
 #registers a site object with the server
@@ -593,6 +623,10 @@ sub rebuild_dispatch {
 	my $self=shift;
 
 	Log::OK::INFO and log_info(__PACKAGE__. " rebuilding dispatch...");
+	#Install error routes per site
+	#Error routes are added after other routes.
+	
+
 	#NOTE:
 	#Here we add the unsupported methods to the table before building it
 	#This is different to a unfound URL resource.
@@ -604,35 +638,38 @@ sub rebuild_dispatch {
 	#
 	for(keys $self->[sites_]->%*){
 		#NOTE: url/path is wrapped in a array
-		$self->[sites_]{$_}->add_route([$Any_Method], undef, _default_handler);
+		#$self->[sites_]{$_}->add_route([$Any_Method], undef, _default_handler);
 
-		for ($self->[sites_]{$_}->unsupported->@*){
+		say "SITE: $_";
+		for($self->[sites_]{$_}->unsupported->@*){
 			Log::OK::TRACE and log_trace "Adding Unmatched endpoints";
 			$self->add_host_end_point($_->@*);
 		}
 	}
 
-	#Create a special default site for each host that matches any method and uri
-	for my $host (keys $self->[host_tables_]->%*) {
+        #Create a special default site for each host that matches any method and uri
+        for my $host (keys $self->[host_tables_]->%*) {
 
-		my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
-		$site->parent_site=$self;
-		#$self->register_site($site);
-		Log::OK::TRACE and log_trace "Adding default handler to $host";
+		say "Addeing defult: for  $host";
+                my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
+                $site->parent_site=$self;
+                $self->register_site($site);
+                Log::OK::TRACE and log_trace "Adding default handler to $host";
 
-		#$site->add_route($Any_Method, qr|.*|, _default_handler);
-		$site->add_route([$Any_Method], undef, _default_handler);
-	}
+                $site->add_route([$Any_Method], undef, _default_handler);
+        }
 
-	#Add  catch all host and catch all route in the case of a host mismatch 
-	#of hosts not supported
-        my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self);
-        $site->parent_site=$self;
-        #$self->register_site($site);
-        Log::OK::TRACE and log_trace "Adding default handler to *.*";
-
-        #$site->add_route($Any_Method, qr|.*|, _default_handler);
-        $site->add_route([$Any_Method], undef, _default_handler);
+        ###################################################################################
+        # #Add  catch all host and catch all route in the case of a host mismatch         #
+        # #of hosts not supported                                                         #
+        # my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self); #
+        # $site->parent_site=$self;                                                       #
+        # #$self->register_site($site);                                                   #
+        # Log::OK::TRACE and log_trace "Adding default handler to *.*";                   #
+        #                                                                                 #
+        # #$site->add_route($Any_Method, qr|.*|, _default_handler);                       #
+        # $site->add_route([$Any_Method], undef, _default_handler);                       #
+        ###################################################################################
 
 	my %lookup=map {
 		$_, [
@@ -659,7 +696,7 @@ sub rebuild_dispatch {
 		#ctx/value structure has
 		#[site, linked_innerware, linked_outerware, counter]
 		#  0 ,		1 	,	2		,3	, 4
-		$Data::Dumper::Deparse=1;
+		#$Data::Dumper::Deparse=1;
 		#say Dumper $table;
 
 		Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route;
@@ -727,6 +764,7 @@ sub run {
 	$self->do_accept2;
 
 	$self->dump_listeners;
+	$self->dump_routes;
 	$cv->recv();
 }
 
@@ -738,13 +776,15 @@ sub dump_listeners {
 	my ($self)=@_;
 	try {
 		require Text::Table;
-		my $tab=Text::Table->new("Interface", "Address", "Family", "Port", "Path");
+		my $tab=Text::Table->new("Interface", "Address", "Family", "Group", "Port", "Path", "Type");
 			$tab->load([
 				$_->{interface},
 				$_->{address},
 				family_to_string($_->{family}),
+				$_->{group},
 				$_->{port},
-				$_->{path}
+				$_->{path},
+				sock_to_string($_->{type}),
 
 				])
 			for $self->[listen2_]->@*;
@@ -758,6 +798,28 @@ sub dump_listeners {
 }
 
 sub dump_routes {
+	my ($self)=@_;
+	for my $host (sort keys $self->[host_tables_]->%*){
+		my $table= $self->[host_tables_]{$host};
+		my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
+		say "DUMPING ROUTES FOR $host";
+		#table is hustle table and cache entry
+		for my $entry ($table->[0]->@*){
+			#say Dumper $entry->[1];
+			say $entry->[1];
+			my $site=$entry->[1][0];
+			#say $site->host->@*;
+			say "entry: ".$entry->[1]->@*;
+			say join "lk, ", $entry->[1]->@*;
+			say "Match: ".$entry->[0], "Type: ".$entry->[2], ;
+			$tab->load([$entry->[0], $entry->[2], $site->id, $site->prefix, join "\n",$host]);
+
+			#say join ", ", $entry->[0], $entry->[1][0]->id;
+		}
+		say $tab->table;
+
+	}
+
 	#Make seperate tables by site?
 	#sort by group by method
 
@@ -844,16 +906,6 @@ sub usac_include {
 	}
 }
 
-###################################
-# sub usac_interface {            #
-#         my $server=$_;          #
-#         $server->[host_]=$_[0]; #
-# }                               #
-# sub usac_port {                 #
-#         my $server=$_;          #
-#         $server->[port_]=$_[0]; #
-# }                               #
-###################################
 sub usac_listen2 {
 	my $spec=pop;		#The spec for interface matching
 	my %options=@_;		#Options for creating hosts
@@ -861,15 +913,7 @@ sub usac_listen2 {
 	$site->add_listeners(%options,$spec);
 }
 
-#########################################################
-# sub usac_listen {                                     #
-#         #specify a interface and port number          #
-#         my $pairs=pop;  #Content is the last item     #
-#         my %options=@_;                               #
-#         my $site=$options{parent}//$uSAC::HTTP::Site; #
-#         $site->add_listener(%options, $pairs);        #
-# }                                                     #
-#########################################################
+*usac_listen=*usac_listen2;
 
 #TODO:
 # We wany to either specifiy the interface name (ie eth0 wlan0 etc)
@@ -906,58 +950,6 @@ sub add_listeners {
 	push $site->[listen2_]->@*, @addresses;
 }
 
-###################################################################################
-# sub add_listener {                                                              #
-#         my $site=shift;                                                         #
-#         my $pairs=pop;  #Content is the last item                               #
-#         my %options=@_;                                                         #
-#                                                                                 #
-#         my @uri;                                                                #
-#         my $type=$options{type}//'tcp';                                         #
-#                                                                                 #
-#         #type can be                                                            #
-#         # family=> unix, INET INET6     Default is inet                         #
-#         # socktype=>stream or datagram default is stream                        #
-#         # interface=>address            defaul is 0.0.0.0                       #
-#         # port=>number                                                          #
-#         #                                                                       #
-#         # tcp                                                                   #
-#         #                                                                       #
-#         # unix                                                                  #
-#         # quic                                                                  #
-#                                                                                 #
-#         #Do a check on the scheme type                                          #
-#         if(ref($pairs) eq "ARRAY"){                                             #
-#                 @uri= map {                                                     #
-#                         URI->new("http://$_")}                                  #
-#                 @$pairs;                                                        #
-#                         #push $site->[listen_]->@*, @$pairs;                    #
-#         }                                                                       #
-#         else {                                                                  #
-#                                                                                 #
-#                 @uri= map {URI->new("http://$_")} ($pairs);                     #
-#                 #push $site->[listen_]->@*, $pairs;                             #
-#         }                                                                       #
-#         @uri=map {                                                              #
-#                         if(/localhost/){                                        #
-#                                 (                                               #
-#                                         URI->new("http://127.0.0.1:".$_->port), #
-#                                         URI->new("http://[::1]:".$_->port)      #
-#                                 )                                               #
-#                         }                                                       #
-#                         else {                                                  #
-#                                 ($_);                                           #
-#                         }                                                       #
-#                 } @uri;                                                         #
-#         unless($options{no_hosts}){                                             #
-#                 push $site->host->@*, map {substr $_->opaque,2 } @uri;          #
-#         }                                                                       #
-#         for(@uri){                                                              #
-#                 die "Error parsing listener: $_ " unless ref;                   #
-#         }                                                                       #
-#         push $site->[listen_]->@*, @uri;                                        #
-# }                                                                               #
-###################################################################################
 
 sub usac_workers {
 	my $workers=pop;	#Content is the last item

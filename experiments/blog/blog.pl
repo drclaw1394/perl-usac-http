@@ -19,9 +19,12 @@ Log::ger::Util::set_level Log::OK::LEVEL;
 
 
 use uSAC::HTTP;
-use uSAC::HTTP::Middleware qw<dummy_mw log_simple chunked deflate gzip>;
+use uSAC::HTTP::Middleware qw<dummy_mw log_simple deflate gzip>;
 
+use uSAC::HTTP::State::JSON qw<state_json>;
+use uSAC::HTTP::State::UUID qw<state_uuid>;
 use Socket ":all";
+use Net::ARP;
 
 
 
@@ -32,10 +35,11 @@ use Data::Dumper;
 
 my $server; $server=usac_server {;
 
-	usac_listen2( {
-			interface=>["lo", "en"],
+	usac_listen( {
+			address=>"::",
+			interface=>["en"],
 			port=>[8084],
-			family=>[AF_INET, AF_INET6],
+			family=>[AF_INET6],
 			type=>SOCK_STREAM,
 			data=> {
 				hosts=>"dfs"
@@ -46,19 +50,23 @@ my $server; $server=usac_server {;
 
 	
 
-	#usac_listen no_hosts=>1, ["0.0.0.0:8084"];#,"[::1]:8084"];
-	#usac_listen "[::1]:8082";
 	#usac_mime_db uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type");
 	#usac_mime_default "some/stuff";
 	#usac_listen "192.168.1.104";
 	
+	#usac_error_route "/error/404" => sub {
+	#		rex_write (@_, "An error occored: $_[2]");
+	#	};
+
+		#usac_error_page 404 => "/error/404";
 	usac_sub_product "blog";
 	#usac_middleware log_simple dump_headers=>1;
 	
 	my $site; $site=usac_site {
 		usac_id "blog";
 		#usac_host "127.0.0.1:8082";
-		#usac_host "localhost:8082";
+		usac_host "localhost:8084";
+		#usac_host "192.168.1.104:8084";
 
 		#usac_middleware log_simple;
 		#
@@ -66,41 +74,44 @@ my $server; $server=usac_server {;
 		#
 		
 		#error route forces a get method to the resource
-		usac_error_route "/error/404" => sub {
-			rex_write (@_, "An error occored: $_[2]");
-		};
-
-		usac_error_page 404 => "/error/404";
 
 		usac_route '/static/hot.txt' =>	gzip()=>deflate()=>usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
 
-		usac_route "/test/$Comp/$Comp" => sub {
-			my $captures=&rex_captures;
-			rex_write @_, $captures->[0];
-		};
-
-                usac_route '/statictest$'=> usac_static_content "This is some data";
-
-                usac_route 'testing.txt'=>deflate()=>sub {
-			push $_[3]->@*, HTTP_CONTENT_TYPE, "text/plain";
-                        rex_write @_, "HELLO";
-                };
-                #                                                                                                            #
-                # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; #
-                #                                                                                                            #
-                usac_route "/static"=>
-		gzip()=>deflate()=>
-		usac_file_under (
-			#filter=>'txt$',
-                        read_size=>4096,
-			#pre_encoded=>[qw<gz>],
-			#no_compress=>qr/txt$/,
-                        do_dir=>1,
-			#indexes=>["index.html"],
-                        #sendfile=>4096,
-                        usac_dirname #  "static"
-                );
-		usac_include usac_path root=>usac_dirname, "admin/usac.pl";
+                ##################################################################################################################
+                # usac_route "/test/$Comp/$Comp" => sub {                                                                        #
+                #         my $captures=&rex_captures;                                                                            #
+                #         rex_write @_, $captures->[0];                                                                          #
+                # };                                                                                                             #
+                #                                                                                                                #
+                # usac_route '/statictest$'=> usac_static_content "This is some data";                                           #
+                #                                                                                                                #
+                # usac_route 'testing.txt'=>state_json()=>state_uuid()=>deflate()=>sub {                                         #
+                #         my $state=&rex_state;                                                                                  #
+                #         say "Existing state: ". $state->{json}{id};                                                            #
+                #         say "Existing state: ". $state->{uuid};                                                                #
+                #         $state->{json}{id}="HELLO".rand 10;                                                                    #
+                #         $state->{uuid}="HELLO".rand 10;                                                                        #
+                #         push $_[3]->@*, HTTP_CONTENT_TYPE, "text/plain";                                                       #
+                #         rex_write @_, "HELLO";                                                                                 #
+                # };                                                                                                             #
+                #                                                                                                                #
+                # #                                                                                                            # #
+                # # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; # #
+                # #                                                                                                            # #
+                # usac_route "/static"=>                                                                                         #
+                # gzip()=>deflate()=>                                                                                            #
+                # usac_file_under (                                                                                              #
+                #         #filter=>'txt$',                                                                                       #
+                #         read_size=>4096,                                                                                       #
+                #         #pre_encoded=>[qw<gz>],                                                                                #
+                #         #no_compress=>qr/txt$/,                                                                                #
+                #         do_dir=>1,                                                                                             #
+                #         #indexes=>["index.html"],                                                                              #
+                #         #sendfile=>4096,                                                                                       #
+                #         usac_dirname #  "static"                                                                               #
+                # );                                                                                                             #
+                # usac_include usac_path root=>usac_dirname, "admin/usac.pl";                                                    #
+                ##################################################################################################################
 
                 ##############################################
                 # => usac_file_under (                       #
