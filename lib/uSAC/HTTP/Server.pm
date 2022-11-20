@@ -116,6 +116,9 @@ sub _default_handler {
 			#Log::OK::TRACE and log_trace "DEFAULT HANDLER FOR TABLE";
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
 			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[1]->headers->%*;
+			$_[4]="EEREREER";
+			say "before not found";
+			say @_;
 			&rex_error_not_found;
 		};
 }
@@ -561,16 +564,7 @@ sub add_host_end_point{
         #         {}                                                                                                     #
         # ];                                                                                                             #
         ##################################################################################################################
-	#$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
-	say "MATCHER: $matcher";
-	say "CTX: $ctx";
-	if($matcher){
-		$table->[0]->add([$matcher, $ctx, $type]);
-	}
-	else {
-		say "lkjasdlkjasdf: $host";
-		$table->[0]->set_default($ctx);
-	}
+	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
 #registers a site object with the server
@@ -682,7 +676,7 @@ sub rebuild_dispatch {
 		keys $self->[host_tables_]->%*;
 
 	$self->[cb_]=sub {
-		my ($host, $input, $rex, $rcode, $rheaders)=@_;
+		my ($host, $input, $rex, $rcode, $rheaders, $data, $cb)=@_;
 
 		Log::OK::DEBUG and log_debug __PACKAGE__." Looking for host: $host";
 		my $table=$lookup{$host}//$lookup{"*.*"};
@@ -707,7 +701,7 @@ sub rebuild_dispatch {
 		# The linked innerware, the route handler and outerware are
 		# triggered from here
 		# Default Result code is HTTP_OK and a new set of empty headers which
-		$route->[1][1]($route, $rex, my $code=$rcode//HTTP_OK, $rheaders//[]);
+		$route->[1][1]($route, $rex, my $code=$rcode//HTTP_OK, $rheaders//[],$data//="",$cb);
 
 		#TODO: Better Routing Cache management.
 		#if the is_default flag is set, this is an unkown match.

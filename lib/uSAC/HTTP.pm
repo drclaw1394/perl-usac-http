@@ -12,6 +12,7 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Method ":constants";
+use enum qw<ROUTE REX CODE HEADER PAYLOAD CB>;
 
 our $Site;
 #use Exporter "import";
@@ -40,5 +41,14 @@ sub import {
 			*{$name}=\${'uSAC::HTTP::Site::'.$_};
 		}
 	}
+
+        ##############################################
+        # #Export contants                           #
+        # for(qw<ROUTE REX CODE HEADER PAYLOAD CB>){ #
+        #         no strict "refs";                  #
+        #         my $name='*'.$caller."::".$_;      #
+        #         *{$name}=\${'uSAC::HTTP::'.$_};    #
+        # }                                          #
+        ##############################################
 }
 1;

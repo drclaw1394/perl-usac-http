@@ -11,6 +11,7 @@ use Template::Plexsite::URLTable;
 use Socket ":all";
 use uSAC::HTTP::Rex;
 
+
 say "ADMIN SETUP";
 my $URLTable=Template::Plexsite::URLTable->new(src=>"src", html_root=>"static/build");
 my $server; $server=usac_server {
@@ -29,11 +30,6 @@ my $server; $server=usac_server {
 		#usac_innerware log_simple;
 		#
 		#error route forces a get method to the resource
-		usac_error_route "/error/404" => sub {
-			rex_write (@_, "An error occored: $_[2]");
-		};
-
-		usac_error_page 404 => "/error/404";
 		usac_route "/static"   => usac_file_under usac_dirname;
 
 		my $vars={fields=>[], peer=>undef};
@@ -63,11 +59,23 @@ my $server; $server=usac_server {
 			#say "Family is ", sockaddr_family $sockaddr;
 			#say "addr is", unpack_sockaddr_in6 $sockaddr;
 
-			my $template=Template::Plex->immediate(undef,\*DATA,$vars);
-			push @_, $template;
+			$_[4]=Template::Plex->immediate(undef,\*DATA,$vars);
 			push $_[3]->@*, HTTP_CONTENT_TYPE, "text/html";
-			&rex_write
+
+			&rex_write;
 		};
+
+		usac_error_route "/error/404" => sub {
+			say "ERROR FOR BLOG admin";
+			$_[4]="CUSTOM ERROR PAGE CONTENT admin: $_[2]";
+			&rex_write;
+		};
+
+		#usac_error_page uses the current site prefix
+		usac_error_page 404 => "/error/404";
+
+		#Catch all
+		usac_route [$Any_Method]=>qr{.*} => usac_error_not_found;
 	};
 	#usac_route "/static/$Path" => static_file_from "static";
 	

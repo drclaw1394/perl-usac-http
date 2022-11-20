@@ -64,9 +64,10 @@ my $server; $server=usac_server {;
 	
 	my $site; $site=usac_site {
 		usac_id "blog";
-		#usac_host "127.0.0.1:8082";
+		usac_host "127.0.0.1:8082";
 		usac_host "localhost:8084";
-		#usac_host "192.168.1.104:8084";
+		usac_host "192.168.1.102:8084";
+
 
 		#usac_middleware log_simple;
 		#
@@ -76,6 +77,7 @@ my $server; $server=usac_server {;
 		#error route forces a get method to the resource
 
 		usac_route '/static/hot.txt' =>	gzip()=>deflate()=>usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
+
 
                 ##################################################################################################################
                 # usac_route "/test/$Comp/$Comp" => sub {                                                                        #
@@ -110,7 +112,7 @@ my $server; $server=usac_server {;
                 #         #sendfile=>4096,                                                                                       #
                 #         usac_dirname #  "static"                                                                               #
                 # );                                                                                                             #
-                # usac_include usac_path root=>usac_dirname, "admin/usac.pl";                                                    #
+                usac_include usac_path root=>usac_dirname, "admin/usac.pl";                                                    #
                 ##################################################################################################################
 
                 ##############################################
@@ -158,8 +160,16 @@ my $server; $server=usac_server {;
                 # # };                                                                              #                        #
                 # ###################################################################################                        #
                 #                                                                                                            #
-                # #usac_include "admin/usac.pl";                                                                             #
-                ##############################################################################################################
+		#
+		#usac_include "admin/usac.pl";                                                                             #
+	       	usac_error_route "/error/404" => sub {
+				say "ERROR FOR BLOG";
+				$_[4]="CUSTOM ERROR PAGE CONTENT: $_[2]";
+				&rex_write;
+		};
+
+		usac_error_page 404 => "/error/404";
+		usac_route qr/.*/ => usac_error_not_found;
 	};
 
 

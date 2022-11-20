@@ -22,12 +22,12 @@ my @redirects=qw<
 
 my @errors=qw<
 usac_error_not_found
+	usac_error_page
+	usac_error_route
 >;	
 	
 our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
-	usac_error_page
-	usac_error_route
-	), @redirects);
+	), @errors,@redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -79,7 +79,12 @@ sub new {
 
 	}
 	else{
-		$self->[host_]=[$options{host}];
+		if(defined($options{host})){
+			$self->[host_]=[$options{host}];
+		}
+		else {
+			$self->[host_]=[];
+		}
 	}
 
 	#die "No server provided" unless $self->[server_];
@@ -162,7 +167,11 @@ sub _add_route {
 		my $headers=[HTTP_ALLOW, join ", ",@matching];
 		$sub = sub { 
 			#TODO: how to add middleware ie logging?
-			rex_write @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
+			$_[2]= HTTP_METHOD_NOT_ALLOWED;
+			$_[3]= $headers;
+			$_[4]="";
+			&rex_write;
+			#rex_write @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
 			return;	#cache this
 		};
 	}
@@ -765,8 +774,10 @@ sub usac_error_page {
 sub set_error_page {
 	my $self=shift;
 	say "set error page:", $self;
+	my $bp=$self->built_prefix;
+
 	for my($k, $v)(@_){
-		$self->[error_uris_]{$k}=$v;
+		$self->[error_uris_]{$k}="$bp$v";
 	}
 }
 
@@ -798,7 +809,8 @@ sub add_static_content {
 			HTTP_CONTENT_TYPE, $mime,
 			HTTP_CONTENT_LENGTH, length($static),
 			@$headers;
-		rex_write @_, $static; 
+		$_[4]=$static;
+		&rex_write;#@_, $static; 
 		#return
 	}
 
@@ -940,7 +952,8 @@ sub usac_path {
 sub usac_redirect_see_other {
 	my $url =pop;
 	sub {
-		rex_redirect_see_other @_, $url;
+		$_[4]=$url;
+		&rex_redirect_see_other;#@_, $url;
 	}
 
 }
@@ -948,28 +961,32 @@ sub usac_redirect_see_other {
 sub usac_redirect_found{
 	my $url =pop;
 	sub {
-		rex_redirect_found @_, $url;
+		$_[4]=$url;
+		&rex_redirect_found;@_, $url;
 	}
 }
 
 sub usac_redirect_temporary {
 	my $url =pop;
 	sub {
-		rex_redirect_temporary @_, $url;
+		$_[4]=$url;
+		&rex_redirect_temporary;#@_, $url;
 	}
 }
 
 sub usac_redirect_not_modified {
 	my $url =pop;
 	sub {
-		rex_redirect_not_modified @_, $url;
+		$_[4]=$url;
+		&rex_redirect_not_modified;@_, $url;
 	}
 }
 
 sub usac_redirect_internal {
 	my $url =pop;
 	sub {
-		rex_redirect_internal @_, $url;
+		$_[4]=$url;
+		&rex_redirect_internal;# @_, $url;
 		#rex_write (@_,HTTP_NOT_MODIFIED, [HTTP_LOCATION, $url],"");
 	}
 

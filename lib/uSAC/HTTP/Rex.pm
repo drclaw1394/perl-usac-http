@@ -211,49 +211,56 @@ sub rex_state :lvalue{
 #TODO: "Multiple Choice"=>300,
 
 sub rex_redirect_moved{
-	my $url=pop;
+	my $url=$_[4];
 	$_[2]=HTTP_MOVED_PERMANENTLY;
 	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	rex_write (@_,"");
+	$_[4]="";
+	&rex_write;
 }
 
 sub rex_redirect_see_other{
-	my $url=pop;
+	#my $url=pop;
+	my $url=$_[4];
 	$_[2]=HTTP_SEE_OTHER;
 	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	rex_write (@_,"");
+	$_[4]="";
+	&rex_write;
 }
 
 sub rex_redirect_found {
-	my $url=pop;
+	#my $url=pop;
+	my $url=$_[4];
 	$_[2]=HTTP_FOUND;
 	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-
-	rex_write (@_,"");
+	$_[4]="";
+	&rex_write;
 	
 }
 
 sub rex_redirect_temporary {
-	my $url=pop;
+	my $url=$_[4];
 	$_[2]=HTTP_TEMPORARY_REDIRECT;
 	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
 
-	rex_write (@_,"");
+	$_[4]="";
+	&rex_write;
 	
 }
 sub rex_redirect_permanent {
-	my $url=pop;
+	my $url=$_[4];
 	$_[2]=HTTP_PERMANENT_REDIRECT;
 	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	rex_write (@_,"");
+	$_[4]="";
+	&rex_write;
 	
 }
 
 sub rex_redirect_not_modified {
-	my $url=pop;
+	my $url=$_[4];
 	$_[2]=HTTP_NOT_MODIFIED;
 	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	rex_write (@_,"");
+	$_[4]="";
+	&rex_write;
 }
 
 sub rex_redirect_internal;
@@ -264,34 +271,43 @@ sub rex_error {
 	my $site=$_[0][1][0];
 	say "rex_error called", join ", ", caller;
 	$_[1][method_]="GET";
-	$_[2]=pop//HTTP_NOT_FOUND;	#New return code is appened at end
+	$_[2]//=HTTP_NOT_FOUND;	#New return code is appened at end
 	
 	#Locate applicable site urls to handle the error
-	say "site in rex_error: $site";
+	say "site in rex_error: ".$site->id;
 	say Dumper $site->error_uris;
 
-	my $uri=$site->error_uris->{$_[2]};
-	return rex_redirect_internal @_, $uri if $uri;
+	for($site->error_uris->{$_[2]}){
+		if($_){
+			$_[4]=$_;
+			return &rex_redirect_internal
+		}
+
+	}
+	#return rex_redirect_internal @_, $uri if $uri;
 	
 	#If one wasn't found, then make an ugly one
-	rex_write (@_, $site->id.': Error: '.$_[2]);
+	say @_;
+	$_[4]||=$site->id.': Error: '.$_[2];
+	&rex_write;
+	#rex_write (@_, $site->id.': Error: '.$_[2]);
 
 }
 
 
 sub rex_error_not_found {
-	#$_[2]=HTTP_NOT_FOUND;
-	push @_, HTTP_NOT_FOUND;
+	$_[2]=HTTP_NOT_FOUND;
+	say @_;
 	&rex_error;
 }
 
 sub rex_error_forbidden {
-	push @_, HTTP_FORBIDDEN;
+	$_[2]= HTTP_FORBIDDEN;
 	&rex_error;
 }
 
 sub rex_error_internal_server_error {
-	push @_, HTTP_INTERNAL_SERVER_ERROR;
+	$_[2]=HTTP_INTERNAL_SERVER_ERROR;
 	&rex_error;
 	$_[1][closeme_]->$*=1;
 	$_[1][dropper_](undef);
@@ -321,12 +337,14 @@ sub rex_redirect_internal {
 	#Here we reenter the main processing chain with a  new url, potentiall
 	#new headers and status code
 	undef $_[0];
+	$rex->[recursion_count_]++;
 	Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
 	$rex->[session_]->server->current_cb->(
 		$rex->[host_],			#Internal redirects are to same host
 		join(" ", $rex->@[method_, uri_]),#New method and url
 		$rex,				#Same rex
-		$code,$headers			#New code and headers
+		$code,
+		$headers			#New code and headers
 	);
 	1;
 }
