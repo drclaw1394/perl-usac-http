@@ -21,6 +21,7 @@ my @redirects=qw<
 	>;
 
 my @errors=qw<
+usac_catch_route
 usac_error_not_found
 	usac_error_page
 	usac_error_route
@@ -755,6 +756,10 @@ sub add_middleware {
 
 ########## Error handling
 
+sub usac_catch_route {
+	#Add a route matching all methods and any path	
+	$uSAC::HTTP::Site->add_route([$Any_Method],qr{.*},pop);
+}
 sub usac_error_route {
 	$uSAC::HTTP::Site->add_error_route(@_);
 }

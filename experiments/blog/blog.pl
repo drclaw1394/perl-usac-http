@@ -169,7 +169,7 @@ my $server; $server=usac_server {;
 		};
 
 		usac_error_page 404 => "/error/404";
-		usac_route qr/.*/ => usac_error_not_found;
+		usac_catch_route usac_error_not_found;
 	};
 
 
