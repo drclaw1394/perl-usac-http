@@ -243,7 +243,6 @@ sub _add_route {
 	my $matcher;
 	
 	@hosts=$self->build_hosts;	#List of hosts (as urls) 
-	say "HOSTS for ",join ", ", $self->[id_],@hosts;
         my $bp=$self->built_prefix;                                      #
 
         ####################################################################
@@ -256,7 +255,6 @@ sub _add_route {
         ####################################################################
 
 	push @hosts, "*.*" unless @hosts;
-	say "Detected hosts in add_route", join ", ", @hosts;
 	#$hosts{"*.*"}//= {};
 	Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
 	#$matcher=qr{^$method_matcher $bp$path_matcher};
@@ -307,7 +305,6 @@ sub _add_route {
 				#$pm=$path_matcher;
         			$matcher="$method $bp$path_matcher";
 			}
-			say "Calling add host end point",$host, $matcher,;
 			$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
 			last unless defined $matcher;
 		}
@@ -421,7 +418,7 @@ sub build_hosts {
 	my $parent=$_[0];
 	my @hosts;
 	while($parent) {
-		say $parent;
+		#say $parent;
 		push @hosts, $parent->host->@*;	
 		last if @hosts;		#Stop if next level specified a host
 		$parent=$parent->parent_site;
@@ -606,8 +603,14 @@ sub add_route {
 		$self->_add_route(@_);
 	}
 	elsif(ref($_[0]) eq "Regexp"){
-		unshift @_, "GET";
-		$self->_add_route(@_);
+		if(@_>=3){
+			#method matcher specified
+			$self->_add_route(@_);
+		}
+		else {
+			unshift @_, "GET";
+			$self->_add_route(@_);
+		}
 	}
 	elsif($_[0]=~m|^/|){
 		#starting with a slash, short cut for GET and head
@@ -778,7 +781,6 @@ sub usac_error_page {
 
 sub set_error_page {
 	my $self=shift;
-	say "set error page:", $self;
 	my $bp=$self->built_prefix;
 
 	for my($k, $v)(@_){

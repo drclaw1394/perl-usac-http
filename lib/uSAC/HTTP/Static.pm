@@ -20,9 +20,12 @@ use Cwd;
 use AnyEvent;
 use Sys::Sendfile;
 
+#use uSAC::HTTP ":constants";
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Constants;
+
 
 use Errno qw<EAGAIN EINTR EBUSY>;
 use Exporter 'import';
@@ -42,10 +45,7 @@ use constant KEY_OFFSET=>0;
 use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
 use constant KET_COUNT=>end_-mime_+1;
 use constant RECURSION_LIMIT=>10;
-use POSIX;
-#use IO::FD::DWIM;# ":all";
 use IO::FD;
-use constant POSIX=>undef;
 use constant DISABLE_CACHE=>undef;
 
 sub new {
@@ -224,14 +224,9 @@ sub open_cache {
 		else{
 			$entry[content_encoding_]=[];
 		}
-		if(POSIX){
-			$in_fh=POSIX::open $path,OPEN_MODE|($mode//0) or return;
-		}
-		else{
-			IO::FD::sysopen $in_fh,$path,OPEN_MODE|($mode//0) or return;
-			#say $in_fh;
-			#open $in_fh,"<:mmap", $path or return;
-		}
+		IO::FD::sysopen $in_fh,$path,OPEN_MODE|($mode//0) or return;
+		#say $in_fh;
+		#open $in_fh,"<:mmap", $path or return;
 		$entry[fh_]=$in_fh;
 		Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
 		Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
@@ -248,7 +243,7 @@ sub open_cache {
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
-		my ($matcher, $rex, $code, $out_headers, $read_size, $sendfile, $entry, $no_encoding)=@_;
+		my ($matcher, $rex, $code, $out_headers, $reply, $cb, $read_size, $sendfile, $entry, $no_encoding)=@_;
 		Log::OK::TRACE and log_trace("send file no range");
 		#my $session=$rex->[uSAC::HTTP::Rex::session_];
 
@@ -263,9 +258,9 @@ sub send_file_uri_norange {
 
 		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
 
-		my $reply="";
+		#my $reply="";
 		#process caching headers
-		my $headers=$_[1][uSAC::HTTP::Rex::headers_];#$rex->headers;
+		my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
 		#my $code=HTTP_OK;
 		my $etag="\"$mod_time-$content_length\"";
 
@@ -470,26 +465,15 @@ sub send_file_uri_norange {
 			$reply=""; #reset buffer
                         #NON Send file
 			#
-			if(POSIX){
-				POSIX::lseek $in_fh, $offset,POSIX::SEEK_SET;
-			}
-			else{
-				IO::FD::sysseek $in_fh, $offset, 0;
-			}
+			IO::FD::sysseek $in_fh, $offset, 0;
 
 			my $sz=($content_length-$total);
 			$sz=$read_size if $sz>$read_size;
-			if(POSIX){
-				$total+= $rc=POSIX::read $in_fh, $reply, $sz;
-			}
-			else {
-                        	$total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
-			}
+                        $total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
 			$offset+=$rc;
 
                         #non zero read length.. do the write
-			POSIX and DISABLE_CACHE and $total==$content_length and POSIX::close $in_fh;
-			!POSIX and DISABLE_CACHE and $total==$content_length and IO::FD::close $in_fh;
+			DISABLE_CACHE and $total==$content_length and IO::FD::close $in_fh;
 			$total==$content_length and
 			(@ranges
 				?return rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
@@ -530,12 +514,7 @@ sub send_file_uri_norange {
                         if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
                                 log_error "Static files: READ ERROR from file";
                                 log_error "Error: $!";
-                                if(POSIX){
-					POSIX::close $in_fh;
-				}
-				else {
-					close $in_fh;
-				}
+				IO::FD::close $in_fh;
                                 $rex->[uSAC::HTTP::Rex::dropper_]->(1);
                                 undef $sub;
                         }
@@ -743,7 +722,7 @@ sub usac_file_under {
 				: return &rex_error_not_found;
 
 		#Push any user static headers
-		push $_[3]->@*, @$headers;
+		push $_[HEADER]->@*, @$headers;
 
 		Log::OK::TRACE and log_trace "static: html_root: $html_root";
 
@@ -772,7 +751,7 @@ sub usac_file_under {
 			else {
 				Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
 				#no valid index found so 404
-				rex_error_not_found @_;
+				&rex_error_not_found;# @_;
 				return 1;
 			}
 		}

@@ -100,18 +100,18 @@ my $server; $server=usac_server {;
                 # #                                                                                                            # #
                 # # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; # #
                 # #                                                                                                            # #
-                # usac_route "/static"=>                                                                                         #
-                # gzip()=>deflate()=>                                                                                            #
-                # usac_file_under (                                                                                              #
-                #         #filter=>'txt$',                                                                                       #
-                #         read_size=>4096,                                                                                       #
-                #         #pre_encoded=>[qw<gz>],                                                                                #
-                #         #no_compress=>qr/txt$/,                                                                                #
-                #         do_dir=>1,                                                                                             #
-                #         #indexes=>["index.html"],                                                                              #
-                #         #sendfile=>4096,                                                                                       #
-                #         usac_dirname #  "static"                                                                               #
-                # );                                                                                                             #
+                usac_route "/static"=>
+                gzip()=>deflate()=>
+                usac_file_under (
+                        #filter=>'txt$',
+                        read_size=>4096,
+                        #pre_encoded=>[qw<gz>],
+                        #no_compress=>qr/txt$/,
+                        do_dir=>1,
+                        #indexes=>["index.html"],
+                        #sendfile=>4096,
+                        usac_dirname #  "static"
+                );
                 usac_include usac_path root=>usac_dirname, "admin/usac.pl";                                                    #
                 ##################################################################################################################
 
@@ -164,7 +164,7 @@ my $server; $server=usac_server {;
 		#usac_include "admin/usac.pl";                                                                             #
 	       	usac_error_route "/error/404" => sub {
 				say "ERROR FOR BLOG";
-				$_[4]="CUSTOM ERROR PAGE CONTENT: $_[2]";
+				$_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ".$_[CODE];
 				&rex_write;
 		};
 

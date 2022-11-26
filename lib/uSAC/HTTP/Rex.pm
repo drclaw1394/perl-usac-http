@@ -58,7 +58,9 @@ rex_redirect_temporary
 rex_redirect_not_modified
 
 rex_error_not_found
+rex_error_forbidden 
 rex_error_internal_server_error 
+rex_error_unsupported_media_type 
 
 rex_redirect_internal
 
@@ -305,6 +307,10 @@ sub rex_error_forbidden {
 	$_[2]= HTTP_FORBIDDEN;
 	&rex_error;
 }
+sub rex_error_unsupported_media_type {
+	$_[2]= HTTP_UNSUPPORTED_MEDIA_TYPE;
+	&rex_error;
+}
 
 sub rex_error_internal_server_error {
 	$_[2]=HTTP_INTERNAL_SERVER_ERROR;
@@ -454,7 +460,8 @@ sub usac_multipart_stream {
 				#$session->[uSAC::HTTP::Session::closeme_]=1;
 				$rex->[closeme_]->$*=1;
 
-				rex_write $line,$rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
+
+				rex_write $line, $rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
 				return;
 			}
 			#uSAC::HTTP::Session::push_reader

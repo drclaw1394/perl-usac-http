@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use feature ":all";
 
+use uSAC::HTTP;
 use Data::Dumper;
 use uSAC::HTTP::Site;
 use uSAC::HTTP::Server;
@@ -10,6 +11,7 @@ use uSAC::HTTP::Middleware qw<log_simple>;
 use Template::Plexsite::URLTable;
 use Socket ":all";
 use uSAC::HTTP::Rex;
+use Sort::Key::Multi qw<sskeysort>;
 
 
 say "ADMIN SETUP";
@@ -51,23 +53,24 @@ my $server; $server=usac_server {
 				\%out;
 			} @data;
 			
+			$vars->{fields}->@*=sskeysort {$_->{mac},$_->{if}} $vars->{fields}->@*;
 			#Find out which address is us
-			my $sockaddr=$_[1][uSAC::HTTP::Rex::peer_];
-			(undef,$vars->{peer},undef)=getnameinfo $sockaddr, NI_NUMERICHOST;
+			my $sockaddr=$_[REX][uSAC::HTTP::Rex::peer_];
+			(undef, $vars->{peer}, undef)=getnameinfo $sockaddr, NI_NUMERICHOST;
 
 			#say "PEER IP is $vars->{peer}";	
 			#say "Family is ", sockaddr_family $sockaddr;
 			#say "addr is", unpack_sockaddr_in6 $sockaddr;
 
-			$_[4]=Template::Plex->immediate(undef,\*DATA,$vars);
-			push $_[3]->@*, HTTP_CONTENT_TYPE, "text/html";
+			$_[PAYLOAD]=Template::Plex->immediate(undef,\*DATA,$vars);
+			push $_[HEADER]->@*, HTTP_CONTENT_TYPE, "text/html";
 
 			&rex_write;
 		};
 
 		usac_error_route "/error/404" => sub {
 			say "ERROR FOR BLOG admin";
-			$_[4]="CUSTOM ERROR PAGE CONTENT admin: $_[2]";
+			$_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT admin: $_[CODE]";
 			&rex_write;
 		};
 

@@ -634,7 +634,6 @@ sub rebuild_dispatch {
 		#NOTE: url/path is wrapped in a array
 		#$self->[sites_]{$_}->add_route([$Any_Method], undef, _default_handler);
 
-		say "SITE: $_";
 		for($self->[sites_]{$_}->unsupported->@*){
 			Log::OK::TRACE and log_trace "Adding Unmatched endpoints";
 			$self->add_host_end_point($_->@*);
@@ -644,7 +643,6 @@ sub rebuild_dispatch {
         #Create a special default site for each host that matches any method and uri
         for my $host (keys $self->[host_tables_]->%*) {
 
-		say "Addeing defult: for  $host";
                 my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
                 $site->parent_site=$self;
                 $self->register_site($site);
@@ -796,21 +794,14 @@ sub dump_routes {
 	for my $host (sort keys $self->[host_tables_]->%*){
 		my $table= $self->[host_tables_]{$host};
 		my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
-		say "DUMPING ROUTES FOR $host";
 		#table is hustle table and cache entry
 		for my $entry ($table->[0]->@*){
-			#say Dumper $entry->[1];
-			say $entry->[1];
 			my $site=$entry->[1][0];
-			#say $site->host->@*;
-			say "entry: ".$entry->[1]->@*;
-			say join "lk, ", $entry->[1]->@*;
-			say "Match: ".$entry->[0], "Type: ".$entry->[2], ;
 			$tab->load([$entry->[0], $entry->[2], $site->id, $site->prefix, join "\n",$host]);
 
 			#say join ", ", $entry->[0], $entry->[1][0]->id;
 		}
-		say $tab->table;
+		Log::OK::INFO and log_info join "", $tab->table;
 
 	}
 
