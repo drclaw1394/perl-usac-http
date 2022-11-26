@@ -124,6 +124,44 @@ my $server; $server=usac_server {;
                 #         usac_path root =>usac_dirname, "." #
                 # );                                         #
                 ##############################################
+		
+		usac_route POST=>"/upload\$"=>usac_data_stream
+		sub {
+			my $cb=sub {say "CALLBACK";};
+			sub {
+				say join ", ", @_;
+				say "STREAMING DATA";
+				$_[CB]&&=$cb;
+				&rex_write;
+			}
+		};
+		usac_route POST=>"/upload2"=>usac_urlencoded_stream sub {
+			sub {
+				$_[CB]=undef;
+				&rex_write;
+			}
+		};
+		usac_route POST=>"/upload3"=>usac_multipart_stream sub {
+			my $cb=sub {say "CALLBACK multipart";};
+			my $prev;
+			sub {
+				if($prev != $_[CB]){
+					say "NEW SECTION====";
+					$prev=$_[CB];
+				}
+				say "in multipart handler";
+				$_[CB]&&=$cb;
+				&rex_write;
+
+			}
+		};
+		usac_route POST=>"/data_slurp"=>usac_data_slurp sub {
+			say "data Slurp route";
+			$_[PAYLOAD]="GOT DATA";
+			&rex_write;
+			
+		};
+
                 # usac_route "noreply"=>sub {                                                                                #
                 #                                                                                                            #
                 # };                                                                                                         #

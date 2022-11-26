@@ -22,6 +22,7 @@ use constant LF => "\015\012";
 use uSAC::HTTP::Session;
 #use uSAC::HTTP::Server;
 use uSAC::HTTP::Cookie qw<:all>;
+use uSAC::HTTP::Constants;
 
 #use uSAC::HTTP::Static;
 use AnyEvent;
@@ -292,7 +293,6 @@ sub rex_error {
 	say @_;
 	$_[4]||=$site->id.': Error: '.$_[2];
 	&rex_write;
-	#rex_write (@_, $site->id.': Error: '.$_[2]);
 
 }
 
@@ -466,8 +466,11 @@ sub usac_multipart_stream {
 			}
 			#uSAC::HTTP::Session::push_reader
 			
+			$_[CB]=$cb->();
 			$session->push_reader(
-				make_form_data_reader @_, $session, $cb->()
+				#make_form_data_reader @_, $session, $cb->()
+
+				&make_form_data_reader # @_, $session, $cb->()
 			);
 
 			Log::OK::INFO and log_info "multipart stream";
@@ -493,32 +496,41 @@ sub usac_data_stream{
 
 	sub {
 		#my $line=shift;
-		my $matcher=$_[0];
-		my $rex=$_[1];#shift;	#rex object
-		my $code =$_[2];
-		my $out_header=$_[3];
+		#my $matcher=$_[0];
+		#my $rex=$_[1];#shift;	#rex object
+		#my $code =$_[2];
+		#my $out_header=$_[3];
 		my $header={};	#Header from parsing this input
 
-		my $session=$rex->[session_];
+		my $session=$_[REX][session_];
 		my @err_res;
-		for($rex->[headers_]){
+		for($_[REX][headers_]){
 			#Wrap regex to prevent captures being destroyed
 			if($_->{CONTENT_TYPE}!~/$mime/){
-				@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
+				#@err_res=(HTTP_UNSUPPORTED_MEDIA_TYPE, [], "Must match $mime");
+				$_[CODE]=HTTP_UNSUPPORTED_MEDIA_TYPE;
+				$_[HEADER]=[];
+				$_[PAYLOAD]="Must match $mime";
 			}
 
 			elsif(defined $upload_limit  and $_->{CONTENT_LENGTH} > $upload_limit){
 				@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
+				$_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
+				$_[HEADER]=[];
+				$_[PAYLOAD]="Limit:  $upload_limit";
 			}
 
 			else{
 
 				#uSAC::HTTP::Session::push_reader
 				Log::OK::TRACE and log_trace "PUSHING FORM READER\n";
+				$_[PAYLOAD]=$header;
+				$_[CB]=$cb->();
 				$session->push_reader(
 
 					#Creates a reader/parser and  merges config with runtime
-					make_form_urlencoded_reader $matcher, $rex, $code, $out_header, $header, $cb->()
+					#make_form_urlencoded_reader $matcher, $rex, $code, $out_header, $header, $cb->()
+					&make_form_urlencoded_reader
 				);
 				Log::OK::TRACE and log_trace "After PUSHING FORM READER\n";
 
@@ -526,12 +538,12 @@ sub usac_data_stream{
 				if(defined($_->{EXPECT})){
 					#issue a continue response	
 					my $reply= "HTTP/1.1 ".HTTP_CONTINUE.LF.LF;
-					$rex->[uSAC::HTTP::Rex::write_]->($reply);
+					$_[REX][uSAC::HTTP::Rex::write_]->($reply);
 				}
 
 				Log::OK::INFO and log_info "data stream";
 				#$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
-				$_[1][in_progress_]->$*=1;
+				$_[REX][in_progress_]->$*=1;
 
 				$session->pump_reader;
 				return;
@@ -539,8 +551,8 @@ sub usac_data_stream{
 		}
 
 		#$session->[uSAC::HTTP::Session::closeme_]=1;
-		$_[1][closeme_]->$*=1;
-		rex_write @_, @err_res;#$line,$rex,@err_res; 
+		$_[REX][closeme_]->$*=1;
+		&rex_write;#@_, @err_res;#$line,$rex,@err_res; 
 	}
 }
 
@@ -744,9 +756,10 @@ sub usac_data_slurp{
 			state ($handle, $name);
 			state $mem="";
 			my $wc;
-			if( $header != $_[3]){
+
+			if( $header != $_[CB]){
 				#first chunk 
-				$header=$_[3];
+				$header=$_[CB];
 				close $handle if $handle;
 				$handle=undef;
 				if($path){
@@ -773,24 +786,25 @@ sub usac_data_slurp{
 				}
 			}
 			if($path or $tmp_dir){
-				$wc=syswrite $handle, $_[2];
+				$wc=syswrite $handle, $_[PAYLOAD];
 				unless($wc){
 					rex_error_internal_server_error $matcher, $rex;
 				}
 
 			}
 			else {
-				$mem.=$_[2];
+				$mem.=$_[PAYLOAD];
 			}
+
 			#TODO: error checking and drop connection on write error
-			if($_[4]){
+			unless($_[CB]){
 				unless($path or $tmp_dir){
 					Log::OK::TRACE and log_trace "Callback with memory";
-					$cb->($matcher, $rex, $code, $head, $mem,1)
+					$cb->($matcher, $rex, $code, $head, $mem, $header)
 				}
 				else {
 					Log::OK::TRACE and log_trace "Callback with file";
-					$cb->($matcher, $rex, $code, $head, $name,1)
+					$cb->($matcher, $rex, $code, $head, $name, $header)
 				}
 				$mem="";
 				$header=0;
