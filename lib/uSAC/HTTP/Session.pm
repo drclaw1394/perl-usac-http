@@ -67,14 +67,6 @@ method init {
 	\my @zombies= $zombies;
 
 	#make reader
-        #######################################################
-        # $_sr=uSAC::IO::SReader->create(fh=>$_fh);           #
-        # $_sr->max_read_size=4096*16;                        #
-        # ($_sr->on_eof = sub {$_closeme=1; $_dropper->(1)}); #
-        # ($_sr->on_error=$_sr->on_eof);                      #
-        # $_sr->timing(\$_time, \$Time);                      #
-        #######################################################
-
         my $s=sub {$_closeme=1; $_dropper->(1)};
         $_sr=uSAC::IO::SReader->create(
                 fh=>$_fh,
@@ -121,7 +113,7 @@ method init {
 
 		#$self->[write_queue_]->@*=();
 		#If the dropper was called with an argument that indicates no error
-		if(@_ and @zombies < 100){
+		if($_[0] and @zombies < 100){
 			# NOTE: Complete reuses of a zombie may still be causing corruption
 			# Suspect that the rex object is not being release intime 
 			# when service static files.
@@ -138,6 +130,7 @@ method init {
 			$_dropper=undef;      #
 			undef $_sr->on_eof;            #
 			undef $_sr->on_error;          #
+			undef $_sr->on_read;
 			#                               #
 			 undef $_sw->on_error; #
 			# undef $self->[sw_];           #

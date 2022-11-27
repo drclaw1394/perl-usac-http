@@ -62,6 +62,7 @@ my $server; $server=usac_server {;
 	usac_sub_product "blog";
 	#usac_middleware log_simple dump_headers=>1;
 	
+	usac_middleware dump_headers=>1, log_simple;
 	my $site; $site=usac_site {
 		usac_id "blog";
 		usac_host "127.0.0.1:8082";
@@ -69,7 +70,6 @@ my $server; $server=usac_server {;
 		usac_host "192.168.1.102:8084";
 
 
-		#usac_middleware log_simple;
 		#
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#

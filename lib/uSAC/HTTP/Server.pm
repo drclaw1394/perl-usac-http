@@ -39,6 +39,7 @@ no warnings "experimental";
 use parent 'uSAC::HTTP::Site';
 use uSAC::HTTP::Site;
 use uSAC::HTTP::Code ":constants";
+use uSAC::HTTP::Constants;
 
 use Hustle::Table;		#dispatching of endpoints
 
@@ -115,8 +116,8 @@ sub _default_handler {
 		state $sub=sub {
 			#Log::OK::TRACE and log_trace "DEFAULT HANDLER FOR TABLE";
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
-			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[1]->headers->%*;
-			$_[4]="EEREREER";
+			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[REX]->headers->%*;
+			$_[PAYLOAD]="EEREREER";
 			say "before not found";
 			say @_;
 			&rex_error_not_found;

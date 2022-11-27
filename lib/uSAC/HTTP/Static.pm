@@ -32,7 +32,6 @@ use Exporter 'import';
 our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_file_under list_dir>;
 our @EXPORT=@EXPORT_OK;
 
-#use constant LF => "\015\012";
 #my $path_ext=	qr{\.([^.]*)$}ao;
 
 use constant  READ_SIZE=>4096;

@@ -37,7 +37,6 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Header qw<:constants>;
 use constant MAX_READ_SIZE => 128 * 1024;
 
-#our $LF = "\015\012";
 
 use constant LF=>"\015\012";
 
@@ -72,7 +71,7 @@ sub parse_form {
 #
 #
 use enum (qw<MODE_SERVER MODE_CLIENT>);
-use enum (qw<STATE_REQUEST STATE_RESPONSE STATE_HEADERS>);
+use enum (qw<STATE_REQUEST STATE_RESPONSE STATE_HEADERS STATE_ERROR>);
 
 #make a reader which is bound to a session
 sub make_reader{
@@ -126,29 +125,37 @@ sub make_reader{
 				
 				if($pos3>=0){
 					($method,$uri,$version)=split " ", substr($buf,0,$pos3);
-					#$uri=uri_decode $uri;
-					#uri_decode_inplace $uri;
-					$uri=url_decode_utf8 $uri;
-					#end of line found
+					
+					if($uri and $version){
+						$uri=url_decode_utf8 $uri;
+						#end of line found
 						$state   = STATE_HEADERS;
 						%h=();
 						#++$seq;
 
 						$buf=substr $buf, $pos3+2;
-						redo;
+					}
+					else {
+						$state= STATE_ERROR; 
+					}
+
+					redo;
 				}
 				else {
 					#Exit the loop as we nee more data pushed in
 					#
-					if( length($buf) >2048){
+					if( length($buf) >MAX_READ_SIZE){
 						#TODO: create a rex a respond with bad request
 
 						#$r->[uSAC::HTTP::Session::closeme_]=1;
 						#$r->[uSAC::HTTP::Session::dropper_]->() 
 						#$r->closeme=1;
 						#$r->dropper->();
-						$closeme=1;
-						$dropper->();
+						$state=STATE_ERROR;
+						redo;
+						#$closeme=1;
+						#$dropper->();
+						
 					}
 					last;
 				}
@@ -161,26 +168,13 @@ sub make_reader{
 				while () {
 					$pos3=index $buf, LF;
 					if($pos3>0){
-						#$index=index substr($buf,0,$pos3), ":";
-						#$k=substr($buf,0,$index);
-						#$val=substr($buf, $index+1,$pos3-$index);
 						($k,$val)=split ":", substr($buf,0,$pos3), 2;
 						#say $k,", ",$val;
 						$k=~tr/-/_/;
 						$k=uc $k;
-						#my $val=
 						$val=~tr/\t //d;
 						\my $e=\$h{$k};
 						$e?$e.=",$val":$e=$val;
-                                                #######################################
-                                                # if($e){                             #
-                                                #         $e.=",$val";                #
-                                                # }                                   #
-                                                # else {                              #
-                                                #         $e=$val;                    #
-                                                #         $host=$val if $k eq "HOST"; #
-                                                # }                                   #
-                                                #######################################
 
 						$host=$val if !$host and $k eq "HOST";
 
@@ -201,7 +195,9 @@ sub make_reader{
 							
 							#return $r->[uSAC::HTTP::Session::dropper_]->();
 							#return $r->dropper->();
-							return $dropper->();
+							$state=STATE_ERROR;
+							redo;
+							#return $dropper->();
                                                 }
                                                 warn "Need more";
                                                 return;
@@ -238,7 +234,13 @@ sub make_reader{
 				#return;
 
 			}
+			elsif($state==STATE_ERROR){
+					$len=0;
+						$closeme=1;
+						$dropper->();
+			}
 			else {
+				#Error state
 			}
 		}
 	};

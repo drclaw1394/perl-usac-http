@@ -290,7 +290,6 @@ sub rex_error {
 	#return rex_redirect_internal @_, $uri if $uri;
 	
 	#If one wasn't found, then make an ugly one
-	say @_;
 	$_[PAYLOAD]||=$site->id.': Error: '.$_[CODE];
 	&rex_write;
 
@@ -306,6 +305,7 @@ sub rex_error_forbidden {
 	$_[CODE]= HTTP_FORBIDDEN;
 	&rex_error;
 }
+
 sub rex_error_unsupported_media_type {
 	$_[CODE]= HTTP_UNSUPPORTED_MEDIA_TYPE;
 	&rex_error;
