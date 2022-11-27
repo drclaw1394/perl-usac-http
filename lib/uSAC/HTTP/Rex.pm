@@ -273,16 +273,16 @@ sub rex_redirect_internal;
 sub rex_error {
 	my $site=$_[0][1][0];
 	say "rex_error called", join ", ", caller;
-	$_[1][method_]="GET";
-	$_[2]//=HTTP_NOT_FOUND;	#New return code is appened at end
+	$_[REX][method_]="GET";
+	$_[CODE]//=HTTP_NOT_FOUND;	#New return code is appened at end
 	
 	#Locate applicable site urls to handle the error
 	say "site in rex_error: ".$site->id;
 	say Dumper $site->error_uris;
 
-	for($site->error_uris->{$_[2]}){
+	for($site->error_uris->{$_[CODE]}){
 		if($_){
-			$_[4]=$_;
+			$_[PAYLOAD]=$_;
 			return &rex_redirect_internal
 		}
 
@@ -291,24 +291,23 @@ sub rex_error {
 	
 	#If one wasn't found, then make an ugly one
 	say @_;
-	$_[4]||=$site->id.': Error: '.$_[2];
+	$_[PAYLOAD]||=$site->id.': Error: '.$_[CODE];
 	&rex_write;
 
 }
 
 
 sub rex_error_not_found {
-	$_[2]=HTTP_NOT_FOUND;
-	say @_;
+	$_[CODE]=HTTP_NOT_FOUND;
 	&rex_error;
 }
 
 sub rex_error_forbidden {
-	$_[2]= HTTP_FORBIDDEN;
+	$_[CODE]= HTTP_FORBIDDEN;
 	&rex_error;
 }
 sub rex_error_unsupported_media_type {
-	$_[2]= HTTP_UNSUPPORTED_MEDIA_TYPE;
+	$_[CODE]= HTTP_UNSUPPORTED_MEDIA_TYPE;
 	&rex_error;
 }
 
@@ -563,24 +562,42 @@ sub usac_urlencoded_stream {
 	usac_data_stream %options, $cb;
 }
 
+=head3 usac_form_stream
+
+Easy way to handle both streaming multipart and url encoded data. Based on the
+MIME type, the appropriate handler is called
+
+=cut
+
 #uses handle_upload or  usac_multipart_stream setup for
 #html forms
 sub usac_form_stream {
 	#my ($cb)=@_;
-	my $multi=  usac_multipart_stream @_;
-	my $url= usac_urlencoded_stream @_;
+	my $multi=  &usac_multipart_stream;
+	my $url= &usac_urlencoded_stream;
 	sub{
-		for ($_[1][headers_]{CONTENT_TYPE}){
-			&$multi  and return if /multipart\/form-data/;
-			&$url  and return if 'application/x-www-form-urlencoded';
-			rex_write $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
+		for ($_[REX][headers_]{CONTENT_TYPE}){
+			return &$multi  if m{multipart/form-data};
+			return &$url  if m{application/x-www-form-urlencoded};
+			$_[PAYLOAD]="multipart/form-data or application/x-www-form-urlencoded required";
+			return &rex_error_unsupported_media_type;
+			#rex_write $_[0],$_[1], HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/form-data or application/x-www-form-urlencoded required";
 		}
 	}
 }
 
-#process urlencoded form
-#Return a set of kv pairs
-#Last item is $cb
+=head3 usac_urlencoded_slurp
+
+Accumulates a url encoded data HTTP/1.1 body. Calls the application via
+callback when the accumuated payload is complete. Returns the fields parsed
+PAYLOAD and the part header in CB.
+
+Unlike streaming routines this always returns a true value for CB.
+
+If the accumuated data is requred, use C<usac_data_slurp> instead.
+
+=cut
+
 sub usac_urlencoded_slurp{
 	my $cb=pop;
 	#The actual sub called
@@ -601,24 +618,28 @@ sub usac_urlencoded_slurp{
 
 			state $part_header=0;
 			state $fields={};
+			state $payload="";
 
-			if($part_header != $_[4]){
-				#new part
-				local $,=", ";
-				$part_header=$_[4];
+			unless($_[CB]){
+				#that was the last part
+				Log::OK::TRACE and log_trace "Last part, send to application";
+				$_[PAYLOAD]=$payload;
 				$fields=&parse_form_params;
+				Log::OK::TRACE and log_trace  Dumper $fields;
+				$cb->($usac, $rex, $code, $out_head, $fields, $part_header);
+				$part_header=undef;
+				$fields={};	#reset 
+				return;
+			}
+			say "NOT LAST PART...";
+			if($part_header != $_[CB]){
+				#new part
+				$part_header=$_[CB];
+				$payload.=$_[PAYLOAD];
 
 				#test for file
 			}
 
-			if($_[4]){
-				#that was the last part
-				Log::OK::TRACE and log_trace "Last part, send to application";
-				Log::OK::TRACE and log_trace  Dumper $fields;
-				$cb->($usac, $rex, $code, $out_head, $fields,1);
-				$part_header=0;
-				$fields={};	#reset 
-			}
 		}
 	}
 }
@@ -648,10 +669,20 @@ sub usac_multipart_slurp{
 			state $fields={};	#
 
 			state ($handle,$name);
-			if($part_header != $_[3]){
+
+			unless($_[CB]){
+				#that was the last part
+				$cb->($usac, $rex, $code, $head, $part_header, $fields);
+				$part_header=0;
+				$fields={};	#Reset after callback
+				$kv={};		#Reset after callback
+				return;
+			}
+
+			if($part_header != $_[CB]){
 				#new part
 				local $,=", ";
-				$part_header=$_[3];
+				$part_header=$_[CB];
 				close $handle if $handle;
 				$name=$handle=undef;
 				{
@@ -667,19 +698,12 @@ sub usac_multipart_slurp{
 				}
 				else {
 					#just a regular form field
-					$fields->{$kv->{name}}=$_[2];
+					$fields->{$kv->{name}}=$_[PAYLOAD];
 				}
 			}
 
 			#write to file only if its a file
-			my $wc=syswrite $handle, $_[2] if $handle;
-			if($_[4]){
-				#that was the last part
-				$cb->($usac, $rex, $code, $head, $fields,1);
-				$part_header=0;
-				$fields={};	#Reset after callback
-				$kv={};		#Reset after callback
-			}
+			my $wc=syswrite $handle, $_[PAYLOAD] if $handle;
 		}
 	}
 }
@@ -747,7 +771,6 @@ sub usac_data_slurp{
 		Log::OK::INFO and log_info "wrapper...";
 		sub {
 			Log::OK::TRACE and log_trace "data_slurp callback";
-			sleep 10;
 			my $matcher=$_[0];
 			my $rex=$_[1];
 			my $code=$_[2];
@@ -757,8 +780,27 @@ sub usac_data_slurp{
 			state $mem="";
 			my $wc;
 
+			unless($_[CB]){
+				say "END MARKER";
+				unless($path or $tmp_dir){
+					Log::OK::TRACE and log_trace "Callback with memory";
+					$cb->($matcher, $rex, $code, $head, $mem, $header)
+				}
+				else {
+					Log::OK::TRACE and log_trace "Callback with file";
+					$cb->($matcher, $rex, $code, $head, $name, $header)
+				}
+				#Reset
+				$header=undef;
+				$mem="";
+				$name=undef;
+				$handle=undef;
+				return;
+			}
+			say "NON END MARKER";
+
 			if( $header != $_[CB]){
-				#first chunk 
+				#new chunk 
 				$header=$_[CB];
 				close $handle if $handle;
 				$handle=undef;
@@ -797,20 +839,6 @@ sub usac_data_slurp{
 			}
 
 			#TODO: error checking and drop connection on write error
-			unless($_[CB]){
-				unless($path or $tmp_dir){
-					Log::OK::TRACE and log_trace "Callback with memory";
-					$cb->($matcher, $rex, $code, $head, $mem, $header)
-				}
-				else {
-					Log::OK::TRACE and log_trace "Callback with file";
-					$cb->($matcher, $rex, $code, $head, $name, $header)
-				}
-				$mem="";
-				$header=0;
-				$name=undef;
-				$handle=undef;
-			}
 
 			#}
 		}
@@ -828,15 +856,15 @@ sub parse_form_params {
 	#1=>rex
 	#2=>code
 	#3=>out_header
-	#4=>section header
-	#5=>data
+	#4=>payload
+	#5=>section header
 	#
 	#parse the fields	
 	for ($rex->[headers_]{CONTENT_TYPE}){
 		if(/multipart\/form-data/){
 			#parse content disposition (name, filename etc)
 			my $kv={};
-			for(map tr/ //dr, split ";", $_[4]->{CONTENT_DISPOSITION}){
+			for(map tr/ //dr, split ";", $_[CB]->{CONTENT_DISPOSITION}){
 				my ($key, $value)=split "=";
 				$kv->{$key}=defined($value)?$value=~tr/"//dr : undef;
 			}
@@ -844,7 +872,7 @@ sub parse_form_params {
 		}
 		elsif($_ eq 'application/x-www-form-urlencoded'){
 			my $kv={};
-			for(split "&", url_decode_utf8 $_[5]){
+			for(split "&", url_decode_utf8 $_[PAYLOAD]){
 				my ($key,$value)=split "=";
 				$kv->{$key}=$value;
 			}

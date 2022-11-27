@@ -143,7 +143,7 @@ my $server; $server=usac_server {;
 		};
 		usac_route POST=>"/upload3"=>usac_multipart_stream sub {
 			my $cb=sub {say "CALLBACK multipart";};
-			my $prev;
+			my $prev=0;
 			sub {
 				if($prev != $_[CB]){
 					say "NEW SECTION====";
@@ -155,9 +155,47 @@ my $server; $server=usac_server {;
 
 			}
 		};
+
+		usac_route POST=>"/form_stream"=>usac_form_stream sub {
+			say "======;lka;k;lkasdfasdf";
+			my $cb=sub {say "CALLBACK FROM STREAM";};
+			my $prev=0;
+			sub {
+				if($prev != $_[CB]){
+					say "NEW SECTION====";
+					$prev=$_[CB];
+				}
+				say "in multipart handler";
+				$_[CB]&&=$cb;
+				&rex_write;
+
+			}
+		};
+
 		usac_route POST=>"/data_slurp"=>usac_data_slurp sub {
 			say "data Slurp route";
+			say join ", ", @_;
 			$_[PAYLOAD]="GOT DATA";
+			say Dumper $_[CB];
+			$_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";};
+			&rex_write;
+			
+		};
+		usac_route POST=>"/url_slurp"=>usac_urlencoded_slurp sub {
+			say "URL encoded Slurp route";
+			say join ", ", @_;
+			$_[PAYLOAD]="GOT DATA";
+			say Dumper $_[CB];
+			$_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";};
+			&rex_write;
+			
+		};
+		usac_route POST=>"/multi_slurp"=>usac_multipart_slurp sub {
+			say "multipart Slurp route";
+			say join ", ", @_;
+			$_[PAYLOAD]="GOT DATA";
+			say Dumper $_[CB];
+			$_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";};
 			&rex_write;
 			
 		};

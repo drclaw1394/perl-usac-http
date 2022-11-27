@@ -260,7 +260,7 @@ sub make_reader{
 sub make_form_data_reader {
 	use integer;
 
-	my ($usac,$rex,$code,$out_header,$payload,$cb)=@_;	
+	my ($usac, $rex, $code, $out_header, $payload, $cb)=@_;	
 	my $session=$rex->session;
 
 
@@ -318,7 +318,7 @@ sub make_form_data_reader {
 						$buf=substr $buf, $processed;
 						$processed=0;
 						$session->pop_reader;
-						$cb->($usac, $rex, $code, $out_header, undef, undef);
+						$cb->($usac, $rex, $code, $out_header, my $a="", my $b=0);
 						return;
 					}
 					else{
@@ -417,7 +417,7 @@ sub make_form_urlencoded_reader {
 	sub {
 		\my $buf=\$_[0];
 		
-		\my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];	#
+		\my %h=$rex->headers;
 
 		my $len =
 		$header->{CONTENT_LENGTH}=		#copy header to part header
@@ -436,7 +436,7 @@ sub make_form_urlencoded_reader {
 			$session->pop_reader;
 			$processed=0;
 			$header=undef; #Set the header to undef for subsequent  calls
-			$cb->($usac, $rex, $code, $out_header, undef, undef);
+			$cb->($usac, $rex, $code, $out_header, my $a="", my $b=0);
 		}
 
 	}
