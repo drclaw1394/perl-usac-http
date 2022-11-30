@@ -112,7 +112,7 @@ require uSAC::HTTP::Middleware;
 #		0     ,	 1 ,	2,	3,    4,  5
 sub rex_write{
 	my $session=$_[1]->[session_];
-	if($_[3]){
+	if($_[HEADER]){
 		#\my @h=$_[3];
 
 
@@ -120,14 +120,13 @@ sub rex_write{
 		Log::OK::TRACE and log_trace "REX: Doing rex write====";
 		#Log::OK::TRACE and log_trace "REX: close me: ".$session->[uSAC::HTTP::Session::closeme_];
 		#$session->[uSAC::HTTP::Session::in_progress_]=1;
-		$_[1][in_progress_]->$*=1;
+		$_[REX][in_progress_]->$*=1;
 
 		#Tell the other end the connection will be closed
-		push $_[3]->@*, HTTP_CONNECTION, "close" if($_[1][closeme_]->$*);
+		push $_[HEADER]->@*, HTTP_CONNECTION, "close" if($_[REX][closeme_]->$*);
 
 		#Hack to get HTTP/1.0 With keepalive working
-		push $_[3]->@*, HTTP_CONNECTION, "Keep-Alive" if($_[1][version_] eq "HTTP/1.0" and !$_[1][closeme_]->$*);
-
+		push $_[HEADER]->@*, HTTP_CONNECTION, "Keep-Alive" if($_[REX][version_] eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
 	}
 
 
@@ -160,10 +159,10 @@ sub uri_stripped {
 
 #Returns parsed query parameters. If they don't exist, they are parse first
 sub query_params {
-	unless($_[1][query_]){
+	unless($_[0][query_]){
 		#NOTE: This should already be decoded so no double decode
 		#$_[1][query_]={};
-		for ($_[1][query_string_]){
+		for ($_[0][query_string_]){
 			#tr/ //d;
 
                         ##############################################
@@ -173,11 +172,15 @@ sub query_params {
                         #                                            #
                         # }                                          #
                         ##############################################
-			$_[1][query_]->%*=map ((split /=/a)[0,1], split /&/a);
+			$_[0][query_]->%*=map ((split /=/a)[0,1], split /&/a);
 		}
 	}
 
-	$_[1][query_];
+	$_[0][query_];
+}
+
+sub rex_query_params{
+	$_[REX]->query_params;	
 }
 
 #Builds a url based on the url of the current site/group
@@ -391,7 +394,7 @@ sub rex_reply_text {
 }
 
 sub rex_captures {
-	$_[1][captures_]
+	$_[REX][captures_]
 }
 
 
@@ -915,7 +918,6 @@ sub parse_query_params_old {
 	 
 
 *rex_parse_form_params=*parse_form_params;
-*rex_query_params=*query_params;
 
 
 1;

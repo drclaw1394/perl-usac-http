@@ -130,7 +130,7 @@ method init {
 			$_dropper=undef;      #
 			undef $_sr->on_eof;            #
 			undef $_sr->on_error;          #
-			undef $_sr->on_read;
+			#undef $_sr->on_read;
 			#                               #
 			 undef $_sw->on_error; #
 			# undef $self->[sw_];           #

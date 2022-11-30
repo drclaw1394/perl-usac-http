@@ -744,7 +744,9 @@ sub usac_file_under {
 			if($do_dir){
 				Log::OK::TRACE and log_trace "Static: Listing dir $p";
 				#dir listing
-				$list_dir->(@_, $p);
+        $_[PAYLOAD]=$p;
+        &$list_dir;
+        #$list_dir->(@_, $p);
 				return 1;
 			}
 			else {

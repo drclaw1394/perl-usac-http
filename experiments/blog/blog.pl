@@ -26,6 +26,7 @@ use uSAC::HTTP::State::UUID qw<state_uuid>;
 use Socket ":all";
 use Net::ARP;
 
+use MyApp;
 
 
 
@@ -112,6 +113,7 @@ my $server; $server=usac_server {;
                         #sendfile=>4096,
                         usac_dirname #  "static"
                 );
+
                 usac_include usac_path root=>usac_dirname, "admin/usac.pl";                                                    #
                 ##################################################################################################################
 
@@ -135,12 +137,14 @@ my $server; $server=usac_server {;
 				&rex_write;
 			}
 		};
+
 		usac_route POST=>"/upload2"=>usac_urlencoded_stream sub {
 			sub {
 				$_[CB]=undef;
 				&rex_write;
 			}
 		};
+
 		usac_route POST=>"/upload3"=>usac_multipart_stream sub {
 			my $cb=sub {say "CALLBACK multipart";};
 			my $prev=0;
@@ -172,24 +176,34 @@ my $server; $server=usac_server {;
 			}
 		};
 
-		usac_route POST=>"/data_slurp"=>usac_data_slurp sub {
-			say "data Slurp route";
-			say join ", ", @_;
-			$_[PAYLOAD]="GOT DATA";
-			say Dumper $_[CB];
-			$_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";};
-			&rex_write;
-			
-		};
-		usac_route POST=>"/url_slurp"=>usac_urlencoded_slurp sub {
-			say "URL encoded Slurp route";
-			say join ", ", @_;
-			$_[PAYLOAD]="GOT DATA";
-			say Dumper $_[CB];
-			$_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";};
-			&rex_write;
-			
-		};
+		#usac_route POST=>"/data_slurp" => usac_data_slurp sub {
+		usac_route POST=>"/data_slurp" => MyApp::data_slurp;
+                ###############################################################
+                # usac_data_slurp sub {                                       #
+                #         say "data Slurp route";                             #
+                #         say join ", ", @_;                                  #
+                #         $_[PAYLOAD]="GOT DATA";                             #
+                #         say Dumper $_[CB];                                  #
+                #         $_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";}; #
+                #         &rex_write;                                         #
+                #                                                             #
+                # };                                                          #
+                ###############################################################
+
+		#usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => usac_urlencoded_slurp sub {
+		usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => MyApp::url_slurp;
+                #########################################################
+                # usac_urlencoded_slurp sub {                           #
+                #         say "URL encoded Slurp route";                #
+                #         say Dumper $_[REX]->query_params;             #
+                #         say "CAPTURES: ".Dumper &rex_captures;        #
+                #         say join ", ", @_;                            #
+                #         @_[PAYLOAD, CB]=(Dumper($_[PAYLOAD]), undef); #
+                #         &rex_write;                                   #
+                #                                                       #
+                # };                                                    #
+                #########################################################
+
 		usac_route POST=>"/multi_slurp"=>usac_multipart_slurp sub {
 			say "multipart Slurp route";
 			say join ", ", @_;

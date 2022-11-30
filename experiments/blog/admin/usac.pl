@@ -37,6 +37,8 @@ my $server; $server=usac_server {
 		my $vars={fields=>[], peer=>undef};
 
 		usac_route "/about" => sub {
+			#Model
+			#######
 			my @data=`arp -an`;
 			$vars->{fields}->@*=map {
 				my %out;
@@ -53,15 +55,15 @@ my $server; $server=usac_server {
 				\%out;
 			} @data;
 			
+			#Controller
+			#######
 			$vars->{fields}->@*=sskeysort {$_->{mac},$_->{if}} $vars->{fields}->@*;
 			#Find out which address is us
 			my $sockaddr=$_[REX][uSAC::HTTP::Rex::peer_];
 			(undef, $vars->{peer}, undef)=getnameinfo $sockaddr, NI_NUMERICHOST;
 
-			#say "PEER IP is $vars->{peer}";	
-			#say "Family is ", sockaddr_family $sockaddr;
-			#say "addr is", unpack_sockaddr_in6 $sockaddr;
-
+			#View/render
+			###########
 			$_[PAYLOAD]=Template::Plex->immediate(undef,\*DATA,$vars);
 			push $_[HEADER]->@*, HTTP_CONTENT_TYPE, "text/html";
 
