@@ -76,10 +76,10 @@ sub log_simple {
 
 sub log_simple_in {
 	my %options=@_;
-	my $dump_headers=$options{dump_headers};
 
-	my $dump_capture=$options{dump_capture};
+  my $dump_headers=$options{dump_headers};
 
+  my $dump_capture=$options{dump_capture};
 	#Header processing sub
 	sub {
 		my $inner_next=shift;	#This is the next mw in the chain
@@ -87,13 +87,15 @@ sub log_simple_in {
 			my $time=time;
 			package uSAC::HTTP::Rex {
 				say STDERR "\n---->>>";
-				say STDERR "Arraval time:		".$time;
+				say STDERR "Arraval time:		$time";
 				say STDERR "Host: 			$_[1][host_]";
+				say STDERR "Method:       $_[1][method_]";
 				say STDERR "Original matched URI: 	$_[1][uri_]";
 				say STDERR "Site relative URI:	$_[1][uri_stripped_]";
 				say STDERR "Matched for site:	".($_[0][1][0]->id//"n/a");
 				say STDERR "Hit counter:		$_[0][1][4]";
 				say STDERR "Captures:		".join ", ",$_[1][captures_]->@* if $dump_capture;
+        say STDERR "Headers:" if $dump_headers;
 				say STDERR Dumper $_[1]->headers if $dump_headers;
 			}
 			return &$inner_next;		#alway call next. this is just loggin

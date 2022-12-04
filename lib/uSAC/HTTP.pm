@@ -4,6 +4,12 @@ use feature qw<say state refaliasing>;
 use utf8;
 use warnings;
 use version; our $VERSION=version->declare("v0.1");
+use Log::ger;
+use Log::OK {
+	lvl=>"info",
+	opt=>"verbose",
+};
+
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Site;
 use uSAC::HTTP::Static;

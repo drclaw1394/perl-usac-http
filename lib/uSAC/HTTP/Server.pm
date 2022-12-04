@@ -7,7 +7,7 @@ use Log::OK;
 use EV;
 use AnyEvent;
 use Socket ":all";
-use Socket::More qw<sockaddr_passive family_to_string sock_to_string>;
+use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
 use IO::FD;
 use Error::ShowMe;
 #use constant "OS::darwin"=>$^O =~ /darwin/;
@@ -348,6 +348,8 @@ sub prepare {
 		my $session;
 		for(keys $self->[sessions_]->%*){
 			$session=$self->[sessions_]{$_};
+      say "testing session $_";
+      say "Server time: ".$self->[server_clock_]." Session time: ".$session->time;
 
 			if(($self->[server_clock_]-$session->time)> $timeout){
 				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
@@ -755,6 +757,7 @@ sub run {
 	$self->do_listen2;
 	#$self->do_accept;
 	$self->do_accept2;
+  $self->prepare;
 
 	$self->dump_listeners;
 	$self->dump_routes;
@@ -932,7 +935,27 @@ sub add_listeners {
 	my $spec=pop;
 	my %options=@_;
 
-	my @addresses=sockaddr_passive($spec);
+  my @spec;
+  my @addresses;
+
+  my $ref=ref $spec;
+  if($ref  and $ref ne "HASH"){
+    croak "Listener must be a HASH ref or a sockaddr_passive cli string";
+
+  }
+  elsif($ref eq ""){
+    @spec=parse_passive_spec($spec);
+    use feature ":all";
+    use Data::Dumper;
+    say Dumper $spec;
+    croak  "could not parse listener specification" unless $spec;
+  }
+  else {
+    #Hash
+    @spec=($spec);
+  }
+
+	@addresses=sockaddr_passive(@spec);
 	push $site->[listen2_]->@*, @addresses;
 }
 

@@ -257,7 +257,7 @@ sub send_file_uri_norange {
 
 		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
 
-		#my $reply="";
+		my $reply="";
 		#process caching headers
 		my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
 		#my $code=HTTP_OK;
@@ -441,83 +441,72 @@ sub send_file_uri_norange {
 		#Clamp the readsize to the file size if its smaller
 		$read_size=$content_length if $content_length < $read_size;
 
-		#my $recursion_limit=10;
 		my $t;
 		my $count=0;
-                (sub {
-			$count++;
-			#This is the callback for itself
-			#if no arguments an error occured
-			unless(@_){
-				#undef $sub;
-				#$session->[uSAC::HTTP::Session::dropper_]->();
-				#$session->drop;
-				$rex->[uSAC::HTTP::Rex::dropper_]->(1);
-				undef $rex;
-				return;
-			}
-			my $sub=__SUB__;
+    (sub {
+        $count++;
+        #This is the callback for itself
+        #if no arguments an error occured
+        unless(@_){
+          #undef $sub;
+          #$session->[uSAC::HTTP::Session::dropper_]->();
+          #$session->drop;
+          $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+          undef $rex;
+          return;
+        }
 
-			state $recursion_counter;
-			$recursion_counter++;
-
-			$reply=""; #reset buffer
-                        #NON Send file
-			#
-			IO::FD::sysseek $in_fh, $offset, 0;
-
-			my $sz=($content_length-$total);
-			$sz=$read_size if $sz>$read_size;
-                        $total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
-			$offset+=$rc;
-
-                        #non zero read length.. do the write
-			DISABLE_CACHE and $total==$content_length and IO::FD::close $in_fh;
-			$total==$content_length and
-			(@ranges
-				?return rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
-					unless(@_){
-						return $sub->();
-					}
-
-					#TODO: FIX MULTIPART RANGE RESPONSE
-					my $r=shift @ranges;
-					$offset=$r->[0];
-					$total=0;
-					$content_length=$r->[1];
-
-					#write new multipart header
-					return $sub->(undef);           #Call with arg
-				}
-				:return rex_write $matcher, $rex, $code, $out_headers, $reply, undef);
+        my $sub=__SUB__;
 
 
-			$rc and	
-			($recursion_counter>=RECURSION_LIMIT
-			?($t=AE::timer 0, 0, sub {
-				$t=undef;
-				$rex
-					?return(rex_write $matcher, $rex, $code, $out_headers, $reply,$sub)
-					:return(undef $sub);
+        $reply=""; #reset buffer
+        #NON Send file
+        #
+        IO::FD::sysseek $in_fh, $offset, 0;
 
-			} and $recursion_counter= 0 or return)
+        my $sz=($content_length-$total);
+        $sz=$read_size if $sz>$read_size;
+        $total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
+        $offset+=$rc;
 
-			:($rex
-				?return rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__
-				:return undef $sub)
-			);
+        #non zero read length.. do the write
+        DISABLE_CACHE and $total==$content_length and IO::FD::close $in_fh;
 
-			#if ($rc);
+        #When we have read the required amount of data
+        $total==$content_length and
+        (@ranges
+          ?return rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
+            unless(@_){
+              return $sub->();
+            }
 
+            #TODO: FIX MULTIPART RANGE RESPONSE
+            my $r=shift @ranges;
+            $offset=$r->[0];
+            $total=0;
+            $content_length=$r->[1];
 
-                        if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
-                                log_error "Static files: READ ERROR from file";
-                                log_error "Error: $!";
-				IO::FD::close $in_fh;
-                                $rex->[uSAC::HTTP::Rex::dropper_]->(1);
-                                undef $sub;
-                        }
-        })->(undef); #call with an argument to prevent error
+            #write new multipart header
+            return $sub->(undef);           #Call with arg
+          }
+          :return rex_write $matcher, $rex, $code, $out_headers, $reply, undef);
+
+        #Data read by more to do
+        $rc and	($rex
+          ?return rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__
+          :return undef $sub);
+
+        #if ($rc);
+
+        #No data but error
+        if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
+          log_error "Static files: READ ERROR from file";
+          log_error "Error: $!";
+          IO::FD::close $in_fh;
+          $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+          undef $sub;
+        }
+      })->(undef); #call with an argument to prevent error
 
 
 

@@ -61,111 +61,115 @@ sub drop;
 
 
 method init {
-	
-        $_time=$Time; 
-	($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme, $_peer)=@_;
-	\my @zombies= $zombies;
 
-	#make reader
-        my $s=sub {$_closeme=1; $_dropper->(1)};
-        $_sr=uSAC::IO::SReader->create(
-                fh=>$_fh,
-                max_read_size=>4096*16,
-                on_eof =>$s,
-                on_error=>$s,
-                time=>\$_time,
-                clock=>\$Time,
-		on_read=>undef
-        );
-		
+  $_time=$Time;   #Copy value of clock to time
+  ($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme, $_peer)=@_;
+  \my @zombies= $zombies;
 
-
-	$_sr->start;
-
-	#make writer
-	#$_sw=uSAC::IO::SWriter->create(fh=>$_fh);
-
-	#Takes an a bool argument: keepalive
-	#if a true value is present then no dropping is performed
-	#if a false or non existent value is present, session is closed
-	$_dropper=sub {
-		Log::OK::DEBUG and log_debug "Session: Dropper start";
-		Log::OK::DEBUG and log_debug "Session: args: @_";
-		Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";
-		Log::OK::DEBUG and log_debug join ", " , caller;
-		#Normal end of transaction operations
-		$_rex=undef;
+  #make reader
+  my $s=sub {say "on_eof insession", $_closeme=1; $_dropper->(1)};
+  my $s2=sub {say "on_error in session";$_closeme=1; $_dropper->(1)};
+  $_sr=uSAC::IO::SReader->create(
+    fh=>$_fh,
+    max_read_size=>4096*16,
+    on_eof =>$s,
+    on_error=>$s2,
+    time=>\$_time,
+    clock=>\$Time,
+    on_read=>undef
+  );
+  #$_sr->timing(\$_time, \$Time);
 
 
-		$_fh or return;	#don't drop if already dropped
-		return unless $_closeme or !@_;	#IF no error or closeme then return
-
-		#End of session transactions
-		#
-		Log::OK::DEBUG and log_debug "Session: Dropper ".$_id;
-		$_sr->pause;
-		$_sw->pause;
-		delete $_sessions->{$_id};
-		IO::FD::close $_fh;
-		$_fh=undef;
-		$_id=undef;
-		#$closeme=undef;
-
-		#$self->[write_queue_]->@*=();
-		#If the dropper was called with an argument that indicates no error
-		if($_[0] and @zombies < 100){
-			# NOTE: Complete reuses of a zombie may still be causing corruption
-			# Suspect that the rex object is not being release intime 
-			# when service static files.
-			# Forced rex to be undef on IO error in static server.. Lets
-			# see if that fixes the issue.
-			# Otherwise comment out the line below
-			unshift @zombies, $self;
-			Log::OK::DEBUG and log_debug "Pushed zombie";
-		}
-		else{
-			#dropper was called without an argument. ERROR. Do not reuse 
-			#
-			#################################
-			$_dropper=undef;      #
-			undef $_sr->on_eof;            #
-			undef $_sr->on_error;          #
-			#undef $_sr->on_read;
-			#                               #
-			 undef $_sw->on_error; #
-			# undef $self->[sw_];           #
-			# undef $self->[sr_];           #
-			 undef $self;                  #
-			#################################
-			Log::OK::DEBUG and log_debug "NO Pushed zombie";
-		}
-
-		Log::OK::DEBUG and log_debug "Session: zombies: ".@zombies;
-		
-		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
-		Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
-
-		Log::OK::DEBUG and log_debug "Session: Dropper end";
 
 
-	};
+  $_sr->start;
 
-        $_sw=uSAC::IO::SWriter->create(
-                fh=>$_fh,
-                on_error=>$_dropper,
-                time=>\$_time,
-                clock=>\$Time,
-        );
-	
-        ##############################################
-        # $_sw=uSAC::IO::SWriter->create( fh=>$_fh); #
-        # $_sw->on_error=$_dropper;                  #
-        # $_sw->timing(\$_time, \$Time);             #
-        ##############################################
+  #make writer
+  #$_sw=uSAC::IO::SWriter->create(fh=>$_fh);
 
-	$_write=$_sw->writer;
+  #Takes an a bool argument: keepalive
+  #if a true value is present then no dropping is performed
+  #if a false or non existent value is present, session is closed
+  $_dropper=sub {
+    Log::OK::DEBUG and log_debug "Session: Dropper start";
+    Log::OK::DEBUG and log_debug "Session: args: @_";
+    Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";
+    Log::OK::DEBUG and log_debug join ", " , caller;
+    #Normal end of transaction operations
+    $_rex=undef;
 
-	#weaken $_write;
+
+    $_fh or return;	#don't drop if already dropped
+    return unless $_closeme or !@_;	#IF no error or closeme then return
+
+    #End of session transactions
+    #
+    Log::OK::DEBUG and log_debug "Session: Dropper ".$_id;
+    $_sr->pause;
+    $_sw->pause;
+    delete $_sessions->{$_id};
+    IO::FD::close $_fh;
+    $_fh=undef;
+    $_id=undef;
+    #$closeme=undef;
+
+    #$self->[write_queue_]->@*=();
+    #If the dropper was called with an argument that indicates no error
+    if($_[0] and @zombies < 100){
+      # NOTE: Complete reuses of a zombie may still be causing corruption
+      # Suspect that the rex object is not being release intime 
+      # when service static files.
+      # Forced rex to be undef on IO error in static server.. Lets
+      # see if that fixes the issue.
+      # Otherwise comment out the line below
+      unshift @zombies, $self;
+      Log::OK::DEBUG and log_debug "Pushed zombie";
+    }
+    else{
+      #dropper was called without an argument. ERROR. Do not reuse 
+      #
+      #################################
+      $_dropper=undef;      #
+      undef $_sr->on_eof;            #
+      undef $_sr->on_error;          #
+      #undef $_sr->on_read;
+      #                               #
+      undef $_sw->on_error; #
+      # undef $self->[sw_];           #
+      # undef $self->[sr_];           #
+      undef $self;                  #
+      #################################
+      Log::OK::DEBUG and log_debug "NO Pushed zombie";
+    }
+
+    Log::OK::DEBUG and log_debug "Session: zombies: ".@zombies;
+
+    Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
+    Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
+
+    Log::OK::DEBUG and log_debug "Session: Dropper end";
+
+
+  };
+
+  $_sw=uSAC::IO::SWriter->create(
+    fh=>$_fh,
+    on_error=>$_dropper,
+    time=>\$_time,
+    clock=>\$Time,
+  );
+  #$_sw->timing(\$_time, \$Time);
+
+  ##############################################
+  # $_sw=uSAC::IO::SWriter->create( fh=>$_fh); #
+  # $_sw->on_error=$_dropper;                  #
+  # $_sw->timing(\$_time, \$Time);             #
+  ##############################################
+
+  $_write=$_sw->writer;
+
+  #weaken $_write;
 }
 
 #take a zombie session and revive it

@@ -1,21 +1,11 @@
 #!/usr/bin/env perl
-use Log::ger::Output 'Screen';
-use Log::ger::Util;
+#use Log::ger::Util;
 BEGIN{
 	$ENV{LIBEV_FLAGS}=1; #POLL
 }
 use EV;
-#set the event model of ev
-#
 use AnyEvent;
 
-use Log::OK {
-		lvl=>"warn",
-		opt=>'verbose',
-
-};
-
-Log::ger::Util::set_level Log::OK::LEVEL;
 
 
 use uSAC::HTTP;
@@ -27,6 +17,7 @@ use Socket ":all";
 use Net::ARP;
 
 use MyApp;
+use Log::ger::Output 'Screen';
 
 
 
@@ -63,7 +54,7 @@ my $server; $server=usac_server {;
 	usac_sub_product "blog";
 	#usac_middleware log_simple dump_headers=>1;
 	
-	usac_middleware dump_headers=>1, log_simple;
+	usac_middleware log_simple dump_headers=>1;
 	my $site; $site=usac_site {
 		usac_id "blog";
 		usac_host "127.0.0.1:8082";

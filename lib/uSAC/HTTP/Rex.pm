@@ -6,6 +6,7 @@ use feature qw<current_sub say refaliasing state>;
 no warnings "experimental";
 our $UPLOAD_LIMIT=10_000_000;
 use Log::ger;
+
 use Log::OK;
 
 use Try::Catch;
@@ -33,6 +34,7 @@ use File::Path qw<make_path>;
 use Data::Dumper;
 use URL::Encode::XS;
 use URL::Encode qw<url_decode_utf8>;
+use Cpanel::JSON::XS qw<encode_json decode_json>;
 
 our @EXPORT_OK=qw<rex_headers 
 
@@ -362,12 +364,15 @@ sub rex_headers {
 }
 
 sub rex_reply_json {
-	my $data=pop;
 	Log::OK::DEBUG and log_debug "rex_reply_json caller: ". join ", ", caller;
-	rex_write @_, HTTP_OK, [
+
+  $_[PAYLOAD]=encode_json $_[PAYLOAD] if(ref($_[PAYLOAD]));
+
+  push $_[HEADER]->@*,
 		HTTP_CONTENT_TYPE, "text/json",
-		HTTP_CONTENT_LENGTH, length($data),
-	], $data;
+		HTTP_CONTENT_LENGTH, length $_[PAYLOAD];
+
+	&rex_write;
 }
 
 sub rex_reply_html {
@@ -725,7 +730,7 @@ sub usac_form_slurp{
 	#convert to abs path to prevent double resolving
 	unless( -d $tmp_dir){
 		my $message= "Could not access directory $tmp_dir for uploads. Does it exist?";
-		Log::OK::FATAL and log_fatal $message;
+    Log::OK::FATAL and log_fatal $message;
 		die $message;
 	}
 
