@@ -125,6 +125,7 @@ sub rex_write{
 		$_[REX][in_progress_]->$*=1;
 
 		#Tell the other end the connection will be closed
+    #
 		push $_[HEADER]->@*, HTTP_CONNECTION, "close" if($_[REX][closeme_]->$*);
 
 		#Hack to get HTTP/1.0 With keepalive working

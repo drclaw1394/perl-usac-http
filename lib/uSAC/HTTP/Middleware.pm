@@ -9,6 +9,7 @@ use uSAC::HTTP::Session;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Constants;
 
 use Time::HiRes qw<time>;
 use IO::Compress::Gzip;
@@ -85,18 +86,19 @@ sub log_simple_in {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
 			my $time=time;
-			package uSAC::HTTP::Rex {
-				say STDERR "\n---->>>";
-				say STDERR "Arraval time:		$time";
-				say STDERR "Host: 			$_[1][host_]";
-				say STDERR "Method:       $_[1][method_]";
-				say STDERR "Original matched URI: 	$_[1][uri_]";
-				say STDERR "Site relative URI:	$_[1][uri_stripped_]";
-				say STDERR "Matched for site:	".($_[0][1][0]->id//"n/a");
-				say STDERR "Hit counter:		$_[0][1][4]";
-				say STDERR "Captures:		".join ", ",$_[1][captures_]->@* if $dump_capture;
-        say STDERR "Headers:" if $dump_headers;
-				say STDERR Dumper $_[1]->headers if $dump_headers;
+
+      package uSAC::HTTP::Rex {
+          say STDERR "\n---->>>";
+          say STDERR "Arraval initial time:		$time";
+          say STDERR "Host: 			$_[1][host_]";
+          say STDERR "Method:       $_[1][method_]";
+          say STDERR "Original matched URI: 	$_[1][uri_]";
+          say STDERR "Site relative URI:	$_[1][uri_stripped_]";
+          say STDERR "Matched for site:	".($_[0][1][0]->id//"n/a");
+          say STDERR "Hit counter:		$_[0][1][4]";
+          say STDERR "Captures:		".join ", ",$_[1][captures_]->@* if $dump_capture;
+          say STDERR "Headers:" if $dump_headers;
+          say STDERR Dumper $_[1]->headers if $dump_headers;
 			}
 			return &$inner_next;		#alway call next. this is just loggin
 		}
@@ -113,11 +115,9 @@ sub log_simple_out {
 		my $outer_next=shift;
 		sub {
 			#matcher, rex, code, header, body, cb, arg
-			#only log on complete responses
-			unless($_[5]){
-				say STDERR "\n<<<---";
-				say STDERR "Depature time:		".time;
-			}
+      say STDERR "\n<<<---";
+      say STDERR "Depature time:		".time;
+
 			return &$outer_next;
 		}
 	};
@@ -231,15 +231,11 @@ sub chunked{
 			#\my $bypass=\$out_ctx{$_[1]}; #access the statefull info for this instance and requst
 			my $exe;
 
-			if($_[3]){
+			if($_[HEADER]){
 				#$bypass=undef;#reset
-				\my @headers=$_[3];
-				#@hindexes=@key_indexes[0..@headers/2-1];
-				#grep $_ eq HTTP_CONTENT_LENGTH, @headers[@hindexes] and return &$next;
-				#$_ eq HTTP_CONTENT_LENGTH and return &$next for ( @headers[@key_indexes[0..@headers/2-1]]);
-                                        #last if $_ >=@headers;
+				\my @headers=$_[HEADER];
 
-                                (($_ eq HTTP_CONTENT_LENGTH)) and return &$next for(@headers[@key_indexes[0..@headers/2-1]]);
+        (($_ eq HTTP_CONTENT_LENGTH)) and return &$next for(@headers[@key_indexes[0..@headers/2-1]]);
 				$exe=1;
 
 				Log::OK::TRACE and log_trace "Middelware: Chunked execute".($exe//"");
@@ -248,12 +244,6 @@ sub chunked{
 				#Add to headers the chunked trasfer encoding
 				#
 				my $index;
-                                ##############################################################################
-                                # for(@key_indexes){                                                         #
-                                #                 #last if $_ >=@headers;                                    #
-                                #         $index=$_+1  and last if ($headers[$_] eq HTTP_TRANSFER_ENCODING); #
-                                # }                                                                          #
-                                ##############################################################################
 				$_ eq HTTP_TRANSFER_ENCODING and ($index=$_+1, last)
 					for @headers[@key_indexes[0..@headers/2-1]];
 
@@ -266,13 +256,13 @@ sub chunked{
 
 				}
 				$ctx=$exe;
-				$out_ctx{$_[1]}=$ctx if $_[5]; #save context if multishot
+				$out_ctx{$_[REX]}=$ctx if $_[CB]; #save context if multishot
 								#no need to save is single shot
 			}
 			#If this is the first call, $ctx will already be set by
 			#the time we get here. So no need to read from hash
 
-			$ctx//=$out_ctx{$_[1]};
+			$ctx//=$out_ctx{$_[REX]};
 			Log::OK::TRACE and log_trace join ", ",caller;
 
 			Log::OK::TRACE and log_trace "Chunked: Testing for context";
@@ -281,20 +271,17 @@ sub chunked{
 			Log::OK::TRACE and log_trace "DOING CHUNKS";
 
 			#my $scratch="";
-			my $scratch=sprintf("%02X".LF,length $_[4]).$_[4].LF if $_[4];
+			my $scratch=sprintf("%02X".LF,length $_[PAYLOAD]).$_[PAYLOAD].LF if $_[PAYLOAD];
 
-			unless($_[5]){
+			unless($_[CB]){
 				$scratch.="00".LF.LF;
-				delete $out_ctx{$_[1]} unless $_[3];	#Last call, delete
+				delete $out_ctx{$_[REX]} unless $_[HEADER];	#Last call, delete
 									#only when headers
 									#are not present
 									#(multicall)
 			}
 
 			$next->(@_[0,1,2,3],$scratch,@_[5,6]);# if $scratch;
-
-			#return &$next;
-
 		};
 	};
 

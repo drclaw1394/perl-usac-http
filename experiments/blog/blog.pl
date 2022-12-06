@@ -52,9 +52,9 @@ my $server; $server=usac_server {;
 
 		#usac_error_page 404 => "/error/404";
 	usac_sub_product "blog";
-	#usac_middleware log_simple dump_headers=>1;
+  #usac_middleware log_simple dump_headers=>1;
 	
-	usac_middleware log_simple dump_headers=>1;
+  #usac_middleware log_simple dump_headers=>1;
 	my $site; $site=usac_site {
 		usac_id "blog";
 		usac_host "127.0.0.1:8082";
@@ -117,6 +117,27 @@ my $server; $server=usac_server {;
                 #         usac_path root =>usac_dirname, "." #
                 # );                                         #
                 ##############################################
+
+    usac_route POST=>"/new_data\$"=>sub {
+        say "Expecting, content, chunged, multipart or similar";
+        #say "Payload: $_[PAYLOAD]";
+        $_[PAYLOAD]=Dumper $_[PAYLOAD];
+        &rex_write;
+    };
+
+    my %ctx;
+    usac_route POST=>"/new_data_multi\$"=>sub {
+        say "============";
+        say "Expecting multipart";
+        say $_[REX];
+        #say "args: ".join ", ", @_;
+        my $ctx=$ctx{$_[REX]}//=0;
+        $ctx+= length $_[PAYLOAD][1];
+        $_[PAYLOAD]="DONE: $ctx";#. Dumper $_[PAYLOAD][0];
+        say $_[PAYLOAD];
+        delete $ctx{$_[REX]} unless($_[CB]);
+        &rex_write;
+    };
 		
 		usac_route POST=>"/upload\$"=>usac_data_stream
 		sub {

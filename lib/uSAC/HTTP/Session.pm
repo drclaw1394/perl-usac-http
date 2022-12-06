@@ -67,8 +67,8 @@ method init {
   \my @zombies= $zombies;
 
   #make reader
-  my $s=sub {say "on_eof insession", $_closeme=1; $_dropper->(1)};
-  my $s2=sub {say "on_error in session";$_closeme=1; $_dropper->(1)};
+  my $s=sub {$_closeme=1; $_dropper->(1)};
+  my $s2=sub {$_closeme=1; $_dropper->(1)};
   $_sr=uSAC::IO::SReader->create(
     fh=>$_fh,
     max_read_size=>4096*16,
@@ -271,7 +271,7 @@ our $timer=AE::timer 0,1, sub {
 #Return an array of references to variables which are publically editable
 #Bypasses method calls for accessors
 method exports {
-	[\$_closeme,$_dropper, \$_server, \$_rex,\$_in_progress, $_write, $_peer];
+	[\$_closeme, $_dropper, \$_server, \$_rex, \$_in_progress, $_write, $_peer];
 
 }
 ##################################################################################

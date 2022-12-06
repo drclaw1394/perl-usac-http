@@ -348,8 +348,8 @@ sub prepare {
 		my $session;
 		for(keys $self->[sessions_]->%*){
 			$session=$self->[sessions_]{$_};
-      say "testing session $_";
-      say "Server time: ".$self->[server_clock_]." Session time: ".$session->time;
+      #say "testing session $_";
+      #say "Server time: ".$self->[server_clock_]." Session time: ".$session->time;
 
 			if(($self->[server_clock_]-$session->time)> $timeout){
 				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
@@ -702,14 +702,16 @@ sub rebuild_dispatch {
 		# The linked innerware, the route handler and outerware are
 		# triggered from here
 		# Default Result code is HTTP_OK and a new set of empty headers which
-		$route->[1][1]($route, $rex, my $code=$rcode//HTTP_OK, $rheaders//[],$data//="",$cb);
+    #$route->[1][1]($route, $rex, my $code=$rcode//HTTP_OK, $rheaders//[],$data//="",$cb);
 
 		#TODO: Better Routing Cache management.
 		#if the is_default flag is set, this is an unkown match.
 		#so do not cache it
 		#say STDERR join ", ", $route->@[0,1,2,3];
 		delete $table->[1]{$input} if $route->[3];
-		1;
+    #return the entry sub for body forwarding
+    $route;
+
 	};
 }
 

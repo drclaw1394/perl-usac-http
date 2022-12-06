@@ -11,6 +11,7 @@ use Log::OK;
 use Cwd qw<abs_path>;
 use File::Spec::Functions;
 use Exporter "import";
+use uSAC::HTTP::Constants;
 
 my @redirects=qw<
 	usac_redirect_see_other 
@@ -203,9 +204,8 @@ sub _add_route {
 				#
 				my $cb=$_[5]//$_[1][uSAC::HTTP::Rex::dropper_];
 
-
-				if($_[3]){
-					\my @h=$_[3];
+				if($_[HEADER]){
+					\my @h=$_[HEADER];
 
 					my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
 						#last if $_ >= @h;
@@ -221,12 +221,12 @@ sub _add_route {
 					Log::OK::DEBUG and log_debug "->Serialize: headers:";
 					Log::OK::DEBUG and log_debug $reply;
 
-					$_[3]=undef;	#mark headers as done
+					$_[HEADER]=undef;	#mark headers as done
 					$reply.=LF.$_[4]//"";
-					$_[1][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
+					$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
 				}
 				else{
-					$_[1][uSAC::HTTP::Rex::write_]($_[4],$cb,$_[6]);
+					$_[REX][uSAC::HTTP::Rex::write_]($_[4],$cb,$_[6]);
 				}
 			};
 	if(@outer){
@@ -351,7 +351,7 @@ sub _strip_prefix {
 				#TODO: The session can go out of scope here. Need a more
 				#consistent approach to testing if a reply is in progress
 			
-				!$_[1][uSAC::HTTP::Rex::in_progress_] and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uSAC::HTTP::Rex::uri_]);
+				!($_[1][uSAC::HTTP::Rex::in_progress_]->$*) and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uSAC::HTTP::Rex::uri_]);
 
 		},
 
