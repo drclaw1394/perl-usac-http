@@ -250,9 +250,7 @@ sub send_file_uri_norange {
 		#weaken $session;
 		#weaken $rex;
 
-		#$session->[uSAC::HTTP::Session::in_progress_]=1;
-		#$session->in_progress=1;
-		$rex->[uSAC::HTTP::Rex::in_progress_]->$*=1;
+		$rex->[uSAC::HTTP::Rex::in_progress_]=1;
 		my $in_fh=$entry->[fh_];
 
 		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
@@ -363,7 +361,7 @@ sub send_file_uri_norange {
 		#and if no_encodingflag is set
 		#
 
-		
+	
 		unshift @$out_headers,
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
@@ -704,6 +702,13 @@ sub usac_file_under {
 		
 		my $path=$html_root.$p;
 		
+    unless($_[CODE]) {
+      #Stack reset
+      $next
+        ?return &$next
+        :return &rex_write;
+    }
+
 		$filter and $path !~ /$filter/o and 
 			$next 
 				? return &$next

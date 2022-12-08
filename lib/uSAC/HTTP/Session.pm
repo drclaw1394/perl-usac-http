@@ -67,8 +67,12 @@ method init {
   \my @zombies= $zombies;
 
   #make reader
-  my $s=sub {$_closeme=1; $_dropper->(1)};
-  my $s2=sub {$_closeme=1; $_dropper->(1)};
+  my $s=sub {
+    #Close causes stack reset
+    $_read_stack[-1]();
+    $_closeme=1; $_dropper->(1)
+  };
+  my $s2=sub {$_read_stack[-1](); $_closeme=1; $_dropper->(1)};
   $_sr=uSAC::IO::SReader->create(
     fh=>$_fh,
     max_read_size=>4096*16,
@@ -97,7 +101,7 @@ method init {
     Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";
     Log::OK::DEBUG and log_debug join ", " , caller;
     #Normal end of transaction operations
-    $_rex=undef;
+    #$_rex=undef;
 
 
     $_fh or return;	#don't drop if already dropped
@@ -181,7 +185,7 @@ method revive {
 	$_scheme=$_[2];
 	$_peer=$_[3];
 
-	$_rex=undef;
+  #$_rex=undef;
 	@_write_stack=();
 	$_closeme=undef;
 	$_sr->start($_fh);
@@ -202,9 +206,11 @@ method closeme :lvalue {
 method dropper :lvalue {
 	$_dropper;
 }
-method rex :lvalue {
-	$_rex;
-}
+########################
+# method rex :lvalue { #
+#         $_rex;       #
+# }                    #
+########################
 
 method server {
 	$_server;

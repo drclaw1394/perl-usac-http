@@ -677,13 +677,11 @@ sub rebuild_dispatch {
 		keys $self->[host_tables_]->%*;
 
 	$self->[cb_]=sub {
-		my ($host, $input, $rex, $rcode, $rheaders, $data, $cb)=@_;
+    #my ($host, $input, $rex)=@_;#, $rex, $rcode, $rheaders, $data, $cb)=@_;
 
-		Log::OK::DEBUG and log_debug __PACKAGE__." Looking for host: $host";
-		my $table=$lookup{$host}//$lookup{"*.*"};
-		Log::OK::DEBUG and log_debug __PACKAGE__." table for lookup :".join ", ", @$table;
-		Log::OK::DEBUG and log_debug __PACKAGE__." Input: $input";
-		(my $route, $rex->[uSAC::HTTP::Rex::captures_])= $table->[0]($input);
+		my $table=$lookup{$_[0]}//$lookup{"*.*"};
+    #(my $route, $_[2]->[uSAC::HTTP::Rex::captures_])= $table->[0]($_[1]);
+		(my $route, my $captures)= $table->[0]($_[1]);
 
 		#Hustle table route structure
 		#[matcher, value, type default]
@@ -708,9 +706,9 @@ sub rebuild_dispatch {
 		#if the is_default flag is set, this is an unkown match.
 		#so do not cache it
 		#say STDERR join ", ", $route->@[0,1,2,3];
-		delete $table->[1]{$input} if $route->[3];
+		delete $table->[1]{$_[1]} if $route->[3];
     #return the entry sub for body forwarding
-    $route;
+    ($route,$captures);
 
 	};
 }

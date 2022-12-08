@@ -93,7 +93,6 @@ use enum (
 	closeme_
 	dropper_
 	server_
-	rex_
 	in_progress_
 
 	response_code_
@@ -122,7 +121,7 @@ sub rex_write{
 		Log::OK::TRACE and log_trace "REX: Doing rex write====";
 		#Log::OK::TRACE and log_trace "REX: close me: ".$session->[uSAC::HTTP::Session::closeme_];
 		#$session->[uSAC::HTTP::Session::in_progress_]=1;
-		$_[REX][in_progress_]->$*=1;
+		$_[REX][in_progress_]=1;
 
 		#Tell the other end the connection will be closed
     #
@@ -429,8 +428,8 @@ sub session {
 my $id=0;	#Instead of using state
 my $_i;
 sub new {
-	#my ($package, $session, $headers, $host, $version, $method, $uri, $ex)=@_;
-	#	0	1	  2	    3		4	5	6   7
+	#my ($package, $session, $headers, $host, $version, $method, $uri, $ex, $captures)=@_;
+	#	0	1	  2	    3		4	5	6   7 8
 
 	#state $id=0;
 	my $query_string="";
@@ -447,9 +446,10 @@ sub new {
 	#
 	#NOTE: A single call to Session export. give references to important variables
 	
-	($self->[closeme_], $self->[dropper_], $self->[server_], $self->[rex_], $self->[in_progress_], $self->[write_], $self->[peer_])= $_[7]->@*;#$_[1]->exports->@*;
+	($self->[closeme_], $self->[dropper_], $self->[server_], undef, undef, $self->[write_], $self->[peer_])= $_[7]->@*;#$_[1]->exports->@*;
 	$self->[recursion_count_]=0;
-
+  $self->[captures_]=$_[8];
+  $self->[in_progress_]=undef;
 	$self;
 }
 
@@ -482,8 +482,7 @@ sub usac_multipart_stream {
 			);
 
 			Log::OK::INFO and log_info "multipart stream";
-			#$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
-			$_[1][in_progress_]->$*=1;
+			$_[1][in_progress_]=1;
 
 			$session->pump_reader;
 			return;
@@ -550,8 +549,7 @@ sub usac_data_stream{
 				}
 
 				Log::OK::INFO and log_info "data stream";
-				#$_[1][session_][uSAC::HTTP::Session::in_progress_]=1;
-				$_[REX][in_progress_]->$*=1;
+				$_[REX][in_progress_]=1;
 
 				$session->pump_reader;
 				return;

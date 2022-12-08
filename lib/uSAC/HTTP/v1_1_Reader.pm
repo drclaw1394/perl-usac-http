@@ -109,8 +109,8 @@ sub make_reader{
   my $payload="";
 
 	sub {
-		\my $buf=\$_[0];
     state $route;
+    state $captures;
     my $processed=0;
     state $body_len=0;
     state $body_type;
@@ -122,6 +122,11 @@ sub make_reader{
     $code=200;
     state $out_header=[];
     state $dummy_cb=sub {};
+    unless(@_){
+      $route and $route->[1][1]($route, $rex);#, $code, $out_header, undef, undef);
+      return;
+    }
+		\my $buf=\$_[0];
 
 		while ( $len=length $buf) {
 
@@ -222,9 +227,7 @@ sub make_reader{
 
 				#Done with headers. 
 
-				$rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri, $ex);
 
-				#$rex=$req;
 
 				$tmp=$h{CONNECTION}//"";
 				$version eq "HTTP/1.0"
@@ -236,11 +239,9 @@ sub make_reader{
 				Log::OK::DEBUG and log_debug "$uri";
 
         #Find route
-				$route=$cb->(
-					$host,
-					"$method $uri",
-					$rex
-				);
+        ($route, $captures)=$cb->($host, "$method $uri");
+        #
+				$rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri, $ex, $captures);
 
         #Before calling the dispatch, setup the parser to process further data.
         #Attempt to further parse the message. It is up to middleware or application
@@ -253,7 +254,7 @@ sub make_reader{
           #No body
           $state=$start_state;
           $payload="";
-          $route->[1][1]($route, $rex, $code, $out_header, $payload, undef);#$dummy_cb);
+          $route->[1][1]($route, $rex, $code, $out_header, $payload, undef);
           $out_header=[];
         }
         else{

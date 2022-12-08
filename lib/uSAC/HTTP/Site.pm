@@ -193,8 +193,12 @@ sub _add_route {
 	my $static_headers=$self->[server_]->static_headers;
 	my $serialize=
 			sub{
-				no warnings qw<numeric uninitialized>;
+        #continue stack reset on error condition. The IO layer resets
+        #on a write call with no arguemts;
+        return $_[REX][uSAC::HTTP::Rex::write_]() unless $_[CODE];
 
+				no warnings qw<numeric uninitialized>;
+        #return unless $_[CODE];
 				Log::OK::TRACE and log_trace "Main serialiser";
 				Log::OK::TRACE and log_trace join  " ", caller;
 				#my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
@@ -202,7 +206,7 @@ sub _add_route {
 				# renders the headers to the output sub
 				# then calls 
 				#
-				my $cb=$_[5]//$_[1][uSAC::HTTP::Rex::dropper_];
+				my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
 
 				if($_[HEADER]){
 					\my @h=$_[HEADER];
@@ -220,13 +224,13 @@ sub _add_route {
 
 					Log::OK::DEBUG and log_debug "->Serialize: headers:";
 					Log::OK::DEBUG and log_debug $reply;
-
 					$_[HEADER]=undef;	#mark headers as done
-					$reply.=LF.$_[4]//"";
+					$reply.=LF.$_[PAYLOAD]//"";
+          #say "REX in serialize: $_[REX]";
 					$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
 				}
 				else{
-					$_[REX][uSAC::HTTP::Rex::write_]($_[4],$cb,$_[6]);
+					$_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);
 				}
 			};
 	if(@outer){
@@ -351,7 +355,8 @@ sub _strip_prefix {
 				#TODO: The session can go out of scope here. Need a more
 				#consistent approach to testing if a reply is in progress
 			
-				!($_[1][uSAC::HTTP::Rex::in_progress_]->$*) and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[1]->[uSAC::HTTP::Rex::uri_]);
+        #say $_[REX];
+				!$_[REX][uSAC::HTTP::Rex::in_progress_] and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[REX][uSAC::HTTP::Rex::uri_]);
 
 		},
 

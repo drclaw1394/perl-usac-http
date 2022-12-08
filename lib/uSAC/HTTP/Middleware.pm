@@ -225,12 +225,17 @@ sub chunked{
 		my $next=shift;
 		#my $bypass;
 		sub {
+      unless($_[CODE]){
+        #Error condition. Reset stack
+        delete $out_ctx{$_[REX]};
+			  return &$next;
+      }
+
 			Log::OK::TRACE  and log_trace "Middeware: Chunked Outerware";
 			Log::OK::TRACE  and log_trace "Key count chunked: ". scalar keys %out_ctx;
 			Log::OK::TRACE  and log_trace "Chunked: ". join " ", caller;
 			#\my $bypass=\$out_ctx{$_[1]}; #access the statefull info for this instance and requst
 			my $exe;
-
 			if($_[HEADER]){
 				#$bypass=undef;#reset
 				\my @headers=$_[HEADER];
