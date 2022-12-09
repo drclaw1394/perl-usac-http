@@ -195,43 +195,45 @@ sub _add_route {
 			sub{
         #continue stack reset on error condition. The IO layer resets
         #on a write call with no arguemts;
-        return $_[REX][uSAC::HTTP::Rex::write_]() unless $_[CODE];
+        if($_[CODE]){
+          #no warnings qw<numeric uninitialized>;
+          #return unless $_[CODE];
+          Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
+          #my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
+          #The last item in the outerware
+          # renders the headers to the output sub
+          # then calls 
+          #
+          my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
 
-				no warnings qw<numeric uninitialized>;
-        #return unless $_[CODE];
-				Log::OK::TRACE and log_trace "Main serialiser";
-				Log::OK::TRACE and log_trace join  " ", caller;
-				#my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
-				#The last item in the outerware
-				# renders the headers to the output sub
-				# then calls 
-				#
-				my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
+          if($_[HEADER]){
+            \my @h=$_[HEADER];
 
-				if($_[HEADER]){
-					\my @h=$_[HEADER];
+            my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
+            #last if $_ >= @h;
+            $reply.= $h[$_].": $h[$_+1]".LF 
+            for(@index[0..@h/2-1]);
 
-					my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
-						#last if $_ >= @h;
-					$reply.= $h[$_].": $h[$_+1]".LF 
-					for(@index[0..@h/2-1]);
+            #last if  $_ >= $static_headers->@*;
+            $reply.="$static_headers->[$_]:$static_headers->[$_+1]".LF
+            for(@index[0..$static_headers->@*/2-1]);
 
-						#last if  $_ >= $static_headers->@*;
-					$reply.="$static_headers->[$_]:$static_headers->[$_+1]".LF
-					for(@index[0..$static_headers->@*/2-1]);
+            $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".LF;
 
-					$reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".LF;
-
-					Log::OK::DEBUG and log_debug "->Serialize: headers:";
-					Log::OK::DEBUG and log_debug $reply;
-					$_[HEADER]=undef;	#mark headers as done
-					$reply.=LF.$_[PAYLOAD]//"";
-          #say "REX in serialize: $_[REX]";
-					$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
-				}
-				else{
-					$_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);
-				}
+            Log::OK::DEBUG and log_debug "->Serialize: headers:";
+            Log::OK::DEBUG and log_debug $reply;
+            $_[HEADER]=undef;	#mark headers as done
+            $reply.=LF.$_[PAYLOAD]//"";
+            #say "REX in serialize: $_[REX]";
+            $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
+          }
+          else{
+            $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);
+          }
+        }
+        else{
+          $_[REX][uSAC::HTTP::Rex::write_]();
+        }
 			};
 	if(@outer){
 		my $middler=uSAC::HTTP::Middler->new();
@@ -346,9 +348,9 @@ sub _strip_prefix {
 	sub {
 		my $inner_next=shift;
 		sub {
+      Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
 			#package uSAC::HTTP::Rex {
-				$_[1][uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len); #strip the url
-				#$_[1][capture_]=[@{^CAPTURE}];	#save the capture 
+				$_[1][uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len) if($_[CODE]);
 
 				&$inner_next; #call the next
 				#Check the inprogress flag
@@ -358,6 +360,7 @@ sub _strip_prefix {
         #say $_[REX];
 				!$_[REX][uSAC::HTTP::Rex::in_progress_] and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[REX][uSAC::HTTP::Rex::uri_]);
 
+        Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
 		},
 
 	}

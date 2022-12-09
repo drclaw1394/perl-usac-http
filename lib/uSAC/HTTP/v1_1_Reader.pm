@@ -123,7 +123,9 @@ sub make_reader{
     state $out_header=[];
     state $dummy_cb=sub {};
     unless(@_){
+      Log::OK::TRACE and log_trace "PASSING ON ERROR IN HTTP parser";
       $route and $route->[1][1]($route, $rex);#, $code, $out_header, undef, undef);
+      $processed=0;
       return;
     }
 		\my $buf=\$_[0];

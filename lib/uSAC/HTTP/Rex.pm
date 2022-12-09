@@ -54,6 +54,7 @@ rex_query_params
 rex_site_url
 rex_site
 rex_state
+rex_peer
 
 rex_redirect_see_other
 rex_redirect_found
@@ -210,6 +211,10 @@ sub rex_state :lvalue{
 	$_[1][state_];
 }
 
+sub rex_peer {
+  $_[1][peer_];
+}
+
 #redirect to within site
 #match entry
 #rex
@@ -219,55 +224,66 @@ sub rex_state :lvalue{
 #TODO: "Multiple Choice"=>300,
 
 sub rex_redirect_moved{
-	my $url=$_[4];
-	$_[2]=HTTP_MOVED_PERMANENTLY;
-	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	$_[4]="";
+  if($_[CODE]){
+    my $url=$_[4];
+    $_[2]=HTTP_MOVED_PERMANENTLY;
+    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[4]="";
+  }
 	&rex_write;
 }
 
 sub rex_redirect_see_other{
-	#my $url=pop;
-	my $url=$_[4];
-	$_[2]=HTTP_SEE_OTHER;
-	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	$_[4]="";
+  if($_[CODE]){
+    my $url=$_[PAYLOAD];
+    $_[CODE]=HTTP_SEE_OTHER;
+    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[PAYLOAD]="";
+  }
 	&rex_write;
 }
 
 sub rex_redirect_found {
 	#my $url=pop;
-	my $url=$_[4];
-	$_[2]=HTTP_FOUND;
-	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	$_[4]="";
+  if($_[CODE]){
+    my $url=$_[4];
+    $_[2]=HTTP_FOUND;
+    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[4]="";
+  }
 	&rex_write;
 	
 }
 
 sub rex_redirect_temporary {
-	my $url=$_[4];
-	$_[2]=HTTP_TEMPORARY_REDIRECT;
-	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+  if($_[CODE]){
+    my $url=$_[4];
+    $_[2]=HTTP_TEMPORARY_REDIRECT;
+    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
 
-	$_[4]="";
+    $_[4]="";
+  }
 	&rex_write;
 	
 }
 sub rex_redirect_permanent {
-	my $url=$_[4];
-	$_[2]=HTTP_PERMANENT_REDIRECT;
-	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	$_[4]="";
+  if($_[CODE]){
+    my $url=$_[4];
+    $_[2]=HTTP_PERMANENT_REDIRECT;
+    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[4]="";
+  }
 	&rex_write;
 	
 }
 
 sub rex_redirect_not_modified {
-	my $url=$_[4];
-	$_[2]=HTTP_NOT_MODIFIED;
-	push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-	$_[4]="";
+  if($_[CODE]){
+    my $url=$_[4];
+    $_[2]=HTTP_NOT_MODIFIED;
+    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[4]="";
+  }
 	&rex_write;
 }
 
@@ -276,43 +292,51 @@ sub rex_redirect_internal;
 
 #General error call, Takes an additional argument of new status code
 sub rex_error {
-	my $site=$_[0][1][0];
-	say "rex_error called", join ", ", caller;
-	$_[REX][method_]="GET";
-	$_[CODE]//=HTTP_NOT_FOUND;	#New return code is appened at end
-	
-	#Locate applicable site urls to handle the error
-	say "site in rex_error: ".$site->id;
-	say Dumper $site->error_uris;
+  if($_[CODE]){
+    my $site=$_[0][1][0];
+    say "rex_error called", join ", ", caller;
+    $_[REX][method_]="GET";
+    $_[CODE]//=HTTP_NOT_FOUND;	#New return code is appened at end
 
-	for($site->error_uris->{$_[CODE]}){
-		if($_){
-			$_[PAYLOAD]=$_;
-			return &rex_redirect_internal
-		}
+    #Locate applicable site urls to handle the error
+    say "site in rex_error: ".$site->id;
+    say Dumper $site->error_uris;
 
-	}
-	#return rex_redirect_internal @_, $uri if $uri;
-	
-	#If one wasn't found, then make an ugly one
-	$_[PAYLOAD]||=$site->id.': Error: '.$_[CODE];
+    for($site->error_uris->{$_[CODE]}){
+      if($_){
+        $_[PAYLOAD]=$_;
+        return &rex_redirect_internal
+      }
+
+    }
+    #return rex_redirect_internal @_, $uri if $uri;
+
+    #If one wasn't found, then make an ugly one
+    $_[PAYLOAD]||=$site->id.': Error: '.$_[CODE];
+  }
 	&rex_write;
 
 }
 
 
 sub rex_error_not_found {
-	$_[CODE]=HTTP_NOT_FOUND;
+  if($_[CODE]){
+    $_[CODE]=HTTP_NOT_FOUND;
+  }
 	&rex_error;
 }
 
 sub rex_error_forbidden {
-	$_[CODE]= HTTP_FORBIDDEN;
+  if($_[CODE]){
+    $_[CODE]= HTTP_FORBIDDEN;
+  }
 	&rex_error;
 }
 
 sub rex_error_unsupported_media_type {
-	$_[CODE]= HTTP_UNSUPPORTED_MEDIA_TYPE;
+  if($_[CODE]){
+    $_[CODE]= HTTP_UNSUPPORTED_MEDIA_TYPE;
+  }
 	&rex_error;
 }
 
@@ -421,6 +445,10 @@ sub writer {
 }
 sub session {
 	$_[0][session_];
+}
+
+sub peer {
+  $_[0][peer_];
 }
 	
 

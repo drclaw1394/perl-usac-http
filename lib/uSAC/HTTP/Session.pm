@@ -69,10 +69,14 @@ method init {
   #make reader
   my $s=sub {
     #Close causes stack reset
+    $_sr->buffer="";
     $_read_stack[-1]();
     $_closeme=1; $_dropper->(1)
   };
-  my $s2=sub {$_read_stack[-1](); $_closeme=1; $_dropper->(1)};
+  my $s2=sub {
+    $_sr->buffer="";
+    $_read_stack[-1](); $_closeme=1; $_dropper->(1)
+  };
   $_sr=uSAC::IO::SReader->create(
     fh=>$_fh,
     max_read_size=>4096*16,
