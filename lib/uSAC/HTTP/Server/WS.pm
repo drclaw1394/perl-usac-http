@@ -16,7 +16,7 @@ use IO::Uncompress::RawInflate qw<rawinflate>;
 
 use Compress::Raw::Zlib;
 
-our @EXPORT_OK=qw<usac_websocket>;
+our @EXPORT_OK=qw<websocket>;
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
@@ -67,89 +67,109 @@ use constant {
 
 use enum qw<STATE_HEADER STATE_BODY>;
 
+sub websocket {
+  #call with same options/arguments
+  [&websocket_in, &websocket_out]
+}
 
-sub usac_websocket {
-	my $parent=$_;
-	my $cb=shift;
+sub websocket_out {
+  sub {
+    my $next=shift; #returns the  next item in the chain
+                    #Technically this shoul not be called 
+                    #as the websocket will take over
+  }
 
-	sub {
-		Log::OK::TRACE and log_trace "Testing for websocket";
-		my ($line, $rex, $code, $headers, $payload, $usac_cb)=@_;
-		my $session=$rex->[uSAC::HTTP::Rex::session_];
-		#attempt to do the match
-		
-		for ($rex->[uSAC::HTTP::Rex::headers_]){
-			if(
-				$_->{CONNECTION} =~ /upgrade/ai	#required
-					and  $_->{UPGRADE} =~ /websocket/ai	#required
-					and  $_->{SEC_WEBSOCKET_VERSION} ==13	#required
-					and  exists $_->{SEC_WEBSOCKET_KEY}	#required
-					and  $_->{SEC_WEBSOCKET_PROTOCOL} =~ /.*/  #sub proto
-			){
+}
 
-				#TODO:  origin testing, externsions,
-				# mangle the key
-				my $key=MIME::Base64::encode_base64 
-				Digest::SHA1::sha1( $_->{SEC_WEBSOCKET_KEY}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
-				"";
-				#
-				#reply
-				my $reply=
-				"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS.LF
-				.HTTP_CONNECTION.": Upgrade".LF
-				.HTTP_UPGRADE.": websocket".LF
-				.HTTP_SEC_WEBSOCKET_ACCEPT.": $key".LF
-				;
+#sub usac_websocket {
+  #my $parent=$_;
+  #my $cb=shift;
+sub websocket_in {
+  sub {
+    my $next=shift; 
 
-				#support the permessage deflate
-				my $deflate_flag;
-				for($_->{SEC_WEBSOCKET_EXTENSIONS}){
-					if(/permessage-deflate/){
-						$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
-						Log::OK::DEBUG and log_debug(  __PACKAGE__." DEFLATE SUPPORTED");
-						$deflate_flag=1;
+    sub {
+      Log::OK::TRACE and log_trace "Testing for websocket";
+      my ($line, $rex, $code, $headers, $payload, $usac_cb)=@_;
+      my $session=$rex->[uSAC::HTTP::Rex::session_];
+      #attempt to do the match
 
-					}
-					else{
-					}
-				}
+      for ($rex->[uSAC::HTTP::Rex::headers_]){
+        if(
+          $_->{CONNECTION} =~ /upgrade/ai	#required
+            and  $_->{UPGRADE} =~ /websocket/ai	#required
+            and  $_->{SEC_WEBSOCKET_VERSION} ==13	#required
+            and  exists $_->{SEC_WEBSOCKET_KEY}	#required
+            and  $_->{SEC_WEBSOCKET_PROTOCOL} =~ /.*/  #sub proto
+        ){
 
-				#write reply	
-				Log::OK::DEBUG and log_debug __PACKAGE__." setting in progress flag";
-				#$session->[uSAC::HTTP::Session::in_progress_]=1;
-				$rex->[uSAC::HTTP::Rex::in_progress_]=1;
-				local $/=", ";
-				#for($session->[uSAC::HTTP::Session::write_]){
+          my @subs=split ",", $_->{SEC_WEBSOCKET_PROTOCOL};
+          #TODO:  origin testing, externsions,
+          # mangle the key
+          my $key=MIME::Base64::encode_base64 
+          Digest::SHA1::sha1( $_->{SEC_WEBSOCKET_KEY}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
+          "";
+          #
+          #reply
+          my $reply=
+          "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS.LF
+          .HTTP_CONNECTION.": Upgrade".LF
+          .HTTP_UPGRADE.": websocket".LF
+          .HTTP_SEC_WEBSOCKET_ACCEPT.": $key".LF
+          .HTTP_SEC_WEBSOCKET_PROTOCOL.": ". $subs[0].LF
+          ;
 
-				
-				for($rex->[uSAC::HTTP::Rex::write_]){
-					$_->($reply.LF , sub {
-							my $ws=uSAC::HTTP::Server::WS->new($session);
-							#$ws->[PMD_]=$deflate_flag;
-							$ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);
-              $_[PAYLOAD]=$ws;
-              #$cb->($line, $rex, $code, $headers, $ws);
-              &$cb;
-							#defer the open callback
-							AnyEvent::postpone {$ws->[on_open_]->($ws)};
+          #support the permessage deflate
+          my $deflate_flag;
+          for($_->{SEC_WEBSOCKET_EXTENSIONS}){
+            if(/permessage-deflate/){
+              $reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
+              Log::OK::DEBUG and log_debug(  __PACKAGE__." DEFLATE SUPPORTED");
+              $deflate_flag=1;
 
-							#read and write setup create a new ws with just the session
-							#uSAC::HTTP::Server::WS->new($_);
-							$_=undef;
-						});
-				}
-			}
+            }
+            else{
+            }
+          }
 
-			else{
-				Log::OK::DEBUG and log_debug __PACKAGE__." Websocket did not match";
-				#reply
-				#$session->[uSAC::HTTP::Session::closeme_]=1;
-				$rex->[uSAC::HTTP::Rex::closeme_]->$*=1;
-				uSAC::HTTP::Rex::rex_error_forbidden $line, $rex;
-				return;
-			}
-		}
-	}
+          #write reply	
+          Log::OK::DEBUG and log_debug __PACKAGE__." setting in progress flag";
+          #$session->[uSAC::HTTP::Session::in_progress_]=1;
+          $rex->[uSAC::HTTP::Rex::in_progress_]=1;
+          local $/=", ";
+          #for($session->[uSAC::HTTP::Session::write_]){
+
+
+          for($rex->[uSAC::HTTP::Rex::write_]){
+            $_->($reply.LF , sub {
+                my $ws=uSAC::HTTP::Server::WS->new($session);
+                #$ws->[PMD_]=$deflate_flag;
+                $ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);
+                $_[PAYLOAD]=$ws;
+                #$cb->($line, $rex, $code, $headers, $ws);
+                #&$cb;
+                &$next;
+                #defer the open callback
+                AnyEvent::postpone {$ws->[on_open_]->($ws)};
+
+                #read and write setup create a new ws with just the session
+                #uSAC::HTTP::Server::WS->new($_);
+                $_=undef;
+              });
+          }
+        }
+
+        else{
+          Log::OK::DEBUG and log_debug __PACKAGE__." Websocket did not match";
+          #reply
+          #$session->[uSAC::HTTP::Session::closeme_]=1;
+          $rex->[uSAC::HTTP::Rex::closeme_]->$*=1;
+          uSAC::HTTP::Rex::rex_error_forbidden $line, $rex;
+          return;
+        }
+      }
+    }
+  }
 }
 
 
@@ -296,11 +316,8 @@ sub  _make_websocket_server_reader {
 					#TODO: drop the session, undef any read/write subs
 					$self->[pinger_]=undef;
 					$self->[on_close_]->($self);
-					#$session->[uSAC::HTTP::Session::closeme_]=1;
-          #$rex->[uSAC::HTTP::Rex::closeme_]->$*=1;
           $session->closeme=1;
-					#$session->[uSAC::HTTP::Session::dropper_]->(undef);
-					$session->[uSAC::HTTP::Rex::dropper_]->(undef);
+					$session->dropper->(undef);
 
 				}
 				else{
@@ -400,14 +417,12 @@ sub new {
 	$self->@[(id_, session_, maxframe_, mask_, ping_interval_, state_, on_message_, on_error_, on_close_, on_open_)]=($id++, $session, 1024**2, 0, 5, OPEN, sub {}, sub {}, sub {}, sub{});
 
 	bless $self, $pkg;
-  #$session->rex=$self;#[uSAC::HTTP::Session::rex_]=$self;	#update rex to refer to the websocket
-	#$session->[uSAC::HTTP::Rex::closeme_]=1;	#At the end of the session close the socket
 	$session->closeme=1;
 
 	$self->[writer_]=_make_websocket_server_writer $self, $session;	#create a writer and store in ws
 
 	#the pushed reader now has access to the writer via the session->rex
-	$session->push_reader(_make_websocket_server_reader($self,$session));
+	$session->push_reader(_make_websocket_server_reader($self, $session));
 
 	#setup ping
 	$self->ping_interval($self->[ping_interval_]);

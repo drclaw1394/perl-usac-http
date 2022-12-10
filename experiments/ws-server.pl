@@ -37,19 +37,19 @@ $server->add_route('GET'=>"/\$"=>sub {
 
 
 
-$server->add_route(GET=>"/ws"=> usac_websocket sub{
+$server->add_route(GET=>"/ws"=> websocket()=>sub{
 		my ($matcher, $rex, $code, $headers, $ws)=@_;
 		say " IN usac websocket  callback: ",join ", ", @_;
 		my $timer;
 		#$ws->ping_interval(0);
-		$ws->on_open=sub {
-			$clients{$_[0]}=$_[0];
-                         $timer=AE::timer 0, 1, sub {
-                                $ws->send_text_message("hello",sub {
-                                        say "CALLBACK";
-                                });
-                        };
-		};
+    $ws->on_open=sub {
+      $clients{$_[0]}=$_[0];
+      $timer=AE::timer 0, 1, sub {
+        $ws->send_text_message("hello",sub {
+            say "CALLBACK";
+          });
+      };
+    };
 
 		$ws->on_message=sub {
 				say "GOT message: $_[1]";
@@ -72,22 +72,37 @@ $server->add_route(GET=>"/ws"=> usac_websocket sub{
 
 $server->add_route("GET"=>"/large"=>()=>sub {
 	state $data= "x"x(4096*4096);
-	rex_write @_, $data;
+  $_[PAYLOAD]=$data;
+	&rex_write;
 });
 
 $server->add_route("GET"=>"/chunks"=>()=>sub {
 	state $data= "x" x (4096*4096);
-	my $size=4096*128;
+	my $size=4096*1;
 	my $offset=0;#-$size;;
 	my @g=@_;
 
-	my $sub=sub {
+  my @args=@_;
+	my $sub;
+  $sub=sub {
 		my $d=substr($data, $offset, $size);	#Data to send
 
 		$offset+=$size;				#update offset
-		rex_write @g, $data, $offset<length($data)?__SUB__:undef;
+    #rex_write @g, $data, $offset<length($data)?__SUB__:undef;
 		
+    if($offset<length($data)){
+        $args[PAYLOAD]= substr $data, $offset, $size;
+        $args[CB]=__SUB__;
+    }
+    else {
+      $args[PAYLOAD]= "";
+      $args[CB]=undef;
+      $sub=undef;
+    }
+
+    rex_write @args;
 	};
+
 	$sub->();
 });
 
@@ -100,13 +115,16 @@ __DATA__
 		<title>WS test </title>
 	</head>
 	<body>
+    <div id="messages"></div>
 		<script >
+      let messages=document.getElementById("messages");
 			
 			var ws=new WebSocket("ws://"+location.host+"/ws","chat");
 			var id=Date.now();
 			ws.onopen=function(event){
 				console.log("websocket open");
 				//ws.send("hello");
+
 				setInterval(function(){
 					ws.send(id+" hello");
 				},100);
@@ -114,6 +132,9 @@ __DATA__
 
 			ws.onmessage= function(msg){
 				console.log("websocket message",msg.data);
+        let m= document.createElement("div");
+        m.innerHTML=msg.data;
+        messages.appendChild(m);
 				};
 			ws.onerror= function(msg){
 				console.log("websocket error",msg);

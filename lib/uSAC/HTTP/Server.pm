@@ -413,7 +413,7 @@ sub do_accept2{
 
 				
 				
-			IO::FD::accept_multiple(@afh, @peers, $fl, 1);
+			IO::FD::accept_multiple(@afh, @peers, $fl);
 			$do_client->(\@afh,\@peers);
 		};
 	}
