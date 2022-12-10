@@ -2,13 +2,6 @@ use strict;
 use warnings;
 use feature qw<state say>;
 
-use Log::ger;
-use Log::ger::Output "Screen";
-use Log::OK {
-	lvl=>"warn",
-	opt=>"verbose"
-};
-Log::ger::Util::set_level Log::OK::LEVEL;
 
 use EV;
 use AnyEvent;
@@ -17,7 +10,10 @@ use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<log_simple>;
 use uSAC::HTTP::Server::WS;
 
+use Log::ger::Output "Screen";
+
 my %clients;
+
 
 
 my $server=uSAC::HTTP::Server->new();
@@ -25,8 +21,8 @@ my $server=uSAC::HTTP::Server->new();
 #FIXME:
 #the listeners and hosts needs to be setup before adding routes
 
-$server->add_listener( "127.0.0.1:9090");
-$server->add_host("localhost:9090");
+$server->add_listeners( "127.0.0.1:9090");
+#$server->add_host("localhost:9090");
 $server->set_mime_default;
 $server->add_middleware(log_simple);
 
@@ -34,9 +30,8 @@ $server->add_route('GET'=>"/\$"=>sub {
 	local $/=undef; state $data; $data=<DATA> unless $data;	
 
 	#TODO: bug. <> operator not working with state
-	
-	rex_write(@_, $data);
-	return;
+  $_[PAYLOAD]=$data;	
+	&rex_write;
 });
 
 
