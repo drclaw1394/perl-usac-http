@@ -417,7 +417,7 @@ sub send_file_uri_norange {
 		Log::OK::TRACE and log_trace join ", ", @$out_headers;
 		
 
-		rex_write $matcher,$rex,$code,$out_headers,"" and return
+		rex_write $matcher, $rex, $code, $out_headers, "" and return
 			if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
 				or $code==HTTP_NOT_MODIFIED);
 
@@ -429,7 +429,7 @@ sub send_file_uri_norange {
 
 			#Setup writable event listener
 
-			rex_write $matcher,$rex,$code,$out_headers,"", $do_sendfile;
+			rex_write $matcher, $rex, $code, $out_headers, "", $do_sendfile;
 			#$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
 			return;
 		}
@@ -595,7 +595,6 @@ sub make_list_dir {
 		unless(-d _ and  -r _){
 
 			rex_error_not_found $line, $rex;
-			#rex_write $line, $rex, HTTP_NOT_FOUND, {},"";
 			return;
 		}
 

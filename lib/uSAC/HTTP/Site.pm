@@ -119,6 +119,11 @@ sub _add_route {
 	)
 		;
 
+  unless (ref $end eq "CODE"){
+     push @_, $end; #Put it back
+     $end= \&rex_write;
+    warn "No end point provided, using rex write";
+  }
 
 
 	my @names;
@@ -156,7 +161,6 @@ sub _add_route {
 
 	unshift @inner, $self->_strip_prefix if $self->built_prefix;#$self->[prefix_];	#make strip prefix first of middleware
 
-	die "No end point provided" unless $end and ref $end eq "CODE";
 
 	#my @non_matching=(qr{[^ ]+});
 	Log::OK::TRACE and log_trace Dumper $method_matcher;
