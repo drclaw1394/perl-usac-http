@@ -256,7 +256,7 @@ sub make_reader{
           #No body
           $state=$start_state;
           $payload="";
-          $route->[1][1]($route, $rex, $code, $out_header, $payload, undef);
+          $route and $route->[1][1]($route, $rex, $code, $out_header, $payload, undef);
           $out_header=[];
         }
         else{
@@ -310,10 +310,10 @@ sub make_reader{
           $state=$start_state;
           $processed=0;
           $_[PAYLOAD]="";#substr $buf, 0, $new, "";
-          $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], undef);
+          $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], undef);
         }
         else {
-          $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], $dummy_cb);
+          $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], $dummy_cb);
         }
 
         $form_headers={};
@@ -354,7 +354,7 @@ sub make_reader{
                 $multi_state=0;
                 $state=$start_state;
                 my $data=substr($buf, 0, $len);
-                $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], undef);
+                $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], undef);
                 $out_header=[];
 
                 $buf=substr $buf, $offset+4;
@@ -362,7 +362,7 @@ sub make_reader{
               elsif(substr($buf, $offset, 2) eq LF){
                 #not last, regular part
                 my $data=substr($buf, 0, $len);
-                $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb) unless $first;
+                $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb) unless $first;
                 $first=0;
                 #move past data and boundary
                 $buf=substr $buf, $offset+2;
@@ -382,7 +382,7 @@ sub make_reader{
               # Full boundary not found, send partial, upto boundary length
               my $len=length($buf)-$b_len;		#don't send boundary
               my $data=substr($buf, 0, $len);
-              $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb);
+              $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb);
               $buf=substr $buf, $len;
               #wait for next read now
               return;

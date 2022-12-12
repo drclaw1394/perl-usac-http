@@ -12,7 +12,7 @@ use Log::OK;
 use Try::Catch;
 use Carp qw<carp>;
 use File::Basename qw<basename dirname>;
-use File::Spec::Functions qw<rel2abs>;
+use File::Spec::Functions qw<rel2abs catfile>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::v1_1_Reader;
@@ -24,6 +24,8 @@ use uSAC::HTTP::Session;
 #use uSAC::HTTP::Server;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Constants;
+use IO::FD;
+use Fcntl qw<O_CREAT O_RDWR>;
 
 #use uSAC::HTTP::Static;
 use AnyEvent;
@@ -37,6 +39,11 @@ use URL::Encode qw<url_decode_utf8>;
 use Cpanel::JSON::XS qw<encode_json decode_json>;
 
 our @EXPORT_OK=qw<rex_headers 
+
+urlencoded_slurp
+urlencoded_file
+multipart_slurp
+multipart_file
 
 usac_data_stream
 usac_multipart_stream
@@ -368,18 +375,18 @@ sub rex_redirect_internal {
 		return;
 	}
 
-	#Here we reenter the main processing chain with a  new url, potentiall
+	#Here we reenter the main processing chain with a  new url, potential
 	#new headers and status code
 	undef $_[0];
 	$rex->[recursion_count_]++;
 	Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
-	$rex->[session_]->server->current_cb->(
+  my $route;
+	($route, $rex->[captures_])=$rex->[session_]->server->current_cb->(
 		$rex->[host_],			#Internal redirects are to same host
 		join(" ", $rex->@[method_, uri_]),#New method and url
-		$rex,				#Same rex
-		$code,
-		$headers			#New code and headers
-	);
+  );
+
+  $route->[1][1]($route, $rex, $code, $headers);
 	1;
 }
 
@@ -621,6 +628,146 @@ sub usac_form_stream {
 	}
 }
 
+#Innerware which aggrigates the streaming url encoded body content
+sub urlencoded_slurp {
+
+  my %options=@_;
+  my $upload_dir=$options{upload_dir};
+  
+  my $inner=sub {
+    my $next=shift;
+    my %ctx;
+    sub {
+      #This sub is shared across all requests for  a route. 
+      if($_[CODE]){
+        my $c;
+        if($_[HEADER]){
+          #first call
+          $_[REX][in_progress_]=1;
+          $c=$ctx{$_[REX]}=[$_[PAYLOAD]];
+        }
+        else{
+          #subsequent calls
+          $c=$ctx{$_[REX]};
+          my $last=@$c-1;
+          $c->[$last][1].=$_[PAYLOAD][1];
+        }
+
+        #Accumulate until the last
+        if(!$_[CB]){
+          #Last set
+          $_[PAYLOAD]=delete $ctx{$_[REX]}; 
+          &$next;
+        }
+        
+      }
+      else {
+        delete $ctx{$_[REX]};
+        &$next;
+      }
+
+    }
+  };
+
+  my $outer=sub {
+    my $next=shift;
+  };
+
+  [$inner, $outer];
+
+}
+sub urlencoded_file {
+
+  my %options=@_;
+  #my $upload_dir=$options{upload_dir};
+  my $upload_dir=$options{upload_dir}; 
+   
+  my $inner=sub {
+    my $next=shift;
+    my %ctx;
+    sub {
+      #This sub is shared across all requests for  a route. 
+      say "URL UPLOAD TO FILE";
+      if($_[CODE]){
+        my $c;
+        if($_[HEADER]){
+          say "URL UPLOAD TO FILE first call";
+          #first call. Open file a temp file
+          my $path=IO::FD::mktemp catfile $upload_dir, "X"x10;
+          say "URL UPLOAD TO FILE first call: path is $path";
+          my $error;
+
+          if(defined IO::FD::sysopen( my $fd, $path, O_CREAT|O_RDWR)){
+            #store the file descriptor in the body field of the payload     
+            if(defined IO::FD::syswrite $fd, $_[PAYLOAD][1]){
+              $_[PAYLOAD][0]{_filename}=$path;
+              $_[PAYLOAD][1]=$fd;
+            }
+            else {
+              say "ERROR writing FILE $!";
+              &rex_error_internal_server_error;
+              #Internal server error
+            }
+          }
+          else {
+              #Internal server error
+              say "ERROR OPENING FILE $!";
+              &rex_error_internal_server_error;
+          }
+
+          $_[REX][in_progress_]=1;
+          $c=$ctx{$_[REX]}=$_[PAYLOAD];
+        }
+        else{
+          #subsequent calls
+          $c=$ctx{$_[REX]};
+          if(defined IO::FD::syswrite $c->[1], $_[PAYLOAD][1]){
+
+          }
+          else {
+            #internal server error
+              &rex_error_internal_server_error;
+          }
+
+        }
+
+        #Accumulate until the last
+        if(!$_[CB]){
+          #Last set
+          my $c=$_[PAYLOAD]=[delete $ctx{$_[REX]}];
+          if(defined IO::FD::close $c->[0][1]){
+            
+          }
+          else {
+            #Internal server error
+          }
+          $c->[0][1]=undef;
+          &$next;
+        }
+        
+      }
+      else {
+        #At this point the connection should be closed
+        my $c=delete $ctx{$_[REX]};
+        if($c->[1]){
+          #Force close fds
+          IO::FD::close $c->[1];
+        }
+        &$next;
+      }
+
+    }
+  };
+
+  my $outer=sub {
+    my $next=shift;
+  };
+
+  [$inner, $outer];
+
+}
+
+
 =head3 usac_urlencoded_slurp
 
 Accumulates a url encoded data HTTP/1.1 body. Calls the application via
@@ -678,6 +825,145 @@ sub usac_urlencoded_slurp{
 		}
 	}
 }
+
+
+sub multipart_slurp {
+
+  my %options=@_;
+  #if a upload directory is specified, then we write the parts to file instead of memory
+  #
+  my $inner=sub {
+    my $next=shift;
+    my %ctx;
+    my $last;
+    sub {
+      say " slurp multipart MIDDLEWARE";
+      if($_[CODE]){
+        my $c=$ctx{$_[REX]};
+        unless($c){
+          $c=$ctx{$_[REX]}=[$_[PAYLOAD]];
+          $_[REX][in_progress_]=1;
+        }
+        else {
+          #For each part (or partial part) we need to append to the right section
+          #$c=$ctx{$_[REX]};
+          $last=@$c-1;
+          if($_[PAYLOAD][0] == $c->[$last][0]){
+            #Header information is the same. Append data
+            $c->[$last][1].=$_[PAYLOAD][1];
+          }
+          else {
+            #New part
+            push @$c, $_[PAYLOAD];
+          }
+        }
+
+        #Call next only when accumulation is done
+        #Pass the list to the next
+        unless($_[CB]){
+          $_[PAYLOAD]=delete $ctx{$_[REX]};
+          &$next;
+        }
+      }
+      else {
+        delete $ctx{$_[REX]};
+        &$next;
+      }
+    }
+  };
+
+  my $outer=sub {
+    my $next=shift;
+  };
+
+  [$inner,$outer];
+}
+sub multipart_file {
+
+  my %options=@_;
+  #my $upload_dir=$options{upload_dir};
+  my $upload_dir=$options{upload_dir}; 
+
+  my $inner=sub {
+    my $next=shift;
+    my %ctx;
+    my $last;
+    sub {
+      say " file multipart MIDDLEWARE";
+      if($_[CODE]){
+        my $open;
+        my $c=$ctx{$_[REX]};
+        unless($c){
+          #first call
+          $c=$ctx{$_[REX]}=[];#$_[PAYLOAD]];
+          $_[REX][in_progress_]=1;
+
+        }
+          #For each part (or partial part) we need to append to the right section
+          #$c=$ctx{$_[REX]};
+          $last=@$c-1;
+          if(@$c and $_[PAYLOAD][0] == $c->[$last][0]){
+            #Header information is the same. Append data
+            my $fd=$c->[$last][1];
+            if(defined IO::FD::syswrite $fd, $_[PAYLOAD][1]){
+              #not used
+            }
+          }
+
+          else {
+            #New part
+
+            #close old one
+            IO::FD::close $c->[$last][1] if @$c;
+
+            #open new one
+            my $path=IO::FD::mktemp catfile $upload_dir, "X"x10;
+            my $error;
+
+            if(defined IO::FD::sysopen( my $fd, $path, O_CREAT|O_RDWR)){
+              #store the file descriptor in the body field of the payload     
+              if(defined IO::FD::syswrite $fd, $_[PAYLOAD][1]){
+                $_[PAYLOAD][0]{_filename}=$path;
+                $_[PAYLOAD][1]=$fd;
+                push @$c, $_[PAYLOAD];
+              }
+              else {
+                say "ERROR writing FILE $!";
+                &rex_error_internal_server_error;
+                #Internal server error
+              }
+            }
+            else {
+              #Internal server error
+              say "ERROR OPENING FILE $!";
+              &rex_error_internal_server_error;
+            }
+          }
+
+
+        #Call next only when accumulation is done
+        #Pass the list to the next
+        unless($_[CB]){
+            #close old one
+            IO::FD::close $c->[$last][1] if @$c;
+          $_[PAYLOAD]=delete $ctx{$_[REX]};
+          &$next;
+        }
+      }
+      else {
+        delete $ctx{$_[REX]};
+        &$next;
+      }
+    }
+  };
+
+  my $outer=sub {
+    my $next=shift;
+  };
+
+  [$inner,$outer];
+}
+
 
 #Writes any file attachments to temp files 
 #NOTE only form-data/multipart

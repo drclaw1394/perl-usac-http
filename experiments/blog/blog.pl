@@ -19,6 +19,8 @@ use Net::ARP;
 use MyApp;
 use Log::ger::Output 'Screen';
 
+use uSAC::HTTP::Rex;
+#::urlencoded_slurp
 
 
 
@@ -118,23 +120,64 @@ my $server; $server=usac_server {;
                 # );                                         #
                 ##############################################
 
-    usac_route POST=>"/new_data\$"=>sub {
+    usac_route POST=>"/stream_url_upload\$"=>sub {
         say "Expecting, content, chunged, multipart or similar";
         #say "Payload: $_[PAYLOAD]";
         $_[PAYLOAD]=Dumper $_[PAYLOAD];
         &rex_write;
     };
+    usac_route POST=>"/slurp_url_upload"=>urlencoded_slurp()=>sub {
+        return &rex_write unless $_[CODE];
+      #NOTE: This is only called when all the data is uploaded
+        say Dumper $_[PAYLOAD];
+        $_[PAYLOAD]="OK";
+        &rex_write;
+    };
+    usac_route POST=>"/file_url_upload"=>
+      urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))=>
+      sub {
+        return &rex_write unless $_[CODE];
+      #NOTE: This is only called when all the data is uploaded
+        say Dumper $_[PAYLOAD];
+        $_[PAYLOAD]="OK";
+        &rex_write;
+    };
+
+    usac_route POST=>"/slurp_multi_upload"=>multipart_slurp()=>sub {
+        return &rex_write unless $_[CODE];
+        
+        #Payload here depends on the configuration of the middleware
+        #It is an array of arrays. The  top level is the list of parts
+        #The second level represents a part (header and body)
+        #The body might be empty, if the data was saved to disk
+        #
+        #say Dumper $_[PAYLOAD];
+        $_[PAYLOAD]="OK";
+        &rex_write;
+    };
+    usac_route POST=>"/file_multi_upload"=>
+      multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))=>
+      sub {
+        return &rex_write unless $_[CODE];
+      #NOTE: This is only called when all the data is uploaded
+        say Dumper $_[PAYLOAD];
+        $_[PAYLOAD]="OK";
+        &rex_write;
+    };
+    
 
     my %ctx;
-    usac_route POST=>"/new_data_multi\$"=>sub {
+    usac_route POST=>"/stream_multi_upload\$"=>sub {
+        return &rex_write unless $_[CODE];
         say "============";
         say "Expecting multipart";
-        say $_[REX];
-        #say "args: ".join ", ", @_;
+
+        #Here we need to test if the headers of incomming parts have changed.
+
         my $ctx=$ctx{$_[REX]}//=0;
         $ctx+= length $_[PAYLOAD][1];
         $_[PAYLOAD]="DONE: $ctx";#. Dumper $_[PAYLOAD][0];
-        say $_[PAYLOAD];
+        say $ctx;
         delete $ctx{$_[REX]} unless($_[CB]);
         &rex_write;
     };

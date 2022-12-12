@@ -154,7 +154,7 @@ sub _add_route {
 	unshift @outer, $self->construct_outerware;
 	@outer=reverse @outer;
 
-	unshift @inner, $self->_strip_prefix;# if $self->[prefix_];	#make strip prefix first of middleware
+	unshift @inner, $self->_strip_prefix if $self->built_prefix;#$self->[prefix_];	#make strip prefix first of middleware
 
 	die "No end point provided" unless $end and ref $end eq "CODE";
 
@@ -169,12 +169,11 @@ sub _add_route {
 		my $headers=[HTTP_ALLOW, join ", ",@matching];
 		$sub = sub { 
 			#TODO: how to add middleware ie logging?
-			$_[2]= HTTP_METHOD_NOT_ALLOWED;
-			$_[3]= $headers;
-			$_[4]="";
+			$_[CODE]= HTTP_METHOD_NOT_ALLOWED;
+			$_[HEADER]= $headers;
+			$_[PAYLOAD]= "";
 			&rex_write;
-			#rex_write @_, HTTP_METHOD_NOT_ALLOWED, $headers, "";
-			return;	#cache this
+			return;	
 		};
 	}
 
@@ -348,19 +347,20 @@ sub _strip_prefix {
 	sub {
 		my $inner_next=shift;
 		sub {
-      Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
 			#package uSAC::HTTP::Rex {
-				$_[1][uSAC::HTTP::Rex::uri_stripped_]= substr($_[1]->[uSAC::HTTP::Rex::uri_], $len) if($_[CODE]);
+        Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
+        $_[REX][uSAC::HTTP::Rex::uri_stripped_]//= substr($_[REX]->[uSAC::HTTP::Rex::uri_], $len);
 
-				&$inner_next; #call the next
-				#Check the inprogress flag
-				#TODO: The session can go out of scope here. Need a more
-				#consistent approach to testing if a reply is in progress
-			
+        &$inner_next; #call the next
+        #Check the inprogress flag
+        #TODO: The session can go out of scope here. Need a more
+        #consistent approach to testing if a reply is in progress
+
         #say $_[REX];
-				!$_[REX][uSAC::HTTP::Rex::in_progress_] and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[REX][uSAC::HTTP::Rex::uri_]);
+        !$_[REX][uSAC::HTTP::Rex::in_progress_] and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[REX][uSAC::HTTP::Rex::uri_]);
 
         Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
+
 		},
 
 	}
