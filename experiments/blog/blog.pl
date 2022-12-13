@@ -126,6 +126,7 @@ my $server; $server=usac_server {;
         $_[PAYLOAD]=Dumper $_[PAYLOAD];
         &rex_write;
     };
+
     usac_route POST=>"/slurp_url_upload"=>urlencoded_slurp()=>sub {
         return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
@@ -133,6 +134,7 @@ my $server; $server=usac_server {;
         $_[PAYLOAD]="OK";
         &rex_write;
     };
+
     usac_route POST=>"/file_url_upload"=>
       urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))=>
       sub {
@@ -259,15 +261,17 @@ my $server; $server=usac_server {;
                 # };                                                    #
                 #########################################################
 
-		usac_route POST=>"/multi_slurp"=>usac_multipart_slurp sub {
-			say "multipart Slurp route";
-			say join ", ", @_;
-			$_[PAYLOAD]="GOT DATA";
-			say Dumper $_[CB];
-			$_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";};
-			&rex_write;
-			
-		};
+                ###############################################################
+                # usac_route POST=>"/multi_slurp"=>usac_multipart_slurp sub { #
+                #         say "multipart Slurp route";                        #
+                #         say join ", ", @_;                                  #
+                #         $_[PAYLOAD]="GOT DATA";                             #
+                #         say Dumper $_[CB];                                  #
+                #         $_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";}; #
+                #         &rex_write;                                         #
+                #                                                             #
+                # };                                                          #
+                ###############################################################
 
                 # usac_route "noreply"=>sub {                                                                                #
                 #                                                                                                            #
@@ -307,10 +311,10 @@ my $server; $server=usac_server {;
                 #                                                                                                            #
 		#
 		#usac_include "admin/usac.pl";                                                                             #
-	       	usac_error_route "/error/404" => sub {
-				say "ERROR FOR BLOG";
-				$_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ".$_[CODE];
-				&rex_write;
+    usac_error_route "/error/404" => sub {
+      say "ERROR FOR BLOG";
+      $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ".$_[CODE];
+      &rex_write;
 		};
 
 		usac_error_page 404 => "/error/404";

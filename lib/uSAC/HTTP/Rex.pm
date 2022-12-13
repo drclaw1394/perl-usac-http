@@ -4,7 +4,8 @@ use strict;
 use version; our $VERSION = version->declare('v0.1');
 use feature qw<current_sub say refaliasing state>;
 no warnings "experimental";
-our $UPLOAD_LIMIT=10_000_000;
+our $UPLOAD_LIMIT=1000;
+our $PART_LIMIT=$UPLOAD_LIMIT;
 use Log::ger;
 
 use Log::OK;
@@ -632,8 +633,8 @@ sub usac_form_stream {
 sub urlencoded_slurp {
 
   my %options=@_;
-  my $upload_dir=$options{upload_dir};
-  
+	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
+   
   my $inner=sub {
     my $next=shift;
     my %ctx;
@@ -642,21 +643,47 @@ sub urlencoded_slurp {
       if($_[CODE]){
         my $c;
         if($_[HEADER]){
+          #test incomming headers are correct
+          
+          unless($_[REX]->headers->{CONTENT_TYPE} =~ m{application/x-www-form-urlencoded}){
+            $_[PAYLOAD]="adsfasdf";
+			      return &rex_error_unsupported_media_type 
+          }
+          #$content_length=$_[REX]->headers->{CONTENT_LENGTH};
+          if(defined $upload_limit  and $_[REX]->headers->{CONTENT_LENGTH} > $upload_limit){
+            #@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
+            $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
+            $_[HEADER]=[];
+            $_[PAYLOAD]="Slurp Limit:  $upload_limit";
+            return &rex_error;
+          }
+
           #first call
           $_[REX][in_progress_]=1;
-          $c=$ctx{$_[REX]}=[$_[PAYLOAD]];
+          $c=$ctx{$_[REX]}=$_[PAYLOAD];
+          $_[PAYLOAD][0]{_byte_count}=0;
         }
         else{
           #subsequent calls
           $c=$ctx{$_[REX]};
-          my $last=@$c-1;
-          $c->[$last][1].=$_[PAYLOAD][1];
+          $c->[1].=$_[PAYLOAD][1];
+          $c->[0]{_byte_count}.+length $_[PAYLOAD][1];
+        }
+
+        #Check total incomming byte count is within limits
+        ##only needed for chunks?
+        if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
+          $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
+          $_[HEADER]=[];
+          $_[PAYLOAD]="Slurp Limit:  $upload_limit";
+          return &rex_error;
         }
 
         #Accumulate until the last
         if(!$_[CB]){
           #Last set
-          $_[PAYLOAD]=delete $ctx{$_[REX]}; 
+          $_[PAYLOAD]=[delete $ctx{$_[REX]}];
+          undef $c;
           &$next;
         }
         
@@ -681,7 +708,8 @@ sub urlencoded_file {
   my %options=@_;
   #my $upload_dir=$options{upload_dir};
   my $upload_dir=$options{upload_dir}; 
-   
+	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
+
   my $inner=sub {
     my $next=shift;
     my %ctx;
@@ -691,6 +719,18 @@ sub urlencoded_file {
       if($_[CODE]){
         my $c;
         if($_[HEADER]){
+          unless($_[REX]->headers->{CONTENT_TYPE} =~ m{application/x-www-form-urlencoded}){
+            $_[PAYLOAD]="";
+			      return &rex_error_unsupported_media_type 
+          }
+          #$content_length=$_[REX]->headers->{CONTENT_LENGTH};
+          if(defined $upload_limit  and $_[REX]->headers->{CONTENT_LENGTH} > $upload_limit){
+            #@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
+            $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
+            $_[HEADER]=[];
+            $_[PAYLOAD]="Limit:  $upload_limit";
+            return &rex_error;
+          }
           say "URL UPLOAD TO FILE first call";
           #first call. Open file a temp file
           my $path=IO::FD::mktemp catfile $upload_dir, "X"x10;
@@ -699,8 +739,10 @@ sub urlencoded_file {
 
           if(defined IO::FD::sysopen( my $fd, $path, O_CREAT|O_RDWR)){
             #store the file descriptor in the body field of the payload     
-            if(defined IO::FD::syswrite $fd, $_[PAYLOAD][1]){
+            my $bytes;
+            if(defined ($bytes=IO::FD::syswrite $fd, $_[PAYLOAD][1])){
               $_[PAYLOAD][0]{_filename}=$path;
+              $_[PAYLOAD][0]{_byte_count}=$bytes;
               $_[PAYLOAD][1]=$fd;
             }
             else {
@@ -721,7 +763,9 @@ sub urlencoded_file {
         else{
           #subsequent calls
           $c=$ctx{$_[REX]};
-          if(defined IO::FD::syswrite $c->[1], $_[PAYLOAD][1]){
+          my $bytes;
+          if(defined($bytes=IO::FD::syswrite $c->[1], $_[PAYLOAD][1])){
+            $c->[0]{_byte_count}+=$bytes;
 
           }
           else {
@@ -730,6 +774,15 @@ sub urlencoded_file {
           }
 
         }
+
+        #Check file size is within limits
+        if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
+          $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
+          $_[HEADER]=[];
+          $_[PAYLOAD]="Limit:  $upload_limit";
+          return &rex_error;
+        }
+
 
         #Accumulate until the last
         if(!$_[CB]){
@@ -768,63 +821,65 @@ sub urlencoded_file {
 }
 
 
-=head3 usac_urlencoded_slurp
-
-Accumulates a url encoded data HTTP/1.1 body. Calls the application via
-callback when the accumuated payload is complete. Returns the fields parsed
-PAYLOAD and the part header in CB.
-
-Unlike streaming routines this always returns a true value for CB.
-
-If the accumuated data is requred, use C<usac_data_slurp> instead.
-
-=cut
-
-sub usac_urlencoded_slurp{
-	my $cb=pop;
-	#The actual sub called
-	#Expected inputs
-	#	line, rex, data, part header, completeflag
-	usac_urlencoded_stream sub {
-			Log::OK::TRACE and log_trace "creating new url encoded streamer";
-			Log::OK::TRACE and log_trace caller;
-
-		sub {
-			Log::OK::TRACE and log_trace "Executing stream callback";
-			Log::OK::TRACE and log_trace caller;
-			my $usac=$_[0];
-			my $rex=$_[1];
-			my $code=$_[2];
-			my $out_head=$_[3];
-			Log::OK::TRACE and log_trace  join ", ", @_;
-
-			state $part_header=0;
-			state $fields={};
-			state $payload="";
-
-			unless($_[CB]){
-				#that was the last part
-				Log::OK::TRACE and log_trace "Last part, send to application";
-				$_[PAYLOAD]=$payload;
-				$fields=&parse_form_params;
-				Log::OK::TRACE and log_trace  Dumper $fields;
-				$cb->($usac, $rex, $code, $out_head, $fields, $part_header);
-				$part_header=undef;
-				$fields={};	#reset 
-				return;
-			}
-			say "NOT LAST PART...";
-			if($part_header != $_[CB]){
-				#new part
-				$part_header=$_[CB];
-				$payload.=$_[PAYLOAD];
-
-				#test for file
-			}
-
-		}
-	}
-}
+##################################################################################################
+# =head3 usac_urlencoded_slurp                                                                   #
+#                                                                                                #
+# Accumulates a url encoded data HTTP/1.1 body. Calls the application via                        #
+# callback when the accumuated payload is complete. Returns the fields parsed                    #
+# PAYLOAD and the part header in CB.                                                             #
+#                                                                                                #
+# Unlike streaming routines this always returns a true value for CB.                             #
+#                                                                                                #
+# If the accumuated data is requred, use C<usac_data_slurp> instead.                             #
+#                                                                                                #
+# =cut                                                                                           #
+#                                                                                                #
+# sub usac_urlencoded_slurp{                                                                     #
+#         my $cb=pop;                                                                            #
+#         #The actual sub called                                                                 #
+#         #Expected inputs                                                                       #
+#         #       line, rex, data, part header, completeflag                                     #
+#         usac_urlencoded_stream sub {                                                           #
+#                         Log::OK::TRACE and log_trace "creating new url encoded streamer";      #
+#                         Log::OK::TRACE and log_trace caller;                                   #
+#                                                                                                #
+#                 sub {                                                                          #
+#                         Log::OK::TRACE and log_trace "Executing stream callback";              #
+#                         Log::OK::TRACE and log_trace caller;                                   #
+#                         my $usac=$_[0];                                                        #
+#                         my $rex=$_[1];                                                         #
+#                         my $code=$_[2];                                                        #
+#                         my $out_head=$_[3];                                                    #
+#                         Log::OK::TRACE and log_trace  join ", ", @_;                           #
+#                                                                                                #
+#                         state $part_header=0;                                                  #
+#                         state $fields={};                                                      #
+#                         state $payload="";                                                     #
+#                                                                                                #
+#                         unless($_[CB]){                                                        #
+#                                 #that was the last part                                        #
+#                                 Log::OK::TRACE and log_trace "Last part, send to application"; #
+#                                 $_[PAYLOAD]=$payload;                                          #
+#                                 $fields=&parse_form_params;                                    #
+#                                 Log::OK::TRACE and log_trace  Dumper $fields;                  #
+#                                 $cb->($usac, $rex, $code, $out_head, $fields, $part_header);   #
+#                                 $part_header=undef;                                            #
+#                                 $fields={};     #reset                                         #
+#                                 return;                                                        #
+#                         }                                                                      #
+#                         say "NOT LAST PART...";                                                #
+#                         if($part_header != $_[CB]){                                            #
+#                                 #new part                                                      #
+#                                 $part_header=$_[CB];                                           #
+#                                 $payload.=$_[PAYLOAD];                                         #
+#                                                                                                #
+#                                 #test for file                                                 #
+#                         }                                                                      #
+#                                                                                                #
+#                 }                                                                              #
+#         }                                                                                      #
+# }                                                                                              #
+##################################################################################################
 
 
 sub multipart_slurp {
