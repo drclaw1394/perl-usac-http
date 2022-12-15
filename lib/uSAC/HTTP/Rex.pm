@@ -302,13 +302,13 @@ sub rex_redirect_internal;
 sub rex_error {
   if($_[CODE]){
     my $site=$_[0][1][0];
-    say "rex_error called", join ", ", caller;
+    #say "rex_error called", join ", ", caller;
     $_[REX][method_]="GET";
     $_[CODE]//=HTTP_NOT_FOUND;	#New return code is appened at end
 
     #Locate applicable site urls to handle the error
-    say "site in rex_error: ".$site->id;
-    say Dumper $site->error_uris;
+    #say "site in rex_error: ".$site->id;
+    #say Dumper $site->error_uris;
 
     for($site->error_uris->{$_[CODE]}){
       if($_){
@@ -821,65 +821,63 @@ sub urlencoded_file {
 }
 
 
-##################################################################################################
-# =head3 usac_urlencoded_slurp                                                                   #
-#                                                                                                #
-# Accumulates a url encoded data HTTP/1.1 body. Calls the application via                        #
-# callback when the accumuated payload is complete. Returns the fields parsed                    #
-# PAYLOAD and the part header in CB.                                                             #
-#                                                                                                #
-# Unlike streaming routines this always returns a true value for CB.                             #
-#                                                                                                #
-# If the accumuated data is requred, use C<usac_data_slurp> instead.                             #
-#                                                                                                #
-# =cut                                                                                           #
-#                                                                                                #
-# sub usac_urlencoded_slurp{                                                                     #
-#         my $cb=pop;                                                                            #
-#         #The actual sub called                                                                 #
-#         #Expected inputs                                                                       #
-#         #       line, rex, data, part header, completeflag                                     #
-#         usac_urlencoded_stream sub {                                                           #
-#                         Log::OK::TRACE and log_trace "creating new url encoded streamer";      #
-#                         Log::OK::TRACE and log_trace caller;                                   #
-#                                                                                                #
-#                 sub {                                                                          #
-#                         Log::OK::TRACE and log_trace "Executing stream callback";              #
-#                         Log::OK::TRACE and log_trace caller;                                   #
-#                         my $usac=$_[0];                                                        #
-#                         my $rex=$_[1];                                                         #
-#                         my $code=$_[2];                                                        #
-#                         my $out_head=$_[3];                                                    #
-#                         Log::OK::TRACE and log_trace  join ", ", @_;                           #
-#                                                                                                #
-#                         state $part_header=0;                                                  #
-#                         state $fields={};                                                      #
-#                         state $payload="";                                                     #
-#                                                                                                #
-#                         unless($_[CB]){                                                        #
-#                                 #that was the last part                                        #
-#                                 Log::OK::TRACE and log_trace "Last part, send to application"; #
-#                                 $_[PAYLOAD]=$payload;                                          #
-#                                 $fields=&parse_form_params;                                    #
-#                                 Log::OK::TRACE and log_trace  Dumper $fields;                  #
-#                                 $cb->($usac, $rex, $code, $out_head, $fields, $part_header);   #
-#                                 $part_header=undef;                                            #
-#                                 $fields={};     #reset                                         #
-#                                 return;                                                        #
-#                         }                                                                      #
-#                         say "NOT LAST PART...";                                                #
-#                         if($part_header != $_[CB]){                                            #
-#                                 #new part                                                      #
-#                                 $part_header=$_[CB];                                           #
-#                                 $payload.=$_[PAYLOAD];                                         #
-#                                                                                                #
-#                                 #test for file                                                 #
-#                         }                                                                      #
-#                                                                                                #
-#                 }                                                                              #
-#         }                                                                                      #
-# }                                                                                              #
-##################################################################################################
+=head3 usac_urlencoded_slurp
+
+Accumulates a url encoded data HTTP/1.1 body. Calls the application via
+callback when the accumuated payload is complete. Returns the fields parsed
+PAYLOAD and the part header in CB.
+
+Unlike streaming routines this always returns a true value for CB.
+
+If the accumuated data is requred, use C<usac_data_slurp> instead.
+
+=cut
+
+sub usac_urlencoded_slurp{
+        my $cb=pop;
+        #The actual sub called
+        #Expected inputs
+        #       line, rex, data, part header, completeflag
+        usac_urlencoded_stream sub {
+                        Log::OK::TRACE and log_trace "creating new url encoded streamer";
+                        Log::OK::TRACE and log_trace caller;
+
+                sub {
+                        Log::OK::TRACE and log_trace "Executing stream callback";
+                        Log::OK::TRACE and log_trace caller;
+                        my $usac=$_[0];
+                        my $rex=$_[1];
+                        my $code=$_[2];
+                        my $out_head=$_[3];
+                        Log::OK::TRACE and log_trace  join ", ", @_;
+
+                        state $part_header=0;
+                        state $fields={};
+                        state $payload="";
+
+                        unless($_[CB]){
+                                #that was the last part
+                                Log::OK::TRACE and log_trace "Last part, send to application";
+                                $_[PAYLOAD]=$payload;
+                                $fields=&parse_form_params;
+                                Log::OK::TRACE and log_trace  Dumper $fields;
+                                $cb->($usac, $rex, $code, $out_head, $fields, $part_header);
+                                $part_header=undef;
+                                $fields={};     #reset
+                                return;
+                        }
+                        say "NOT LAST PART...";
+                        if($part_header != $_[CB]){
+                                #new part
+                                $part_header=$_[CB];
+                                $payload.=$_[PAYLOAD];
+
+                                #test for file
+                        }
+
+                }
+        }
+}
 
 
 sub multipart_slurp {

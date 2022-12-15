@@ -117,9 +117,9 @@ sub _default_handler {
 			#Log::OK::TRACE and log_trace "DEFAULT HANDLER FOR TABLE";
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
 			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[REX]->headers->%*;
-			$_[PAYLOAD]="EEREREER";
-			say "before not found";
-			say @_;
+			$_[PAYLOAD]="NOT FOUND";
+      #say "before not found";
+      #say @_;
 			&rex_error_not_found;
 		};
 }

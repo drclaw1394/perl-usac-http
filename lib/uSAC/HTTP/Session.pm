@@ -30,7 +30,7 @@ field $_peer;
 field $_sessions;
 field @_zombies;
 field $_server;
-field $_scheme;
+field $_scheme :reader;
 field $_time :mutator;
 field $_closeme;
 field $_rw;

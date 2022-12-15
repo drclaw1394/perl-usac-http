@@ -12,5 +12,5 @@ use Plack::Request; sub {
 	#
 	#
 
-	return [200,[],["content from psgi file"]];
+	[200,[],["content from psgi file"]];
 };
