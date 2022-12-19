@@ -6,7 +6,7 @@ use Log::ger;
 use Log::OK;
 use EV;
 use AnyEvent;
-use Socket ":all";
+use Socket;
 use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
 use IO::FD;
 use Error::ShowMe;
@@ -171,7 +171,7 @@ sub _setup_dgram_passive {
 
 	}
 
-	IO::FD::bind $fh, $l->{addr}
+	defined(IO::FD::bind $fh, $l->{addr})
 		or Carp::croak "listen/bind: $!";
 
 	if($l->{family}== AF_UNIX){
@@ -187,7 +187,7 @@ sub _setup_dgram_passive {
 }
 
 sub _setup_stream_passive{
-	my ($self,$l)=@_;
+	my ($self, $l)=@_;
 
 	#Create a socket from results from interface
 	defined IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or Carp::croak "listen/socket: $!";
@@ -202,7 +202,7 @@ sub _setup_stream_passive{
 	}
 
 
-	IO::FD::bind $fh, $l->{addr}
+	defined(IO::FD::bind $fh, $l->{addr})
 		or Carp::croak "listen/bind: $!";
 	#Log::OK::INFO and log_info("Stream bind ok");
 	
@@ -721,9 +721,7 @@ sub stop {
 
 sub run {
 	my $self=shift;
-	my $cv=AE::cv;
 	Log::OK::INFO and log_info(__PACKAGE__. " starting server...");
-	$self->[cv_]=$cv;
 	my $sig; $sig=AE::signal(INT=>sub {
 		$self->stop;
 		$sig=undef;
@@ -753,14 +751,18 @@ sub run {
 
 
 	$self->rebuild_dispatch;
-	#$self->do_listen;
 	$self->do_listen2;
-	#$self->do_accept;
+
 	$self->do_accept2;
   $self->prepare;
 
 	$self->dump_listeners;
 	$self->dump_routes;
+  
+  #Spawn children here?
+
+	my $cv=AE::cv;
+	$self->[cv_]=$cv;
 	$cv->recv();
 }
 
@@ -945,9 +947,9 @@ sub add_listeners {
   }
   elsif($ref eq ""){
     @spec=parse_passive_spec($spec);
-    use feature ":all";
-    use Data::Dumper;
-    say Dumper $spec;
+    #use feature ":all";
+    #use Data::Dumper;
+    #say Dumper $spec;
     croak  "could not parse listener specification" unless $spec;
   }
   else {
@@ -959,6 +961,10 @@ sub add_listeners {
 	push $site->[listen2_]->@*, @addresses;
 }
 
+sub listeners:lvalue {
+  my $self=shift;
+  $self->[listen2_];
+}
 
 sub usac_workers {
 	my $workers=pop;	#Content is the last item

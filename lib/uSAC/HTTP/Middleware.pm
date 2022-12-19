@@ -29,7 +29,6 @@ use Log::OK;
 
 
 
-use constant LF => "\015\012";
 
 our @EXPORT_OK=qw<
 	dummy_mw 
@@ -272,10 +271,10 @@ sub chunked{
         Log::OK::TRACE and log_trace "DOING CHUNKS";
 
         #my $scratch="";
-        my $scratch=sprintf("%02X".LF,length $_[PAYLOAD]).$_[PAYLOAD].LF if $_[PAYLOAD];
+        my $scratch=sprintf("%02X".CRLF,length $_[PAYLOAD]).$_[PAYLOAD].CRLF if $_[PAYLOAD];
 
         unless($_[CB]){
-          $scratch.="00".LF.LF;
+          $scratch.="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]} unless $_[HEADER];	#Last call, delete
           #only when headers
           #are not present

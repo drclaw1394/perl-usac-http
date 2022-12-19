@@ -39,7 +39,6 @@ use uSAC::HTTP::Header qw<:constants>;
 use constant MAX_READ_SIZE => 128 * 1024;
 
 
-use constant LF=>"\015\012";
 
 ###############################################################################
 # sub uri_decode {                                                            #
@@ -144,7 +143,7 @@ sub make_reader{
 			#	$version => comment
 			#
 			if ($state == STATE_REQUEST) {
-				$pos3=index $buf, LF;
+				$pos3=index $buf, CRLF;
 			  $body_type=undef;	
         $body_len=0;
 				if($pos3>=0){
@@ -190,7 +189,7 @@ sub make_reader{
 				#my $pos3;
 				#my $index;
 				while () {
-					$pos3=index $buf, LF;
+					$pos3=index $buf, CRLF;
 					if($pos3>0){
 						($k,$val)=split ":", substr($buf,0,$pos3), 2;
 						$k=~tr/-/_/;
@@ -348,7 +347,7 @@ sub make_reader{
               #test if last
               my $offset=$index+$b_len;
 
-              if(substr($buf, $offset, 4) eq "--".LF){
+              if(substr($buf, $offset, 4) eq "--".CRLF){
                 #Last part
                 $first=1;	#reset first;
                 $multi_state=0;
@@ -359,7 +358,7 @@ sub make_reader{
 
                 $buf=substr $buf, $offset+4;
               }
-              elsif(substr($buf, $offset, 2) eq LF){
+              elsif(substr($buf, $offset, 2) eq CRLF){
                 #not last, regular part
                 my $data=substr($buf, 0, $len);
                 $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb) unless $first;

@@ -255,7 +255,7 @@ sub send_file_uri_norange {
 
 		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
 
-		my $reply="";
+		$reply="";
 		#process caching headers
 		my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
 		#my $code=HTTP_OK;

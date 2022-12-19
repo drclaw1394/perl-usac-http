@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use feature ":all";
+use feature "say";
 
 use uSAC::HTTP;
 use Data::Dumper;
@@ -9,7 +9,9 @@ use uSAC::HTTP::Server;
 use uSAC::HTTP::Static;
 use uSAC::HTTP::Middleware qw<log_simple>;
 use Template::Plexsite::URLTable;
-use Socket ":all";
+
+use Socket qw<getnameinfo NI_NUMERICHOST>;# ":all";
+
 use uSAC::HTTP::Rex;
 use Sort::Key::Multi qw<sskeysort>;
 

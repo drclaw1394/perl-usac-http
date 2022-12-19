@@ -20,6 +20,9 @@ use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Method ":constants";
 #use enum qw<ROUTE REX CODE HEADER PAYLOAD CB>;
 
+use uSAC::HTTP::Constants;
+
+
 our $Site;
 #use Exporter "import";
 sub import {
@@ -44,21 +47,22 @@ sub import {
 			elsif(/Dir_Path/ or /File_Path/ or /Comp/ ){
 				#print 'Symbol name: '.$_."\n";;
 				s/\$//;
-				my $name='*'.$caller."::".$_;
+				my $name=$caller."::".$_;
 				*{$name}=\${'uSAC::HTTP::Site::'.$_};
 			}
 		}
 	}
-	if(@_==1 or grep /:constants/, @_){
-		#Export contants
-		my $i=0;
-		for(qw<ROUTE REX CODE HEADER PAYLOAD CB>){
-			no strict "refs";
-			my $name='*'.$caller."::".$_;
-			my $a=$i;
-			*{$name}=sub {$a};#\${'uSAC::HTTP::'.$_};
-			$i++;
-		}
-	}
+        if(@_==1 or grep /:constants/, @_){
+                #Export contants
+                my $i=0;
+                for(qw<ROUTE REX CODE HEADER PAYLOAD CB LF>){
+                        no strict "refs";
+                        my $name=$caller."::".$_;
+                        my $a=$i;
+      #*{$name}=sub {$a};#\${'uSAC::HTTP::'.$_};
+      *{$name}=\&{$_};
+                        $i++;
+                }
+        }
 }
 1;

@@ -36,6 +36,7 @@ our @EXPORT=@EXPORT_OK;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
+use uSAC::HTTP::Constants;
 
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie qw<:all>;
@@ -58,7 +59,6 @@ use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ 
 use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	end_-server_+1;
 
-use constant LF=>"\015\012";
 
 
 
@@ -108,7 +108,7 @@ my @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 sub _add_route {
 	local $,=" ";
 	my $self=shift;
-	my $end=pop @_;
+	my $end=pop;
 	my $method_matcher=shift;
 	my $path_matcher=shift;
 	my @inner;
@@ -119,11 +119,11 @@ sub _add_route {
 	)
 		;
 
-  unless (ref $end eq "CODE"){
-     push @_, $end; #Put it back
-     $end= \&rex_write;
-    warn "No end point provided, using rex write";
-  }
+    unless (ref $end eq "CODE"){
+      push @_, $end; #Put it back
+      $end= \&rex_write;
+      Log::OK::INFO and log_info "No end point provided, using rex write";
+    }
 
 
 	my @names;
@@ -159,7 +159,7 @@ sub _add_route {
 	unshift @outer, $self->construct_outerware;
 	@outer=reverse @outer;
 
-	unshift @inner, $self->_strip_prefix if $self->built_prefix;#$self->[prefix_];	#make strip prefix first of middleware
+	unshift @inner, $self->_strip_prefix;# if $self->built_prefix;#$self->[prefix_];	#make strip prefix first of middleware
 
 
 	#my @non_matching=(qr{[^ ]+});
@@ -212,21 +212,21 @@ sub _add_route {
           if($_[HEADER]){
             \my @h=$_[HEADER];
 
-            my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. LF;
+            my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. CRLF;
             #last if $_ >= @h;
-            $reply.= $h[$_].": $h[$_+1]".LF 
+            $reply.= $h[$_].": $h[$_+1]".CRLF 
             for(@index[0..@h/2-1]);
 
             #last if  $_ >= $static_headers->@*;
-            $reply.="$static_headers->[$_]:$static_headers->[$_+1]".LF
+            $reply.="$static_headers->[$_]:$static_headers->[$_+1]".CRLF
             for(@index[0..$static_headers->@*/2-1]);
 
-            $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".LF;
+            $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
 
             Log::OK::DEBUG and log_debug "->Serialize: headers:";
             Log::OK::DEBUG and log_debug $reply;
             $_[HEADER]=undef;	#mark headers as done
-            $reply.=LF.$_[PAYLOAD]//"";
+            $reply.=CRLF.$_[PAYLOAD]//"";
             #say "REX in serialize: $_[REX]";
             $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
           }
@@ -356,12 +356,15 @@ sub _strip_prefix {
         $_[REX][uSAC::HTTP::Rex::uri_stripped_]//= substr($_[REX]->[uSAC::HTTP::Rex::uri_], $len);
 
         &$inner_next; #call the next
-        #Check the inprogress flag
-        #TODO: The session can go out of scope here. Need a more
-        #consistent approach to testing if a reply is in progress
 
-        #say $_[REX];
-        !$_[REX][uSAC::HTTP::Rex::in_progress_] and Log::OK::ERROR and log_error("NO ENDPOINT REPLIED for". $_[REX][uSAC::HTTP::Rex::uri_]);
+        #Check the inprogress flag
+        #here we force write unless the rex is in progress
+        
+        unless($_[REX][uSAC::HTTP::Rex::in_progress_]){
+          Log::OK::TRACE and log_trace "REX not in progress";
+          $_[CB]=undef;
+          &rex_write;
+        }
 
         Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
 
@@ -824,19 +827,17 @@ sub add_static_content {
 	my $headers=$options{headers}//[];
 	#my $type=[HTTP_CONTENT_TYPE, $mime];
 	sub {
-		push $_[3]->@*, 
+		push $_[HEADER]->@*, 
 			HTTP_CONTENT_TYPE, $mime,
 			HTTP_CONTENT_LENGTH, length($static),
 			@$headers;
-		$_[4]=$static;
-		&rex_write;#@_, $static; 
-		#return
+		$_[PAYLOAD]=$static;
+		&rex_write;
 	}
 
 }
 
 sub usac_cached_file {
-	#my $self=$_;
 	my $path=pop;
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;

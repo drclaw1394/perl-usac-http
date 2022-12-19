@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 #use Log::ger::Util;
 BEGIN{
-	$ENV{LIBEV_FLAGS}=1; #POLL
+  #$ENV{LIBEV_FLAGS}=1; #POLL
 }
 use EV;
 use AnyEvent;
@@ -13,7 +13,8 @@ use uSAC::HTTP::Middleware qw<dummy_mw log_simple deflate gzip>;
 
 use uSAC::HTTP::State::JSON qw<state_json>;
 use uSAC::HTTP::State::UUID qw<state_uuid>;
-use Socket ":all";
+use Socket;
+#use Socket qw<AF_INET6 SOCK_STREAM>;
 use Net::ARP;
 
 use MyApp;
@@ -59,7 +60,7 @@ my $server; $server=usac_server {;
   #usac_middleware log_simple dump_headers=>1;
 	my $site; $site=usac_site {
 		usac_id "blog";
-		usac_host "127.0.0.1:8082";
+		usac_host "127.0.0.1:8084";
 		usac_host "localhost:8084";
 		usac_host "192.168.1.102:8084";
 
@@ -72,6 +73,12 @@ my $server; $server=usac_server {;
 
 		usac_route '/static/hot.txt' =>	gzip()=>deflate()=>usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
 
+    usac_route "/no_write"=>gzip()=>deflate()=>sub {
+      $_[PAYLOAD]="no write indeed";
+    };
+    usac_route "/loopback";
+
+    usac_route '/statictest$'=> usac_static_content "This is some data";
 
                 ##################################################################################################################
                 # usac_route "/test/$Comp/$Comp" => sub {                                                                        #
@@ -79,7 +86,6 @@ my $server; $server=usac_server {;
                 #         rex_write @_, $captures->[0];                                                                          #
                 # };                                                                                                             #
                 #                                                                                                                #
-                # usac_route '/statictest$'=> usac_static_content "This is some data";                                           #
                 #                                                                                                                #
                 # usac_route 'testing.txt'=>state_json()=>state_uuid()=>deflate()=>sub {                                         #
                 #         my $state=&rex_state;                                                                                  #
@@ -184,133 +190,10 @@ my $server; $server=usac_server {;
         &rex_write;
     };
 		
-		usac_route POST=>"/upload\$"=>usac_data_stream
-		sub {
-			my $cb=sub {say "CALLBACK";};
-			sub {
-				say join ", ", @_;
-				say "STREAMING DATA";
-				$_[CB]&&=$cb;
-				&rex_write;
-			}
-		};
 
-		usac_route POST=>"/upload2"=>usac_urlencoded_stream sub {
-			sub {
-				$_[CB]=undef;
-				&rex_write;
-			}
-		};
+    #usac_route POST=>"/data_slurp" => MyApp::data_slurp;
 
-		usac_route POST=>"/upload3"=>usac_multipart_stream sub {
-			my $cb=sub {say "CALLBACK multipart";};
-			my $prev=0;
-			sub {
-				if($prev != $_[CB]){
-					say "NEW SECTION====";
-					$prev=$_[CB];
-				}
-				say "in multipart handler";
-				$_[CB]&&=$cb;
-				&rex_write;
-
-			}
-		};
-
-		usac_route POST=>"/form_stream"=>usac_form_stream sub {
-			say "======;lka;k;lkasdfasdf";
-			my $cb=sub {say "CALLBACK FROM STREAM";};
-			my $prev=0;
-			sub {
-				if($prev != $_[CB]){
-					say "NEW SECTION====";
-					$prev=$_[CB];
-				}
-				say "in multipart handler";
-				$_[CB]&&=$cb;
-				&rex_write;
-
-			}
-		};
-
-		#usac_route POST=>"/data_slurp" => usac_data_slurp sub {
-		usac_route POST=>"/data_slurp" => MyApp::data_slurp;
-                ###############################################################
-                # usac_data_slurp sub {                                       #
-                #         say "data Slurp route";                             #
-                #         say join ", ", @_;                                  #
-                #         $_[PAYLOAD]="GOT DATA";                             #
-                #         say Dumper $_[CB];                                  #
-                #         $_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";}; #
-                #         &rex_write;                                         #
-                #                                                             #
-                # };                                                          #
-                ###############################################################
-
-		#usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => usac_urlencoded_slurp sub {
-		usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => MyApp::url_slurp;
-                #########################################################
-                # usac_urlencoded_slurp sub {                           #
-                #         say "URL encoded Slurp route";                #
-                #         say Dumper $_[REX]->query_params;             #
-                #         say "CAPTURES: ".Dumper &rex_captures;        #
-                #         say join ", ", @_;                            #
-                #         @_[PAYLOAD, CB]=(Dumper($_[PAYLOAD]), undef); #
-                #         &rex_write;                                   #
-                #                                                       #
-                # };                                                    #
-                #########################################################
-
-                ###############################################################
-                # usac_route POST=>"/multi_slurp"=>usac_multipart_slurp sub { #
-                #         say "multipart Slurp route";                        #
-                #         say join ", ", @_;                                  #
-                #         $_[PAYLOAD]="GOT DATA";                             #
-                #         say Dumper $_[CB];                                  #
-                #         $_[CB]=undef;#&&=sub { say "DATA SLURP CALLBACK";}; #
-                #         &rex_write;                                         #
-                #                                                             #
-                # };                                                          #
-                ###############################################################
-
-                # usac_route "noreply"=>sub {                                                                                #
-                #                                                                                                            #
-                # };                                                                                                         #
-                #                                                                                                            #
-                # usac_route "test/$Comp/$Comp" => sub {                                                                     #
-                #         my $q=&rex_query_params;                                                                           #
-                #         rex_write @_, HTTP_OK, [], "Comp1 $1, Comp $2, query " . Dumper($q);                               #
-                # };                                                                                                         #
-                #                                                                                                            #
-                # usac_route "test2/$File_Path" => sub {                                                                     #
-                #         rex_write @_, HTTP_OK,[], "Comp2 $1";#, Comp $2";                                                  #
-                # };                                                                                                         #
-                #                                                                                                            #
-                # usac_route "test3/$File_Path" => sub {                                                                     #
-                #         my $q=&rex_query_params;                                                                           #
-                #         #say Dumper rex_query_params $rex;                                                                 #
-                #         rex_write @_, HTTP_OK, [], [$1, Dumper $q];     #"Test3 Comp3 $1, Comp ${\$rex->query_params}";    #
-                # };                                                                                                         #
-                #                                                                                                            #
-                # ###################################################################################                        #
-                # # usac_route "file/$File_Path" => sub {                                           #                        #
-                # #         state $static;                                                          #                        #
-                # #         local $_=$_[0][4] and $static= usac_file_under "static" unless $static; #                        #
-                # #                                                                                 #                        #
-                # #         #test file                                                              #                        #
-                # #         if($1 eq "test.txt"){                                                   #                        #
-                # #                 push @_, "test.txt";                                            #                        #
-                # #                 &$static;#->(@_, "test.txt");                                   #                        #
-                # #         }                                                                       #                        #
-                # #         else {                                                                  #                        #
-                # #                 say "not found";                                                #                        #
-                # #                 rex_reply_simple @_, HTTP_NOT_FOUND, [], "";                    #                        #
-                # #         }                                                                       #                        #
-                # # };                                                                              #                        #
-                # ###################################################################################                        #
-                #                                                                                                            #
-		#
-		#usac_include "admin/usac.pl";                                                                             #
+    #usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => MyApp::url_slurp;
     usac_error_route "/error/404" => sub {
       say "ERROR FOR BLOG";
       $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ".$_[CODE];

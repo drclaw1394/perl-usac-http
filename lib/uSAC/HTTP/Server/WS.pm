@@ -30,9 +30,7 @@ use uSAC::HTTP::Constants;
 
 use uSAC::HTTP::Middler;
 
-my $LF=$uSAC::HTTP::Rex::LF;
 
-use constant LF=>"\015\012";
 
 use constant DEBUG => 1;
 
@@ -112,18 +110,18 @@ sub websocket_in {
           #
           #reply
           my $reply=
-          "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS.LF
-          .HTTP_CONNECTION.": Upgrade".LF
-          .HTTP_UPGRADE.": websocket".LF
-          .HTTP_SEC_WEBSOCKET_ACCEPT.": $key".LF
-          .HTTP_SEC_WEBSOCKET_PROTOCOL.": ". $subs[0].LF
+          "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS.CRLF
+          .HTTP_CONNECTION.": Upgrade".CRLF
+          .HTTP_UPGRADE.": websocket".CRLF
+          .HTTP_SEC_WEBSOCKET_ACCEPT.": $key".CRLF
+          .HTTP_SEC_WEBSOCKET_PROTOCOL.": ". $subs[0].CRLF
           ;
 
           #support the permessage deflate
           my $deflate_flag;
           for($_->{SEC_WEBSOCKET_EXTENSIONS}){
             if(/permessage-deflate/){
-              $reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".LF;
+              $reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".CRLF;
               Log::OK::DEBUG and log_debug(  __PACKAGE__." DEFLATE SUPPORTED");
               $deflate_flag=1;
 
@@ -141,7 +139,7 @@ sub websocket_in {
 
 
           for($rex->[uSAC::HTTP::Rex::write_]){
-            $_->($reply.LF , sub {
+            $_->($reply.CRLF , sub {
                 my $ws=uSAC::HTTP::Server::WS->new($session);
                 #$ws->[PMD_]=$deflate_flag;
                 $ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);

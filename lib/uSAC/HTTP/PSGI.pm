@@ -24,7 +24,6 @@ use constant KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
 use constant KEY_COUNT=> end_-entries_+1;
 
-use constant LF => "\015\012";
 our @EXPORT_OK=qw<usac_to_psgi>;
 our @EXPORT=@EXPORT_OK;
 
@@ -32,7 +31,7 @@ our @EXPORT=@EXPORT_OK;
 package uSAC::HTTP::PSGI::Writer {
 
   use uSAC::HTTP::Rex;
-  use constant LF => "\015\012";
+  use uSAC::HTTP::Constants;
   #simple class to wrap the push write of the session
   sub new {
     my $package=shift;
@@ -64,7 +63,6 @@ package uSAC::HTTP::PSGI::Writer {
     #$session->[uSAC::HTTP::Session::dropper_]->();	#no keep alive
     $session->dropper->();
 
-    $session->pop_reader;
   }
 }
 
@@ -103,6 +101,7 @@ sub usac_to_psgi {
       
       unless($_[CODE]){
         #stack reset
+        say "STACK RESET";
         delete $ctx{$_[REX]};
         &$next;
         return
@@ -111,8 +110,6 @@ sub usac_to_psgi {
       if($_[HEADER]){
         #buffer to become psgi.input
         #my $buffer=Plack::TempBuffer->new();
-        my $buffer=Stream::Buffered::PerlIO->new();
-        $ctx{$_[REX]}//=$buffer;
 
         my $session=$_[REX]->session;#$rex->[uSAC::HTTP::Rex::session_];
 
@@ -120,15 +117,21 @@ sub usac_to_psgi {
 
         state $psgi_version=[1,1];
 
+        my $buffer;
         \my %env=$_[REX]->headers;#[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
         #say join ", ", %env;
         #my %env=map(("HTTP_".$_, $h->{$_}), keys $h->%*);
 
         #remove /rename content length and content type for PSGI
-        $env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
-        $env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
+        #$env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
+        #$env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
         #
 
+        if($env{CONTENT_LENGTH}){
+          #We have a body to process
+          $buffer=Stream::Buffered::PerlIO->new();
+          $ctx{$_[REX]}//=$buffer;
+        }
         $env{REQUEST_METHOD}=	$_[REX]->[uSAC::HTTP::Rex::method_];
         $env{SCRIPT_NAME}=		"";
         $env{PATH_INFO}=		"";
@@ -186,9 +189,10 @@ sub usac_to_psgi {
               my $res=shift;
               if(@$res==3){
                 #DELAYED RESPONSE IS A 3 elemement response
-                $next->($usac, $rex, $res->[0],$res->[1], join "", $res->[2]->@*);
+                $next->($usac, $rex, $res->[0], $res->[1], join "", $res->[2]->@*);
                 return;
               }
+
               #or it is streaming. return writer
               my ($code, $psgi_headers, $psgi_body)=@$res;
               uSAC::HTTP::PSGI::Writer->new(%options, code=>$code, headers=>$psgi_headers, rex=>$rex, matcher=>$usac, next=>$next);
@@ -199,7 +203,8 @@ sub usac_to_psgi {
         for(ref($res->[2])){
           if($_ eq "ARRAY"){
             #do_array($usac, $rex, $res);
-            $next->($usac, $rex, $res->[0],$res->[1], join "", $res->[2]->@*);
+            $next->($usac, $rex, $res->[0], $res->[1], join("", $res->[2]->@*),undef);
+            delete $ctx{$_[REX]} if $buffer;  #Immediate respose dispose of context if it was created
           }
           elsif($_ eq "GLOB"){
             do_glob($usac, $rex, $res);
@@ -231,7 +236,6 @@ sub do_array {
 		$res->[1],
 		join "", $res->[2]->@*;
 
-	$session->pop_reader;
 }
 
 sub do_glob {
@@ -243,7 +247,6 @@ sub do_glob {
 
 	#setup headers
 
-	#my $reply="HTTP/1.1 $code".LF;
 
 	unless(first {/Content-Length/i}, @$psgi_headers)	{
 		#calculate the file size from stating it
@@ -254,20 +257,27 @@ sub do_glob {
 	
 	local $/=\4096;
 	my $data;
-	my $do_it=sub{
+	my $do_it;
+  $do_it=sub{
+    unless (@_){
+      #callback error. Close file
+        close $psgi_body;
+        $do_it=undef;
+        $dropper->();
+        return;
+    }
 		$data=<$psgi_body>;
 		if(length($data)){
-			rex_write($usac,$rex, $code, undef, $data, __SUB__);
+			rex_write($usac,$rex, $code, $psgi_headers, $data, __SUB__);
+      $psgi_headers=undef;
 		}
 		else {
+      $do_it=undef;
 			close $psgi_body; 
-			$session->pop_reader;
 			$dropper->();
-
 		}
 	};
-	$data=<$psgi_body>;
-	rex_write($usac,$rex, $code, $psgi_headers, $data, $do_it);
+  $do_it->(undef);
 }
 
 sub do_streaming {
