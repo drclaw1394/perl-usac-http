@@ -826,14 +826,26 @@ sub add_static_content {
 	my $mime=$options{mime}//$self->resolve_mime_default;
 	my $headers=$options{headers}//[];
 	#my $type=[HTTP_CONTENT_TYPE, $mime];
+  [
 	sub {
-		push $_[HEADER]->@*, 
-			HTTP_CONTENT_TYPE, $mime,
-			HTTP_CONTENT_LENGTH, length($static),
-			@$headers;
-		$_[PAYLOAD]=$static;
-		&rex_write;
+      my $next=shift;
+      sub {
+        if($_[HEADER]){
+          push $_[HEADER]->@*, 
+          HTTP_CONTENT_TYPE, $mime,
+          HTTP_CONTENT_LENGTH, length($static),
+          @$headers;
+        }
+        $_[PAYLOAD]=$static if $_[CODE];
+        #&rex_write;
+        &$next;
+      }
 	}
+  , sub {
+      my $next=shift;
+  
+    }
+  ]
 
 }
 

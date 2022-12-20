@@ -93,20 +93,19 @@ our @EXPORT=@EXPORT_OK;
 #
 # Welcome message
 sub _welcome {
-	state $data;
-	unless($data){
-		local $/=undef;
-		$data=<DATA>;
+  state $data;
+  unless($data){
+    local $/=undef;
+    $data=<DATA>;
 
-		#execute template
+    #execute template
 
-	}
+  }
 
-	state $sub=sub {
-		rex_reply_html @_, $data;	
-		#rex_write @_, HTTP_OK, {HTTP_CONTENT_LENGTH, length($data),}, $data;
-		return; #Enable caching
-	}
+  state $sub=sub {
+    $_[PAYLOAD]=$data;
+    &rex_reply_html;
+  }
 }
 
 #if nothing else on this server matches, this will run
@@ -123,6 +122,7 @@ sub _default_handler {
 			&rex_error_not_found;
 		};
 }
+
 
 sub new {
 	my $pkg = shift;
@@ -231,7 +231,7 @@ sub _setup_stream_passive{
 
 
 #Filter the interface listeners to the right place
-sub do_listen2 {
+sub do_passive {
 	my $self = shift;
 	#Listeners are in interface format
 	die "No listeners could be found" unless $self->[listen2_]->@*;
@@ -250,87 +250,6 @@ sub do_listen2 {
 
 }
 
-##########################################################################################################
-# sub do_listen {                                                                                        #
-#         my $self = shift;                                                                              #
-#         Log::OK::INFO and log_info __PACKAGE__." setting up listeners...";                             #
-#         say STDERR $self;                                                                              #
-#         for my $listen (@{ $self->[listen_] }) {                                                       #
-#                 my ($host,$service) =($listen->host, $listen->port);#split ':',$listen,2;              #
-#                                                                                                        #
-#                 my ($error,@results)=getaddrinfo($host,$service, {                                     #
-#                                 hints=>AI_PASSIVE,                                                     #
-#                                 socktype=>SOCK_STREAM                                                  #
-#                         });                                                                            #
-#                                                                                                        #
-#                 say Dumper @results;                                                                   #
-#                 die "Error getting address info for $host:$service" if $error;                         #
-#                                                                                                        #
-#                 my $addr=$results[0]{addr};                                                            #
-#                 my $af=$results[0]{family};                                                            #
-#                                                                                                        #
-#                                                                                                        #
-#                                                                                                        #
-#                 Carp::croak "listen/socket: address family not supported"                              #
-#                         if AnyEvent::WIN32 && $af == AF_UNIX;                                          #
-#                                                                                                        #
-#                         #my $addr;                                                                     #
-#                 IO::FD::socket my $fh, $af, SOCK_STREAM, 0 or Carp::croak "listen/socket: $!";         #
-#                 say STDERR "LISTENER FD: $fh";                                                         #
-#                 if ($af == AF_INET || $af == AF_INET6) {                                               #
-#                         #$addr=pack_sockaddr_in($service,$addr);                                       #
-#                         if($self->[workers_]>1 or 1){                                                  #
-#                                 IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1)         #
-#                                 or Carp::croak "listen/so_reuseaddr: $!"                               #
-#                                         unless AnyEvent::WIN32;                                        #
-#                                                                                                        #
-#                                         IO::FD::setsockopt $fh, SOL_SOCKET, SO_REUSEPORT, pack "i", 1  #
-#                                 or Carp::croak "listen/so_reuseport: $!"                               #
-#                                         unless AnyEvent::WIN32;                                        #
-#                         }                                                                              #
-#                         else {                                                                         #
-#                                 say STDERR "Socket reuse not enabled. (ie only 1 worker)";             #
-#                         }                                                                              #
-#                                                                                                        #
-#                         IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1                  #
-#                                 or Carp::croak "listen/so_nodelay $!"                                  #
-#                                         unless AnyEvent::WIN32;                                        #
-#                                                                                                        #
-#                 } elsif ($af == AF_UNIX) {                                                             #
-#                         unlink $service;                                                               #
-#                 }                                                                                      #
-#                                                                                                        #
-#                 log_info "Service: $service, host $host";                                              #
-#                 #AnyEvent::Socket::pack_sockaddr( $service, $ipn )                                     #
-#                 IO::FD::bind $fh, $addr                                                                #
-#                         or Carp::croak "listen/bind: $!";                                              #
-#                                                                                                        #
-#                 if ($host eq 'unix/') {                                                                #
-#                         chmod oct('0777'), $service                                                    #
-#                                 or warn "chmod $service failed: $!";                                   #
-#                 }                                                                                      #
-#                                                                                                        #
-#                 #fh_nonblocking $fh, 1;                                                                #
-#                 IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;                                                 #
-#                                                                                                        #
-#                 $self->[fh_] ||= $fh; # compat                                                         #
-#                 $self->[fhs_]{fileno $fh} = $fh;                                                       #
-#         }                                                                                              #
-#                                                                                                        #
-#         $self->prepare();                                                                              #
-#                                                                                                        #
-#         for ( values  %{ $self->[fhs_] } ) {                                                           #
-#                 IO::FD::listen $_, $self->[backlog_]                                                   #
-#                         or Carp::croak "listen/listen on ".(IO::FD::fileno $_).": $!";                 #
-#         }                                                                                              #
-#                                                                                                        #
-#         return wantarray ? do {                                                                        #
-#                 #my ($service, $host) = AnyEvent::Socket::unpack_sockaddr( getsockname $self->[fh_] ); #
-#                 #(format_address $host, $service);                                                     #
-#                 ();                                                                                    #
-#         } : ();                                                                                        #
-# }                                                                                                      #
-##########################################################################################################
 
 sub prepare {
 	#setup timer for constructing date header once a second
@@ -353,11 +272,8 @@ sub prepare {
 
 			if(($self->[server_clock_]-$session->time)> $timeout){
 				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
-				#$session->[uSAC::HTTP::Session::closeme_]=1;
-				#$session->[uSAC::HTTP::Session::dropper_]->();
 				$session->closeme=1;
 				$session->drop;
-				#delete $self->[sessions_]{$_};
 			}
 		}
 		
@@ -435,29 +351,31 @@ sub do_accept2{
 }
 
 
-sub do_accept {
-	state $seq=0;
-	Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
-	weaken( my $self = shift );
-	\my @zombies=$self->[zombies_];
-	\my %sessions=$self->[sessions_];
-	my $do_client=$self->make_do_client;
-
-	my $child_index;
-	\my @children=[];
-
-	for my $fl ( values %{ $self->[fhs_] }) {
-		$self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {
-			my $peer;
-			while(($peer = IO::FD::accept my $fh, $fl)){
-				#last unless $fh;
-				CONFIG::kernel_loadbalancing and $do_client->($fh);
-
-				#!CONFIG::kernel_loadbalancing and IO::FDPass::send $children[$child_index++%@children], $fh;
-			}
-		};
-	}
-}
+#################################################################################################################################
+# sub do_accept {                                                                                                               #
+#         state $seq=0;                                                                                                         #
+#         Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";                                                     #
+#         weaken( my $self = shift );                                                                                           #
+#         \my @zombies=$self->[zombies_];                                                                                       #
+#         \my %sessions=$self->[sessions_];                                                                                     #
+#         my $do_client=$self->make_do_client;                                                                                  #
+#                                                                                                                               #
+#         my $child_index;                                                                                                      #
+#         \my @children=[];                                                                                                     #
+#                                                                                                                               #
+#         for my $fl ( values %{ $self->[fhs_] }) {                                                                             #
+#                 $self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {                                                            #
+#                         my $peer;                                                                                             #
+#                         while(($peer = IO::FD::accept my $fh, $fl)){                                                          #
+#                                 #last unless $fh;                                                                             #
+#                                 CONFIG::kernel_loadbalancing and $do_client->($fh);                                           #
+#                                                                                                                               #
+#                                 #!CONFIG::kernel_loadbalancing and IO::FDPass::send $children[$child_index++%@children], $fh; #
+#                         }                                                                                                     #
+#                 };                                                                                                            #
+#         }                                                                                                                     #
+# }                                                                                                                             #
+#################################################################################################################################
 
 sub as_satellite {
 	#Connect to unix socket, which master is listening to
@@ -474,57 +392,57 @@ sub make_do_dgram_client {
 
 sub make_do_client{
 
-	my ($self)=@_;
-	\my @zombies=$self->[zombies_];
-	\my %sessions=$self->[sessions_];
+  my ($self)=@_;
+  \my @zombies=$self->[zombies_];
+  \my %sessions=$self->[sessions_];
 
-	my $session;
-	my $seq=0;
-	sub {
-		my ($fhs,$peers)=@_;
+  my $session;
+  my $seq=0;
+  sub {
+    my ($fhs,$peers)=@_;
 
-		my $i=0;
-		for my $fh(@$fhs){#=shift;
+    my $i=0;
+    for my $fh(@$fhs){#=shift;
 
-		#while ($fl and ($peer = accept my $fh, $fl)) {
+      #while ($fl and ($peer = accept my $fh, $fl)) {
 
-		#binmode	$fh, ":raw";
+      #binmode	$fh, ":raw";
 
-		#Linux does not inherit the socket flags from parent socket. But BSD does.
-		#Compile time disabling with constants
-		#CONFIG::set_nonblock and IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
+      #Linux does not inherit the socket flags from parent socket. But BSD does.
+      #Compile time disabling with constants
+      #CONFIG::set_nonblock and IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
 
-		#TODO:
-		# Need to do OS check here
-		CONFIG::set_no_delay and IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1 or Carp::croak "listen/so_nodelay $!";
-		#setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
+      #TODO:
+      # Need to do OS check here
+      CONFIG::set_no_delay and IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1 or Carp::croak "listen/so_nodelay $!";
+      #setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
 
 
-		my $id = ++$seq;
-		my $scheme="http";
+      my $id = ++$seq;
+      my $scheme="http";
 
-		Log::OK::DEBUG and log_debug "Server new client connection: id $id";
-		if(@zombies){
-			$session=pop @zombies;
-			#uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
-			$session->revive($id, $fh, $scheme, $peers->[$i]);
-		}
-		else {
-			#$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
-			$session=uSAC::HTTP::Session->new;
-			$session->init($id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme, $peers->[$i]);
-			#uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
-			$session->push_reader(make_reader $session, MODE_SERVER);
-		}
-		$i++;
-		$sessions{ $id } = $session;
-		#$active_connections++;
-		#$total_connections++;
+      Log::OK::DEBUG and log_debug "Server new client connection: id $id";
+      if(@zombies){
+        $session=pop @zombies;
+        #uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
+        $session->revive($id, $fh, $scheme, $peers->[$i]);
+      }
+      else {
+        #$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
+        $session=uSAC::HTTP::Session->new;
+        $session->init($id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme, $peers->[$i]);
+        #uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
+        $session->push_reader(make_reader $session, MODE_SERVER);
+      }
+      $i++;
+      $sessions{ $id } = $session;
+      #$active_connections++;
+      #$total_connections++;
 
-	}
-	@{$fhs}=();
-	@{$peers}=();
-}
+    }
+    @{$fhs}=();
+    @{$peers}=();
+  }
 }
 
 sub current_cb {
@@ -537,12 +455,7 @@ sub enable_hosts {
 sub static_headers {
 	shift->[static_headers_];
 }
-#########################################################################
-# sub add_end_point{                                                    #
-#         my ($self,$matcher,$end, $ctx)=@_;                            #
-#         $self->[table_]->add(matcher=>$matcher,sub=>$end, ctx=>$ctx); #
-# }                                                                     #
-#########################################################################
+
 sub add_host_end_point{
 	my ($self, $host, $matcher, $ctx, $type)=@_;
 
@@ -554,19 +467,6 @@ sub add_host_end_point{
 	my $table=$self->[host_tables_]{$host}//=[
 		Hustle::Table->new("kkkkk: asdf"),{}
 	];
-        ##################################################################################################################
-        #                 uSAC::HTTP::Site->new(id=>"TABLE_FALLBACK"),                                                   #
-        #                 sub {                                                                                          #
-        #                         say "IN TABLE FALLBACK";                                                               #
-        #                         &rex_error_not_found;                                                                  #
-        #                         #log_error "Should not use table default dispatcher: ". $_[1]->[uSAC::HTTP::Rex::uri_] #
-        #                 },                                                                                             #
-        #                 undef,  #No outerware linking                                                                  #
-        #                 0                                                                                              #
-        #         ]),                                                                                                    #
-        #         {}                                                                                                     #
-        # ];                                                                                                             #
-        ##################################################################################################################
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
@@ -751,15 +651,17 @@ sub run {
 
 
 	$self->rebuild_dispatch;
-	$self->do_listen2;
 
+  #Spawn here for sharding
+
+	$self->do_passive;
 	$self->do_accept2;
   $self->prepare;
 
 	$self->dump_listeners;
 	$self->dump_routes;
   
-  #Spawn children here?
+  #Spawn children here for thundering herd
 
 	my $cv=AE::cv;
 	$self->[cv_]=$cv;
@@ -984,13 +886,6 @@ sub usac_sub_product {
 	HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )];
 }
 
-sub process_listeners {
-	#A listener binds to a particular socket type and family
-	#Sets up the callback to call when a new connection is available
-	#or how to process datagrams
-	
-	
-}
 
 1; 
 __DATA__

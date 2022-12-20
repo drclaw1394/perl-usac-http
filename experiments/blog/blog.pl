@@ -76,7 +76,8 @@ my $server; $server=usac_server {;
     usac_route "/no_write"=>gzip()=>deflate()=>sub {
       $_[PAYLOAD]="no write indeed";
     };
-    usac_route "/loopback";
+
+    usac_route "/loopback"=>sub {$_[PAYLOAD]="OK"};
 
     usac_route '/statictest$'=> usac_static_content "This is some data";
 

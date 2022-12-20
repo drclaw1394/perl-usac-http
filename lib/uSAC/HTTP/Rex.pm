@@ -120,15 +120,10 @@ require uSAC::HTTP::Middleware;
 #Arguments are matcher, rex, code, header, data, cb
 #		0     ,	 1 ,	2,	3,    4,  5
 sub rex_write{
-	my $session=$_[1]->[session_];
+  #my $session=$_[1]->[session_];
 	if($_[HEADER]){
-		#\my @h=$_[3];
-
-
 		#If headers are supplied, then  process headers
 		Log::OK::TRACE and log_trace "REX: Doing rex write====";
-		#Log::OK::TRACE and log_trace "REX: close me: ".$session->[uSAC::HTTP::Session::closeme_];
-		#$session->[uSAC::HTTP::Session::in_progress_]=1;
 		$_[REX][in_progress_]=1;
 
 		#Tell the other end the connection will be closed
@@ -146,8 +141,10 @@ sub rex_write{
 
 	&{$_[0][1][2]};	#Execute the outerware for this site/location
 
-	#1;	#always return true
 }
+
+
+
 ##
 #OO Methods
 #
@@ -406,27 +403,29 @@ sub rex_reply_json {
 	&rex_write;
 }
 
+#Assume payload has content
 sub rex_reply_html {
-	my $data=pop;
-	rex_write @_, HTTP_OK, [
+
+  push $_[HEADER]->@*,
 		HTTP_CONTENT_TYPE, "text/html",
-		HTTP_CONTENT_LENGTH, length($data),
-	], $data;
+		HTTP_CONTENT_LENGTH, length $_[PAYLOAD];
+
+	&rex_write;
 }
 sub rex_reply_javascript {
-	my $data=pop;
-	rex_write @_, HTTP_OK, [
+  push $_[HEADER]->@*,
 		HTTP_CONTENT_TYPE, "text/javascript",
-		HTTP_CONTENT_LENGTH, length($data),
-	], $data;
+		HTTP_CONTENT_LENGTH, length $_[PAYLOAD];
+
+	&rex_write;
 }
 
 sub rex_reply_text {
-	my $data=pop;
-	rex_write @_, HTTP_OK, [
+  push $_[HEADER]->@*,
 		HTTP_CONTENT_TYPE, "text/plain",
-		HTTP_CONTENT_LENGTH, length($data),
-	], $data;
+		HTTP_CONTENT_LENGTH, length $_[PAYLOAD];
+
+	&rex_write;
 }
 
 sub rex_captures {
