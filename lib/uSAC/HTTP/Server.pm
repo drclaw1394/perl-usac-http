@@ -4,8 +4,6 @@ use feature "try";
 
 use Log::ger;
 use Log::OK;
-use EV;
-use AnyEvent;
 use Socket;
 use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
 use IO::FD;
@@ -84,7 +82,7 @@ use uSAC::HTTP::Rex;
 use uSAC::MIME;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<usac_server usac_include usac_listen usac_listen2 usac_mime_map usac_mime_default usac_sub_product>;
+our @EXPORT_OK=qw<usac_server usac_run usac_include usac_listen usac_listen2 usac_mime_map usac_mime_default usac_sub_product>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -260,7 +258,10 @@ sub prepare {
 
 	#Timeout timer
 	#
-	$self->[stream_timer_]=AE::timer 0, $interval, sub {
+  $SIG{ALRM}=
+  #$self->[stream_timer_]=AE::timer 0, $interval,
+  sub {
+    say "Alarm received";
 		#iterate through all connections and check the difference between the last update
 		$self->[server_clock_]+=$interval;
 		#and the current tick
@@ -277,34 +278,11 @@ sub prepare {
 			}
 		}
 		
-		
+	  alarm	 $interval;
 	};
+  
+  alarm $interval;
 
-        # FD recieve
-        #open child pipe
-        ##################################################
-        # my $sfd;                                       #
-        # my $rfd;                                       #
-        # my $socket;                                    #
-        # return unless $socket;                         #
-        # my $do_client=$self->make_do_client;           #
-        # my $watcher; $watcher=AE::io $socket, 0, sub { #
-        #         #fd is readable.. attempt to read      #
-        #         $rfd=IO::FDPass::recv $sfd;            #
-        #         if(defined $rfd){                      #
-        #                 #New fd to play with           #
-        #                 $do_client->($rfd);            #
-        #         }                                      #
-        #         elsif($! == EAGAIN or $! ==EINTR){     #
-        #                 return;                        #
-        #         }                                      #
-        #         else {                                 #
-        #                 #Actuall error                 #
-        #                 #TODO                          #
-        #         }                                      #
-        #                                                #
-        # };                                             #
-        ##################################################
 }
 
 #Iterate over passive sockets are run the required code
@@ -321,18 +299,12 @@ sub do_accept2{
 	my @peers;
 	my @afh;
 
-	for my $fl ( values %{ $self->[fhs2_] }) {
-		$self->[aws_]{ $fl } = AE::io $fl, 0, sub {
-			#my $peer;
-			#my $fh;
-			#$do_client->([$fh]) while($peer = IO::FD::accept $fh, $fl);
-
-				
-				
-			IO::FD::accept_multiple(@afh, @peers, $fl);
-			$do_client->(\@afh,\@peers);
-		};
-	}
+  for my $fl ( values %{ $self->[fhs2_] }) {
+    $self->[aws_]{ $fl } = AE::io $fl, 0, sub {
+      IO::FD::accept_multiple(@afh, @peers, $fl);
+      $do_client->(\@afh,\@peers);
+    };
+  }
 
 	for my $fl (values $self->[fhs3_]->%*){
 		$self->[aws2_]{ $fl } = AE::io $fl, 0, sub {
@@ -517,100 +489,103 @@ sub site {
 
 
 sub rebuild_dispatch {
-	my $self=shift;
+  my $self=shift;
 
-	Log::OK::INFO and log_info(__PACKAGE__. " rebuilding dispatch...");
-	#Install error routes per site
-	#Error routes are added after other routes.
-	
+  Log::OK::INFO and log_info(__PACKAGE__. " rebuilding dispatch...");
+  #Install error routes per site
+  #Error routes are added after other routes.
 
-	#NOTE:
-	#Here we add the unsupported methods to the table before building it
-	#This is different to a unfound URL resource.
-	#These give a 'method not supported error', while an unfound resource is a
-	#not found error
-	#
-	#Because of the general matching, they are added to the table after all sites
-	#have positive matches installed.
-	#
-	for(keys $self->[sites_]->%*){
-		#NOTE: url/path is wrapped in a array
-		#$self->[sites_]{$_}->add_route([$Any_Method], undef, _default_handler);
 
-		for($self->[sites_]{$_}->unsupported->@*){
-			Log::OK::TRACE and log_trace "Adding Unmatched endpoints";
-			$self->add_host_end_point($_->@*);
-		}
-	}
+  #NOTE:
+  #Here we add the unsupported methods to the table before building it
+  #This is different to a unfound URL resource.
+  #These give a 'method not supported error', while an unfound resource is a
+  #not found error
+  #
+  #Because of the general matching, they are added to the table after all sites
+  #have positive matches installed.
+  #
+  ##############################################################################
+  # for(keys $self->[sites_]->%*){                                             #
+  #   #NOTE: url/path is wrapped in a array                                    #
+  #   #$self->[sites_]{$_}->add_route([$Any_Method], undef, _default_handler); #
+  #   say "iterating through sites $_";                                        #
+  #   for($self->[sites_]{$_}->unsupported->@*){                               #
+  #     Log::OK::TRACE and log_trace "Adding Unmatched endpoints";             #
+  #     say "Adding unmatched endpoints";                                      #
+  #     $self->add_host_end_point($_->@*);                                     #
+  #   }                                                                        #
+  # }                                                                          #
+  ##############################################################################
 
-        #Create a special default site for each host that matches any method and uri
-        for my $host (keys $self->[host_tables_]->%*) {
+  #Create a special default site for each host that matches any method and uri
+  for my $host (keys $self->[host_tables_]->%*) {
 
-                my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
-                $site->parent_site=$self;
-                $self->register_site($site);
-                Log::OK::TRACE and log_trace "Adding default handler to $host";
+    my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
+    $site->parent_site=$self;
+    $self->register_site($site);
+    Log::OK::TRACE and log_trace "Adding default handler to $host";
 
-                $site->add_route([$Any_Method], undef, _default_handler);
-        }
+    $site->add_route([$Any_Method], undef, _default_handler);
+  }
 
-        ###################################################################################
-        # #Add  catch all host and catch all route in the case of a host mismatch         #
-        # #of hosts not supported                                                         #
-        # my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self); #
-        # $site->parent_site=$self;                                                       #
-        # #$self->register_site($site);                                                   #
-        # Log::OK::TRACE and log_trace "Adding default handler to *.*";                   #
-        #                                                                                 #
-        # #$site->add_route($Any_Method, qr|.*|, _default_handler);                       #
-        # $site->add_route([$Any_Method], undef, _default_handler);                       #
-        ###################################################################################
+  ###################################################################################
+  # #Add  catch all host and catch all route in the case of a host mismatch         #
+  # #of hosts not supported                                                         #
+  # my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self); #
+  # $site->parent_site=$self;                                                       #
+  # #$self->register_site($site);                                                   #
+  # Log::OK::TRACE and log_trace "Adding default handler to *.*";                   #
+  #                                                                                 #
+  # #$site->add_route($Any_Method, qr|.*|, _default_handler);                       #
+  # $site->add_route([$Any_Method], undef, _default_handler);                       #
+  ###################################################################################
 
-	my %lookup=map {
-		$_, [
-			#table
-			$self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
-			#cache for table
-			$self->[host_tables_]{$_}[1]
-			]
-		}
-		keys $self->[host_tables_]->%*;
+  my %lookup=map {
+    $_, [
+    #table
+    $self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
+    #cache for table
+    $self->[host_tables_]{$_}[1]
+    ]
+  }
+  keys $self->[host_tables_]->%*;
 
-	$self->[cb_]=sub {
+  $self->[cb_]=sub {
     #my ($host, $input, $rex)=@_;#, $rex, $rcode, $rheaders, $data, $cb)=@_;
 
-		my $table=$lookup{$_[0]}//$lookup{"*.*"};
+    my $table=$lookup{$_[0]}//$lookup{"*.*"};
     #(my $route, $_[2]->[uSAC::HTTP::Rex::captures_])= $table->[0]($_[1]);
-		(my $route, my $captures)= $table->[0]($_[1]);
+    (my $route, my $captures)= $table->[0]($_[1]);
 
-		#Hustle table route structure
-		#[matcher, value, type default]
-		#
-		#ctx/value structure has
-		#[site, linked_innerware, linked_outerware, counter]
-		#  0 ,		1 	,	2		,3	, 4
-		#$Data::Dumper::Deparse=1;
-		#say Dumper $table;
+    #Hustle table route structure
+    #[matcher, value, type default]
+    #
+    #ctx/value structure has
+    #[site, linked_innerware, linked_outerware, counter]
+    #  0 ,		1 	,	2		,3	, 4
+    #$Data::Dumper::Deparse=1;
+    #say Dumper $table;
 
-		Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route;
-		Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route->@*;
-		$route->[1][4]++;	
+    Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route;
+    Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route->@*;
+    $route->[1][4]++;	
 
-		#NOTE: MAIN ENTRY TO REX RENDERING SYSTEM
-		# The linked innerware, the route handler and outerware are
-		# triggered from here
-		# Default Result code is HTTP_OK and a new set of empty headers which
+    #NOTE: MAIN ENTRY TO REX RENDERING SYSTEM
+    # The linked innerware, the route handler and outerware are
+    # triggered from here
+    # Default Result code is HTTP_OK and a new set of empty headers which
     #$route->[1][1]($route, $rex, my $code=$rcode//HTTP_OK, $rheaders//[],$data//="",$cb);
 
-		#TODO: Better Routing Cache management.
-		#if the is_default flag is set, this is an unkown match.
-		#so do not cache it
-		#say STDERR join ", ", $route->@[0,1,2,3];
-		delete $table->[1]{$_[1]} if $route->[3];
+    #TODO: Better Routing Cache management.
+    #if the is_default flag is set, this is an unkown match.
+    #so do not cache it
+    #say STDERR join ", ", $route->@[0,1,2,3];
+    delete $table->[1]{$_[1]} if $route->[3];
     #return the entry sub for body forwarding
     ($route,$captures);
 
-	};
+  };
 }
 
 
@@ -762,8 +737,17 @@ sub usac_server :prototype(&) {
 
 	#Push the server as the lastest 'site'
 	local $uSAC::HTTP::Site=$server;
-	$sub->();		#run the configuration for the server
+	$sub->($server);		#run the configuration for the server
 	$server;
+}
+
+#Attempt to run the server, only if its in DSL mode
+sub usac_run {
+	my %options=@_;
+	my $site=$options{parent}//$uSAC::HTTP::Site;
+
+	$site->run;
+
 }
 
 #include another config file

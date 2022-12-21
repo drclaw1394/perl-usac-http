@@ -64,6 +64,9 @@ use constant KEY_COUNT=>	end_-server_+1;
 
 my $id=0;
 sub new {
+  if(@_%2){
+    #last element is exepected to be setup code
+  }
 	my $self=[];
 	my $package=shift//__PACKAGE__;
 	my %options=@_;
@@ -73,7 +76,7 @@ sub new {
 	$self->[cors_]=		$options{cors}//"";
 	$self->[innerware_]=	$options{middleware}//[];
 	$self->[outerware_]=	$options{outerware}//[];
-	$self->[unsupported_]=[];
+  #$self->[unsupported_]=[];
 	$self->[error_uris_]={};
 
 	if(ref($options{host}) eq "ARRAY"){
@@ -335,11 +338,13 @@ sub _add_route {
 		else {
 			$host=$uri;	#match all
 		}
-		for my $method (@non_matching){
-			my $unsupported="$method $bp$path_matcher";
-			push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer,0]];
-			Log::OK::TRACE and log_trace "  non matching: $host $unsupported";                                 #
-		}
+                ################################################################################################################
+                # for my $method (@non_matching){                                                                              #
+                #         my $unsupported="$method $bp$path_matcher";                                                          #
+                #         push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer,0]];                       #
+                #         Log::OK::TRACE and log_trace "  non matching: $host $unsupported";                                 # #
+                # }                                                                                                            #
+                ################################################################################################################
 	}
 }
 
@@ -399,9 +404,11 @@ sub add_end_point {
 sub parent_site :lvalue{
 	$_[0][parent_];
 }
-sub unsupported {
-	return $_[0]->[unsupported_];
-}
+#########################################
+# sub unsupported {                     #
+#         return $_[0]->[unsupported_]; #
+# }                                     #
+#########################################
 
 sub usac_site_url {
 	my $self=$uSAC::HTTP::Site;
@@ -577,15 +584,18 @@ After the server is set. the C<$_> in localised and set to the new site
 sub usac_site :prototype(&) {
 	#my $server=$_->find_root;
 	my $server=$uSAC::HTTP::Site->find_root;
-	my $sub=shift;
+	my $sub=pop;
+  my %options=@_;
 	my $self= uSAC::HTTP::Site->new(server=>$server);
-	$self->[parent_]=$uSAC::HTTP::Site;
-	$self->[id_]=join ", ", caller;
+	$self->[parent_]=$options{parent}//$uSAC::HTTP::Site;
+	$self->[id_]=$options{id}//join ", ", caller;
+  #$self->[prefix_]=$options{prefix}//"";
+	$self->set_prefix(%options,$options{prefix}//'');
 	#$self->[parent_]=$_;
 	
 	local  $uSAC::HTTP::Site=$self;
 	#local  $_=$self;
-	$sub->();
+	$sub->($self);
 	$self;
 }
 
@@ -666,10 +676,10 @@ sub add_route {
 }
 
 sub usac_id {
-	my $id=pop;	
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	$self->set_id(%options, $id);
+        my $id=pop;
+        my %options=@_;
+        my $self=$options{parent}//$uSAC::HTTP::Site;
+        $self->set_id(%options, $id);
 }
 sub set_id {
 	my $self=shift;
@@ -678,16 +688,16 @@ sub set_id {
 }
 
 sub usac_prefix {
-	my $prefix=pop;
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	$self->set_prefix(%options,$prefix);
+        my $prefix=pop;
+        my %options=@_;
+        my $self=$options{parent}//$uSAC::HTTP::Site;
+        $self->set_prefix(%options,$prefix);
 }
-
 sub set_prefix {
 	my $self=shift;
-        my $prefix=pop;
+  my $prefix=pop;
 	my %options=@_;
+  return unless $prefix;
 	unless($prefix=~m|^/|){
 
 		#Log::OK::TRACE and 

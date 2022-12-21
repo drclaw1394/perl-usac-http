@@ -1,10 +1,7 @@
 #!/usr/bin/env perl
-#use Log::ger::Util;
-BEGIN{
+#BEGIN{
   #$ENV{LIBEV_FLAGS}=1; #POLL
-}
-use EV;
-use AnyEvent;
+  #}
 
 
 
@@ -14,21 +11,20 @@ use uSAC::HTTP::Middleware qw<dummy_mw log_simple deflate gzip>;
 use uSAC::HTTP::State::JSON qw<state_json>;
 use uSAC::HTTP::State::UUID qw<state_uuid>;
 use Socket;
-#use Socket qw<AF_INET6 SOCK_STREAM>;
+
 use Net::ARP;
 
 use MyApp;
 use Log::ger::Output 'Screen';
 
 use uSAC::HTTP::Rex;
-#::urlencoded_slurp
 
 
 
 #use uSAC::MIME;
 use Data::Dumper;
 
-my $server; $server=usac_server {;
+my $server; $server=usac_server {
 
 	usac_listen( {
 			address=>"::",
@@ -58,8 +54,8 @@ my $server; $server=usac_server {;
   #usac_middleware log_simple dump_headers=>1;
 	
   #usac_middleware log_simple dump_headers=>1;
-	my $site; $site=usac_site {
-		usac_id "blog";
+	usac_site {
+    usac_id "blog";
 		usac_host "127.0.0.1:8084";
 		usac_host "localhost:8084";
 		usac_host "192.168.1.102:8084";
@@ -134,6 +130,10 @@ my $server; $server=usac_server {;
         &rex_write;
     };
 
+    usac_route "GET"=>"/stream_url_upload\$"=> sub {
+      &rex_error_unsupported_media_type;
+    };
+
     usac_route POST=>"/slurp_url_upload"=>urlencoded_slurp()=>sub {
         return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
@@ -195,13 +195,14 @@ my $server; $server=usac_server {;
     #usac_route POST=>"/data_slurp" => MyApp::data_slurp;
 
     #usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => MyApp::url_slurp;
-    usac_error_route "/error/404" => sub {
+    usac_error_route "/error" => sub {
       say "ERROR FOR BLOG";
-      $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ".$_[CODE];
+      $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[CODE];
       &rex_write;
 		};
 
-		usac_error_page 404 => "/error/404";
+		usac_error_page 404 => "/error";
+		usac_error_page 415 => "/error";
 		usac_catch_route usac_error_not_found;
 	};
 
@@ -209,5 +210,6 @@ my $server; $server=usac_server {;
 	#usac_route "/static/$Path" => static_file_from "static";
 	
 	#usac_route  "/static/$Path"=> static_file_from "static", cache_size=>10;
+  usac_run;
 };
-$server->run();
+#$server->run();

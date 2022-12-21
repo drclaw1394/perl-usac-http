@@ -270,6 +270,7 @@ sub rex_redirect_temporary {
 	&rex_write;
 	
 }
+
 sub rex_redirect_permanent {
   if($_[CODE]){
     my $url=$_[4];
@@ -298,13 +299,10 @@ sub rex_redirect_internal;
 sub rex_error {
   if($_[CODE]){
     my $site=$_[0][1][0];
-    #say "rex_error called", join ", ", caller;
     $_[REX][method_]="GET";
-    $_[CODE]//=HTTP_NOT_FOUND;	#New return code is appened at end
+    #$_[CODE]//=HTTP_NOT_FOUND;	#New return code is appened at end
 
     #Locate applicable site urls to handle the error
-    #say "site in rex_error: ".$site->id;
-    #say Dumper $site->error_uris;
 
     for($site->error_uris->{$_[CODE]}){
       if($_){
@@ -316,10 +314,9 @@ sub rex_error {
     #return rex_redirect_internal @_, $uri if $uri;
 
     #If one wasn't found, then make an ugly one
-    $_[PAYLOAD]||=$site->id.': Error: '.$_[CODE];
+    $_[PAYLOAD]||="Site: ".$site->id.': Error: '.$_[CODE];
   }
 	&rex_write;
-
 }
 
 
@@ -357,7 +354,7 @@ sub rex_error_internal_server_error {
 sub rex_redirect_internal {
 
 	my ($matcher, $rex, $code, $headers, $uri)=@_;
-	say "rex_redirect_internal called";
+	say STDERR "rex_redirect_internal called";
 	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	
@@ -610,7 +607,7 @@ sub urlencoded_file {
     my %ctx;
     sub {
       #This sub is shared across all requests for  a route. 
-      say "URL UPLOAD TO FILE";
+      say STDERR "URL UPLOAD TO FILE";
       if($_[CODE]){
         my $c;
         if($_[HEADER]){
@@ -626,10 +623,10 @@ sub urlencoded_file {
             $_[PAYLOAD]="Limit:  $upload_limit";
             return &rex_error;
           }
-          say "URL UPLOAD TO FILE first call";
+          say STDERR "URL UPLOAD TO FILE first call";
           #first call. Open file a temp file
           my $path=IO::FD::mktemp catfile $upload_dir, "X"x10;
-          say "URL UPLOAD TO FILE first call: path is $path";
+          say STDERR "URL UPLOAD TO FILE first call: path is $path";
           my $error;
 
           if(defined IO::FD::sysopen( my $fd, $path, O_CREAT|O_RDWR)){
@@ -641,14 +638,14 @@ sub urlencoded_file {
               $_[PAYLOAD][1]=$fd;
             }
             else {
-              say "ERROR writing FILE $!";
+              say STDERR "ERROR writing FILE $!";
               &rex_error_internal_server_error;
               #Internal server error
             }
           }
           else {
               #Internal server error
-              say "ERROR OPENING FILE $!";
+              say STDERR "ERROR OPENING FILE $!";
               &rex_error_internal_server_error;
           }
 
@@ -728,7 +725,7 @@ sub multipart_slurp {
     my %ctx;
     my $last;
     sub {
-      say " slurp multipart MIDDLEWARE";
+      say STDERR " slurp multipart MIDDLEWARE";
       if($_[CODE]){
         my $c=$ctx{$_[REX]};
         unless($c){
@@ -780,7 +777,7 @@ sub multipart_file {
     my %ctx;
     my $last;
     sub {
-      say " file multipart MIDDLEWARE";
+      say STDERR " file multipart MIDDLEWARE";
       if($_[CODE]){
         my $open;
         my $c=$ctx{$_[REX]};
@@ -819,14 +816,14 @@ sub multipart_file {
                 push @$c, $_[PAYLOAD];
               }
               else {
-                say "ERROR writing FILE $!";
+                say STDERR "ERROR writing FILE $!";
                 &rex_error_internal_server_error;
                 #Internal server error
               }
             }
             else {
               #Internal server error
-              say "ERROR OPENING FILE $!";
+              say STDERR "ERROR OPENING FILE $!";
               &rex_error_internal_server_error;
             }
           }

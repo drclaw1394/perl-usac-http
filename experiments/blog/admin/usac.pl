@@ -27,8 +27,8 @@ my $server; $server=usac_server {
 	#usac_innerware log_simple;
 
 	usac_site {
-		usac_id "admin";
-		usac_prefix "/admin";
+    usac_id "admin";
+    usac_prefix "/admin";
 		#usac_host "127.0.0.1:8080";
 		#usac_host "localhost:8080";
 		#usac_innerware log_simple;
