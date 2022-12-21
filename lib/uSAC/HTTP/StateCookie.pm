@@ -21,7 +21,6 @@ use uSAC::HTTP::Cookie;
 use MIME::Base64 qw<encode_base64url decode_base64url>;
 
 
-use Data::Dumper;
 
 our @EXPORT_OK=qw<state_cookie state_cookie_in state_cookie_out>;
 our @EXPORT=();
@@ -57,7 +56,6 @@ sub state_cookie_in {
 			Log::OK::DEBUG and log_debug "StateCookie innerware";
 			if($state_value=$rex->cookies->{$state_name}){
 				Log::OK::DEBUG and log_debug "StateCookie decoding $state_value";
-				Log::OK::DEBUG and log_debug Dumper $rex->cookies;
 				try {
 					$rex->state->{$state_field}=$state_decode->(decode_base64url($state_value))
 				}

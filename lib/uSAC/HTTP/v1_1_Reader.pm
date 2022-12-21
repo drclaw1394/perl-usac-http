@@ -6,7 +6,6 @@ no warnings "experimental";
 use EV;
 use Log::ger;
 use Log::OK;
-use Data::Dumper;
 
 use Exporter 'import';
 use Encode qw<find_encoding decode encode decode_utf8>;

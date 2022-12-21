@@ -33,7 +33,6 @@ use Exporter 'import';
 use File::Temp qw<tempfile>;
 use File::Path qw<make_path>;
 
-use Data::Dumper;
 use URL::Encode::XS;
 use URL::Encode qw<url_decode_utf8>;
 use Cpanel::JSON::XS qw<encode_json decode_json>;

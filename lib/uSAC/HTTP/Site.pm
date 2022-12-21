@@ -53,7 +53,6 @@ use uSAC::HTTP::Middleware qw<log_simple chunked>;
 use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
 
-use Data::Dumper;
 #Class attribute keys
 use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ error_uris_ end_));
 
@@ -167,7 +166,6 @@ sub _add_route {
 
 
 	#my @non_matching=(qr{[^ ]+});
-	Log::OK::TRACE and log_trace Dumper $method_matcher;
 	my @matching=grep { /$method_matcher/ } @methods;
 	my @non_matching=grep { !/$method_matcher/ } @methods;
 	my $sub;

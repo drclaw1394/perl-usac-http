@@ -4,6 +4,7 @@ use warnings;
 use Exporter 'import';
 use feature qw<refaliasing say fc switch state current_sub signatures>;
 no warnings "experimental";
+
 #no feature "indirect";
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Code qw<:constants>;
@@ -17,11 +18,9 @@ use IO::Compress::Gzip::Constants;
 use Compress::Raw::Zlib;
 
 
-use MIME::Base64;		
-use Digest::SHA1;
+#use MIME::Base64;		
+#use Digest::SHA1;
 
-use Crypt::JWT qw<decode_jwt encode_jwt>;
-use Data::Dumper;
 use List::Util qw<first>;
 use Log::ger;
 use Log::OK;
@@ -67,6 +66,8 @@ sub dummy_mw{
 	};
 	$sub;
 }
+
+
 # ===========
 # Log Simple - Log basic stats to STDERR
 #
@@ -75,6 +76,7 @@ sub log_simple {
 }
 
 sub log_simple_in {
+  require Data::Dumper;
 	my %options=@_;
 
   my $dump_headers=$options{dump_headers};
@@ -97,7 +99,7 @@ sub log_simple_in {
           say STDERR "Hit counter:		$_[0][1][4]";
           say STDERR "Captures:		".join ", ",$_[1][captures_]->@* if $dump_capture;
           say STDERR "Headers:" if $dump_headers;
-          say STDERR Dumper $_[1]->headers if $dump_headers;
+          say STDERR Data::Dumper::Dumper $_[1]->headers if $dump_headers;
 			}
 			return &$inner_next;		#alway call next. this is just loggin
 		}
@@ -125,9 +127,6 @@ sub log_simple_out {
 	
 	#Return as a array [$header, $body]
 }
-
-
-
 # =============
 
 
@@ -207,23 +206,23 @@ sub http2_upgrade {
 #Last write must be an empty string
 #
 sub chunked{
-	#"x"x1024;
-	#$scratch="";
+  #"x"x1024;
+  #$scratch="";
 
-	#matcher,rex, code, headers, data,cb,arg
-	my $chunked_in=
-	sub {
-		my $next=shift;
-		
-	};
+  #matcher,rex, code, headers, data,cb,arg
+  my $chunked_in=
+  sub {
+    my $next=shift;
 
-	my %out_ctx;
-	my $ctx;
-	my $chunked_out=
-	sub {
-		my $next=shift;
-		#my $bypass;
-		sub {
+  };
+
+  my %out_ctx;
+  my $ctx;
+  my $chunked_out=
+  sub {
+    my $next=shift;
+    #my $bypass;
+    sub {
       if($_[CODE]){
 
         Log::OK::TRACE  and log_trace "Middeware: Chunked Outerware";
@@ -287,171 +286,167 @@ sub chunked{
         #Error condition. Reset stack
         Log::OK::TRACE  and log_trace "Middeware: Chunked Passing on error condition";
         delete $out_ctx{$_[REX]};
-			  &$next;
+        &$next;
       }
 
 
-		};
-	};
+    };
+  };
 
-	[$chunked_in, $chunked_out]
+  [$chunked_in, $chunked_out]
 }
 
 
 
 sub deflate {
-	my $in=sub {
-		my $next=shift;
-		$next;
-	};
+  my $in=sub {
+    my $next=shift;
+    $next;
+  };
 
-	state @deflate_pool;
-	my %out_ctx; #stores bypass and  compressor
-	my $dummy=sub{};
-	my $out=sub {
-		my $next=shift;
-		my $status;
-		my $index;
-		(sub {
-			Log::OK::TRACE and log_debug "Input data length: ".length  $_[4];
-			# 0	1 	2   3	    4     5
-			# usac, rex, code, headers, data, cb
-			\my $buf=\$_[4];
-			#Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1)
-			Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
-			Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
-			Log::OK::TRACE  and log_trace "doing deflate";
+  state @deflate_pool;
+  my %out_ctx; #stores bypass and  compressor
+  my $dummy=sub{};
+  my $out=sub {
+    my $next=shift;
+    my $status;
+    my $index;
+    (sub {
+        Log::OK::TRACE and log_debug "Input data length: ".length  $_[4];
+        # 0	1 	2   3	    4     5
+        # usac, rex, code, headers, data, cb
+        \my $buf=\$_[4];
+        #Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1)
+        Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
+        Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
+        Log::OK::TRACE  and log_trace "doing deflate";
 
-			my $exe;
-			my $ctx;
-			if($_[3]){
-				Log::OK::TRACE and log_debug "Deflate: in header processing";
-				\my @headers=$_[3]; #Alias for easy of use and performance
-				Log::OK::TRACE and log_trace "deflate: looking for accept";
-				Log::OK::TRACE and log_trace "delfate: Incoming accept_encoding: ".Dumper $_[1]->headers;
+        my $exe;
+        my $ctx;
+        if($_[3]){
+          Log::OK::TRACE and log_debug "Deflate: in header processing";
+          \my @headers=$_[3]; #Alias for easy of use and performance
+          Log::OK::TRACE and log_trace "deflate: looking for accept";
 
-				($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa and return &$next;
-				#Also disable if we are already encoded
-				$exe=1;
-				my $bypass;
-				($bypass= $_ eq HTTP_CONTENT_ENCODING) and last for @headers[@key_indexes[0.. @headers/2-1]];
-				$exe&&=!$bypass;	
-				
-				Log::OK::TRACE  and log_trace "exe ". $exe; 
-				Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
+          ($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa and return &$next;
+          #Also disable if we are already encoded
+          $exe=1;
+          my $bypass;
+          ($bypass= $_ eq HTTP_CONTENT_ENCODING) and last for @headers[@key_indexes[0.. @headers/2-1]];
+          $exe&&=!$bypass;	
 
-				$ctx=$exe;
+          Log::OK::TRACE  and log_trace "exe ". $exe; 
+          Log::OK::TRACE  and log_trace "Single shot: ". !$_[5];
 
-				return &$next unless $exe; #bypass is default
-				
-				Log::OK::TRACE  and log_trace "No bypass in headers";
+          $ctx=$exe;
 
-				$index=@headers;
+          return &$next unless $exe; #bypass is default
 
-				$headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
-					for @key_indexes[0..@headers/2-1];
+          Log::OK::TRACE  and log_trace "No bypass in headers";
 
-				Log::OK::TRACE and log_debug "Content length index: $index";
+          $index=@headers;
 
-				splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "deflate");# if defined $index;
-				unless($_[5]){
-					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
+          $headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
+          for @key_indexes[0..@headers/2-1];
 
-					Log::OK::TRACE and log_trace "single shot";
-					my $scratch=""; 	#new scratch each call
-					my $status=$ctx->deflate($buf, $scratch);
-					$status == Z_OK or log_error "Error creating deflate context";
-					$status=$ctx->flush($scratch);
-					$ctx->deflateReset;
-					Log::OK::TRACE and log_debug "about to push for single shot";
-					push @deflate_pool, $ctx;
-					$next->(@_[0,1,2,3], $scratch, @_[5,6]);
-					return;
-					
-				}
-				else{
-					#multiple calls required so setup context
-					#my $scratch="";
-					$ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
-					Log::OK::TRACE and log_trace "Multicalls required $_[1]";
-					$out_ctx{$_[1]}=$ctx;
+          Log::OK::TRACE and log_debug "Content length index: $index";
 
-					Log::OK::TRACE and log_trace Dumper $out_ctx{$_[1]};
+          splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "deflate");# if defined $index;
+          unless($_[5]){
+            $ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 
-				}
-			}
-			Log::OK::TRACE and log_trace "Doing body";
-			Log::OK::TRACE and log_trace "Processing deflate content";
-			# Only process if setup correctly
-			#
-			Log::OK::TRACE and log_trace $_[1];
+            Log::OK::TRACE and log_trace "single shot";
+            my $scratch=""; 	#new scratch each call
+            my $status=$ctx->deflate($buf, $scratch);
+            $status == Z_OK or log_error "Error creating deflate context";
+            $status=$ctx->flush($scratch);
+            $ctx->deflateReset;
+            Log::OK::TRACE and log_debug "about to push for single shot";
+            push @deflate_pool, $ctx;
+            $next->(@_[0,1,2,3], $scratch, @_[5,6]);
+            return;
 
-			Log::OK::TRACE and log_trace Dumper $ctx;
-			$ctx//=$out_ctx{$_[1]};
-
-			Log::OK::TRACE and log_trace Dumper $ctx;
-
-			return &$next unless $ctx;
+          }
+          else{
+            #multiple calls required so setup context
+            #my $scratch="";
+            $ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
+            Log::OK::TRACE and log_trace "Multicalls required $_[1]";
+            $out_ctx{$_[1]}=$ctx;
 
 
-			# Append comppressed data to the scratch when its ready
-			#
-			my $scratch=""; 	#new scratch each call
-			$status=$ctx->deflate($buf, $scratch);
-			$status == Z_OK or log_error "Error creating deflate context";
+          }
+        }
+        Log::OK::TRACE and log_trace "Doing body";
+        Log::OK::TRACE and log_trace "Processing deflate content";
+        # Only process if setup correctly
+        #
+        Log::OK::TRACE and log_trace $_[1];
+
+        $ctx//=$out_ctx{$_[1]};
 
 
-			# Push to next stage
-			unless($_[5]){
-				Log::OK::TRACE and log_debug "No more data expected";
-				#if no callback is provided, then this is the last write
-				$status=$ctx->flush($scratch);
-				delete $out_ctx{$_[1]};
+        return &$next unless $ctx;
 
-				$ctx->deflateReset;
-				Log::OK::TRACE and log_debug "about to push for multicall";
-				push @deflate_pool, $ctx;
-				Log::OK::TRACE and log_trace "delete...".scalar keys %out_ctx;
 
-				$next->(@_[0,1,2,3], $scratch, @_[5,6]);
-				#return;
+        # Append comppressed data to the scratch when its ready
+        #
+        my $scratch=""; 	#new scratch each call
+        $status=$ctx->deflate($buf, $scratch);
+        $status == Z_OK or log_error "Error creating deflate context";
 
-			}
-			else {
-				Log::OK::TRACE and log_debug "Expecting more data";
-				# more data expected
-				if(length $scratch){
-					Log::OK::TRACE and log_debug "Writing what we have";
-					#enough data to send out
-					$next->(@_[0,1,2,3], $scratch,$dummy);# @_[5,6]);
-					$_[5]->($_[6]);	#execute callback to force feed
-				}
-				else{
-					$_[5]->($_[6]);	#execute callback to force feed
-				}
-			}
-		},
-	)
-	};
-	[$in, $out];
+
+        # Push to next stage
+        unless($_[5]){
+          Log::OK::TRACE and log_debug "No more data expected";
+          #if no callback is provided, then this is the last write
+          $status=$ctx->flush($scratch);
+          delete $out_ctx{$_[1]};
+
+          $ctx->deflateReset;
+          Log::OK::TRACE and log_debug "about to push for multicall";
+          push @deflate_pool, $ctx;
+          Log::OK::TRACE and log_trace "delete...".scalar keys %out_ctx;
+
+          $next->(@_[0,1,2,3], $scratch, @_[5,6]);
+          #return;
+
+        }
+        else {
+          Log::OK::TRACE and log_debug "Expecting more data";
+          # more data expected
+          if(length $scratch){
+            Log::OK::TRACE and log_debug "Writing what we have";
+            #enough data to send out
+            $next->(@_[0,1,2,3], $scratch,$dummy);# @_[5,6]);
+            $_[5]->($_[6]);	#execute callback to force feed
+          }
+          else{
+            $_[5]->($_[6]);	#execute callback to force feed
+          }
+        }
+      },
+    )
+  };
+  [$in, $out];
 }
 
 use constant FLAG_APPEND             => 1 ;
 use constant FLAG_CRC                => 2 ;
 sub gzip{
-	my $in=sub {
-		my $next=shift;
-		$next;
-	};
+  my $in=sub {
+    my $next=shift;
+    $next;
+  };
 
-	state @deflate_pool;
-	my %out_ctx; #stores bypass and  compressor
-	my $dummy=sub{};
-	my $out=sub {
-		my $next=shift;
-		my $status;
-		my $index;
-		(sub {
+  state @deflate_pool;
+  my %out_ctx; #stores bypass and  compressor
+  my $dummy=sub{};
+  my $out=sub {
+    my $next=shift;
+    my $status;
+    my $index;
+    (sub {
         if($_[CODE]){
           Log::OK::TRACE and log_debug "Input data length: ".length  $_[4];
           # 0	1 	2   3	    4     5
@@ -470,7 +465,6 @@ sub gzip{
             Log::OK::TRACE and log_debug "gzipin header processing";
             \my @headers=$_[3]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "gzip: looking for accept encoding";
-            Log::OK::TRACE and log_trace "gzip: Incoming accept_encoding: ".Dumper $_[1]->headers;
 
             ($_[1]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa and return &$next;
 
@@ -529,7 +523,6 @@ sub gzip{
               Log::OK::TRACE and log_trace "Multicalls required $_[1]";
               $out_ctx{$_[1]}=$ctx;
 
-              Log::OK::TRACE and log_trace Dumper $out_ctx{$_[1]};
 
             }
           }
@@ -541,7 +534,6 @@ sub gzip{
 
           $ctx//=$out_ctx{$_[1]};
 
-          Log::OK::TRACE and log_trace Dumper $ctx;
 
           return &$next unless $ctx;
 
@@ -588,45 +580,15 @@ sub gzip{
             }
           }
         }
-    else {
-				delete $out_ctx{$_[1]};
-        &$next;
+        else {
+          delete $out_ctx{$_[1]};
+          &$next;
 
-    }
-		},
-	)
-	};
-	[$in, $out];
+        }
+      },
+    )
+  };
+  [$in, $out];
 }
 
-
-
 1;
-
-__END__
-
-=head1 NAME
-
-uSAC::HTTP::Middleware - Common Middleware and API
-
-=head1 API
-
-Each component inner or outerware is a sub reference, which has captured the next sub lexically in a closure.
-
-Linking is performed by L<Sub::Middler>  to generate a chained set of middlewares
-
-Arguments to the Middlware are as follows:
-
-	Matcher Rex code headers body callback arg
-
-Aliasing to be used where possible
-
-First call must have headers defined. If body is 'true' (non empty string), then if the middlware modifies the body, it can enable itself.
-A false body indicates the body will be sent outside of this middleware chain (ie sendfile). Should be disabled.
-
-Subsequency calls Must have headers undefined.	
-	Renderer sets headers to undef (as its aliased). So using the same variable this should be automatic
-
-
-The last call is indicated by not suppling a callback. Middleware which modifies the body should flush when this condition is present.
-

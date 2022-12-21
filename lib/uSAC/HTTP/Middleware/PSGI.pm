@@ -99,7 +99,6 @@ sub usac_to_psgi {
       
       unless($_[CODE]){
         #stack reset
-        say "STACK RESET";
         delete $ctx{$_[REX]};
         &$next;
         return

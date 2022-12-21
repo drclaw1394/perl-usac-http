@@ -6,7 +6,6 @@ use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
 use Log::ger;
 use Log::OK;
-use Data::Dumper;
 use JSON;
 #no feature "indirect";
 use Devel::Peek qw<SvREFCNT>;

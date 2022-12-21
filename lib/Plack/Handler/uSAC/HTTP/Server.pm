@@ -5,7 +5,6 @@ use feature qw<say refaliasing>;
 
 use uSAC::HTTP;
 use uSAC::HTTP::PSGI;
-use Data::Dumper;
 
 sub new {
 	my ($class, %options)=@_;
@@ -15,7 +14,6 @@ sub new {
 sub run{
 	my ($self, $app)=@_;
 	#create a new server with a single endpoint added
-	say Dumper $self;	
 	my $server; $server=usac_server{
 		usac_route ".*"=>  usac_to_psgi $app;
 		usac_listen $self->{listen};

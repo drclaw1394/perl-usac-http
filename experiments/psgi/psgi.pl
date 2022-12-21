@@ -1,7 +1,9 @@
 use EV;
 use AnyEvent;
+
 use uSAC::HTTP;
-use uSAC::HTTP::PSGI;
+use uSAC::HTTP::Middleware::PSGI;
+
 use Log::ger::Output 'Screen';
 
 
@@ -31,7 +33,8 @@ my $app4=sub {
 };
 
 my $server; $server=usac_server {
-	usac_listen "0.0.0.0:8081";
+  usac_id "asdf";
+	usac_listen "a=0.0.0.0,po=8081,t=stream";
 	usac_route "/app0"=>usac_to_psgi root=>usac_dirname, "test.psgi";
         ################################################################################
         # usac_include root=>usac_dirname, "enabled";                                  #
@@ -43,4 +46,5 @@ my $server; $server=usac_server {
         # };                                                                           #
         ################################################################################
 };
+
 $server->run;

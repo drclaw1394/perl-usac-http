@@ -52,8 +52,6 @@ inet_pton);
 
 use Carp 'croak';
 
-use Data::Dumper;
-$Data::Dumper::Deparse=1;
 #use constant MAX_READ_SIZE => 128 * 1024;
 
 #Class attribute keys
@@ -125,7 +123,7 @@ sub new {
 
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
-	$self->[workers_]=3;
+	$self->[workers_]=undef;
 
 	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
@@ -396,7 +394,6 @@ sub add_host_end_point{
 	#[$site, $endpoint, $outer, $default_flag]
 	#This becomes the value field in hustle table entry
 	#[matcher, value, type, default]
-	Log::OK::TRACE and log_trace Dumper $matcher;
 	my $table=$self->[host_tables_]{$host}//=[
 		Hustle::Table->new("kkkkk: asdf"),{}
 	];
@@ -470,8 +467,6 @@ sub rebuild_dispatch {
     #ctx/value structure has
     #[site, linked_innerware, linked_outerware, counter]
     #  0 ,		1 	,	2		,3	, 4
-    #$Data::Dumper::Deparse=1;
-    #say Dumper $table;
 
     Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route;
     Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route->@*;
@@ -523,16 +518,36 @@ sub run {
   #Calles to accept are serialised. Use SO_REUSEPORT for 'zero' downtime
   #server reloads
 
-  for(1..$self->[workers_]){
-    my $pid=fork;
-    if($pid){
-      #server
+  if(not defined $self->[workers_]){
+    #Attempt to auto pick the number of workers based on cpu information
+    try {
+      require Sys::Info;
+      my $info=Sys::Info->new;
+      $self->[workers_]=$info->device("cpu")->count;
+      Log::OK::WARN and log_warn "Worker count set automatically to  $self->[workers_]";
+
     }
-    else {
-      #child, start accepting only on workers
-      $self->prepare;
-      last;
+    catch($e){
+      $self->[workers_]=0;
+      Log::OK::WARN and log_warn "Error guessing worker count. Running in single process mode (workers =0)";
     }
+  }
+
+  if($self->[workers_]){
+    for(1..$self->[workers_]){
+      my $pid=fork;
+      if($pid){
+        #server
+      }
+      else {
+        #child, start accepting only on workers
+        $self->prepare;
+        last;
+      }
+    }
+  }
+  else {
+        $self->prepare;
   }
 
   require AnyEvent;
@@ -733,8 +748,6 @@ sub add_listeners {
   elsif($ref eq ""){
     @spec=parse_passive_spec($spec);
     #use feature ":all";
-    #use Data::Dumper;
-    #say Dumper $spec;
     croak  "could not parse listener specification" unless $spec;
   }
   else {

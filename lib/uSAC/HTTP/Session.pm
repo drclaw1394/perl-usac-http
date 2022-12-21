@@ -12,7 +12,6 @@ use Devel::Peek qw<SvREFCNT>;
 use uSAC::IO::SReader;
 use uSAC::IO::SWriter;
 use IO::FD;
-use Data::Dumper;
 
 
 #require uSAC::HTTP::Server;
