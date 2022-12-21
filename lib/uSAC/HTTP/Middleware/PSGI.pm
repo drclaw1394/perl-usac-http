@@ -1,4 +1,4 @@
-package uSAC::HTTP::PSGI;
+package uSAC::HTTP::Middleware::PSGI;
 #PSGI adaptor for uSAC::HTTP::Server
 use strict;
 use warnings;
@@ -6,8 +6,6 @@ use feature qw<switch say refaliasing state>;
 no warnings "experimental";
 
 use List::Util qw<pairs first>;
-use Data::Dumper;
-$Data::Dumper::Deparse=1;
 
 use Exporter "import";
 
@@ -28,7 +26,7 @@ our @EXPORT_OK=qw<usac_to_psgi>;
 our @EXPORT=@EXPORT_OK;
 
 #This is to mimic a filehandle?
-package uSAC::HTTP::PSGI::Writer {
+package uSAC::HTTP::Middleware::PSGI::Writer {
 
   use uSAC::HTTP::Rex;
   use uSAC::HTTP::Constants;

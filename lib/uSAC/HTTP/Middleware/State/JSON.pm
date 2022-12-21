@@ -1,4 +1,4 @@
-package uSAC::HTTP::State::JSON;
+package uSAC::HTTP::Middleware::State::JSON;
 #Module for storting a uuid in http sate
 use strict;
 use warnings;
@@ -11,7 +11,6 @@ use Time::HiRes qw<time>;
 use uSAC::HTTP::StateCookie qw<state_cookie>;
 use JSON;
 
-use Data::Dumper;
 
 our @EXPORT_OK=qw<state_json rex_state_json_data>;
 our @EXPORT=();
