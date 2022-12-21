@@ -4,6 +4,9 @@
   #}
 
 
+use EV;
+use AnyEvent;
+use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<dummy_mw log_simple deflate gzip>;
@@ -15,7 +18,6 @@ use Socket;
 use Net::ARP;
 
 use MyApp;
-use Log::ger::Output 'Screen';
 
 use uSAC::HTTP::Rex;
 
@@ -25,18 +27,19 @@ use uSAC::HTTP::Rex;
 use Data::Dumper;
 
 my $server; $server=usac_server {
-
-	usac_listen( {
-			address=>"::",
-			interface=>["en"],
-			port=>[8084],
-			family=>[AF_INET6],
-			type=>SOCK_STREAM,
-			data=> {
-				hosts=>"dfs"
-			}
-		}
-	);
+  usac_workers 4;
+        ########################################
+        # usac_listen {                        #
+        #                 address=>"::",       #
+        #                 interface=>["en"],   #
+        #                 port=>[8084],        #
+        #                 family=>[AF_INET6],  #
+        #                 type=>SOCK_STREAM,   #
+        #                 data=> {             #
+        #                         hosts=>"dfs" #
+        #                 }                    #
+        #         };                           #
+        ########################################
 
 
 	
@@ -101,7 +104,7 @@ my $server; $server=usac_server {
                 gzip()=>deflate()=>
                 usac_file_under (
                         #filter=>'txt$',
-                        read_size=>4096,
+                        read_size=>4096*32,
                         #pre_encoded=>[qw<gz>],
                         #no_compress=>qr/txt$/,
                         do_dir=>1,

@@ -7,35 +7,36 @@ use Log::OK;
 use Socket;
 use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
 use IO::FD;
+use uSAC::IO::Acceptor;
 use Error::ShowMe;
-#use constant "OS::darwin"=>$^O =~ /darwin/;
-#use constant "OS::linux"=>0;
-#
+
 use constant::more {
-	"CONFIG::set_nonblock"=> $^O eq "linux",
 	"CONFIG::set_no_delay"=> 1
 };
 use constant::more {
 	"CONFIG::single_process"=>1,
 	"CONFIG::kernel_loadbalancing"=>1,
 };
+
+#Set a logging level if the use application hasn't
 use Log::OK {
 	lvl=>"warn"
 };
-use URI;
+
 
 use feature qw<refaliasing say state current_sub>;
-#use Try::Catch;
-#use IO::Handle;
 use constant NAME=>"uSAC";
 use constant VERSION=>"0.1";
-our @Subproducts;#=();		#Global to be provided by applcation
 
-use version;our $VERSION = version->declare('v0.1');
-#use  v5.24;
+#our @Subproducts;#=();		#Global to be provided by applcation
+
+use version; our $VERSION = version->declare('v0.1.0');
+
 no warnings "experimental";
 use parent 'uSAC::HTTP::Site';
+
 use uSAC::HTTP::Site;
+
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Constants;
 
@@ -44,17 +45,11 @@ use Hustle::Table;		#dispatching of endpoints
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
 
-use AnyEvent;
-use AnyEvent::Socket;
-use AnyEvent::Handle;
+#use AnyEvent;
 use Scalar::Util 'refaddr', 'weaken';
-use Errno qw(EAGAIN EINTR);
-use AnyEvent::Util qw(WSAEWOULDBLOCK AF_INET6 fh_nonblocking);
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY SO_LINGER
 inet_pton);
 
-use File::Basename qw<dirname>;
-use File::Spec::Functions qw<rel2abs catfile catdir>;
 use Carp 'croak';
 
 use Data::Dumper;
@@ -68,21 +63,21 @@ $Data::Dumper::Deparse=1;
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"host_=".KEY_OFFSET, qw<port_ enable_hosts_ sites_ host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
+	"sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
 );
 
-use constant KEY_COUNT=> total_requests_ - host_+1;
+
+use constant KEY_COUNT=> total_requests_ - sites_+1;
 
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Session;
-#use uSAC::HTTP::v1_1;
 use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Rex;
 use uSAC::MIME;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<usac_server usac_run usac_include usac_listen usac_listen2 usac_mime_map usac_mime_default usac_sub_product>;
+our @EXPORT_OK=qw<usac_server usac_run usac_include usac_listen usac_listen2 usac_mime_map usac_mime_default usac_sub_product usac_workers>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -91,14 +86,7 @@ our @EXPORT=@EXPORT_OK;
 #
 # Welcome message
 sub _welcome {
-  state $data;
-  unless($data){
-    local $/=undef;
-    $data=<DATA>;
-
-    #execute template
-
-  }
+  state $data=do{ local $/=undef; <DATA>}; #execute template
 
   state $sub=sub {
     $_[PAYLOAD]=$data;
@@ -111,7 +99,6 @@ sub _welcome {
 #ie expecting a request line but getting something else
 sub _default_handler {
 		state $sub=sub {
-			#Log::OK::TRACE and log_trace "DEFAULT HANDLER FOR TABLE";
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
 			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[REX]->headers->%*;
 			$_[PAYLOAD]="NOT FOUND";
@@ -127,9 +114,6 @@ sub new {
 	my $self = $pkg->SUPER::new();#bless [], $pkg;
 	my %options=@_;
 
-	$self->[host_]=$options{host}//"0.0.0.0";
-	$self->[port_]=$options{port}//8080;
-	$self->[enable_hosts_]=1;#$options{enable_hosts};
 	$self->[host_tables_]={};
 	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
 	$self->[zombies_]=[];
@@ -141,7 +125,8 @@ sub new {
 
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
-	$self->[workers_]=1;
+	$self->[workers_]=3;
+
 	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
 
@@ -252,6 +237,11 @@ sub do_passive {
 sub prepare {
 	#setup timer for constructing date header once a second
 	my ($self)=shift;
+
+  #Start the acceptors running on this worker 
+  $_->start for(values $self->[aws_]->%*);
+  
+  #Setup the watchdog timer for the any active connections
 	my $interval=1;
 	my $timeout=20;
 	$self->[server_clock_]=time;	
@@ -261,7 +251,7 @@ sub prepare {
   $SIG{ALRM}=
   #$self->[stream_timer_]=AE::timer 0, $interval,
   sub {
-    say "Alarm received";
+    #say "Alarm received";
 		#iterate through all connections and check the difference between the last update
 		$self->[server_clock_]+=$interval;
 		#and the current tick
@@ -298,56 +288,38 @@ sub do_accept2{
 
 	my @peers;
 	my @afh;
-
   for my $fl ( values %{ $self->[fhs2_] }) {
-    $self->[aws_]{ $fl } = AE::io $fl, 0, sub {
-      IO::FD::accept_multiple(@afh, @peers, $fl);
-      $do_client->(\@afh,\@peers);
-    };
+    $self->[aws_]{ $fl } =my $acceptor=uSAC::IO::Acceptor->create(fh=>$fl, on_accept=>$do_client, on_error=>sub {});
+    #$acceptor->start;
   }
+  ###################################################
+  # for my $fl ( values %{ $self->[fhs2_] }) {      #
+  #   $self->[aws_]{ $fl } = AE::io $fl, 0, sub {   #
+  #     IO::FD::accept_multiple(@afh, @peers, $fl); #
+  #     $do_client->(\@afh,\@peers);                #
+  #   };                                            #
+  # }                                               #
+  ###################################################
 
-	for my $fl (values $self->[fhs3_]->%*){
-		$self->[aws2_]{ $fl } = AE::io $fl, 0, sub {
-			my $buf="";
-			while(IO::FD::recv($fl,$buf,4069)){
-				#TODO: a table of peer addresses needs to be stored in a hash
-				#The key being a new session
-				#If the key didn't exist, create a new session
-				#
-				#if it did, use existing session
-			}
-		};
+        #########################################################################################
+        #TODO: DATAGRAM processing
+        # for my $fl (values $self->[fhs3_]->%*){                                               #
+        #         $self->[aws2_]{ $fl } = AE::io $fl, 0, sub {                                  #
+        #                 my $buf="";                                                           #
+        #                 while(IO::FD::recv($fl,$buf,4069)){                                   #
+        #                         #TODO: a table of peer addresses needs to be stored in a hash #
+        #                         #The key being a new session                                  #
+        #                         #If the key didn't exist, create a new session                #
+        #                         #                                                             #
+        #                         #if it did, use existing session                              #
+        #                 }                                                                     #
+        #         };                                                                            #
+        #########################################################################################
 
-	}
+        #}
 	Log::OK::INFO and log_info "SETUP PASSIVE COMPLETE";
 }
 
-
-#################################################################################################################################
-# sub do_accept {                                                                                                               #
-#         state $seq=0;                                                                                                         #
-#         Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";                                                     #
-#         weaken( my $self = shift );                                                                                           #
-#         \my @zombies=$self->[zombies_];                                                                                       #
-#         \my %sessions=$self->[sessions_];                                                                                     #
-#         my $do_client=$self->make_do_client;                                                                                  #
-#                                                                                                                               #
-#         my $child_index;                                                                                                      #
-#         \my @children=[];                                                                                                     #
-#                                                                                                                               #
-#         for my $fl ( values %{ $self->[fhs_] }) {                                                                             #
-#                 $self->[aws_]{ fileno $fl } = AE::io $fl, 0, sub {                                                            #
-#                         my $peer;                                                                                             #
-#                         while(($peer = IO::FD::accept my $fh, $fl)){                                                          #
-#                                 #last unless $fh;                                                                             #
-#                                 CONFIG::kernel_loadbalancing and $do_client->($fh);                                           #
-#                                                                                                                               #
-#                                 #!CONFIG::kernel_loadbalancing and IO::FDPass::send $children[$child_index++%@children], $fh; #
-#                         }                                                                                                     #
-#                 };                                                                                                            #
-#         }                                                                                                                     #
-# }                                                                                                                             #
-#################################################################################################################################
 
 sub as_satellite {
 	#Connect to unix socket, which master is listening to
@@ -375,15 +347,6 @@ sub make_do_client{
 
     my $i=0;
     for my $fh(@$fhs){#=shift;
-
-      #while ($fl and ($peer = accept my $fh, $fl)) {
-
-      #binmode	$fh, ":raw";
-
-      #Linux does not inherit the socket flags from parent socket. But BSD does.
-      #Compile time disabling with constants
-      #CONFIG::set_nonblock and IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
-
       #TODO:
       # Need to do OS check here
       CONFIG::set_no_delay and IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1 or Carp::croak "listen/so_nodelay $!";
@@ -420,9 +383,7 @@ sub make_do_client{
 sub current_cb {
 	shift->[cb_];
 }
-sub enable_hosts {
-	shift->[enable_hosts_];
-}
+
 
 sub static_headers {
 	shift->[static_headers_];
@@ -467,56 +428,12 @@ sub site {
 	$self->[sites_]{$name//"default"}
 }
 
-#Duck type as a site 
-#######################################
-# sub add_route {                     #
-#         my $self=shift;             #
-#         $self->site->add_route(@_); #
-# }                                   #
-#                                     #
-#                                     #
-#                                     #
-# sub host {                          #
-#         return $_[0]->site->host;   #
-# }                                   #
-# sub innerware {                     #
-#         $_[0]->site->innerware;     #
-# }                                   #
-# sub outerware{                      #
-#         $_[0]->site->outerware;     #
-# }                                   #
-#######################################
-
-
 sub rebuild_dispatch {
   my $self=shift;
 
   Log::OK::INFO and log_info(__PACKAGE__. " rebuilding dispatch...");
   #Install error routes per site
   #Error routes are added after other routes.
-
-
-  #NOTE:
-  #Here we add the unsupported methods to the table before building it
-  #This is different to a unfound URL resource.
-  #These give a 'method not supported error', while an unfound resource is a
-  #not found error
-  #
-  #Because of the general matching, they are added to the table after all sites
-  #have positive matches installed.
-  #
-  ##############################################################################
-  # for(keys $self->[sites_]->%*){                                             #
-  #   #NOTE: url/path is wrapped in a array                                    #
-  #   #$self->[sites_]{$_}->add_route([$Any_Method], undef, _default_handler); #
-  #   say "iterating through sites $_";                                        #
-  #   for($self->[sites_]{$_}->unsupported->@*){                               #
-  #     Log::OK::TRACE and log_trace "Adding Unmatched endpoints";             #
-  #     say "Adding unmatched endpoints";                                      #
-  #     $self->add_host_end_point($_->@*);                                     #
-  #   }                                                                        #
-  # }                                                                          #
-  ##############################################################################
 
   #Create a special default site for each host that matches any method and uri
   for my $host (keys $self->[host_tables_]->%*) {
@@ -529,17 +446,6 @@ sub rebuild_dispatch {
     $site->add_route([$Any_Method], undef, _default_handler);
   }
 
-  ###################################################################################
-  # #Add  catch all host and catch all route in the case of a host mismatch         #
-  # #of hosts not supported                                                         #
-  # my $site=uSAC::HTTP::Site->new(id=>"_default_*.*", host=>"*.*", server=>$self); #
-  # $site->parent_site=$self;                                                       #
-  # #$self->register_site($site);                                                   #
-  # Log::OK::TRACE and log_trace "Adding default handler to *.*";                   #
-  #                                                                                 #
-  # #$site->add_route($Any_Method, qr|.*|, _default_handler);                       #
-  # $site->add_route([$Any_Method], undef, _default_handler);                       #
-  ###################################################################################
 
   my %lookup=map {
     $_, [
@@ -580,7 +486,7 @@ sub rebuild_dispatch {
     #TODO: Better Routing Cache management.
     #if the is_default flag is set, this is an unkown match.
     #so do not cache it
-    #say STDERR join ", ", $route->@[0,1,2,3];
+
     delete $table->[1]{$_[1]} if $route->[3];
     #return the entry sub for body forwarding
     ($route,$captures);
@@ -597,47 +503,39 @@ sub stop {
 sub run {
 	my $self=shift;
 	Log::OK::INFO and log_info(__PACKAGE__. " starting server...");
-	my $sig; $sig=AE::signal(INT=>sub {
-		$self->stop;
-		$sig=undef;
-	});
-
-#unless($self->[listen_] and $self->[listen_]->@*){
-#Log::OK::FATAL and log_fatal "NO listeners defined";
-#die "no Listeners defined";
-#}
-	#TODO: check for duplicates
-	
-	
-        ###################################################################
-        # #=======CATCH ALL                                               #
-        # #Add a catch all route to the default site.                     #
-        # #As this is always the last route added, it will be tested last #
-        # #Middleware for the default site is applicable to this handler  #
-        # #                                                               #
-        # my $site=$self->site;#uSAC::HTTP::Site->new(server=>$self);     #
-        #                                                                 #
-        # unshift $site->host->@*, "[^ ]+";       #match any host         #
-        # $site->add_route($Any_Method, qr|.*|, sub {                     #
-        #                 &rex_error_not_found                            #
-        #         }                                                       #
-        # );                                                              #
-        ###################################################################
-
+        #######################################
+        # my $sig; $sig=AE::signal(INT=>sub { #
+        #         $self->stop;                #
+        #         $sig=undef;                 #
+        # });                                 #
+        #######################################
 
 	$self->rebuild_dispatch;
 
-  #Spawn here for sharding
-
 	$self->do_passive;
 	$self->do_accept2;
-  $self->prepare;
 
 	$self->dump_listeners;
 	$self->dump_routes;
   
-  #Spawn children here for thundering herd
+  #TODO: Preforking server
+  #Seems like there are no 'thundering herds' in linux and darwin
+  #Calles to accept are serialised. Use SO_REUSEPORT for 'zero' downtime
+  #server reloads
 
+  for(1..$self->[workers_]){
+    my $pid=fork;
+    if($pid){
+      #server
+    }
+    else {
+      #child, start accepting only on workers
+      $self->prepare;
+      last;
+    }
+  }
+
+  require AnyEvent;
 	my $cv=AE::cv;
 	$self->[cv_]=$cv;
 	$cv->recv();
@@ -745,6 +643,7 @@ sub usac_server :prototype(&) {
 sub usac_run {
 	my %options=@_;
 	my $site=$options{parent}//$uSAC::HTTP::Site;
+  $site->parse_cli_options(@ARGV);
 
 	$site->run;
 
@@ -858,7 +757,14 @@ sub usac_workers {
 	my $site=$options{parent}//$uSAC::HTTP::Site;
 
 	#FIXME
-	$site->[workers_]=$workers;
+  $site->workers=$workers;
+}
+
+sub workers: lvalue {
+  my $self=shift;
+  my $workers=pop;
+  my %options=@_;
+  $self->[workers_]=shift;
 }
 
 
@@ -870,6 +776,31 @@ sub usac_sub_product {
 	HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )];
 }
 
+
+sub parse_cli_options {
+  my $self=shift;
+  my @options=@_;
+
+  #Attempt to parse the CLI options
+  require Getopt::Long;
+  my %options;
+  Getopt::Long::GetOptionsFromArray \@options,\%options,
+    "workers=i",
+    "listener=s@"
+  ;
+  for my($key,$value)(%options){
+    say $key;
+    if($key eq "workers"){
+      $self->workers=$value;
+    }
+    elsif($key eq "listener"){
+      $self->add_listeners($_) for(@$value);
+    }
+    else {
+      #Unsupported option
+    }
+  }
+}
 
 1; 
 __DATA__

@@ -12,6 +12,7 @@ use Cwd qw<abs_path>;
 use File::Spec::Functions;
 use Exporter "import";
 use uSAC::HTTP::Constants;
+use URI;
 
 my @redirects=qw<
 	usac_redirect_see_other 
@@ -755,32 +756,6 @@ sub add_middleware {
 
 }
 
-#########################################################
-# sub usac_innerware{                                   #
-#         #my $self=$_;                                 #
-#         my $mw=pop;     #Content is the last item     #
-#         my %options=@_;                               #
-#         my $self=$options{parent}//$uSAC::HTTP::Site; #
-#         if(ref($mw)eq"ARRAY"){                        #
-#                 push $self->innerware->@*, @$mw;      #
-#         }                                             #
-#         else{                                         #
-#                 push $self->innerware->@*, $mw;       #
-#         }                                             #
-# }                                                     #
-# sub usac_outerware {                                  #
-#         #my $self=$_;                                 #
-#         my $mw=pop;     #Content is the last item     #
-#         my %options=@_;                               #
-#         my $self=$options{parent}//$uSAC::HTTP::Site; #
-#         if(ref($mw)eq"ARRAY"){                        #
-#                 push $self->outerware->@*, @$mw;      #
-#         }                                             #
-#         else{                                         #
-#                 push $self->outerware->@*, $mw;       #
-#         }                                             #
-# }                                                     #
-#########################################################
 
 ########## Error handling
 
