@@ -241,7 +241,7 @@ sub open_cache {
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
-		my ($matcher, $rex, $code, $out_headers, $reply, $cb, $read_size, $sendfile, $entry, $no_encoding)=@_;
+		my ($matcher, $rex, $code, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $no_encoding)=@_;
 		Log::OK::TRACE and log_trace("send file no range");
 		#my $session=$rex->[uSAC::HTTP::Rex::session_];
 
@@ -389,7 +389,7 @@ sub send_file_uri_norange {
 				$code=HTTP_RANGE_NOT_SATISFIABLE;
 				push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
 
-				rex_write $matcher,$rex,$code,$out_headers,"";
+				$next->( $matcher,$rex,$code,$out_headers,"");
 				return;
 			}
 			elsif(@ranges==1){
@@ -416,7 +416,7 @@ sub send_file_uri_norange {
 		Log::OK::TRACE and log_trace join ", ", @$out_headers;
 		
 
-		rex_write $matcher, $rex, $code, $out_headers, "" and return
+		$next->($matcher, $rex, $code, $out_headers, "" ) and return
 			if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
 				or $code==HTTP_NOT_MODIFIED);
 
@@ -428,7 +428,7 @@ sub send_file_uri_norange {
 
 			#Setup writable event listener
 
-			rex_write $matcher, $rex, $code, $out_headers, "", $do_sendfile;
+			$next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
 			#$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
 			return;
 		}
@@ -472,7 +472,7 @@ sub send_file_uri_norange {
         #When we have read the required amount of data
         $total==$content_length and
         (@ranges
-          ?return rex_write $matcher, $rex, $code, $out_headers, $reply, sub {
+          ?return $next->( $matcher, $rex, $code, $out_headers, $reply, sub {
             unless(@_){
               return $sub->();
             }
@@ -485,12 +485,12 @@ sub send_file_uri_norange {
 
             #write new multipart header
             return $sub->(undef);           #Call with arg
-          }
-          :return rex_write $matcher, $rex, $code, $out_headers, $reply, undef);
+          })
+          :return $next->($matcher, $rex, $code, $out_headers, $reply, undef));
 
         #Data read by more to do
         $rc and	($rex
-          ?return rex_write $matcher, $rex, $code, $out_headers, $reply, __SUB__
+          ?return $next->($matcher, $rex, $code, $out_headers, $reply, __SUB__)
           :return undef $sub);
 
         #if ($rc);
@@ -586,7 +586,7 @@ sub make_list_dir {
 	}
 	
 	sub{
-		my ($line, $rex, $code, $headers, $uri)=@_;
+		my ($line, $rex, $code, $headers, $uri, $next)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
 		my $abs_path=$html_root.$uri;
@@ -622,11 +622,11 @@ sub make_list_dir {
 		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
 		$ren->($data, $labels, \@results);	#Render to output
 		if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
-			rex_write $line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , "";
+			$next->($line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , "",my $cb=undef);
 
 		}
 		else{
-			rex_write $line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , $data;
+			$next->($line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , $data, my $cb=undef);
 		}
 	}
 }
@@ -640,138 +640,135 @@ sub make_list_dir {
 #Specifies the url prefix (and or regex) to match
 #The prefix is removed and
 sub usac_file_under {
-	#create a new static file object
-	#my $parent=$_;
-	my $html_root=pop;
-	my %options=@_;
-	my $parent=$options{parent}//$uSAC::HTTP::Site;
+  #create a new static file object
+  #my $parent=$_;
+  my $html_root=pop;
+  my %options=@_;
+  my $parent=$options{parent}//$uSAC::HTTP::Site;
 
-	$options{mime}=$parent->resolve_mime_lookup;
-	$options{default_mime}=$parent->resolve_mime_default;
+  $options{mime}=$parent->resolve_mime_lookup;
+  $options{default_mime}=$parent->resolve_mime_default;
 
-	my $headers=$options{headers}//[];
-	my $read_size=$options{read_size}//READ_SIZE;
-	my $sendfile=$options{sendfile}//0;
-	my $open_modes=$options{open_flags}//0;
-	my $filter=$options{filter};
-	my $no_encoding=$options{no_encoding}//"";
-	my $do_dir=$options{list_dir}//$options{do_dir};
-	my $pre_encoded=$options{pre_encoded}//[];
-	\my @indexes=$options{indexes}//[];
-	#TODO: Need to check only supported encodings are provided.
-	
-	Log::OK::INFO and log_info "Static files from: $html_root";
-	Log::OK::INFO and log_info "DIR Listing: ".($do_dir?"yes":"no");
-	Log::OK::INFO and log_info "DIR index: ".(@indexes?join(", ", @indexes):"no");
-	Log::OK::INFO and log_info "Filename Filter: ".($filter?$filter: "**NONE**");
-	Log::OK::INFO and log_info "Readsize: $read_size";
-	Log::OK::INFO and log_info "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
-	Log::OK::INFO and log_info "Preencoding filter: ".($pre_encoded?$pre_encoded:"**NONE**");
-	Log::OK::INFO and log_info "Sendfile: ".($sendfile?"yes $sendfile":"no");
-	
-	Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
-	my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
+  my $headers=$options{headers}//[];
+  my $read_size=$options{read_size}//READ_SIZE;
+  my $sendfile=$options{sendfile}//0;
+  my $open_modes=$options{open_flags}//0;
+  my $filter=$options{filter};
+  my $no_encoding=$options{no_encoding}//"";
+  my $do_dir=$options{list_dir}//$options{do_dir};
+  my $pre_encoded=$options{pre_encoded}//[];
+  \my @indexes=$options{indexes}//[];
+  #TODO: Need to check only supported encodings are provided.
 
-	my $cache=$static->[cache_];
-	$html_root=$static->[html_root_];
-	my $list_dir=$static->make_list_dir(%options);
+  Log::OK::INFO and log_info "Static files from: $html_root";
+  Log::OK::INFO and log_info "DIR Listing: ".($do_dir?"yes":"no");
+  Log::OK::INFO and log_info "DIR index: ".(@indexes?join(", ", @indexes):"no");
+  Log::OK::INFO and log_info "Filename Filter: ".($filter?$filter: "**NONE**");
+  Log::OK::INFO and log_info "Readsize: $read_size";
+  Log::OK::INFO and log_info "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
+  Log::OK::INFO and log_info "Preencoding filter: ".($pre_encoded?$pre_encoded:"**NONE**");
+  Log::OK::INFO and log_info "Sendfile: ".($sendfile?"yes $sendfile":"no");
 
-	die "Can not access dir $html_root to serve static files" unless -d $html_root;
-	#check for mime type in parent 
+  Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
+  my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
 
-	#create the sub to use the static files here
-	my $next;
-	my $p;	#tmp variable
-	sub {
-		#Do a check here. if first argment is a sub ref we are being used as middleware
-		#But this should only happen once.
-		#state $next;
-		if(!$next and ref($_[0])eq "CODE"){
-		
-				$next=$_[0];
-				Log::OK::TRACE and log_trace "Static file: returning  middle ware";
-				return __SUB__;
-		}
-			
-		$p=$_[4]
-			?pop 
-			:$_[1]->[uSAC::HTTP::Rex::uri_stripped_];
+  my $cache=$static->[cache_];
+  $html_root=$static->[html_root_];
+  my $list_dir=$static->make_list_dir(%options);
 
-		
-		my $path=$html_root.$p;
-		
-    unless($_[CODE]) {
-      #Stack reset
-      $next
-        ?return &$next
-        :return &rex_write;
+  die "Can not access dir $html_root to serve static files" unless -d $html_root;
+  #check for mime type in parent 
+  my $inner=sub {
+    #create the sub to use the static files here
+    my $next=shift;
+    my $p;	#tmp variable
+    sub {
+      unless($_[CODE]) {
+        #Stack reset
+        &$next;
+        return;
+      }
+      $p=$_[REX][uSAC::HTTP::Rex::uri_stripped_];
+
+      my $path=$html_root.$p;
+
+
+      if($filter and $path !~ /$filter/o){
+        $_[PAYLOAD]="";
+        $_[CODE]=HTTP_NOT_FOUND;
+        push $_[HEADER]->@*, HTTP_CONTENT_LENGTH,0;
+        return &$next;
+      }
+
+      #Push any user static headers
+      push $_[HEADER]->@*, @$headers;
+
+      Log::OK::TRACE and log_trace "static: html_root: $html_root";
+
+      #Server dir listing if option is specified
+      #
+      #=========================================
+
+      if($do_dir || @indexes and substr($path, -1) eq "/") {
+        #attempt to do automatic index file.
+        my $entry;
+        for(@indexes){
+          my $path=$html_root.$p.$_;
+          Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
+          $entry=$cache->{$path}//$static->open_cache($path);
+          next unless $entry;
+          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry);
+          return 1;
+        }
+
+        if($do_dir){
+          Log::OK::TRACE and log_trace "Static: Listing dir $p";
+          #dir listing
+          $_[PAYLOAD]=$p;
+          $_[CB]=$next;
+          &$list_dir;
+          #$list_dir->(@_, $p);
+          return 1;
+        }
+        else {
+          Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
+          #no valid index found so 404
+          &rex_error_not_found;# @_;
+          return 1;
+        }
+      }
+
+
+
+
+      # File serving
+      #
+      # Attempts to open the file and send it. If it fails, the next static middleware is called if present
+
+      my $pre_encoded_ok=($path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
+      ?$pre_encoded
+      :[];
+
+      my $entry;
+      $entry=$cache->{$path} unless DISABLE_CACHE;
+      $entry//=$static->open_cache($path,$open_modes, $pre_encoded_ok);
+      #my $entry=$static->open_cache($path,$open_modes, $pre_encoded_ok);
+
+      $entry and return send_file_uri_norange @_, $next, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
+
+      #Middle ware setup. Should not get here normally
+      $_[PAYLOAD]="";
+      $_[CODE]=HTTP_NOT_FOUND;
+      push $_[HEADER]->@*, HTTP_CONTENT_LENGTH,0;
+      &$next;
     }
+  };
 
-		$filter and $path !~ /$filter/o and 
-			$next 
-				? return &$next
-				: return &rex_error_not_found;
+  my $outer=sub {
+    my $next=shift;
+  };
 
-		#Push any user static headers
-		push $_[HEADER]->@*, @$headers;
-
-		Log::OK::TRACE and log_trace "static: html_root: $html_root";
-
-		#Server dir listing if option is specified
-		#
-		#=========================================
-		
-		if($do_dir || @indexes and substr($path, -1) eq "/") {
-			#attempt to do automatic index file.
-			my $entry;
-			for(@indexes){
-				my $path=$html_root.$p.$_;
-				Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
-				$entry=$cache->{$path}//$static->open_cache($path);
-				next unless $entry;
-				send_file_uri_norange(@_, $read_size, $sendfile, $entry);
-				return 1;
-			}
-
-			if($do_dir){
-				Log::OK::TRACE and log_trace "Static: Listing dir $p";
-				#dir listing
-        $_[PAYLOAD]=$p;
-        &$list_dir;
-        #$list_dir->(@_, $p);
-				return 1;
-			}
-			else {
-				Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
-				#no valid index found so 404
-				&rex_error_not_found;# @_;
-				return 1;
-			}
-		}
-
-
-
-
-		# File serving
-		#
-		# Attempts to open the file and send it. If it fails, the next static middleware is called if present
-		
-		my $pre_encoded_ok=($path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
-			?$pre_encoded
-			:[];
-
-		my $entry;
-		$entry=$cache->{$path} unless DISABLE_CACHE;
-		$entry//=$static->open_cache($path,$open_modes, $pre_encoded_ok);
-		#my $entry=$static->open_cache($path,$open_modes, $pre_encoded_ok);
-
-		$entry and return send_file_uri_norange @_, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
-
-		#Middle ware setup. Should not get here normally
-		$next
-			? return &$next
-			: return &rex_error_not_found;
-	}
+  [$inner, $outer];
 }
 
 1;

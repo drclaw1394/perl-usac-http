@@ -254,7 +254,7 @@ sub make_reader{
           #No body
           $state=$start_state;
           $payload="";
-          $route and $route->[1][1]($route, $rex, $code, $out_header, $payload, undef);
+          $route and $route->[1][1]($route, $rex, $code, $out_header, $payload, my $cb=undef);
           $out_header=[];
         }
         else{
@@ -308,7 +308,7 @@ sub make_reader{
           $state=$start_state;
           $processed=0;
           $_[PAYLOAD]="";#substr $buf, 0, $new, "";
-          $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], undef);
+          $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], my $cb=undef);
         }
         else {
           $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], $dummy_cb);
@@ -352,7 +352,7 @@ sub make_reader{
                 $multi_state=0;
                 $state=$start_state;
                 my $data=substr($buf, 0, $len);
-                $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], undef);
+                $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], my $cb=undef);
                 $out_header=[];
 
                 $buf=substr $buf, $offset+4;

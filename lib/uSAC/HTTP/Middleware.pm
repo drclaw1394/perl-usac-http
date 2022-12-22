@@ -244,7 +244,7 @@ sub chunked{
           #
           my $index;
           $_ eq HTTP_TRANSFER_ENCODING and ($index=$_+1, last)
-          for @headers[@key_indexes[0..@headers/2-1]];
+            for @headers[@key_indexes[0..@headers/2-1]];
 
           unless($index){	
             push @headers, HTTP_TRANSFER_ENCODING, "chunked";

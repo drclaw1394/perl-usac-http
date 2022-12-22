@@ -801,10 +801,11 @@ sub parse_cli_options {
     "workers=i",
     "listener=s@"
   ;
+
   for my($key,$value)(%options){
     say $key;
     if($key eq "workers"){
-      $self->workers=$value;
+      $self->workers=$value<0?undef:$value;
     }
     elsif($key eq "listener"){
       $self->add_listeners($_) for(@$value);
