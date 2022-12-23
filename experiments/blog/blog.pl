@@ -9,7 +9,8 @@ use AnyEvent;
 use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
-use uSAC::HTTP::Middleware qw<dummy_mw log_simple deflate gzip>;
+use uSAC::HTTP::Middleware qw<log_simple>;
+use uSAC::HTTP::Middleware::Compression qw<gzip deflate>;
 
 use uSAC::HTTP::State::JSON qw<state_json>;
 use uSAC::HTTP::State::UUID qw<state_uuid>;
@@ -104,7 +105,7 @@ my $server; $server=usac_server {
                 gzip()=>deflate()=>
                 usac_file_under (
                         #filter=>'txt$',
-                        read_size=>4096*32,
+                        read_size=>4096*128,
                         #pre_encoded=>[qw<gz>],
                         #no_compress=>qr/txt$/,
                         do_dir=>1,
@@ -199,7 +200,6 @@ my $server; $server=usac_server {
 
     #usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => MyApp::url_slurp;
     usac_error_route "/error" => sub {
-      say "ERROR FOR BLOG";
       $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[CODE];
       &rex_write;
 		};

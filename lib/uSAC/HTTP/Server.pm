@@ -249,7 +249,6 @@ sub prepare {
   $SIG{ALRM}=
   #$self->[stream_timer_]=AE::timer 0, $interval,
   sub {
-    #say "Alarm received";
 		#iterate through all connections and check the difference between the last update
 		$self->[server_clock_]+=$interval;
 		#and the current tick
@@ -266,7 +265,7 @@ sub prepare {
 			}
 		}
 		
-	  alarm	 $interval;
+	  alarm	 $interval;# if $self->[sessions_]->%*; #only start interval if something to watch?
 	};
   
   alarm $interval;
@@ -803,7 +802,6 @@ sub parse_cli_options {
   ;
 
   for my($key,$value)(%options){
-    say $key;
     if($key eq "workers"){
       $self->workers=$value<0?undef:$value;
     }

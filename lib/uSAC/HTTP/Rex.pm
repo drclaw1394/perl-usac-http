@@ -353,7 +353,7 @@ sub rex_error_internal_server_error {
 sub rex_redirect_internal {
 
 	my ($matcher, $rex, $code, $headers, $uri)=@_;
-	say STDERR "rex_redirect_internal called";
+  #say STDERR "rex_redirect_internal called";
 	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	
