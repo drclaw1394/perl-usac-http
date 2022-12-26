@@ -248,7 +248,9 @@ sub chunked{
           #(multicall)
         }
 
-        $next->(@_[0,1,2,3],$scratch,@_[5,6]);# if $scratch;
+        #$next->(@_[0,1,2,3],$scratch,@_[5,6]);# if $scratch;
+        $_[PAYLOAD]=$scratch;
+        &$next;
       }
       else{
         #Error condition. Reset stack
@@ -256,8 +258,6 @@ sub chunked{
         delete $out_ctx{$_[REX]};
         &$next;
       }
-
-
     };
   };
 

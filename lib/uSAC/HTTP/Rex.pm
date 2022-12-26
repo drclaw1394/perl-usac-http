@@ -10,28 +10,24 @@ use Log::ger;
 
 use Log::OK;
 
-use Try::Catch;
+#use Try::Catch;
 use Carp qw<carp>;
-use File::Basename qw<basename dirname>;
-use File::Spec::Functions qw<rel2abs catfile>;
+#use File::Basename qw<basename dirname>;
+use File::Spec::Functions qw<catfile>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::v1_1_Reader;
 #use uSAC::HTTP::Server;
 
 
-use uSAC::HTTP::Session;
+#use uSAC::HTTP::Session;
 #use uSAC::HTTP::Server;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Constants;
 use IO::FD;
 use Fcntl qw<O_CREAT O_RDWR>;
 
-#use uSAC::HTTP::Static;
-use AnyEvent;
 use Exporter 'import';
-use File::Temp qw<tempfile>;
-use File::Path qw<make_path>;
 
 use URL::Encode::XS;
 use URL::Encode qw<url_decode_utf8>;

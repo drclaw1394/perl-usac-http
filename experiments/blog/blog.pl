@@ -105,12 +105,12 @@ my $server; $server=usac_server {
                 gzip()=>deflate()=>
                 usac_file_under (
                         #filter=>'txt$',
-                        read_size=>4096*128,
+                        read_size=>4096*16,
                         #pre_encoded=>[qw<gz>],
                         #no_compress=>qr/txt$/,
                         do_dir=>1,
                         #indexes=>["index.html"],
-                        #sendfile=>4096,
+                        sendfile=>4096*32,
                         usac_dirname #  "static"
                 );
 

@@ -17,7 +17,8 @@ use File::Basename qw<basename dirname>;
 use Time::Piece;
 use Cwd;
 use AnyEvent;
-use Sys::Sendfile;
+#use Sys::Sendfile;
+use IO::FD;
 
 #use uSAC::HTTP ":constants";
 use uSAC::HTTP::Code qw<:constants>;
@@ -241,14 +242,12 @@ sub open_cache {
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
 		use  integer;
+
 		my ($matcher, $rex, $code, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $no_encoding)=@_;
+
 		Log::OK::TRACE and log_trace("send file no range");
-		#my $session=$rex->[uSAC::HTTP::Rex::session_];
 
 		
-		#weaken $session;
-		#weaken $rex;
-
 		$rex->[uSAC::HTTP::Rex::in_progress_]=1;
 		my $in_fh=$entry->[fh_];
 
@@ -270,18 +269,21 @@ sub send_file_uri_norange {
 		#======
 		# call sendfile. If remaining data to send, setup write watcher to 
 		# trigger next call
-		#my $out_fh=$session->[uSAC::HTTP::Session::fh_];
 		my $do_sendfile;
 		if($sendfile){
-			my $session=$rex->[uSAC::HTTP::Rex::session_];
-			my $out_fh=$session->fh;
-			my $ww;
+    no warnings "uninitialized";
+    my $ww;
+	    my $session=$rex->[uSAC::HTTP::Rex::session_];
+      my $out_fh=$session->fh;
+
 			$do_sendfile=sub {
 				Log::OK::TRACE  and log_trace "Doing send file";
 				#Do send file here?
 				#seek $in_fh,$total,0;
 				#in, out, size, input_offset
-				$total+=$rc=sendfile($out_fh, $in_fh, $read_size, $offset);
+
+
+				$total+=$rc=IO::FD::sendfile($out_fh, $in_fh, $read_size, $offset);
 				$offset+=$rc;
 
 				#non zero read length.. do the write
@@ -298,10 +300,6 @@ sub send_file_uri_norange {
 						&__SUB__;	#restart
 						return;	
 					}
-					#ofr drop if no more
-					#Do dropper as we reached the end. use keep alive 
-					#$session->[uSAC::HTTP::Session::dropper_]->(1);
-					#$session->drop(1);
 					$rex->[uSAC::HTTP::Rex::dropper_]->(1);
 					$out_fh=undef;
 					$ww=undef;
@@ -309,21 +307,12 @@ sub send_file_uri_norange {
 				}
 
 				elsif($rc){
-					#redo the sub and more data to send
-					#
-					
-					$ww=AE::io $out_fh, 1, __SUB__ unless $ww;#$do_sendfile;
-					# __SUB__->();
-					#$session->[uSAC::HTTP::Session::write_]->($reply, __SUB__);
+					$ww=AE::io $out_fh, 1, __SUB__ unless $ww;
 					return;
 				}
 				elsif( $! != EAGAIN and  $! != EINTR and $! != EBUSY){
 					log_error "Send file error";
 					log_error $!;
-					#delete $cache{$abs_path};
-					#close $in_fh;
-					#$session->[uSAC::HTTP::Session::dropper_]->();
-					#$session->drop(1);
 					$rex->[uSAC::HTTP::Rex::dropper_]->(1);
 					return;
 				}
@@ -427,9 +416,8 @@ sub send_file_uri_norange {
 			#Write header out and then issue send file
 
 			#Setup writable event listener
-
+      
 			$next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
-			#$session->[uSAC::HTTP::Session::write_]->($reply, $do_sendfile);
 			return;
 		}
 
@@ -446,8 +434,6 @@ sub send_file_uri_norange {
         #if no arguments an error occured
         unless(@_){
           #undef $sub;
-          #$session->[uSAC::HTTP::Session::dropper_]->();
-          #$session->drop;
           $rex->[uSAC::HTTP::Rex::dropper_]->(1);
           undef $rex;
           return;
@@ -717,6 +703,7 @@ sub usac_file_under {
           Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
           $entry=$cache->{$path}//$static->open_cache($path);
           next unless $entry;
+          $_[HEADER]=[];
           send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry);
           return 1;
         }
@@ -754,6 +741,7 @@ sub usac_file_under {
       $entry//=$static->open_cache($path,$open_modes, $pre_encoded_ok);
       #my $entry=$static->open_cache($path,$open_modes, $pre_encoded_ok);
 
+      $_[HEADER]=[];
       $entry and return send_file_uri_norange @_, $next, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
 
       #Middle ware setup. Should not get here normally

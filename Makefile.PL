@@ -11,11 +11,11 @@ WriteMakefile(
 		AnyEvent 	=> 0,
 		'Digest::SHA1' 	=> 0,
 		JSON		=> 0,
-		'JSON::XS'     	=> 0,
+		'Cpanel::JSON::XS'     	=> 0,
 		enum	    	=> 0,
 		"Hustle::Table" => "0.5.5",	#Bug fix for updating default matcher
 		"uSAC::IO"	=> 0,
-		"IO::FD"	=> "0.1.3",
+		"IO::FD"	=> "0.2.0",
 		"Sys::Sendfile" => 0,
 		
 
