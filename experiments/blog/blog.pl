@@ -12,8 +12,8 @@ use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<log_simple>;
 use uSAC::HTTP::Middleware::Compression qw<gzip deflate>;
 
-use uSAC::HTTP::State::JSON qw<state_json>;
-use uSAC::HTTP::State::UUID qw<state_uuid>;
+use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
+use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
 use Socket;
 
 use Net::ARP;

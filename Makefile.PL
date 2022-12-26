@@ -22,10 +22,9 @@ WriteMakefile(
 		"Crypt::JWT"	=> 0,
 		"Log::ger"	=> 0,
 		"Log::ger::Output::Screen" => 0,
-		"Log::OK"	=> 0,
+		"Log::OK"	=> "v0.1.5",
 		"Socket::More"	=> 0,
 		"uSAC::MIME"	=> 0,
-		"Try::Catch"	=> 0,
 		"URI"		=> 0,
 		"URL::Encode"	=> 0,
 		"URL::Encode::XS" =>0
