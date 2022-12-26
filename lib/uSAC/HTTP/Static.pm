@@ -283,8 +283,8 @@ sub send_file_uri_norange {
 				#in, out, size, input_offset
 
 
-				$total+=$rc=IO::FD::sendfile($out_fh, $in_fh, $read_size, $offset);
-				$offset+=$rc;
+        $total+=$rc=IO::FD::sendfile($out_fh, $in_fh, $read_size, $offset);
+        $offset+=$rc;
 
 				#non zero read length.. do the write
 				if($total==$content_length){    #end of file
@@ -301,6 +301,7 @@ sub send_file_uri_norange {
 						return;	
 					}
 					$rex->[uSAC::HTTP::Rex::dropper_]->(1);
+          $do_sendfile=undef;
 					$out_fh=undef;
 					$ww=undef;
 					return;
@@ -308,13 +309,14 @@ sub send_file_uri_norange {
 
 				elsif($rc){
 					$ww=AE::io $out_fh, 1, __SUB__ unless $ww;
-					return;
+          #return;
 				}
 				elsif( $! != EAGAIN and  $! != EINTR and $! != EBUSY){
-					log_error "Send file error";
-					log_error $!;
+          #log_error "Send file error $!";
+          $ww=undef;
 					$rex->[uSAC::HTTP::Rex::dropper_]->(1);
-					return;
+          $do_sendfile=undef;
+          #return;
 				}
 
 				else {  

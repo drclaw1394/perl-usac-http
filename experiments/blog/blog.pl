@@ -29,18 +29,16 @@ use Data::Dumper;
 
 my $server; $server=usac_server {
   usac_workers 4;
-        ########################################
-        # usac_listen {                        #
-        #                 address=>"::",       #
-        #                 interface=>["en"],   #
-        #                 port=>[8084],        #
-        #                 family=>[AF_INET6],  #
-        #                 type=>SOCK_STREAM,   #
-        #                 data=> {             #
-        #                         hosts=>"dfs" #
-        #                 }                    #
-        #         };                           #
-        ########################################
+        usac_listen {
+                        address=>"::",
+                        interface=>["en"],
+                        port=>[8084],
+                        family=>[AF_INET6],
+                        type=>SOCK_STREAM,
+                        data=> {
+                                hosts=>"dfs"
+                        }
+                };
 
 
 	
