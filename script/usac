@@ -6,31 +6,27 @@ use feature qw<say>;
 
 use Log::ger;
 use Log::ger::Output "Screen";
-use Log::ger::Util;
 use Log::OK {
 	lvl=>"info",
 	opt=>"verbose",
 };
 
-Log::ger::Util::set_level Log::OK::LEVEL;
-
-
 
 use File::Spec::Functions qw<rel2abs>;
 use File::Basename qw<dirname basename>;
 use Cwd;
-use Pod::Usage;
 
 #usac-http server command line utility
 use uSAC::HTTP;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Static;
 use uSAC::HTTP::Middleware qw<log_simple>;
-use Socket ":all";
+
+use Socket;
 use Socket::More ":all";
 
 
-use uSAC::HTTP::State::JSON qw<state_json>;
+use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 
 use Getopt::Long;
 my %options;
@@ -66,9 +62,16 @@ GetOptions \%options,
 
 
 
-	or pod2usage verbose=>1;
+	or do {
+    require Pod::Usage;
+    Pod::Usage::pod2usage(verbose=>1);
+  };
 
-pod2usage verbose=>2 if $options{help};
+if($options{help}){
+  require Pod::Usage;
+  Pod::Usage::pod2usage(verbose=>2);
+}
+
 # TODO:
 #	--ws my/uri=file://file_to_watch
 #	--ws my/ws=unix://named_fifo
@@ -171,7 +174,7 @@ $server=usac_server{
 		usac_include $target;
 	}
 };
-
+$server->parse_cli_options(@ARGV);
 $server->run();
 __END__
 

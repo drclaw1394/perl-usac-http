@@ -18,7 +18,6 @@ use Socket;
 
 use Net::ARP;
 
-use MyApp;
 
 use uSAC::HTTP::Rex;
 
