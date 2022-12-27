@@ -87,27 +87,30 @@ sub _welcome {
   state $data=do{ local $/=undef; <DATA>}; #execute template
 
   state $sub=sub {
-    $_[PAYLOAD]=$data;
-    &rex_reply_html;
+    if($_[CODE]){
+      $_[PAYLOAD]=$data;
+      &rex_reply_html;
+    }
   }
 }
 
-#This is used as the default entry in a Hustle::Table and acts as a marker to
-#allow setup code to force the actual default handler below. It is needed to
-#allow an default matcher to be set from outside the server/site.
+#
+# This is used as the default entry in a Hustle::Table and acts as a marker to
+# allow setup code to force the actual default handler below. It is needed to
+# allow an default matcher to be set from outside the server/site.
 #
 my $dummy_default=[];
 
-#if nothing else on this server matches, this will run
-#And if that happens it it most likley a protocol error
-#ie expecting a request line but getting something else
+#
+# If nothing else on this server matches, this will run
+# And if that happens it it most likley a protocol error
+# ie expecting a request line but getting something else
+#
 sub _default_handler {
 		state $sub=sub {
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
 			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[REX]->headers->%*;
 			$_[PAYLOAD]="NOT FOUND";
-      #say "before not found";
-      #say @_;
 			&rex_error_not_found;
 		};
 }
@@ -143,6 +146,7 @@ sub new {
 	return $self;
 }
 
+
 sub _setup_dgram_passive {
 	my ($self,$l)=@_;
 	#Create a socket from results from interface
@@ -172,6 +176,7 @@ sub _setup_dgram_passive {
 	IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
 	$self->[fhs3_]{$fh} = $fh;
 }
+
 
 sub _setup_stream_passive{
 	my ($self, $l)=@_;
@@ -237,7 +242,9 @@ sub do_passive {
 
 }
 
-
+# 
+# Each worker calls this after spawning. Sets up timers, signal handlers etc
+#
 sub prepare {
 	#setup timer for constructing date header once a second
 	my ($self)=shift;
@@ -261,8 +268,6 @@ sub prepare {
 		my $session;
 		for(keys $self->[sessions_]->%*){
 			$session=$self->[sessions_]{$_};
-      #say "testing session $_";
-      #say "Server time: ".$self->[server_clock_]." Session time: ".$session->time;
 
 			if(($self->[server_clock_]-$session->time)> $timeout){
 				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
@@ -278,66 +283,39 @@ sub prepare {
 
 }
 
-#Iterate over passive sockets are run the required code
-sub do_accept2{
-	#Accept is only for SOCK_STREAM 
-	state $seq=0;
-	Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
-	weaken( my $self = shift );
-	\my @zombies=$self->[zombies_]; #Alias to the zombie sessions for reuse
-	\my %sessions=$self->[sessions_];	#Keep track of the sessions
+#
+# Iterate over passive sockets and setup an asyncrhonous acceptor
+# 
+sub do_accept{
+  #Accept is only for SOCK_STREAM 
+  state $seq=0;
+  Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
+  weaken( my $self = shift );
+  \my @zombies=$self->[zombies_]; #Alias to the zombie sessions for reuse
+  \my %sessions=$self->[sessions_];	#Keep track of the sessions
 
-	my $do_client=$self->make_do_client;
+  my $do_client=$self->make_basic_client;
 
-	my @peers;
-	my @afh;
+  my @peers;
+  my @afh;
   for my $fl ( values %{ $self->[fhs2_] }) {
     $self->[aws_]{ $fl } =my $acceptor=uSAC::IO::Acceptor->create(fh=>$fl, on_accept=>$do_client, on_error=>sub {});
     #$acceptor->start;
   }
-  ###################################################
-  # for my $fl ( values %{ $self->[fhs2_] }) {      #
-  #   $self->[aws_]{ $fl } = AE::io $fl, 0, sub {   #
-  #     IO::FD::accept_multiple(@afh, @peers, $fl); #
-  #     $do_client->(\@afh,\@peers);                #
-  #   };                                            #
-  # }                                               #
-  ###################################################
-
-        #########################################################################################
-        #TODO: DATAGRAM processing
-        # for my $fl (values $self->[fhs3_]->%*){                                               #
-        #         $self->[aws2_]{ $fl } = AE::io $fl, 0, sub {                                  #
-        #                 my $buf="";                                                           #
-        #                 while(IO::FD::recv($fl,$buf,4069)){                                   #
-        #                         #TODO: a table of peer addresses needs to be stored in a hash #
-        #                         #The key being a new session                                  #
-        #                         #If the key didn't exist, create a new session                #
-        #                         #                                                             #
-        #                         #if it did, use existing session                              #
-        #                 }                                                                     #
-        #         };                                                                            #
-        #########################################################################################
-
-        #}
-	Log::OK::INFO and log_info "SETUP PASSIVE COMPLETE";
+  Log::OK::INFO and log_info "SETUP PASSIVE COMPLETE";
 }
 
 
-sub as_satellite {
-	#Connect to unix socket, which master is listening to
-}
-sub as_central {
-	#Create a unix socket and start accepting connections from worker
-	
-}
 
 sub make_do_dgram_client {
 	#A single dgram listener is all thats required. it needs to call.
 	#todo
 }
 
-sub make_do_client{
+#
+#Returns a sub for processing new TCP client connections
+#
+sub make_basic_client{
 
   my ($self)=@_;
   \my @zombies=$self->[zombies_];
@@ -345,35 +323,34 @@ sub make_do_client{
 
   my $session;
   my $seq=0;
+
   sub {
-    my ($fhs,$peers)=@_;
+    my ($fhs, $peers)=@_;
 
     my $i=0;
-    for my $fh(@$fhs){#=shift;
+    for my $fh(@$fhs){
       #TODO:
       # Need to do OS check here
-      CONFIG::set_no_delay and IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1 or Carp::croak "listen/so_nodelay $!";
-      #setsockopt $fh, IPPROTO_TCP, TCP_NOPUSH, 1 or die "error setting no push";
+      #CONFIG::set_no_delay and IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1 or Carp::croak "listen/so_nodelay $!";
 
 
       my $id = ++$seq;
       my $scheme="http";
 
       Log::OK::DEBUG and log_debug "Server new client connection: id $id";
+
       if(@zombies){
         $session=pop @zombies;
-        #uSAC::HTTP::Session::revive $session, $id, $fh, $scheme;
         $session->revive($id, $fh, $scheme, $peers->[$i]);
       }
       else {
-        #$session=uSAC::HTTP::Session::new(undef,$id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme);
         $session=uSAC::HTTP::Session->new;
         $session->init($id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme, $peers->[$i]);
-        #uSAC::HTTP::Session::push_reader $session, make_reader $session, MODE_SERVER;
         $session->push_reader(make_reader $session, MODE_SERVER);
       }
       $i++;
       $sessions{ $id } = $session;
+
       #$active_connections++;
       #$total_connections++;
 
@@ -399,8 +376,6 @@ sub add_host_end_point{
 	#[$site, $endpoint, $outer, $default_flag]
 	#This becomes the value field in hustle table entry
 	#[matcher, value, type, default]
-  say "ADD HOST END POINT: ", join ", ", @_;
-  say "";
 	my $table=$self->[host_tables_]{$host}//=[
 		Hustle::Table->new($dummy_default),{}
 	];
@@ -458,47 +433,56 @@ sub rebuild_dispatch {
 
 
   my %lookup=map {
-    $_, [
-    #table
-    $self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
-    #cache for table
-    $self->[host_tables_]{$_}[1]
-    ]
-  }
-  keys $self->[host_tables_]->%*;
+      $_, [
+      #table
+      $self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
+      #cache for table
+      $self->[host_tables_]{$_}[1]
+      ]
+    } keys $self->[host_tables_]->%*;
 
+    #
+    # Parser call the following to identify / match a route for header and path
+    # information. The route contains the middlewares prelinked to process the
+    # requests
+    #
   $self->[cb_]=sub {
     #my ($host, $input, $rex)=@_;#, $rex, $rcode, $rheaders, $data, $cb)=@_;
 
     my $table=$lookup{$_[0]}//$lookup{"*.*"};
-    #(my $route, $_[2]->[uSAC::HTTP::Rex::captures_])= $table->[0]($_[1]);
     (my $route, my $captures)= $table->[0]($_[1]);
 
-    #Hustle table route structure
+    #Hustle table entry structure:
     #[matcher, value, type default]
     #
-    #ctx/value structure has
+    #ctx/value is  a 'route' structure:
     #[site, linked_innerware, linked_outerware, counter]
     #  0 ,		1 	,	2		,3	, 4
 
     Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route;
     Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route->@*;
+
+    #
+    # Increment the counter on the route
+    #
     $route->[1][4]++;	
 
-    #NOTE: MAIN ENTRY TO REX RENDERING SYSTEM
+    #
+    # NOTE: MAIN ENTRY TO  PROCESSING CHAIN / MIDDLEWARE
     # The linked innerware, the route handler and outerware are
     # triggered from here
     # Default Result code is HTTP_OK and a new set of empty headers which
+    #
     #$route->[1][1]($route, $rex, my $code=$rcode//HTTP_OK, $rheaders//[],$data//="",$cb);
+    #
 
-    #TODO: Better Routing Cache management.
-    #if the is_default flag is set, this is an unkown match.
-    #so do not cache it
+    # TODO: Better Routing Cache management.
+    # if the is_default flag is set, this is an unkown match.
+    # so do not cache it
 
     delete $table->[1]{$_[1]} if $route->[3];
     #return the entry sub for body forwarding
-    ($route,$captures);
-
+    ($route, $captures);
   };
 }
 
@@ -521,7 +505,7 @@ sub run {
 	$self->rebuild_dispatch;
 
 	$self->do_passive;
-	$self->do_accept2;
+	$self->do_accept;
 
 	$self->dump_listeners;
 	$self->dump_routes;
@@ -531,19 +515,25 @@ sub run {
   #Calles to accept are serialised. Use SO_REUSEPORT for 'zero' downtime
   #server reloads
 
-  if(not defined $self->[workers_]){
+  if(not defined($self->[workers_]) or $self->[workers_]<0){
     #Attempt to auto pick the number of workers based on cpu information
     try {
       require Sys::Info;
       my $info=Sys::Info->new;
       $self->[workers_]=$info->device("cpu")->count;
-      Log::OK::WARN and log_warn "Worker count set automatically to  $self->[workers_]";
+      Log::OK::WARN and log_warn "Attempting to quess a nice worker count...";
 
     }
     catch($e){
       $self->[workers_]=0;
       Log::OK::WARN and log_warn "Error guessing worker count. Running in single process mode (workers =0)";
     }
+  }
+  if($self->[workers_]){
+    Log::OK::INFO and log_info "Running $self->[workers_] workers + manager";
+  }
+  else {
+    Log::OK::INFO and log_info "Running single process mode";
   }
 
   if($self->[workers_]){
@@ -606,9 +596,13 @@ sub dump_routes {
 		#table is hustle table and cache entry
 		for my $entry ($table->[0]->@*){
 			my $site=$entry->[1][0];
-			$tab->load([$entry->[0], $entry->[2], $site->id, $site->prefix, join "\n",$host]);
+      if($site){
+        $tab->load([$entry->[0], $entry->[2], $site->id, $site->prefix, join "\n",$host]);
+      }
+      else{
+        $tab->load([$entry->[0], $entry->[2], "na", "na", join "\n",$host]);
+      }
 
-			#say join ", ", $entry->[0], $entry->[1][0]->id;
 		}
 		Log::OK::INFO and log_info join "", $tab->table;
 
@@ -699,7 +693,6 @@ sub usac_include {
 	else{
 		#not a dir . do it
 		Log::OK::INFO and log_info "Including server script from $path";
-		say $path;
 		my $result=eval "require '$path'";
 
 			if(my $context=Error::ShowMe::context $path){

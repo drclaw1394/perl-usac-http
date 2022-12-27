@@ -27,6 +27,7 @@ our @EXPORT=@EXPORT_OK;
 
 #This is to mimic a filehandle?
 package uSAC::HTTP::Middleware::PSGI::Writer {
+no warnings "experimental";
 
   use uSAC::HTTP::Rex;
   use uSAC::HTTP::Constants;
@@ -64,6 +65,7 @@ package uSAC::HTTP::Middleware::PSGI::Writer {
   }
 }
 
+no warnings "experimental";
 #Driver to interface with PSGI based applications
 #this acts as either middleware or an end point
 sub psgi {

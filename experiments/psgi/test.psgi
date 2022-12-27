@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use feature ":all";
 
-use uSAC::HTTP;
 use Data::Dumper;
 use Plack::Request; 
 

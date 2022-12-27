@@ -109,7 +109,6 @@ sub new {
 #
 my @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 sub _add_route {
-  say "in _add_route: ", join ", ", @_;
   local $,=" ";
   my $self=shift;
   my $end=pop;
@@ -235,7 +234,6 @@ sub _add_route {
         Log::OK::DEBUG and log_debug $reply;
         $_[HEADER]=undef;	#mark headers as done
         $reply.=CRLF.$_[PAYLOAD]//"";
-        #say "REX in serialize: $_[REX]";
         $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
       }
       else{
@@ -440,7 +438,6 @@ sub build_hosts {
 	my $parent=$_[0];
 	my @hosts;
 	while($parent) {
-		#say $parent;
 		push @hosts, $parent->host->@*;	
 		last if @hosts;		#Stop if next level specified a host
 		$parent=$parent->parent_site;
@@ -623,13 +620,11 @@ sub add_route {
   die "route needs at least two parameters" unless @_>=2;
   
   if(!defined($_[0])){
-    say "ADDING route: ", join ", ", @_;;
-    #assume setting the default route
-    #my $a=shift;
+    ##
+    #Sets the default for the host
     shift; unshift @_, $Any_Method, undef;
 		$self->_add_route(@_);
   }
-	#first element is tested for short cut get use
 	elsif(ref($_[0]) eq "ARRAY"){
 		#Methods specified as an array ref
 		my $a=shift;
@@ -642,6 +637,7 @@ sub add_route {
 			$self->_add_route(@_);
 		}
 		else {
+      #Path matcher is a regex
 			unshift @_, "GET";
 			$self->_add_route(@_);
 		}
@@ -655,7 +651,7 @@ sub add_route {
 		#not starting with a forward slash but with a method
 		my $url=shift @_;
 
-		#only add a slash if the strin is not empty
+		#only add a slash if the string is not empty
 		$url="/".$url if $url ne "";
 
 		unshift @_, $url;
