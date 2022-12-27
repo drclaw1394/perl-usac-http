@@ -22,7 +22,7 @@ use constant KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
 use constant KEY_COUNT=> end_-entries_+1;
 
-our @EXPORT_OK=qw<usac_to_psgi>;
+our @EXPORT_OK=qw<psgi>;
 our @EXPORT=@EXPORT_OK;
 
 #This is to mimic a filehandle?
@@ -66,7 +66,7 @@ package uSAC::HTTP::Middleware::PSGI::Writer {
 
 #Driver to interface with PSGI based applications
 #this acts as either middleware or an end point
-sub usac_to_psgi {
+sub psgi {
 
   #PSGI application 
   my $app=pop;

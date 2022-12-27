@@ -35,12 +35,15 @@ my $app4=sub {
 my $server; $server=usac_server {
   usac_id "asdf";
 	usac_listen "a=0.0.0.0,po=8081,t=stream";
-	usac_route "/app0"=>usac_to_psgi root=>usac_dirname, "test.psgi";
+	usac_route "/app0"=>psgi root=>usac_dirname, "test.psgi";
+
         ################################################################################
         # usac_include root=>usac_dirname, "enabled";                                  #
         # #       usac_route "/app1"=>usac_to_psgi keep_alive=>1, $app;                #
-         usac_route "/app3"=>usac_to_psgi $app3;                                      
-         usac_route "/app4"=>usac_to_psgi keep_alive=>1, $app4;
+
+  usac_route "/app3"=>psgi $app3;                                      
+  usac_route "/app4"=>psgi keep_alive=>1, $app4;
+
         # usac_route "/app5"=>chunked()=>sub {                                         #
         #         rex_write @_, 200, [HTTP_CONTENT_TYPE, "text/plain"], "Hello there"; #
         # };                                                                           #

@@ -109,242 +109,243 @@ sub new {
 #
 my @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 sub _add_route {
-	local $,=" ";
-	my $self=shift;
-	my $end=pop;
-	my $method_matcher=shift;
-	my $path_matcher=shift;
-	my @inner;
-	my @outer;
+  say "in _add_route: ", join ", ", @_;
+  local $,=" ";
+  my $self=shift;
+  my $end=pop;
+  my $method_matcher=shift;
+  my $path_matcher=shift;
+  my @inner;
+  my @outer;
 
-	Log::OK::INFO and log_info (join "\n", "Adding Route: ".($path_matcher?$path_matcher:"**DEFAULT**"),
-		"Method: $method_matcher",
-	)
-		;
+  Log::OK::INFO and log_info (join "\n", "Adding Route: ".($path_matcher?$path_matcher:"**DEFAULT**"),
+    "Method: $method_matcher",
+  )
+  ;
 
-    unless (ref $end eq "CODE"){
-      push @_, $end; #Put it back
-      $end= \&rex_write;
-      Log::OK::INFO and log_info "No end point provided, using rex write";
+  unless (ref $end eq "CODE"){
+    push @_, $end; #Put it back
+    $end= \&rex_write;
+    Log::OK::INFO and log_info "No end point provided, using rex write";
+  }
+
+
+  my @names;
+  #Add chunked always. Add at start of total middleware
+  # and last for outerware
+  unshift @_, chunked();
+ 
+  #Process other middleware
+  for(@_){
+    #If the elemtn is a code ref it is innerware
+    if(ref($_)eq "CODE"){
+      push @inner, $_;
+    }
+    #if its an array ref, then it might contain both inner
+    #and outerware and possible a name
+    elsif(ref($_) eq "ARRAY"){
+      push @inner, $_->[0];
+      push @outer, $_->[1];
+      push @names, $_->[2];
+    }
+    else {
+      #Ignore anything else
+      #TODO: check of PSGI middleware and wrap
+    }
+  }
+
+  Log::OK::INFO and log_info "Middleware: ".join(", ", map {defined ? $_ :"unkown"} @names);
+
+
+  # Innerware run form parent to child to route in
+  # the order of listing
+  #
+  unshift @inner, $self->construct_middleware;
+
+  # Outerware is in reverse order
+  unshift @outer, $self->construct_outerware;
+  @outer=reverse @outer;
+
+  unshift @inner, $self->_strip_prefix;# if $self->built_prefix;#$self->[prefix_];	#make strip prefix first of middleware
+
+
+  #my @non_matching=(qr{[^ ]+});
+  my @matching=grep { /$method_matcher/ } @methods;
+  local $"=",";
+  Log::OK::TRACE and log_trace "Methods array : @matching";
+  ############################################################
+  # my $sub;                                                 #
+  # my @non_matching=grep { !/$method_matcher/ } @methods;   #
+  # if(@non_matching){                                       #
+  #         my $headers=[HTTP_ALLOW, join ", ",@matching];   #
+  #         $sub = sub {                                     #
+  #                 #TODO: how to add middleware ie logging? #
+  #                 $_[CODE]= HTTP_METHOD_NOT_ALLOWED;       #
+  #                 $_[HEADER]= $headers;                    #
+  #                 $_[PAYLOAD]= "";                         #
+  #                 &rex_write;                              #
+  #                 return;                                  #
+  #         };                                               #
+  # }                                                        #
+  ############################################################
+
+  my $outer;
+
+  if(@inner){
+    my $middler=uSAC::HTTP::Middler->new();
+    for(@inner){
+      $middler->register($_);
+    }
+    $end=$middler->link($end);
+  }
+  my @index=map {$_*2} 0..99;
+
+  #my $server= $self->[server_];
+  my $static_headers=$self->[server_]->static_headers;
+  my $serialize=
+  sub{
+    #continue stack reset on error condition. The IO layer resets
+    #on a write call with no arguemts;
+    if($_[CODE]){
+      #no warnings qw<numeric uninitialized>;
+      #return unless $_[CODE];
+      Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
+      #my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
+      #The last item in the outerware
+      # renders the headers to the output sub
+      # then calls 
+      #
+      my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
+
+      if($_[HEADER]){
+        \my @h=$_[HEADER];
+
+        my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. CRLF;
+        #last if $_ >= @h;
+        $reply.= $h[$_].": $h[$_+1]".CRLF 
+        for(@index[0..@h/2-1]);
+
+        #last if  $_ >= $static_headers->@*;
+        $reply.="$static_headers->[$_]:$static_headers->[$_+1]".CRLF
+        for(@index[0..$static_headers->@*/2-1]);
+
+        $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
+
+        Log::OK::DEBUG and log_debug "->Serialize: headers:";
+        Log::OK::DEBUG and log_debug $reply;
+        $_[HEADER]=undef;	#mark headers as done
+        $reply.=CRLF.$_[PAYLOAD]//"";
+        #say "REX in serialize: $_[REX]";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
+      }
+      else{
+        $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);
+      }
+    }
+    else{
+      $_[REX][uSAC::HTTP::Rex::write_]();
+    }
+  };
+  if(@outer){
+    my $middler=uSAC::HTTP::Middler->new();
+    $middler->register($_) for(@outer);
+
+    $outer=$middler->link($serialize);
+  }
+  else {
+    $outer=$serialize;
+  }
+
+  my @hosts;
+  my $matcher;
+
+  @hosts=$self->build_hosts;	#List of hosts (as urls) 
+  my $bp=$self->built_prefix;                                      #
+
+  ####################################################################
+  # push @hosts, qr{[^ ]+} unless @hosts;                            #
+  # my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";      #
+  # my $bp=$self->built_prefix;                                      #
+  # $matcher=qr{^$host_match $method_matcher $bp$path_matcher};      #
+  # log_info "  matching: $matcher";                                 #
+  # $self->[server_]->add_end_point($matcher, $end, [$self,$outer]); #
+  ####################################################################
+
+  push @hosts, "*.*" unless @hosts;
+
+
+  #$hosts{"*.*"}//= {};
+  Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
+  #$matcher=qr{^$method_matcher $bp$path_matcher};
+  my $pm;
+  for my $uri (@hosts){
+    my $host;
+    if(ref $uri){
+      $host=$uri->host;
+      if($uri->port!=80 or $uri->port !=443){
+        $host.=":".$uri->port;
+      }
+    }
+    else {
+      $host=$uri;	#match all
     }
 
+    for my $method (@matching){
+      Log::OK::TRACE and log_trace "$host=>$method";
+      #test if $path_matcher is a regex
+      my $type;
 
-	my @names;
-	#Add chunked always. Add at start of total middleware
-	# and last for outerware
-	unshift @_, chunked();
-	for(@_){
-		#If the elemtn is a code ref it is innerware
-		if(ref($_)eq "CODE"){
-			push @inner, $_;
-		}
-		#if its an array ref, then it might contain both inner
-		#and outerware and possible a name
-		elsif(ref($_) eq "ARRAY"){
-			push @inner, $_->[0];
-			push @outer, $_->[1];
-			push @names, $_->[2];
-		}
-		else {
-			#Ignore anything else
-		}
-	}
+      if(ref($path_matcher) eq "Regexp"){
+        $type=undef;
+        #$pm=$path_matcher;
+        $matcher=qr{$method $bp$path_matcher};
+      }
+      elsif(!defined $path_matcher){
+        $type=undef;
+        #$pm=$path_matcher;
+        $matcher=undef;
+        #$matcher=qr{$method $bp$path_matcher};
+      }
+      #is this right?
+      elsif($path_matcher =~ /[(\^\$]/){
+        $type=undef;
+        #$pm=$path_matcher;
+        $matcher=qr{$method $bp$path_matcher};
+      }
 
-	Log::OK::INFO and log_info "Middleware: ".join(", ", map {defined ? $_ :"unkown"} @names);
-
-	
-	# Innerware run form parent to child to route in
-	# the order of listing
-	#
-	unshift @inner, $self->construct_middleware;
-
-	# Outerware is in reverse order
-	unshift @outer, $self->construct_outerware;
-	@outer=reverse @outer;
-
-	unshift @inner, $self->_strip_prefix;# if $self->built_prefix;#$self->[prefix_];	#make strip prefix first of middleware
-
-
-	#my @non_matching=(qr{[^ ]+});
-	my @matching=grep { /$method_matcher/ } @methods;
-	my @non_matching=grep { !/$method_matcher/ } @methods;
-	my $sub;
-	local $"=",";
-	Log::OK::TRACE and log_trace "Methods array : @matching";
-	if(@non_matching){
-		my $headers=[HTTP_ALLOW, join ", ",@matching];
-		$sub = sub { 
-			#TODO: how to add middleware ie logging?
-			$_[CODE]= HTTP_METHOD_NOT_ALLOWED;
-			$_[HEADER]= $headers;
-			$_[PAYLOAD]= "";
-			&rex_write;
-			return;	
-		};
-	}
-
-	my $outer;
-
-	if(@inner){
-		my $middler=uSAC::HTTP::Middler->new();
-		for(@inner){
-			$middler->register($_);
-		}
-		$end=$middler->link($end);
-	}
-	my @index=map {$_*2} 0..99;
-
-	#my $server= $self->[server_];
-	my $static_headers=$self->[server_]->static_headers;
-	my $serialize=
-			sub{
-        #continue stack reset on error condition. The IO layer resets
-        #on a write call with no arguemts;
-        if($_[CODE]){
-          #no warnings qw<numeric uninitialized>;
-          #return unless $_[CODE];
-          Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
-          #my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
-          #The last item in the outerware
-          # renders the headers to the output sub
-          # then calls 
-          #
-          my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
-
-          if($_[HEADER]){
-            \my @h=$_[HEADER];
-
-            my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. CRLF;
-            #last if $_ >= @h;
-            $reply.= $h[$_].": $h[$_+1]".CRLF 
-            for(@index[0..@h/2-1]);
-
-            #last if  $_ >= $static_headers->@*;
-            $reply.="$static_headers->[$_]:$static_headers->[$_+1]".CRLF
-            for(@index[0..$static_headers->@*/2-1]);
-
-            $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
-
-            Log::OK::DEBUG and log_debug "->Serialize: headers:";
-            Log::OK::DEBUG and log_debug $reply;
-            $_[HEADER]=undef;	#mark headers as done
-            $reply.=CRLF.$_[PAYLOAD]//"";
-            #say "REX in serialize: $_[REX]";
-            $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
-          }
-          else{
-            $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);
-          }
-        }
-        else{
-          $_[REX][uSAC::HTTP::Rex::write_]();
-        }
-			};
-	if(@outer){
-		my $middler=uSAC::HTTP::Middler->new();
-		$middler->register($_) for(@outer);
-
-		$outer=$middler->link($serialize);
-	}
-	else {
-		$outer=$serialize;
-	}
-
-	my @hosts;
-	my $matcher;
-	
-	@hosts=$self->build_hosts;	#List of hosts (as urls) 
-        my $bp=$self->built_prefix;                                      #
-
-        ####################################################################
-        # push @hosts, qr{[^ ]+} unless @hosts;                            #
-        # my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";      #
-        # my $bp=$self->built_prefix;                                      #
-        # $matcher=qr{^$host_match $method_matcher $bp$path_matcher};      #
-        # log_info "  matching: $matcher";                                 #
-        # $self->[server_]->add_end_point($matcher, $end, [$self,$outer]); #
-        ####################################################################
-
-	push @hosts, "*.*" unless @hosts;
-	#$hosts{"*.*"}//= {};
-	Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
-	#$matcher=qr{^$method_matcher $bp$path_matcher};
-	my $pm;
-	for my $uri (@hosts){
-		my $host;
-		if(ref $uri){
-			$host=$uri->host;
-			if($uri->port!=80 or $uri->port !=443){
-				$host.=":".$uri->port;
-			}
-		}
-		else {
-			$host=$uri;	#match all
-		}
-
-		for my $method (@matching){
-			Log::OK::TRACE and log_trace "$host=>$method";
-			#test if $path_matcher is a regex
-			my $type;
-
-			if(ref($path_matcher) eq "Regexp"){
-				$type=undef;
-				#$pm=$path_matcher;
-        			$matcher=qr{$method $bp$path_matcher};
-			}
-			elsif(!defined $path_matcher){
-				$type=undef;
-				#$pm=$path_matcher;
-				$matcher=undef;
-				#$matcher=qr{$method $bp$path_matcher};
-			}
-			#is this right?
-			elsif($path_matcher =~ /[(\^\$]/){
-				$type=undef;
-				#$pm=$path_matcher;
-        			$matcher=qr{$method $bp$path_matcher};
-			}
-			
-			elsif($path_matcher =~ /\$$/){
-				$pm=substr $path_matcher, 0, -1;
-				Log::OK::TRACE and log_trace "Exact match";
-				$type="exact";
-        			$matcher="$method $bp$path_matcher";
-			}
-			else {
-				$type="begin";
-				#$pm=$path_matcher;
-        			$matcher="$method $bp$path_matcher";
-			}
-			$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
-			last unless defined $matcher;
-		}
-	}
+      elsif($path_matcher =~ /\$$/){
+        $pm=substr $path_matcher, 0, -1;
+        Log::OK::TRACE and log_trace "Exact match";
+        $type="exact";
+        $matcher="$method $bp$path_matcher";
+      }
+      else {
+        $type="begin";
+        #$pm=$path_matcher;
+        $matcher="$method $bp$path_matcher";
+      }
+      $self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
+      last unless defined $matcher;
+    }
+  }
 
 
-	my $tmp=join "|", @non_matching;
-	my $mre=qr{$tmp};
-	#my $unsupported=qr{^$mre $bp$path_matcher};
-	#push @hosts, "*.*" unless @hosts;
-	for my $uri (@hosts){
-		my $host;
-		if(ref $uri){
-			$host=$uri->host;
-			if($uri->port!=80 or $uri->port !=443){
-				$host.=":".$uri->port;
-			}
-		}
-		else {
-			$host=$uri;	#match all
-		}
-                ################################################################################################################
-                # for my $method (@non_matching){                                                                              #
-                #         my $unsupported="$method $bp$path_matcher";                                                          #
-                #         push $self->[unsupported_]->@*, [$host, $unsupported, [$self,$sub, $outer,0]];                       #
-                #         Log::OK::TRACE and log_trace "  non matching: $host $unsupported";                                 # #
-                # }                                                                                                            #
-                ################################################################################################################
-	}
+  ###########################################################
+  # my $tmp=join "|", @non_matching;                        #
+  # my $mre=qr{$tmp};                                       #
+  # for my $uri (@hosts){                                   #
+  #         my $host;                                       #
+  #         if(ref $uri){                                   #
+  #                 $host=$uri->host;                       #
+  #                 if($uri->port!=80 or $uri->port !=443){ #
+  #                         $host.=":".$uri->port;          #
+  #                 }                                       #
+  #         }                                               #
+  #         else {                                          #
+  #                 $host=$uri;     #match all              #
+  #         }                                               #
+  # }                                                       #
+  ###########################################################
 }
 
 #middleware to strip prefix
@@ -619,8 +620,17 @@ sub usac_route {
 }
 sub add_route {
 	my $self=shift;
+  die "route needs at least two parameters" unless @_>=2;
+  
+  if(!defined($_[0])){
+    say "ADDING route: ", join ", ", @_;;
+    #assume setting the default route
+    #my $a=shift;
+    shift; unshift @_, $Any_Method, undef;
+		$self->_add_route(@_);
+  }
 	#first element is tested for short cut get use
-	if(ref($_[0]) eq "ARRAY"){
+	elsif(ref($_[0]) eq "ARRAY"){
 		#Methods specified as an array ref
 		my $a=shift;
 		unshift @_, "(?:".join("|", @$a).")";

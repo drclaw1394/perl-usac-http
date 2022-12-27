@@ -92,6 +92,12 @@ sub _welcome {
   }
 }
 
+#This is used as the default entry in a Hustle::Table and acts as a marker to
+#allow setup code to force the actual default handler below. It is needed to
+#allow an default matcher to be set from outside the server/site.
+#
+my $dummy_default=[];
+
 #if nothing else on this server matches, this will run
 #And if that happens it it most likley a protocol error
 #ie expecting a request line but getting something else
@@ -393,8 +399,10 @@ sub add_host_end_point{
 	#[$site, $endpoint, $outer, $default_flag]
 	#This becomes the value field in hustle table entry
 	#[matcher, value, type, default]
+  say "ADD HOST END POINT: ", join ", ", @_;
+  say "";
 	my $table=$self->[host_tables_]{$host}//=[
-		Hustle::Table->new("kkkkk: asdf"),{}
+		Hustle::Table->new($dummy_default),{}
 	];
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
@@ -424,6 +432,7 @@ sub site {
 	$self->[sites_]{$name//"default"}
 }
 
+
 sub rebuild_dispatch {
   my $self=shift;
 
@@ -433,13 +442,18 @@ sub rebuild_dispatch {
 
   #Create a special default site for each host that matches any method and uri
   for my $host (keys $self->[host_tables_]->%*) {
+    #If the table has a dummy catch all then lets make an fallback
+    my $entry=$self->[host_tables_]{$host};
+    my $last=$entry->[0]->@*-1;
+    if($entry->[0][$last] == $dummy_default){
 
-    my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
-    $site->parent_site=$self;
-    $self->register_site($site);
-    Log::OK::TRACE and log_trace "Adding default handler to $host";
+      my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
+      $site->parent_site=$self;
+      $self->register_site($site);
+      Log::OK::TRACE and log_trace "Adding default handler to $host";
 
-    $site->add_route([$Any_Method], undef, _default_handler);
+      $site->add_route([$Any_Method], undef, _default_handler);
+    }
   }
 
 

@@ -18,9 +18,9 @@ my $app= sub {
 
 
 builder {
-    enable "AccessLog";
-    enable "StackTrace";
-    enable "Auth::Basic", authenticator => \&authen_cb;
+    #enable "AccessLog";
+    #enable "StackTrace";
+    #enable "Auth::Basic", authenticator => \&authen_cb;
     $app;
 };
 
@@ -28,4 +28,3 @@ sub authen_cb {
     my($username, $password, $env) = @_;
     return $username eq 'admin' && $password eq 's3cr3t';
 }
-"SDF";
