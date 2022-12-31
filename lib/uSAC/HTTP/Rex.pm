@@ -463,11 +463,13 @@ sub new {
 		if(($_i=index($_[6], "?"))>=0);
 	
 	Log::OK::DEBUG and log_debug "+++++++Create rex: $id";
+  Log::OK::DEBUG and log_debug "Query string is $query_string";
 
 	#my $write=undef;
 
 	my $self=bless [ $_[4], $_[1], $_[2], undef, undef, $query_string ,undef,$_[3], $_[5], $_[6], $_[6], {}, [], $id++], $_[0];
 
+  Log::OK::DEBUG and log_debug "Query string is $self->[query_string_]";
 	#my $write=$_[1]->[uSAC::HTTP::Session::write_];
 	#
 	#NOTE: A single call to Session export. give references to important variables

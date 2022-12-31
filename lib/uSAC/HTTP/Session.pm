@@ -27,7 +27,7 @@ field $_id;
 field $_fh;
 field $_peer;
 field $_sessions;
-field @_zombies;
+#field @_zombies;
 field $_server;
 field $_scheme :reader;
 field $_time :mutator;
@@ -35,7 +35,7 @@ field $_closeme;
 field $_rw;
 field $_ww;
 field $_wcb;
-field $_left;
+#field $_left;
 field $_read;
 field $_write :mutator;
 field $_request_count;
@@ -50,7 +50,7 @@ field $_write_queue;
 field $_sr;
 field $_sw;
 field $_in_progress;
-field $_on_body;
+#field $_on_body;
 
 our $Date;		#Date string for http
 our $Time;		#seconds from epoch

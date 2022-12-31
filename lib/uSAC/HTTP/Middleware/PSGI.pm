@@ -1,4 +1,5 @@
 package uSAC::HTTP::Middleware::PSGI;
+use v5.36;
 #PSGI adaptor for uSAC::HTTP::Server
 use strict;
 use warnings;
@@ -17,6 +18,7 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Middleware qw<chunked>;
 use uSAC::HTTP::Constants;
+use URL::Encode qw<url_decode_utf8>;
 
 use constant KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
@@ -42,8 +44,7 @@ no warnings "experimental";
     my $rex=$self->{rex};
 
     #call with generic sub as callback to continue the chunks
-    #rex_write( $self->{matcher}, $self->{rex}, $self->{code},$self->{headers}, $_[0], sub {});
-    $self->{next}( $self->{matcher}, $self->{rex}, $self->{code},$self->{headers}, $_[0], sub {});
+    $self->{next}( $self->{matcher}, $self->{rex}, $self->{code},$self->{headers}, my $a=$_[0], sub {});
 
     $self->{headers}=undef;
 
@@ -55,7 +56,7 @@ no warnings "experimental";
     my $session=$rex->[uSAC::HTTP::Rex::session_];
     #call with no callback to mark the end of chunked stream
     #Also need to pass defined but empty data
-    rex_write( $self->{matcher}, $self->{rex}, $self->{code}, $self->{headers}, "");
+    rex_write( $self->{matcher}, $self->{rex}, $self->{code}, $self->{headers}, my $a="");
 
     #$session->[uSAC::HTTP::Session::closeme_]=1;
     $session->closeme=1;
@@ -117,27 +118,70 @@ sub psgi {
         state $psgi_version=[1,1];
 
         my $buffer;
-        \my %env=$_[REX]->headers;#[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
+        #\my %env=$_[REX]->headers;#[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
         #say join ", ", %env;
-        #my %env=map(("HTTP_".$_, $h->{$_}), keys $h->%*);
+        \my %h=$_[REX]->headers;
+        my %env=map(("HTTP_".$_, $h{$_}), keys %h);
+        $env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
+        $env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
 
-        #remove /rename content length and content type for PSGI
-        #$env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
-        #$env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
-        #
 
         if($env{CONTENT_LENGTH}){
+          say STDERR "++_+_+_+_+_+_ CONTENT LENGTH";
           #We have a body to process
-          $buffer=Stream::Buffered::PerlIO->new();
+          $buffer=Stream::Buffered->new($env{CONTENT_LENGTH});
           $ctx{$_[REX]}//=$buffer;
         }
-        $env{REQUEST_METHOD}=	$_[REX]->[uSAC::HTTP::Rex::method_];
-        $env{SCRIPT_NAME}=		"";
-        $env{PATH_INFO}=		"";
-        $env{REQUEST_URI}=		$_[REX]->[uSAC::HTTP::Rex::uri_];
-        $env{QUERY_STRING}=		$_[REX]->[uSAC::HTTP::Rex::query_string_];
+        
+        #
+        # Do silly CGI convention here
+        #
+        my $path;
+        my $query;
+        for($_[REX][uSAC::HTTP::Rex::uri_]){
+          my $index=index $_, "?";
+          if($index>=0){
+            #Split
+            $path=substr $_,0, $index;
+            $query=substr $_,$index+1;
+            #($path, $query)=split $_, "?", 2;
+          }
+          else {
+            #No query
+            $path=$_;
+          }
+        }
+        $env{SCRIPT_NAME}="";
+        #utf8::encode $path;
+        #$path=url_decode_utf8 $path;
+        $env{PATH_INFO}=$path;
 
-        my($host,$port)=split ":", $env{HOST};
+        ####################################################
+        # my $count=split "/", $path;                      #
+        #                                                  #
+        # #Find the second slash, the first after the root #
+        # my $index=index $path, "/", 1;                   #
+        # #if($index>=0){                                  #
+        # if($count>2){                                    #
+        #                                                  #
+        #   #we have an 'application'                      #
+        #   $env{SCRIPT_NAME}=substr $path, 0, $index;     #
+        #   $env{PATH_INFO}=substr $path, $index;          #
+        # }                                                #
+        # else {                                           #
+        #   #No application                                #
+        #   #$index=0;                                     #
+        #   $env{SCRIPT_NAME}="";                          #
+        #   $env{PATH_INFO}=$path;#substr $_, $index+1;    #
+        # }                                                #
+        ####################################################
+        $env{REQUEST_METHOD}=	$_[REX]->[uSAC::HTTP::Rex::method_];
+        #$env{SCRIPT_NAME}=		$_[REX]->[uSAC::HTTP::Rex::uri_]eq"/"?"": $_[REX][uSAC::HTTP::Rex::uri_];
+        #$env{PATH_INFO}=		"";
+        $env{REQUEST_URI}=		$_[REX]->[uSAC::HTTP::Rex::uri_];
+        $env{QUERY_STRING}=		$_[REX][uSAC::HTTP::Rex::query_string_];
+
+        my($host,$port)=split ":", $env{HTTP_HOST};
         $env{SERVER_NAME}=	$host;
         $env{SERVER_PORT}=		$port;
         $env{SERVER_PROTOCOL}=	$_[REX]->[uSAC::HTTP::Rex::version_];
@@ -178,8 +222,16 @@ sub psgi {
 
 
 
+        use Data::Dumper;
+        say STDERR Dumper \%env;
         #Execute the PSGI application
-        my $res=$app->(\%env);
+        
+        my $res;
+        $res=eval{$app->(\%env)};
+
+        &rex_error_internal_server_error
+          if(!defined($res) and $@);
+
 
 
         if(ref($res) eq  "CODE"){
@@ -194,7 +246,7 @@ sub psgi {
 
               #or it is streaming. return writer
               my ($code, $psgi_headers, $psgi_body)=@$res;
-              uSAC::HTTP::PSGI::Writer->new(%options, code=>$code, headers=>$psgi_headers, rex=>$rex, matcher=>$usac, next=>$next);
+              uSAC::HTTP::Middleware::PSGI::Writer->new(%options, code=>$code, headers=>$psgi_headers, rex=>$rex, matcher=>$usac, next=>$next);
             });
           return
         }
@@ -205,11 +257,12 @@ sub psgi {
             $next->($usac, $rex, $res->[0], $res->[1], join("", $res->[2]->@*),undef);
             delete $ctx{$_[REX]} if $buffer;  #Immediate respose dispose of context if it was created
           }
-          elsif($_ eq "GLOB"){
+          elsif($_ eq "GLOB" or $res->[2] isa "IO::Handle"){
+            say STDERR "++++++DOING GLOB";
             do_glob($usac, $rex, $res);
           }
           else {
-            say "unknown type";
+            say "unknown type $_";
           }
         }
       }
@@ -247,17 +300,20 @@ sub do_glob {
 	#setup headers
 
 
-	unless(first {/Content-Length/i}, @$psgi_headers)	{
+	unless(first {/Content-Length/i} @$psgi_headers)	{
 		#calculate the file size from stating it
 		my $size=(stat $psgi_body)[7];
-		push @$psgi_headers, "Content-Length",$size;
+		push @$psgi_headers, HTTP_CONTENT_LENGTH, $size;
 	}
+  use Data::Dumper;
+  say STDERR Dumper $psgi_headers;
 
 	
 	local $/=\4096;
 	my $data;
 	my $do_it;
   $do_it=sub{
+    say STDERR " IN DO IT SUB ++++++";
     unless (@_){
       #callback error. Close file
         close $psgi_body;
@@ -267,7 +323,7 @@ sub do_glob {
     }
 		$data=<$psgi_body>;
 		if(length($data)){
-			rex_write($usac,$rex, $code, $psgi_headers, $data, __SUB__);
+			rex_write($usac, $rex, $code, $psgi_headers, $data, __SUB__);
       $psgi_headers=undef;
 		}
 		else {
@@ -279,16 +335,5 @@ sub do_glob {
   $do_it->(undef);
 }
 
-sub do_streaming {
-	my ($usac,$rex, $res, $options)=@_;
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	my $dropper=$session->dropper;#[uSAC::HTTP::Session::dropper_];
-	my ($code, $psgi_headers, $psgi_body)=@$res;
-
-	
-
-	my $w=uSAC::HTTP::PSGI::Writer->new(%$options, code=>$code, headers=>$psgi_headers, rex=>$rex, matcher=>$usac);
-	return $w;
-}
 
 1;

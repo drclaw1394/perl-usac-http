@@ -143,6 +143,7 @@ sub new {
 	$self->mime_db=uSAC::MIME->new;
 	$self->mime_default="application/octet-stream";
 	#$self->[mime_lookup_]=$self->mime_db->index;
+  
 	return $self;
 }
 
@@ -299,6 +300,12 @@ sub do_accept{
   my @peers;
   my @afh;
   for my $fl ( values %{ $self->[fhs2_] }) {
+    #TODO: based on per listener settings route to different processing subs
+    # eg
+    #   http
+    #   https
+    #   http2/s
+    #   sni
     $self->[aws_]{ $fl } =my $acceptor=uSAC::IO::Acceptor->create(fh=>$fl, on_accept=>$do_client, on_error=>sub {});
     #$acceptor->start;
   }
@@ -803,10 +810,10 @@ sub parse_cli_options {
   #Attempt to parse the CLI options
   require Getopt::Long;
   my %options;
-  Getopt::Long::GetOptionsFromArray \@options,\%options,
+  Getopt::Long::GetOptionsFromArray(\@options,\%options,
     "workers=i",
     "listener=s@"
-  ;
+  );
 
   for my($key,$value)(%options){
     if($key eq "workers"){

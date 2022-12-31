@@ -185,13 +185,13 @@ sub chunked{
   };
 
   my %out_ctx;
-  my $ctx;
   my $chunked_out=
   sub {
     my $next=shift;
     #my $bypass;
     sub {
-      if($_[CODE]){
+      my $ctx;
+      if($_[CODE] and $_[CODE]!=304){
 
         Log::OK::TRACE  and log_trace "Middeware: Chunked Outerware";
         Log::OK::TRACE  and log_trace "Key count chunked: ". scalar keys %out_ctx;
@@ -226,7 +226,7 @@ sub chunked{
           $out_ctx{$_[REX]}=$ctx if $_[CB]; #save context if multishot
           #no need to save is single shot
         }
-
+        
         if($ctx//=$out_ctx{$_[REX]}){
           #Process 
           Log::OK::TRACE and log_trace join ", ",caller;

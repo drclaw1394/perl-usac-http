@@ -34,9 +34,6 @@ sub run{
   1;
   ";
 
-  use Data::Dumper;
-  say Dumper $self;
-
 	my $server=uSAC::HTTP::Server->new;
 
   # 
@@ -47,10 +44,23 @@ sub run{
 
   #
   # Setup one or more listeners from  a --listen argument
-  # Ignore the --port and --host options as this is combined
-  # into listen and the IPv6 support is broken.
   #
   $server->add_listeners($_) for $self->{listen}->@*;
+
+  # Create a listener form the --port and --host options, only if
+  # --listen is not specified. This required for loading via loader
+  # NOTE IPv6 support is busteed 
+
+  unless($self->{listen}->@*){
+
+    my $port=$self->{port};#//5000; #default port
+    my $host=$self->{host};
+    say STDERR "Port $port and host $host";
+    if(defined($host) and defined($port)){
+          $server->add_listeners("a=$host,po=$port,t=stream");
+    }
+
+  }
 
 
   #

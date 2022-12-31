@@ -146,10 +146,11 @@ sub make_reader{
 			  $body_type=undef;	
         $body_len=0;
 				if($pos3>=0){
-					($method,$uri,$version)=split " ", substr($buf,0,$pos3);
+					($method, $uri, $version)=split " ", substr($buf, 0, $pos3);
 					
 					if($uri and $version){
-						$uri=url_decode_utf8 $uri;
+            $uri=url_decode_utf8 $uri;
+            #
 						#end of line found
 						$state   = STATE_HEADERS;
 						%h=();
@@ -190,12 +191,18 @@ sub make_reader{
 				while () {
 					$pos3=index $buf, CRLF;
 					if($pos3>0){
-						($k,$val)=split ":", substr($buf,0,$pos3), 2;
+						($k, $val)=split ":", substr($buf, 0, $pos3), 2;
 						$k=~tr/-/_/;
 						$k=uc $k;
-						$val=~tr/\t //d;
+
+            $val=builtin::trim $val;  #perl 5.36 required
+
+            #$val=~s/^[\t ]//g;  #Strip leading whitespace
+            #$val=~s/[\t ]$//g;  #Strep trailing whitespace
+
 						\my $e=\$h{$k};
-						$e?$e.=",$val":$e=$val;
+						$e?($e.=",$val"):($e=$val);
+
 
 						$host=$val if !$host and $k eq "HOST";
 
