@@ -356,7 +356,7 @@ sub _strip_prefix {
 		sub {
 			#package uSAC::HTTP::Rex {
         Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
-        $_[REX][uSAC::HTTP::Rex::uri_stripped_]//= substr($_[REX]->[uSAC::HTTP::Rex::uri_], $len);
+        $_[REX][uSAC::HTTP::Rex::uri_stripped_]//= substr($_[REX]->[uSAC::HTTP::Rex::uri_raw_], $len);
 
         &$inner_next; #call the next
 

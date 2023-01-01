@@ -149,7 +149,7 @@ sub make_reader{
 					($method, $uri, $version)=split " ", substr($buf, 0, $pos3);
 					
 					if($uri and $version){
-            $uri=url_decode_utf8 $uri;
+            #$uri=url_decode_utf8 $uri;
             #
 						#end of line found
 						$state   = STATE_HEADERS;

@@ -602,7 +602,7 @@ sub make_list_dir {
                                 s|^$html_root/||;                       #strip out html_root
                                 my $base=(split "/")[-1].($isDir? "/":"");
 
-                                ["$rex->[uSAC::HTTP::Rex::uri_]$base", $base, stat _]
+                                ["$rex->[uSAC::HTTP::Rex::uri_raw_]$base", $base, stat _]
                 }
 		@fs_paths;
 		my $ren=$renderer//&_html_dir_list;

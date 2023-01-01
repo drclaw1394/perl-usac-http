@@ -92,7 +92,8 @@ use Scalar::Util qw(weaken);
 #method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_ headers_ write_ query_ query_string_ cookies_ host_ method_ uri_stripped_ uri_ state_ captures_ id_
+	"version_=0" ,qw< session_
+  headers_ write_ query_ query_string_ cookies_ host_ method_ uri_stripped_ uri_raw_ state_ captures_ id_
 	closeme_
 	dropper_
 	server_
@@ -153,7 +154,7 @@ sub method {
 	$_[0][method_];
 }
 sub uri{
-	$_[0][uri_];
+	$_[0][uri_raw_];
 }
 sub uri_stripped {
 	$_[0][uri_stripped_];
@@ -354,7 +355,7 @@ sub rex_redirect_internal {
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	
 	}
-	$rex->[uri_]=$uri;
+	$rex->[uri_raw_]=$uri;
 	$rex->[uri_stripped_]=$uri;
 	if(($rex->[recursion_count_]) > 10){
 		$rex->[recursion_count_]=0;
@@ -372,7 +373,7 @@ sub rex_redirect_internal {
   my $route;
 	($route, $rex->[captures_])=$rex->[session_]->server->current_cb->(
 		$rex->[host_],			#Internal redirects are to same host
-		join(" ", $rex->@[method_, uri_]),#New method and url
+		join(" ", $rex->@[method_, uri_raw_]),#New method and url
   );
 
   $route->[1][1]($route, $rex, $code, $headers);

@@ -10,15 +10,15 @@ use List::Util qw<pairs first>;
 
 use Exporter "import";
 
-use Stream::Buffered::PerlIO;	#From PSGI distribution
-#use Plack::TempBuffer;
+#use Stream::Buffered::PerlIO;	#From PSGI distribution
+use Plack::TempBuffer;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Middleware qw<chunked>;
 use uSAC::HTTP::Constants;
-use URL::Encode qw<url_decode_utf8>;
+use URL::Encode qw<url_decode_utf8 url_decode url_encode_utf8 url_encode>;
 
 use constant KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
@@ -106,10 +106,11 @@ sub psgi {
         &$next;
         return
       }
-
+      my $ctx;
+      my $env;
+      my $buffer;
       if($_[HEADER]){
         #buffer to become psgi.input
-        #my $buffer=Plack::TempBuffer->new();
 
         my $session=$_[REX]->session;#$rex->[uSAC::HTTP::Rex::session_];
 
@@ -117,7 +118,6 @@ sub psgi {
 
         state $psgi_version=[1,1];
 
-        my $buffer;
         #\my %env=$_[REX]->headers;#[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
         #say join ", ", %env;
         \my %h=$_[REX]->headers;
@@ -125,12 +125,13 @@ sub psgi {
         $env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
         $env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
 
+        $env=\%env;
 
         if($env{CONTENT_LENGTH}){
           say STDERR "++_+_+_+_+_+_ CONTENT LENGTH";
           #We have a body to process
           $buffer=Stream::Buffered->new($env{CONTENT_LENGTH});
-          $ctx{$_[REX]}//=$buffer;
+          $ctx=$ctx{$_[REX]}=[ $env, $buffer];
         }
         
         #
@@ -138,22 +139,27 @@ sub psgi {
         #
         my $path;
         my $query;
-        for($_[REX][uSAC::HTTP::Rex::uri_]){
-          my $index=index $_, "?";
-          if($index>=0){
-            #Split
-            $path=substr $_,0, $index;
-            $query=substr $_,$index+1;
-            #($path, $query)=split $_, "?", 2;
-          }
-          else {
-            #No query
-            $path=$_;
-          }
+        my $uri=$_[REX][uSAC::HTTP::Rex::uri_raw_];
+        #utf8::encode $uri;
+        
+        $uri=url_decode $uri;
+        #$uri= url_encode $uri;
+        say STDERR "REENCODED: ".$uri;
+        my $index=index $uri, "?";
+        if($index>=0){
+          #Split
+          $path=substr $uri,0, $index;
+          $query=substr $uri, $index+1;
+          #($path, $query)=split $_, "?", 2;
+        }
+        else {
+          #No query
+          $path=$uri;
         }
         $env{SCRIPT_NAME}="";
         #utf8::encode $path;
-        #$path=url_decode_utf8 $path;
+        #$path=url_encode_utf8 $path;
+        #utf8::encode $path;
         $env{PATH_INFO}=$path;
 
         ####################################################
@@ -175,10 +181,12 @@ sub psgi {
         #   $env{PATH_INFO}=$path;#substr $_, $index+1;    #
         # }                                                #
         ####################################################
+
         $env{REQUEST_METHOD}=	$_[REX]->[uSAC::HTTP::Rex::method_];
-        #$env{SCRIPT_NAME}=		$_[REX]->[uSAC::HTTP::Rex::uri_]eq"/"?"": $_[REX][uSAC::HTTP::Rex::uri_];
-        #$env{PATH_INFO}=		"";
-        $env{REQUEST_URI}=		$_[REX]->[uSAC::HTTP::Rex::uri_];
+        $env{REQUEST_URI}=		$_[REX]->[uSAC::HTTP::Rex::uri_raw_];
+        
+        say STDERR "requst url: ".$env{REQUEST_URI};
+
         $env{QUERY_STRING}=		$_[REX][uSAC::HTTP::Rex::query_string_];
 
         my($host,$port)=split ":", $env{HTTP_HOST};
@@ -195,7 +203,7 @@ sub psgi {
         $env{'psgi.url_scheme'}=	$session->scheme;#[uSAC::HTTP::Session::scheme_];
 
         # the input stream.	Buffer?
-        $env{'psgi.input'}=		$buffer;
+        $env{'psgi.input'}=		undef;#$buffer;
         # the error stream.
         ###############################################
         # state $io=IO::Handle->new();                #
@@ -221,14 +229,33 @@ sub psgi {
         $env{'psgix.cleanup.handlers'}=	[];
 
 
+        #return if $env{CONTENT_LENGTH};
 
-        use Data::Dumper;
-        say STDERR Dumper \%env;
+      }
+      
+
+      if($ctx//=$ctx{$_[REX]}){
+        $env=$ctx->[0];
+        $buffer=$ctx->[1];
+          $buffer->print($_[PAYLOAD][1]);
+          unless($_[CB]){
+            #last call, Actually call the application
+            $env->{"psgi.input"}=$buffer->rewind; 
+          }
+          else {
+            #Not last call. more to come. execute callback?
+            $_[CB]->(1);
+            return;
+          }
+      }
+      
+
         #Execute the PSGI application
         
         my $res;
-        $res=eval{$app->(\%env)};
+        $res=eval{$app->($env)};
 
+        say STDERR $@ unless defined($res);
         &rex_error_internal_server_error
           if(!defined($res) and $@);
 
@@ -255,7 +282,7 @@ sub psgi {
           if($_ eq "ARRAY"){
             #do_array($usac, $rex, $res);
             $next->($usac, $rex, $res->[0], $res->[1], join("", $res->[2]->@*),undef);
-            delete $ctx{$_[REX]} if $buffer;  #Immediate respose dispose of context if it was created
+            #delete $ctx{$_[REX]} if $buffer;  #Immediate respose dispose of context if it was created
           }
           elsif($_ eq "GLOB" or $res->[2] isa "IO::Handle"){
             say STDERR "++++++DOING GLOB";
@@ -265,10 +292,11 @@ sub psgi {
             say "unknown type $_";
           }
         }
-      }
-      else {
-          $ctx{$_[REX]}->print($_[PAYLOAD])
-      }
+        delete $ctx{$_[REX]};
+
+
+
+
     };
   };
 
@@ -305,8 +333,6 @@ sub do_glob {
 		my $size=(stat $psgi_body)[7];
 		push @$psgi_headers, HTTP_CONTENT_LENGTH, $size;
 	}
-  use Data::Dumper;
-  say STDERR Dumper $psgi_headers;
 
 	
 	local $/=\4096;
