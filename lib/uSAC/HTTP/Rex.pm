@@ -295,7 +295,9 @@ sub rex_redirect_internal;
 sub rex_error {
   if($_[CODE]){
     my $site=$_[0][1][0];
+    $_[CB]=undef;
     $_[REX][method_]="GET";
+    $_[REX][in_progress_]=1;
     #$_[CODE]//=HTTP_NOT_FOUND;	#New return code is appened at end
 
     #Locate applicable site urls to handle the error
@@ -310,7 +312,8 @@ sub rex_error {
     #return rex_redirect_internal @_, $uri if $uri;
 
     #If one wasn't found, then make an ugly one
-    $_[PAYLOAD]||="Site: ".$site->id.': Error: '.$_[CODE];
+    #$_[PAYLOAD]||="Site: ".$site->id.': Error: '.$_[CODE];
+    $_[PAYLOAD]="";
   }
 	&rex_write;
 }
@@ -338,10 +341,10 @@ sub rex_error_unsupported_media_type {
 }
 
 sub rex_error_internal_server_error {
-	$_[2]=HTTP_INTERNAL_SERVER_ERROR;
-	&rex_error;
-	$_[1][closeme_]->$*=1;
-	$_[1][dropper_](undef);
+  if($_[CODE]){
+    $_[CODE]=HTTP_INTERNAL_SERVER_ERROR;
+  }
+    &rex_error;
 }
 
 
@@ -350,7 +353,7 @@ sub rex_error_internal_server_error {
 sub rex_redirect_internal {
 
 	my ($matcher, $rex, $code, $headers, $uri)=@_;
-  #say STDERR "rex_redirect_internal called";
+  say STDERR "rex_redirect_internal called";
 	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	

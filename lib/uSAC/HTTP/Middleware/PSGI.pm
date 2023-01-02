@@ -5,6 +5,8 @@ use strict;
 use warnings;
 use feature qw<switch say refaliasing state>;
 no warnings "experimental";
+use Log::ger;
+use Log::OK;
 
 use List::Util qw<pairs first>;
 
@@ -81,14 +83,22 @@ sub psgi {
   else{
 
     #assume a file path
-    $app=usac_path %options, $app;
-    say "Attempting to load psgi: $app";
-    unless($app=do $app){
-      say STDERR "Could not load psgi";
-      say STDERR $!;
-      say STDERR $@;
+    my $path=usac_path %options, $app;
+    Log::OK::INFO and log_info "Attempting to load psgi: $path";
+		my $app=eval "require '$path'";
 
+    if(my $context=Error::ShowMe::context $path){
+      log_error "Could not load PSGI file $path: $app";
+      die "Could not load PSGI file $path $!";	
     }
+    #######################################
+    # unless($app=do $app){               #
+    #                                     #
+    #   say STDERR "Could not load psgi"; #
+    #   say STDERR $!;                    #
+    #   say STDERR $@;                    #
+    # }                                   #
+    #######################################
   }
 
   #TODO: options inclue using keepalive or not.
@@ -100,6 +110,7 @@ sub psgi {
     sub {
       my ($usac, $rex)=@_;	
       
+
       unless($_[CODE]){
         #stack reset
         delete $ctx{$_[REX]};
@@ -109,6 +120,7 @@ sub psgi {
       my $ctx;
       my $env;
       my $buffer;
+      my $header;
       if($_[HEADER]){
         #buffer to become psgi.input
 
@@ -118,8 +130,6 @@ sub psgi {
 
         state $psgi_version=[1,1];
 
-        #\my %env=$_[REX]->headers;#[uSAC::HTTP::Rex::headers_];	#alias the headers as the environment
-        #say join ", ", %env;
         \my %h=$_[REX]->headers;
         my %env=map(("HTTP_".$_, $h{$_}), keys %h);
         $env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
@@ -128,12 +138,13 @@ sub psgi {
         $env=\%env;
 
         if($env{CONTENT_LENGTH}){
-          say STDERR "++_+_+_+_+_+_ CONTENT LENGTH";
           #We have a body to process
           $buffer=Stream::Buffered->new($env{CONTENT_LENGTH});
-          $ctx=$ctx{$_[REX]}=[ $env, $buffer];
+          $ctx=$ctx{$_[REX]}=[ $env, $buffer, $_[HEADER]];
+			    $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
         }
         
+          $_[HEADER]=undef;
         #
         # Do silly CGI convention here
         #
@@ -144,7 +155,6 @@ sub psgi {
         
         $uri=url_decode $uri;
         #$uri= url_encode $uri;
-        say STDERR "REENCODED: ".$uri;
         my $index=index $uri, "?";
         if($index>=0){
           #Split
@@ -185,7 +195,6 @@ sub psgi {
         $env{REQUEST_METHOD}=	$_[REX]->[uSAC::HTTP::Rex::method_];
         $env{REQUEST_URI}=		$_[REX]->[uSAC::HTTP::Rex::uri_raw_];
         
-        say STDERR "requst url: ".$env{REQUEST_URI};
 
         $env{QUERY_STRING}=		$_[REX][uSAC::HTTP::Rex::query_string_];
 
@@ -237,6 +246,7 @@ sub psgi {
       if($ctx//=$ctx{$_[REX]}){
         $env=$ctx->[0];
         $buffer=$ctx->[1];
+
           $buffer->print($_[PAYLOAD][1]);
           unless($_[CB]){
             #last call, Actually call the application
@@ -244,6 +254,7 @@ sub psgi {
           }
           else {
             #Not last call. more to come. execute callback?
+            #
             $_[CB]->(1);
             return;
           }
@@ -255,9 +266,11 @@ sub psgi {
         my $res;
         $res=eval{$app->($env)};
 
-        say STDERR $@ unless defined($res);
-        &rex_error_internal_server_error
-          if(!defined($res) and $@);
+        if(!defined($res) and $@){
+          delete $ctx{$_[REX]};
+          $_[HEADER]=[];
+          return &rex_error_internal_server_error
+        }
 
 
 
@@ -284,12 +297,9 @@ sub psgi {
             $next->($usac, $rex, $res->[0], $res->[1], join("", $res->[2]->@*),undef);
             #delete $ctx{$_[REX]} if $buffer;  #Immediate respose dispose of context if it was created
           }
-          elsif($_ eq "GLOB" or $res->[2] isa "IO::Handle"){
-            say STDERR "++++++DOING GLOB";
+          #elsif($_ eq "GLOB" or $res->[2] isa "IO::Handle"){
+          else{
             do_glob($usac, $rex, $res);
-          }
-          else {
-            say "unknown type $_";
           }
         }
         delete $ctx{$_[REX]};
@@ -330,8 +340,10 @@ sub do_glob {
 
 	unless(first {/Content-Length/i} @$psgi_headers)	{
 		#calculate the file size from stating it
-		my $size=(stat $psgi_body)[7];
-		push @$psgi_headers, HTTP_CONTENT_LENGTH, $size;
+    if(ref($psgi_body) eq "GLOB" or $psgi_body isa IO::Handle){
+      my $size=(stat $psgi_body)[7];
+      push @$psgi_headers, HTTP_CONTENT_LENGTH, $size;
+    }
 	}
 
 	
@@ -339,23 +351,27 @@ sub do_glob {
 	my $data;
 	my $do_it;
   $do_it=sub{
-    say STDERR " IN DO IT SUB ++++++";
     unless (@_){
       #callback error. Close file
-        close $psgi_body;
+        $psgi_body->close;
         $do_it=undef;
         $dropper->();
         return;
     }
-		$data=<$psgi_body>;
-		if(length($data)){
+		$data=$psgi_body->getline;#<$psgi_body>;
+		if(defined($data) or length($data)){
+      #say STDERR "FILE READ: line: $data";
 			rex_write($usac, $rex, $code, $psgi_headers, $data, __SUB__);
       $psgi_headers=undef;
 		}
 		else {
-      $do_it=undef;
-			close $psgi_body; 
-			$dropper->();
+      $do_it=undef;     #Release this sub
+			$psgi_body->close; #close the file
+      $psgi_body=undef;
+      
+      #Do the final write with no callback
+			rex_write($usac, $rex, $code, $psgi_headers, my $a=undef, my$b=undef);
+      #$dropper->();
 		}
 	};
   $do_it->(undef);

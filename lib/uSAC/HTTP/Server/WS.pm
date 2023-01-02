@@ -399,7 +399,6 @@ sub _make_websocket_server_writer {
 	my $session=shift;	#session
 
 	say  "SESSSION REX WRITE: ", $session->write;
-	sleep 1;
 	my ($entry_point,$stack)=uSAC::HTTP::Middler->new()
 		->register(\&_websocket_writer)
 		->link($session->write);#rex->[uSAC::HTTP::Rex::write_]);

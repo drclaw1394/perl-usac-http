@@ -289,9 +289,14 @@ sub make_reader{
         #\my $buf=\$_[0];
 
         #\my %h=$rex->headers;
-        $form_headers->{CONTENT_LENGTH}=$body_len;		#copy header to part header
+        if($out_header){
+          #
+          # Single part. Only send the form header once when the out header is set
+          #
+          $form_headers->{CONTENT_LENGTH}=$body_len;		#copy header to part header
 
-        $form_headers->{CONTENT_TYPE}=$h{CONTENT_TYPE};
+          $form_headers->{CONTENT_TYPE}=$h{CONTENT_TYPE};
+        }
 
         #here we need to process data untill the end of the body,
         #That could mean a chunked transfer, multipart or urlencoded type data
@@ -310,19 +315,30 @@ sub make_reader{
 
         my $payload=substr $buf, 0, $new, "";
 
+        say STDERR "PROCESSED: $processed, body len: $body_len";
         if($processed==$body_len){
-          #Last send
+          #
+          # Last send
+          #
           $state=$start_state;
           $processed=0;
           $_[PAYLOAD]="";#substr $buf, 0, $new, "";
           $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], my $cb=undef);
+          $form_headers={}; #Create new part header
+          $out_header=[];   #Create new out header
+          $processed=0;
         }
         else {
+          # 
+          # Not last send
+          #
           $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], $dummy_cb);
+          $body_len-=$new;
+          
+          #First pass always sets the header to undef for subsequent middleware
+          $out_header=undef;
         }
 
-        $form_headers={};
-        $out_header=[];
       }
 
       elsif($state==STATE_BODY_MULTIPART){
@@ -465,207 +481,5 @@ sub make_reader{
   };
 
 }
-
-
-
-#HTML FORM readers
-
-#This reads http1/1.1 post type 
-#Body is multiple parts  seperated by a boundary. ie no length
-#
-#Headers required:
-#Content-Type: multipart/form-data;boundary="boundary"
-#NO Content-Length
-
-# multipart/form-data; boundary=------border
-# Basically scan through the entire contents of the body and locate the border stirng 
-########################################################################################################################################################
-# sub make_form_data_reader {                                                                                                                          #
-#         use integer;                                                                                                                                 #
-#                                                                                                                                                      #
-#         my ($usac, $rex, $code, $out_header, $payload, $cb)=@_;                                                                                      #
-#         my $session=$rex->session;                                                                                                                   #
-#                                                                                                                                                      #
-#                                                                                                                                                      #
-#         my $state=0;                                                                                                                                 #
-#         my $first=1;                                                                                                                                 #
-#         ##my %h;                                                                                                                                     #
-#         my $form_headers={};                                                                                                                         #
-#                                                                                                                                                      #
-#         sub {                                                                                                                                        #
-#                 \my $buf=\$_[0];                                                                                                                     #
-#                 my $processed=0;                                                                                                                     #
-#                                                                                                                                                      #
-#                 \my %h=$rex->headers;#[uSAC::HTTP::Rex::headers_];                                                                                   #
-#                 my $type = $h{CONTENT_TYPE};                                                                                                         #
-#                 #TODO: check for content-disposition and filename if only a single part.                                                             #
-#                 my $boundary="--".(split("=", $type))[1];                                                                                            #
-#                 my $b_len=length $boundary;                                                                                                          #
-#                 say "Looking for boundary----";                                                                                                      #
-#                 say "Buffer length: ". length $buf;                                                                                                  #
-#                 while($processed < length $buf){                                                                                                     #
-#                         say "LOOP: $processed";                                                                                                      #
-#                         if($state==0){                                                                                                               #
-#                                 say "STATE $state. Looking for boundary";                                                                            #
-#                                 #%h=();                                                                                                              #
-#                                 #Attempt to match boundary                                                                                           #
-#                                 my $index=index($buf, $boundary, $processed);                                                                        #
-#                                 if($index>=0){                                                                                                       #
-#                                                                                                                                                      #
-#                                                                                                                                                      #
-#                                         say "FOUND boundary and index: $index first: $first";                                                        #
-#                                         #send partial data to callback                                                                               #
-#                                         my $len=($index-2)-$processed;  #-2 for LF                                                                   #
-#                                                                                                                                                      #
-#                                                                                                                                                      #
-#                                                                                                                                                      #
-#                                         #test if last                                                                                                #
-#                                         my $offset=$index+$b_len;                                                                                    #
-#                                         if(substr($buf, $offset, 2) eq LF){                                                                          #
-#                                                 #not last                                                                                            #
-#                                                 $cb->($usac, $rex, $code, $out_header, substr($buf, $processed, $len), $form_headers) unless $first; #
-#                                                 $first=0;                                                                                            #
-#                                                 #move past data and boundary                                                                         #
-#                                                 $processed+=$offset+2;                                                                               #
-#                                                 $buf=substr $buf, $processed;                                                                        #
-#                                                 $processed=0;                                                                                        #
-#                                                 $state=1;                                                                                            #
-#                                                 $form_headers={};                                                                                    #
-#                                                 redo;                                                                                                #
-#                                                                                                                                                      #
-#                                         }                                                                                                            #
-#                                         elsif(substr($buf,$offset,4) eq "--".LF){                                                                    #
-#                                                 $first=1;       #reset first;                                                                        #
-#                                                 $cb->($usac, $rex, $code, $out_header, substr($buf,$processed,$len),$form_headers);                  #
-#                                                 $processed+=$offset+4;                                                                               #
-#                                                 $buf=substr $buf, $processed;                                                                        #
-#                                                 $processed=0;                                                                                        #
-#                                                 $session->pop_reader;                                                                                #
-#                                                 $cb->($usac, $rex, $code, $out_header, my $a="", my $b=0);                                           #
-#                                                 return;                                                                                              #
-#                                         }                                                                                                            #
-#                                         else{                                                                                                        #
-#                                                 #need more                                                                                           #
-#                                                 return                                                                                               #
-#                                         }                                                                                                            #
-#                                                                                                                                                      #
-#                                 }                                                                                                                    #
-#                                                                                                                                                      #
-#                                 else {                                                                                                               #
-#                                         say "NOT FOUND boundary and index: $index";                                                                  #
-#                                         # Full boundary not found, send partial, upto boundary length                                                #
-#                                         my $len=length($buf)-$b_len;            #don't send boundary                                                 #
-#                                         $cb->($usac, $rex, $code, $out_header, substr($buf, $processed, $len),$form_headers);                        #
-#                                         $processed+=$len;                                                                                            #
-#                                         $buf=substr $buf, $processed;                                                                                #
-#                                         $processed=0;                                                                                                #
-#                                         #wait for next read now                                                                                      #
-#                                         return;                                                                                                      #
-#                                 }                                                                                                                    #
-#                                                                                                                                                      #
-#                                 #attempt to match extra hyphons                                                                                      #
-#                                 #next line after boundary is content disposition                                                                     #
-#                                                                                                                                                      #
-#                         }                                                                                                                            #
-#                         elsif($state==1){                                                                                                            #
-#                                 #read any headers                                                                                                    #
-#                                 say "State  $state. READING HEADERS";                                                                                #
-#                                 pos($buf)=$processed;                                                                                                #
-#                                                                                                                                                      #
-#                                 while (){                                                                                                            #
-#                                         if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){           #
-#                                                 \my $e=\$form_headers->{uc $1=~tr/-/_/r};                                                            #
-#                                                 $e = defined $e ? $e.','.$2: $2;                                                                     #
-#                                                 say "Got header: $e";                                                                                #
-#                                                                                                                                                      #
-#                                                 #need to split to isolate name and filename                                                          #
-#                                                 redo;                                                                                                #
-#                                         }                                                                                                            #
-#                                         elsif ($buf =~ /\G\015\012/sxogca) {                                                                         #
-#                                                 say "HEADERS DONE";                                                                                  #
-#                                                 $processed=pos($buf);                                                                                #
-#                                                                                                                                                      #
-#                                                 #readjust the buffer no                                                                              #
-#                                                 $buf=substr $buf,$processed;                                                                         #
-#                                                 $processed=0;                                                                                        #
-#                                                                                                                                                      #
-#                                                 #say "Buffer:",$buf;                                                                                 #
-#                                                 #headers done. setup                                                                                 #
-#                                                                                                                                                      #
-#                                                 #go back to state 0 and look for boundary                                                            #
-#                                                 $state=0;                                                                                            #
-#                                                 last;                                                                                                #
-#                                         }                                                                                                            #
-#                                         else {                                                                                                       #
-#                                                                                                                                                      #
-#                                                 say "OTHER HEADER";                                                                                  #
-#                                         }                                                                                                            #
-#                                 }                                                                                                                    #
-#                                                                                                                                                      #
-#                                 #update the offset                                                                                                   #
-#                                 #$processed=pos $buf;                                                                                                #
-#                                                                                                                                                      #
-#                                 say "END READING HEADER: $processed";                                                                                #
-#                         }                                                                                                                            #
-#                         else{                                                                                                                        #
-#                                 say "DEFAULT";                                                                                                       #
-#                                                                                                                                                      #
-#                         }                                                                                                                            #
-#                         #say "End of while";                                                                                                         #
-#                 }                                                                                                                                    #
-#                 #say "End of form reader";                                                                                                           #
-#         }                                                                                                                                            #
-#                                                                                                                                                      #
-#                                                                                                                                                      #
-# }                                                                                                                                                    #
-########################################################################################################################################################
-
-
-
-#This reads http1/1.1 post type 
-#Headers required:
-#Content-Length:  length
-#Content-Type: application/x-www-form-urlencoded
-#
-#################################################################################################
-# sub make_form_urlencoded_reader {                                                             #
-#         use integer;                                                                          #
-#         #These values are shared for a session                                                #
-#         #                                                                                     #
-#         my ($usac, $rex, $code, $out_header, $header, $cb)=@_;                                #
-#         my $session=$rex->session;                                                            #
-#         my $processed=0;                                        #stateful position in buffer  #
-#         #my $header={};                                                                       #
-#                                                                                               #
-#         #NOTE: Reader HTTP Parsing chain, called from event system                            #
-#         #Actual Reader. Uses the input buffer stored in the session. call back is also pushed #
-#         sub {                                                                                 #
-#                 \my $buf=\$_[0];                                                              #
-#                                                                                               #
-#                 \my %h=$rex->headers;                                                         #
-#                                                                                               #
-#                 my $len =                                                                     #
-#                 $header->{CONTENT_LENGTH}=              #copy header to part header           #
-#                 $h{CONTENT_LENGTH}//0; #number of bytes to read, or 0 if undefined            #
-#                                                                                               #
-#                 $header->{CONTENT_TYPE}=$h{CONTENT_TYPE};                                     #
-#                                                                                               #
-#                                                                                               #
-#                 my $new=length($buf)-$processed;        #length of read buffer                #
-#                                                                                               #
-#                 $new=$new>$len?$len:$new;               #clamp to content length              #
-#                 $processed+=$new;                       #track how much we have processed     #
-#                                                                                               #
-#                 $cb->($usac, $rex, $code, $out_header, substr($buf,0,$new,""), $header);      #
-#                 if($processed==$len){                                                         #
-#                         $session->pop_reader;                                                 #
-#                         $processed=0;                                                         #
-#                         $header=undef; #Set the header to undef for subsequent  calls         #
-#                         $cb->($usac, $rex, $code, $out_header, my $a="", my $b=0);            #
-#                 }                                                                             #
-#                                                                                               #
-#         }                                                                                     #
-# }                                                                                             #
-#################################################################################################
 
 1;
