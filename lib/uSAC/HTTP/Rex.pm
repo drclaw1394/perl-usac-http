@@ -102,6 +102,7 @@ use enum (
 	response_code_
 	recursion_count_
 	peer_
+  uri_decoded_
 	end_
 	>
 );
@@ -482,6 +483,7 @@ sub new {
 	$self->[recursion_count_]=0;
   $self->[captures_]=$_[8];
   $self->[in_progress_]=undef;
+  $self->[uri_decoded_]=url_decode_utf8 $self->[uri_raw_];
 	$self;
 }
 

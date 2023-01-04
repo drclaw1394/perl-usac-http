@@ -16,7 +16,8 @@ WriteMakefile(
 		"Hustle::Table" => "0.5.5",	#Bug fix for updating default matcher
 		"uSAC::IO"	=> 0,
 		"IO::FD"	=> "0.2.0",
-		"Sys::Sendfile" => 0,
+    "Error::Show"=>0,
+    #"Sys::Sendfile" => 0,
 		
 
 		"Crypt::JWT"	=> 0,

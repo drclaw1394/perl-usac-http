@@ -87,7 +87,7 @@ sub psgi {
     Log::OK::INFO and log_info "Attempting to load psgi: $path";
 		my $app=eval "require '$path'";
 
-    if(my $context=Error::ShowMe::context $path){
+    if(my $context=Error::Show::context program=>$path){
       log_error "Could not load PSGI file $path: $app";
       die "Could not load PSGI file $path $!";	
     }

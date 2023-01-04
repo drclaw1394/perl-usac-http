@@ -8,7 +8,7 @@ use Socket;
 use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
 use IO::FD;
 use uSAC::IO::Acceptor;
-use Error::ShowMe;
+use Error::Show;
 
 use constant::more {
 	"CONFIG::set_no_delay"=> 1
@@ -702,7 +702,7 @@ sub usac_include {
 		Log::OK::INFO and log_info "Including server script from $path";
 		my $result=eval "require '$path'";
 
-			if(my $context=Error::ShowMe::context $path){
+			if(my $context=Error::Show::context program=>$path){
 				log_error "Could not include file $path: $context";
 				die "Could not include file $path $!";	
 			}

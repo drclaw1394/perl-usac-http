@@ -83,9 +83,9 @@ method init {
     on_error=>$s2,
     time=>\$_time,
     clock=>\$Time,
-    on_read=>undef
+    on_read=>undef,
+    sysread=>\&IO::FD::sysread
   );
-  #$_sr->timing(\$_time, \$Time);
 
 
 
@@ -165,6 +165,7 @@ method init {
     on_error=>$_dropper,
     time=>\$_time,
     clock=>\$Time,
+    syswrite=>\&IO::FD::syswrite
   );
   #$_sw->timing(\$_time, \$Time);
 
