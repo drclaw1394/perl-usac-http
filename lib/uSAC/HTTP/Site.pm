@@ -926,7 +926,7 @@ sub set_mime_db {
 #returns the dir of the caller.
 #Path is abs path, so files loaded via a symlink will refer to 
 #the origina path
-sub usac_dirname{
+sub usac_dirname :prototype(){
 	my %options=@_;	
 	#Use Cwd::abs_path to normalise path
 	#Use File::Spec::Functions::abs2rel to make relative

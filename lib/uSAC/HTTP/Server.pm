@@ -700,12 +700,14 @@ sub usac_include {
 	else{
 		#not a dir . do it
 		Log::OK::INFO and log_info "Including server script from $path";
-		my $result=eval "require '$path'";
+    #my $result=
+    eval "require '$path'";
 
-			if(my $context=Error::Show::context program=>$path){
-				log_error "Could not include file $path: $context";
-				die "Could not include file $path $!";	
-			}
+    if($@){
+      my $context=Error::Show::context;
+      log_error "Could not include file: $context";
+      die "Could not include file $path";	
+    }
 
 	}
 }
