@@ -68,7 +68,7 @@ my $server; $server=usac_server {
 		
 		#error route forces a get method to the resource
   
-    usac_route qr</getme/($Comp)>=>sub {
+    usac_route "/getme/($Comp)"=>sub {
       return unless $_[CODE];
 
       $_[PAYLOAD]=join ", ",&rex_captures->@*;#"GOT IT";

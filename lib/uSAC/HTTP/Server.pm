@@ -75,7 +75,7 @@ use uSAC::HTTP::Rex;
 use uSAC::MIME;
 use Exporter 'import';
 
-our @EXPORT_OK=qw<usac_server usac_run usac_include usac_listen usac_listen2 usac_mime_map usac_mime_default usac_sub_product usac_workers>;
+our @EXPORT_OK=qw<usac_server usac_run usac_load usac_include usac_listen usac_listen2 usac_mime_map usac_mime_default usac_sub_product usac_workers>;
 our @EXPORT=@EXPORT_OK;
 
 
@@ -600,15 +600,32 @@ sub dump_routes {
 	for my $host (sort keys $self->[host_tables_]->%*){
 		my $table= $self->[host_tables_]{$host};
 		my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
-		#table is hustle table and cache entry
+    #
+		# table is hustle table and cache entry
+    # 
+    
+    # 
+    
 		for my $entry ($table->[0]->@*){
 			my $site=$entry->[1][0];
+
+      my $key;
+      my @a;
       if($site){
+        @a=$entry->[0], $entry->[2], $site->id, $site->prefix;
+        $key=join "-",@a;
+        
         $tab->load([$entry->[0], $entry->[2], $site->id, $site->prefix, join "\n",$host]);
       }
       else{
+        
+        @a=$entry->[0], $entry->[2], "na", "na";
+        $key=join "-",@a;
+
         $tab->load([$entry->[0], $entry->[2], "na", "na", join "\n",$host]);
       }
+
+
 
 		}
 		Log::OK::INFO and log_info join "", $tab->table;
@@ -681,7 +698,7 @@ sub usac_run {
 #include another config file
 #Do so in the callers package namespace
 #the package option allows including into that package
-sub usac_include {
+sub usac_load {
 	my $path=pop;
 	my %options=@_;
 
@@ -711,6 +728,7 @@ sub usac_include {
 
 	}
 }
+*usac_include=\*usac_load;
 
 sub usac_listen2 {
 	my $spec=pop;		#The spec for interface matching

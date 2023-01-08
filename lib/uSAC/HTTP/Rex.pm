@@ -909,6 +909,40 @@ sub parse_query_params_old {
 	return $kv;
 }
 
+#
+sub mw_dead_horse_stripper {
+  my ($package, $prefix)=@_;
+	my $len=length $prefix;
+	sub {
+		my $inner_next=shift;
+		sub {
+      return &$inner_next unless $_[CODE];
+
+      Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
+      $_[REX][uri_stripped_]= 
+      ($_[HEADER] and $len)
+        ?substr($_[REX][uri_raw_], $len)
+        : $_[REX][uri_raw_];
+
+      &$inner_next; #call the next
+
+      #Check the inprogress flag
+      #here we force write unless the rex is in progress
+
+      unless($_[REX][in_progress_]){
+        Log::OK::TRACE and log_trace "REX not in progress";
+        $_[CB]=undef;
+        &rex_write;
+      }
+
+      Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
+
+    },
+
+	}
+
+}
+
 ##############################################################################################################################
 # sub DESTROY {                                                                                                              #
 #         Log::OK::DEBUG and log_debug "+++++++Destroy rex: $_[0][id_],  session $_[0][session_][uSAC::HTTP::Session::id_]"; #

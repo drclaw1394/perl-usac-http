@@ -117,6 +117,9 @@ sub _add_route {
   my @inner;
   my @outer;
 
+  my $bp=$self->built_prefix;                                      #
+
+
   Log::OK::INFO and log_info (join "\n", "Adding Route: ".($path_matcher?$path_matcher:"**DEFAULT**"),
     "Method: $method_matcher",
   )
@@ -136,16 +139,30 @@ sub _add_route {
  
   #Process other middleware
   for(@_){
-    #If the elemtn is a code ref it is innerware
-    if(ref($_)eq "CODE"){
+    #If the element is a code ref it is innerware ONLY
+    if(ref($_) eq "CODE"){
       push @inner, $_;
     }
     #if its an array ref, then it might contain both inner
     #and outerware and possible a name
     elsif(ref($_) eq "ARRAY"){
+      #check at least for one code ref
+      if(ref($_->[0]) ne "CODE"){
+        $_->[0]=sub { state $next=shift};  #Force short circuit
+      }
       push @inner, $_->[0];
+
+      if(ref($_->[1]) ne "CODE"){
+        $_->[1]=sub { state $next=shift};  #Force short circuit
+      }
       push @outer, $_->[1];
+
+
+      if(!defined($_[2])){
+        $_[2]="Middleware";
+      }
       push @names, $_->[2];
+
     }
     else {
       #Ignore anything else
@@ -165,28 +182,18 @@ sub _add_route {
   unshift @outer, $self->construct_outerware;
   @outer=reverse @outer;
 
-  unshift @inner, $self->_strip_prefix;# if $self->built_prefix;#$self->[prefix_];	#make strip prefix first of middleware
+  #unshift @inner, $self->_strip_prefix;
+  unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($self->[built_prefix_]);
+
+  # if $self->built_prefix;
+  # #$self->[prefix_];	
+  # #make strip prefix first of middleware
 
 
   #my @non_matching=(qr{[^ ]+});
   my @matching=grep { /$method_matcher/ } @methods;
   local $"=",";
   Log::OK::TRACE and log_trace "Methods array : @matching";
-  ############################################################
-  # my $sub;                                                 #
-  # my @non_matching=grep { !/$method_matcher/ } @methods;   #
-  # if(@non_matching){                                       #
-  #         my $headers=[HTTP_ALLOW, join ", ",@matching];   #
-  #         $sub = sub {                                     #
-  #                 #TODO: how to add middleware ie logging? #
-  #                 $_[CODE]= HTTP_METHOD_NOT_ALLOWED;       #
-  #                 $_[HEADER]= $headers;                    #
-  #                 $_[PAYLOAD]= "";                         #
-  #                 &rex_write;                              #
-  #                 return;                                  #
-  #         };                                               #
-  # }                                                        #
-  ############################################################
 
   my $outer;
 
@@ -258,16 +265,6 @@ sub _add_route {
   my $matcher;
 
   @hosts=$self->build_hosts;	#List of hosts (as urls) 
-  my $bp=$self->built_prefix;                                      #
-
-  ####################################################################
-  # push @hosts, qr{[^ ]+} unless @hosts;                            #
-  # my $host_match="(?:".((join "|", @hosts)=~s|\.|\\.|gr).")";      #
-  # my $bp=$self->built_prefix;                                      #
-  # $matcher=qr{^$host_match $method_matcher $bp$path_matcher};      #
-  # log_info "  matching: $matcher";                                 #
-  # $self->[server_]->add_end_point($matcher, $end, [$self,$outer]); #
-  ####################################################################
 
   push @hosts, "*.*" unless @hosts;
 
@@ -296,7 +293,7 @@ sub _add_route {
       if(ref($path_matcher) eq "Regexp"){
         $type=undef;
         #$pm=$path_matcher;
-        $matcher=qr{$method $bp$path_matcher};
+        $matcher=qr{^$method $bp$path_matcher};
       }
       elsif(!defined $path_matcher){
         $type=undef;
@@ -308,7 +305,7 @@ sub _add_route {
       elsif($path_matcher =~ /[(\^\$]/){
         $type=undef;
         #$pm=$path_matcher;
-        $matcher=qr{$method $bp$path_matcher};
+        $matcher=qr{^$method $bp$path_matcher};
       }
 
       elsif($path_matcher =~ /\$$/){
@@ -327,64 +324,39 @@ sub _add_route {
     }
   }
 
-
-  ###########################################################
-  # my $tmp=join "|", @non_matching;                        #
-  # my $mre=qr{$tmp};                                       #
-  # for my $uri (@hosts){                                   #
-  #         my $host;                                       #
-  #         if(ref $uri){                                   #
-  #                 $host=$uri->host;                       #
-  #                 if($uri->port!=80 or $uri->port !=443){ #
-  #                         $host.=":".$uri->port;          #
-  #                 }                                       #
-  #         }                                               #
-  #         else {                                          #
-  #                 $host=$uri;     #match all              #
-  #         }                                               #
-  # }                                                       #
-  ###########################################################
 }
 
-#middleware to strip prefix
-sub _strip_prefix {
-	my $self=shift;
-	my $prefix=$self->[built_prefix_];
-	my $len=length($prefix)//0;
-	sub {
-		my $inner_next=shift;
-		sub {
-			#package uSAC::HTTP::Rex {
-        Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
-        $_[REX][uSAC::HTTP::Rex::uri_stripped_]//= substr($_[REX]->[uSAC::HTTP::Rex::uri_raw_], $len);
-
-        &$inner_next; #call the next
-
-        #Check the inprogress flag
-        #here we force write unless the rex is in progress
-        
-        unless($_[REX][uSAC::HTTP::Rex::in_progress_]){
-          Log::OK::TRACE and log_trace "REX not in progress";
-          $_[CB]=undef;
-          &rex_write;
-        }
-
-        Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
-
-		},
-
-	}
-}
-
-#outerware to catch no reply
-sub _catch_no_reply {
-	my $self=shift;
-	sub {
-		my $outer_next=shift; #this should  not exist...
-
-	}
-
-}
+########################################################################################################
+# #middleware to strip prefix                                                                          #
+# sub _strip_prefix {                                                                                  #
+#         my $self=shift;                                                                              #
+#         my $prefix=$self->[built_prefix_];                                                           #
+#         my $len=length($prefix)//0;                                                                  #
+#         sub {                                                                                        #
+#                 my $inner_next=shift;                                                                #
+#                 sub {                                                                                #
+#       return &$inner_next unless $_[CODE];                                                           #
+#       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";                                        #
+#       $_[REX][uSAC::HTTP::Rex::uri_stripped_]//= substr($_[REX]->[uSAC::HTTP::Rex::uri_raw_], $len); #
+#                                                                                                      #
+#       &$inner_next; #call the next                                                                   #
+#                                                                                                      #
+#       #Check the inprogress flag                                                                     #
+#       #here we force write unless the rex is in progress                                             #
+#                                                                                                      #
+#       unless($_[REX][uSAC::HTTP::Rex::in_progress_]){                                                #
+#         Log::OK::TRACE and log_trace "REX not in progress";                                          #
+#         $_[CB]=undef;                                                                                #
+#         &rex_write;                                                                                  #
+#       }                                                                                              #
+#                                                                                                      #
+#       Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";                                  #
+#                                                                                                      #
+#     },                                                                                               #
+#                                                                                                      #
+#         }                                                                                            #
+# }                                                                                                    #
+########################################################################################################
 
 sub server: lvalue {
 	return $_[0][server_];
@@ -402,11 +374,6 @@ sub add_end_point {
 sub parent_site :lvalue{
 	$_[0][parent_];
 }
-#########################################
-# sub unsupported {                     #
-#         return $_[0]->[unsupported_]; #
-# }                                     #
-#########################################
 
 sub usac_site_url {
 	my $self=$uSAC::HTTP::Site;
