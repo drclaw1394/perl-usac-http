@@ -490,12 +490,12 @@ our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS)/;
 our $Method=		qr{^([^ ]+)};
 
 #NOTE Path matching tests for a preceeding /
-our $Path=		qr{(?<=[/])([^?]*)};		#Remainder of path components  in request line
-our $File_Path=		qr{(?<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
-our $Dir_Path=		qr{(?<=[/])([^?]*+)(?<=[/])};
+our $Path=		qr{(?:<=[/])([^?]*)};		#Remainder of path components  in request line
+our $File_Path=		qr{(?:<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
+our $Dir_Path=		qr{(?:<=[/])([^?]*+)(?<=[/])};
 
 #NOTE Comp matching only matches between slashes
-our $Comp=		qr{([^/?]+)};		#Path component
+our $Comp=		qr{(?:[^/?]+)};		#Path component
 
 #our $Query=		qr{(?:([^#]+))?};
 #our $Fragment=		qr{(?:[#]([^ ]+)?)?};

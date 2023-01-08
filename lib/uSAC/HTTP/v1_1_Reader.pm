@@ -483,7 +483,6 @@ sub make_reader{
     catch($e){
       #If debugging is enabled. dump the stack trace?
 
-      say "ERROR is $e";
       my $context=Error::Show::tracer error=>$e;
       Log::OK::ERROR and log_error  $context;
       $@=undef;

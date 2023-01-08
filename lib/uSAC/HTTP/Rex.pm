@@ -305,7 +305,7 @@ sub rex_error {
 
     for($site->error_uris->{$_[CODE]}){
       if($_){
-        $_[PAYLOAD]=$_;
+        $_[PAYLOAD]=my $a=$_;
         return &rex_redirect_internal
       }
 
@@ -314,7 +314,7 @@ sub rex_error {
 
     #If one wasn't found, then make an ugly one
     #$_[PAYLOAD]||="Site: ".$site->id.': Error: '.$_[CODE];
-    $_[PAYLOAD]="";
+    #$_[PAYLOAD]="";
   }
 	&rex_write;
 }

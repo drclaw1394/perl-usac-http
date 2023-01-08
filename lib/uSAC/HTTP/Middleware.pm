@@ -189,7 +189,10 @@ sub chunked{
   sub {
     my $next=shift;
     #my $bypass;
+    my $tmp;
+    my $scratch;
     sub {
+      #say @_;
       my $ctx;
       if($_[CODE] and $_[CODE]!=304){
 
@@ -235,19 +238,22 @@ sub chunked{
 
           Log::OK::TRACE and log_trace "DOING CHUNKS";
 
-          my $scratch=sprintf("%02X".CRLF,length $_[PAYLOAD]).$_[PAYLOAD].CRLF if $_[PAYLOAD];
+          # my $scratch=sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF if $_[PAYLOAD];
+          $tmp="$_[PAYLOAD]";
+          $scratch = $tmp?sprintf("%02X".CRLF, length $tmp).$tmp.CRLF : "";
 
           unless($_[CB]){
+            Log::OK::TRACE  and log_trace "Middleware chunked: no callback";
             $scratch.="00".CRLF.CRLF;
             delete $out_ctx{$_[REX]} unless $_[HEADER];	#Last call, delete
           }
 
-          #$next->(@_[0,1,2,3],$scratch,@_[5,6]);# if $scratch;
           $_[PAYLOAD]=$scratch;
           &$next;
         }
         else {
           #nothing to process
+          Log::OK::TRACE  and log_trace "Middeware: Chunked nothing to process on subsequent calls";
           &$next 
         }
       }
