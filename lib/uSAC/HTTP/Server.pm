@@ -61,7 +61,7 @@ use Carp 'croak';
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ total_requests_>
+	"sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ options_ total_requests_>
 );
 
 
@@ -133,6 +133,7 @@ sub new {
 	$self->[backlog_]=4096;
 	$self->[read_size_]=4096;
 	$self->[workers_]=undef;
+  $self->[options_]={};
 
 	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$self->[sessions_]={};
@@ -501,7 +502,6 @@ sub stop {
 
 sub run {
 	my $self=shift;
-	Log::OK::INFO and log_info(__PACKAGE__. " starting server...");
         #######################################
         # my $sig; $sig=AE::signal(INT=>sub { #
         #         $self->stop;                #
@@ -511,11 +511,17 @@ sub run {
 
 	$self->rebuild_dispatch;
 
+  if($self->[options_]{show_routes}){
+	  Log::OK::INFO and log_info(__PACKAGE__. " Listing routes for hosts: ".join ", ", $self->[options_]{show_routes}->@*);
+	  $self->dump_routes;
+    return;
+  }
+	Log::OK::INFO and log_info(__PACKAGE__. " starting server...");
+  
 	$self->do_passive;
 	$self->do_accept;
 
 	$self->dump_listeners;
-	$self->dump_routes;
   
   #TODO: Preforking server
   #Seems like there are no 'thundering herds' in linux and darwin
@@ -597,40 +603,52 @@ sub dump_listeners {
 
 sub dump_routes {
 	my ($self)=@_;
-	for my $host (sort keys $self->[host_tables_]->%*){
-		my $table= $self->[host_tables_]{$host};
-		my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
-    #
-		# table is hustle table and cache entry
-    # 
-    
-    # 
-    
-		for my $entry ($table->[0]->@*){
-			my $site=$entry->[1][0];
+  try {
+    require Text::Table;
+    for my $host (sort keys $self->[host_tables_]->%*){
+      my $table= $self->[host_tables_]{$host};
+      my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
+      #
+      # table is hustle table and cache entry
+      # 
 
-      my $key;
-      my @a;
-      if($site){
-        @a=$entry->[0], $entry->[2], $site->id, $site->prefix;
-        $key=join "-",@a;
-        
-        $tab->load([$entry->[0], $entry->[2], $site->id, $site->prefix, join "\n",$host]);
+      # Only dump the host routes if the route spec
+      last unless $self->[options_]{show_routes};
+      next unless grep $host=~ $_, $self->[options_]{show_routes}->@*;
+
+      for my $entry ($table->[0]->@*){
+        my $site=$entry->[1][0];
+
+
+        my $key;
+        my @a;
+
+        if($site){
+          #@a=$entry->[0], $entry->[2], $site->id, $site->prefix;
+          #$key=join "-",@a;
+
+          $tab->load([$entry->[0], $entry->[2], $site->id, $site->prefix, join "\n",$host]);
+        }
+        else{
+
+          #@a=$entry->[0], $entry->[2], "na", "na";
+          #$key=join "-",@a;
+
+          $tab->load([$entry->[0], $entry->[2], "na", "na", join "\n",$host]);
+        }
+
+
+
       }
-      else{
-        
-        @a=$entry->[0], $entry->[2], "na", "na";
-        $key=join "-",@a;
+      Log::OK::INFO and log_info join "", $tab->table;
 
-        $tab->load([$entry->[0], $entry->[2], "na", "na", join "\n",$host]);
-      }
+    }
+  }
+  catch($e){
+		Log::OK::ERROR and log_error "Could not load Text::Table for route listing";
 
-
-
-		}
-		Log::OK::INFO and log_info join "", $tab->table;
-
-	}
+  }
+  
 
 	#Make seperate tables by site?
 	#sort by group by method
@@ -832,7 +850,9 @@ sub parse_cli_options {
   my %options;
   Getopt::Long::GetOptionsFromArray(\@options,\%options,
     "workers=i",
-    "listener=s@"
+    "listener=s@",
+    "show=s@"
+    
   );
 
   for my($key,$value)(%options){
@@ -842,6 +862,10 @@ sub parse_cli_options {
     elsif($key eq "listener"){
       $self->add_listeners($_) for(@$value);
     }
+    elsif($key eq "show"){
+      $self->[options_]{show_routes}=$value;
+    }
+
     else {
       #Unsupported option
     }

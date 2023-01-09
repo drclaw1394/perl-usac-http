@@ -192,6 +192,9 @@ sub _add_route {
 
   #my @non_matching=(qr{[^ ]+});
   my @matching=grep { /$method_matcher/ } @methods;
+  unless(@matching){
+    @matching=($method_matcher);
+  }
   local $"=",";
   Log::OK::TRACE and log_trace "Methods array : @matching";
 
@@ -467,20 +470,22 @@ our $Comp=		qr{(?:[^/?]+)};		#Path component
 #our $Query=		qr{(?:([^#]+))?};
 #our $Fragment=		qr{(?:[#]([^ ]+)?)?};
 
-sub begins_with {
-	my $test=$_[0];
-	sub{0 <= index $_[0], $test},
-}
-
-sub matches_with {
-	return qr{$_[0]}o;
-}
-
-sub ends_with {
-	my $test=reverse $_[0];
-	sub {0 <= index reverse($_[0]), $test}
-}
-
+##################################################
+# sub begins_with {                              #
+#         my $test=$_[0];                        #
+#         sub{0 <= index $_[0], $test},          #
+# }                                              #
+#                                                #
+# sub matches_with {                             #
+#         return qr{$_[0]}o;                     #
+# }                                              #
+#                                                #
+# sub ends_with {                                #
+#         my $test=reverse $_[0];                #
+#         sub {0 <= index reverse($_[0]), $test} #
+# }                                              #
+#                                                #
+##################################################
 sub site_route {
 	my $self=shift;
 	$self->add_route(@_);
@@ -732,8 +737,10 @@ sub add_middleware {
 
 sub usac_catch_route {
 	#Add a route matching all methods and any path	
-	$uSAC::HTTP::Site->add_route([$Any_Method],qr{.*},pop);
+  #$uSAC::HTTP::Site->add_route([$Any_Method],qr{.*},pop);
+	$uSAC::HTTP::Site->add_route(qr{(?#COMMENT)[^\s]+} ,qr{.*},pop);
 }
+
 sub usac_error_route {
 	$uSAC::HTTP::Site->add_error_route(@_);
 }
