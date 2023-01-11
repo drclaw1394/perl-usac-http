@@ -241,16 +241,15 @@ sub open_cache {
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
 	#return a sub with cache an sysroot aliased
-		use  integer;
+  #use  integer;
 
 		my ($matcher, $rex, $code, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $no_encoding)=@_;
 
 		Log::OK::TRACE and log_trace("send file no range");
-
 		
 		$rex->[uSAC::HTTP::Rex::in_progress_]=1;
 		my $in_fh=$entry->[fh_];
-
+    
 		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
 
 		$reply="";
@@ -351,8 +350,9 @@ sub send_file_uri_norange {
 		#and if no_encodingflag is set
 		#
 
-	
-		unshift @$out_headers,
+    say "Out headers: ".join ", ", $out_headers->@*;
+    say "Count of out headers ". scalar @$out_headers;
+    unshift($out_headers->@*,
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
 			$entry->[content_type_header_]->@*,
@@ -365,8 +365,9 @@ sub send_file_uri_norange {
 
 			#HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
 
-			HTTP_ETAG,$etag,
+			HTTP_ETAG, $etag,
 			HTTP_ACCEPT_RANGES,"bytes"
+    )
 			;
 			#@$user_headers
 
@@ -671,86 +672,95 @@ sub usac_file_under {
     my $next=shift;
     my $p;	#tmp variable
     sub {
-      unless($_[CODE]) {
         #Stack reset
-        &$next;
-        return;
-      }
-      $p=$_[REX][uSAC::HTTP::Rex::uri_stripped_];
+        return &$next unless($_[CODE]);
 
-      my $path=$html_root.$p;
+      if($_[HEADER]){
+        $p=$_[REX][uSAC::HTTP::Rex::uri_stripped_];
+
+        my $path=$html_root.$p;
 
 
-      if($filter and $path !~ /$filter/o){
-        $_[PAYLOAD]="";
-        $_[CODE]=HTTP_NOT_FOUND;
-        push $_[HEADER]->@*, HTTP_CONTENT_LENGTH,0;
-        return &$next;
-      }
+        if($filter and $path !~ /$filter/o){
+          $_[PAYLOAD]="";
+          $_[CODE]=HTTP_NOT_FOUND;
+          push $_[HEADER]->@*, HTTP_CONTENT_LENGTH,0;
+          return &$next;
+        }
 
-      #Push any user static headers
-      push $_[HEADER]->@*, @$headers;
+        #Push any user static headers
+        push $_[HEADER]->@*, @$headers;
 
-      Log::OK::TRACE and log_trace "static: html_root: $html_root";
+        Log::OK::TRACE and log_trace "static: html_root: $html_root";
 
-      #Server dir listing if option is specified
-      #
-      #=========================================
+        #Server dir listing if option is specified
+        #
+        #=========================================
 
-      if($do_dir || @indexes and substr($path, -1) eq "/") {
-        #attempt to do automatic index file.
+        if($do_dir || @indexes and substr($path, -1) eq "/") {
+          #attempt to do automatic index file.
+          my $entry;
+          for(@indexes){
+            my $path=$html_root.$p.$_;
+            Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
+            $entry=$cache->{$path}//$static->open_cache($path);
+            next unless $entry;
+            $_[HEADER]=[];
+            send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry);
+            return 1;
+          }
+
+          if($do_dir){
+            Log::OK::TRACE and log_trace "Static: Listing dir $p";
+            #dir listing
+            $_[PAYLOAD]=$p;
+            $_[CB]=$next;
+            &$list_dir;
+            #$list_dir->(@_, $p);
+            return 1;
+          }
+          else {
+            Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
+            #no valid index found so 404
+            &rex_error_not_found;# @_;
+            return 1;
+          }
+        }
+
+
+
+
+        # File serving
+        #
+        # Attempts to open the file and send it. If it fails, the next static middleware is called if present
+
+        my $pre_encoded_ok=($path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
+        ?$pre_encoded
+        :[];
+
         my $entry;
-        for(@indexes){
-          my $path=$html_root.$p.$_;
-          Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
-          $entry=$cache->{$path}//$static->open_cache($path);
-          next unless $entry;
-          $_[HEADER]=[];
-          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry);
-          return 1;
-        }
+        $entry=$cache->{$path} unless DISABLE_CACHE;
+        $entry//=$static->open_cache($path,$open_modes, $pre_encoded_ok);
 
-        if($do_dir){
-          Log::OK::TRACE and log_trace "Static: Listing dir $p";
-          #dir listing
-          $_[PAYLOAD]=$p;
-          $_[CB]=$next;
-          &$list_dir;
-          #$list_dir->(@_, $p);
-          return 1;
+
+        #$_[HEADER]=[];
+        if($entry){
+          my @args=@_;
+          send_file_uri_norange(@args, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/));
+
         }
-        else {
-          Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
-          #no valid index found so 404
-          &rex_error_not_found;# @_;
-          return 1;
+        else{
+          #Middle ware setup. Should not get here normally
+          $_[PAYLOAD]="";
+          $_[CODE]=HTTP_NOT_FOUND;
+          push $_[HEADER]->@*, HTTP_CONTENT_LENGTH,0;
+          &$next;
         }
       }
-
-
-
-
-      # File serving
-      #
-      # Attempts to open the file and send it. If it fails, the next static middleware is called if present
-
-      my $pre_encoded_ok=($path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
-      ?$pre_encoded
-      :[];
-
-      my $entry;
-      $entry=$cache->{$path} unless DISABLE_CACHE;
-      $entry//=$static->open_cache($path,$open_modes, $pre_encoded_ok);
-      #my $entry=$static->open_cache($path,$open_modes, $pre_encoded_ok);
-
-      $_[HEADER]=[];
-      $entry and return send_file_uri_norange @_, $next, $read_size, $sendfile, $entry, $no_encoding and $path =~ /$no_encoding/;
-
-      #Middle ware setup. Should not get here normally
-      $_[PAYLOAD]="";
-      $_[CODE]=HTTP_NOT_FOUND;
-      push $_[HEADER]->@*, HTTP_CONTENT_LENGTH,0;
-      &$next;
+      else {
+        #Not HEADER
+        &$next;
+      }
     }
   };
 

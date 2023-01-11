@@ -1,3 +1,34 @@
+#
+# IMPORTANT 
+#
+# Middleware must pass 6 argument along the chain
+#
+#   route, rex, code, header, payload, cb
+#
+# As most of the uSAC api utiliseds the @_ array, it is very important to keep the count correct.
+#
+# route and rex must alway be defined and set by the parser at the start of the chain
+# 
+# code can be any non zero, valid http code for normal processing (a true value)
+# when code is false, it triggers a stack reset all the way down to the output writer
+#
+# header must be a has ref, even an empty one, for the start of a request. Middleware
+# further down the line will set this to undef when it has started its 'accumualted' output.
+# ie the serializer will do this, on the fly zip, gzip compression will also do this.
+#
+# payload is the data to send to the next middleware component. It is normally
+# string content, but does not have to be
+#
+# callback is the sub ref to call when the 'accumulator' has processed the data
+# chunk. When it is undef, in indicates the upstream middleware does not need
+# notifificaiton and has finished. This the instruct the acculuator to
+# performan any finishing work, and potentailly call futher middleware
+#
+# It is also important that each of the above are lvalues, not constants. This
+# is because middleware stages might write to the (aliased) variable which will
+# continue to be used for subsequent middleware. Of course you can compy the
+# arguments however that causes a performance hit
+#
 package uSAC::HTTP::Middleware;
 use strict;
 use warnings;
@@ -49,11 +80,14 @@ sub log_simple_in {
 
   my $dump_headers=$options{dump_headers};
 
-  my $dump_capture=$options{dump_capture};
+  my $dump_capture=$options{dump_captures};
+  my $sort_headers=$options{sort};
 	#Header processing sub
 	sub {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
+
+      return &$inner_next unless $_[CODE] and $_[HEADER];
 			my $time=time;
 
       package uSAC::HTTP::Rex {
@@ -65,11 +99,19 @@ sub log_simple_in {
           say STDERR "Site relative URI:	$_[1][uri_stripped_]";
           say STDERR "Matched for site:	".($_[0][1][0]->id//"n/a");
           say STDERR "Hit counter:		$_[0][1][4]";
-          say STDERR "Captures:		".join ", ",$_[1][captures_]->@* if $dump_capture;
-          say STDERR "Headers:" if $dump_headers;
-          say STDERR Data::Dumper::Dumper $_[1]->headers if $dump_headers;
+          say STDERR "Captures:\n".join "\n",$_[1][captures_]->@* if $dump_capture;
+          if($dump_headers){
+            say STDERR "Headers:\n" if $dump_headers;
+            my $headers=$_[1]->headers;
+            my $out="";
+            for my($k, $v)(%$headers){
+              $out.="$k: $v\n"; 
+            }
+            say STDERR $out;
+            #say STDERR Data::Dumper::Dumper $_[1]->headers if $dump_headers;
+          }
 			}
-			return &$inner_next;		#alway call next. this is just loggin
+			&$inner_next;		#alway call next. this is just loggin
 		}
 	};
 	
@@ -84,10 +126,12 @@ sub log_simple_out {
 		my $outer_next=shift;
 		sub {
 			#matcher, rex, code, header, body, cb, arg
+      return &$outer_next unless $_[CODE] and $_[HEADER];
+
       say STDERR "\n<<<---";
       say STDERR "Depature time:		".time;
 
-			return &$outer_next;
+			&$outer_next;
 		}
 	};
 
@@ -253,7 +297,7 @@ sub chunked{
         }
         else {
           #nothing to process
-          Log::OK::TRACE  and log_trace "Middeware: Chunked nothing to process on subsequent calls";
+          Log::OK::TRACE  and log_trace "Middeware: Chunked ; no context. bybass";
           &$next 
         }
       }

@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use feature "try";
 
+use uSAC::HTTP;
 use Log::ger;
 
 use Log::OK;
@@ -50,6 +51,7 @@ sub state_cookie_in {
 		#input sub
 		#Extract the cookie with the right key
 		sub {
+        return &$inner_next unless $_[CODE] and $_[HEADER];
 			#route, rex, 
 			my ($route, $rex)=@_;
 			my $state_value;
@@ -83,9 +85,9 @@ sub state_cookie_out {
 		my $outer_next=shift;
 
 			sub {
+        return &$outer_next unless $_[CODE] and $_[HEADER];
 				Log::OK::DEBUG and log_debug "StateCookie: top";
 				Log::OK::DEBUG and log_debug join " ",caller;
-				return &$outer_next  unless $_[3]; #Call next unless we have headers
 				Log::OK::DEBUG and log_debug "StateCookie: processing";
 				#route, rex, code, headers, body
 				my $rex=$_[1];

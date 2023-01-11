@@ -483,9 +483,10 @@ sub make_reader{
     catch($e){
       #If debugging is enabled. dump the stack trace?
 
-      my $context=Error::Show::tracer error=>$e;
-      Log::OK::ERROR and log_error  $context;
-      $@=undef;
+      my $context;
+        $context=Error::Show::tracer error=>$e;
+        Log::OK::ERROR and log_error  $context;
+
       if(Log::OK::DEBUG){
         uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b=[HTTP_CONTENT_LENGTH,length $context] ,my $c=$context, my $d=undef);
       }
@@ -493,6 +494,10 @@ sub make_reader{
         uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b=[HTTP_CONTENT_LENGTH, 0],my $c="", my $d=undef);
       }
     }
+
+
+
+
   };
 }
 

@@ -120,15 +120,11 @@ sub _add_route {
   my $bp=$self->built_prefix;                                      #
 
 
-  Log::OK::INFO and log_info (join "\n", "Adding Route: ".($path_matcher?$path_matcher:"**DEFAULT**"),
-    "Method: $method_matcher",
-  )
-  ;
 
   unless (ref $end eq "CODE"){
     push @_, $end; #Put it back
     $end= \&rex_write;
-    Log::OK::INFO and log_info "No end point provided, using rex write";
+    Log::OK::DEBUG and log_debug "No end point provided, using rex write";
   }
 
 
@@ -170,8 +166,6 @@ sub _add_route {
     }
   }
 
-  Log::OK::INFO and log_info "Middleware: ".join(", ", map {defined ? $_ :"unkown"} @names);
-
 
   # Innerware run form parent to child to route in
   # the order of listing
@@ -190,11 +184,8 @@ sub _add_route {
   # #make strip prefix first of middleware
 
 
-  #my @non_matching=(qr{[^ ]+});
-  my @matching=grep { /$method_matcher/ } @methods;
-  unless(@matching){
-    @matching=($method_matcher);
-  }
+  #my @matching=grep { /$method_matcher/ } @methods;
+  my @matching=($method_matcher);
   local $"=",";
   Log::OK::TRACE and log_trace "Methods array : @matching";
 
@@ -274,7 +265,6 @@ sub _add_route {
 
   #$hosts{"*.*"}//= {};
   Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
-  #$matcher=qr{^$method_matcher $bp$path_matcher};
   my $pm;
   for my $uri (@hosts){
     my $host;
@@ -326,7 +316,6 @@ sub _add_route {
       last unless defined $matcher;
     }
   }
-
 }
 
 ########################################################################################################
@@ -738,7 +727,7 @@ sub add_middleware {
 sub usac_catch_route {
 	#Add a route matching all methods and any path	
   #$uSAC::HTTP::Site->add_route([$Any_Method],qr{.*},pop);
-	$uSAC::HTTP::Site->add_route(qr{(?#COMMENT)[^\s]+} ,qr{.*},pop);
+	$uSAC::HTTP::Site->add_route(qr{(?#SITE CATCH ALL)[^\s]+} ,qr{.*},pop);
 }
 
 sub usac_error_route {

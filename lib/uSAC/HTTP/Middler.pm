@@ -60,7 +60,6 @@ sub link {
 		
 
 		$mw[$i]=$maker->($next);
-		#$mw[$i]=$maker->($next_target,$dispatcher);	#call with next and last
 	}
 
 	@middleware?$mw[0]:$dispatcher;

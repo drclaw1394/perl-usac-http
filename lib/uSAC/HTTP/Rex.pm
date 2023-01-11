@@ -53,6 +53,7 @@ usac_form_slurp
 rex_parse_form_params 
 rex_query_params
 
+rex_method
 rex_site_url
 rex_site
 rex_state
@@ -137,10 +138,15 @@ sub rex_write{
 	
 
 	&{$_[0][1][2]};	#Execute the outerware for this site/location
+  Log::OK::TRACE and log_trace "Rex: End of rex write. after outerware";
 
 }
 
 
+
+sub rex_method {
+  $_[REX][method_];
+}
 
 ##
 #OO Methods
@@ -154,10 +160,10 @@ sub headers {
 sub method {
 	$_[0][method_];
 }
-sub uri{
+sub uri: lvalue{
 	$_[0][uri_raw_];
 }
-sub uri_stripped {
+sub uri_stripped :lvalue{
 	$_[0][uri_stripped_];
 }
 
@@ -353,35 +359,48 @@ sub rex_error_internal_server_error {
 #TODO: recursion limit
 sub rex_redirect_internal {
 
-	my ($matcher, $rex, $code, $headers, $uri)=@_;
-  say STDERR "rex_redirect_internal called";
+	my ($matcher, $rex, undef, undef, $uri)=@_;
 	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	
 	}
-	$rex->[uri_raw_]=$uri;
-	$rex->[uri_stripped_]=$uri;
+
+  my $code=$_[CODE];
+  my $header=[$_[HEADER]->@*];
+
+  #$_[CODE]=0;
+  
+  
+  $rex->[in_progress_]=1;
+
 	if(($rex->[recursion_count_]) > 10){
 		$rex->[recursion_count_]=0;
 		#carp "Redirections loop detected for $uri";
 		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
-		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, [HTTP_CONTENT_LENGTH, 0],"");
+		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, [HTTP_CONTENT_LENGTH, 0],"",undef);
 		return;
 	}
-
-	#Here we reenter the main processing chain with a  new url, potential
-	#new headers and status code
-	undef $_[0];
-	$rex->[recursion_count_]++;
-	Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
-  my $route;
-	($route, $rex->[captures_])=$rex->[session_]->server->current_cb->(
-		$rex->[host_],			#Internal redirects are to same host
-		join(" ", $rex->@[method_, uri_raw_]),#New method and url
-  );
-
-  $route->[1][1]($route, $rex, $code, $headers);
-	1;
+  my $t; #$t=AE::timer 0,0,sub {
+    say $matcher->[1][1];
+    $matcher->[1][1]($matcher, $rex); #force a reset of the current chain, starting at innerware
+    $rex->[in_progress_]=undef;
+    $rex->[uri_raw_]=$uri;
+    $rex->[uri_stripped_]=$uri;
+    #say "AFTER CALL TO RESET EXISTING CHAIN";
+    #Here we reenter the main processing chain with a  new url, potential
+    #new headers and status code
+    #undef $_[0];
+    $t=undef;
+    $rex->[recursion_count_]++;
+    Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
+    my $route;
+    ($route, $rex->[captures_])=$rex->[session_]->server->current_cb->(
+      $rex->[host_],			#Internal redirects are to same host
+      join(" ", $rex->@[method_, uri_raw_]),#New method and url
+    );
+    
+    $route->[1][1]($route, $rex, $code, $header,my $a="",my $b=undef);
+  #};
 }
 
 sub rex_headers {
@@ -930,7 +949,7 @@ sub mw_dead_horse_stripper {
       #here we force write unless the rex is in progress
 
       unless($_[REX][in_progress_]){
-        Log::OK::TRACE and log_trace "REX not in progress";
+        Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef";
         $_[CB]=undef;
         &rex_write;
       }

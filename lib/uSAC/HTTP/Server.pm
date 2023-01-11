@@ -514,7 +514,7 @@ sub run {
   if($self->[options_]{show_routes}){
 	  Log::OK::INFO and log_info(__PACKAGE__. " Listing routes for hosts: ".join ", ", $self->[options_]{show_routes}->@*);
 	  $self->dump_routes;
-    return;
+    #return;
   }
 	Log::OK::INFO and log_info(__PACKAGE__. " starting server...");
   
@@ -603,6 +603,7 @@ sub dump_listeners {
 
 sub dump_routes {
 	my ($self)=@_;
+  use re qw(is_regexp regexp_pattern);
   try {
     require Text::Table;
     for my $host (sort keys $self->[host_tables_]->%*){
@@ -616,10 +617,18 @@ sub dump_routes {
       last unless $self->[options_]{show_routes};
       next unless grep $host=~ $_, $self->[options_]{show_routes}->@*;
 
+      
       for my $entry ($table->[0]->@*){
+        
         my $site=$entry->[1][0];
 
 
+        my $matcher=$entry->[0];
+        if(is_regexp $matcher){
+          $matcher=regexp_pattern $matcher;
+          while($matcher=~s|\(\?\^u\:(.*)\)|$1|){};
+
+        }
         my $key;
         my @a;
 
@@ -627,14 +636,14 @@ sub dump_routes {
           #@a=$entry->[0], $entry->[2], $site->id, $site->prefix;
           #$key=join "-",@a;
 
-          $tab->load([$entry->[0], $entry->[2], $site->id, $site->prefix, join "\n",$host]);
+          $tab->load([$matcher, $entry->[2], $site->id, $site->prefix, join "\n",$host]);
         }
         else{
 
           #@a=$entry->[0], $entry->[2], "na", "na";
           #$key=join "-",@a;
 
-          $tab->load([$entry->[0], $entry->[2], "na", "na", join "\n",$host]);
+          $tab->load([$matcher, $entry->[2], "na", "na", join "\n",$host]);
         }
 
 
@@ -853,7 +862,7 @@ sub parse_cli_options {
     "listener=s@",
     "show=s@"
     
-  );
+  ) or die "Invalid arguments";
 
   for my($key,$value)(%options){
     if($key eq "workers"){
@@ -863,7 +872,7 @@ sub parse_cli_options {
       $self->add_listeners($_) for(@$value);
     }
     elsif($key eq "show"){
-      $self->[options_]{show_routes}=$value;
+      $self->[options_]{show_routes}=$value
     }
 
     else {
