@@ -14,7 +14,7 @@ no feature "indirect";
 
 use Time::HiRes qw<time>;
 use Data::UUID;
-use uSAC::HTTP::StateCookie qw<state_cookie>;
+use uSAC::HTTP::Middleware::State::Cookie qw<state_cookie>;
 
 our @EXPORT_OK=qw<state_uuid rex_state_uuid_data state_uuid_new state_uuid_data>;
 our @EXPORT=();

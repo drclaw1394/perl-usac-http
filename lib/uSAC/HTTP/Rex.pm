@@ -200,9 +200,9 @@ sub rex_query_params{
 sub rex_site_url {
 	#match_entry->context->site->built_prefix
 	#my $url= $_[0][4][0]->built_prefix;
-	my $url= $_[0][1][0]->built_prefix;
-	if($_[2]//""){
-		return "$url/$_[2]";
+	my $url= $_[ROUTE][1][0]->built_prefix;
+	if($_[PAYLOAD]){
+		return "$url/$_[PAYLOAD]";
 	}
 	$url;
 	#$_[0][4][0]->built_prefix."/".($_[3]//"");
@@ -366,7 +366,7 @@ sub rex_redirect_internal {
 	}
 
   my $code=$_[CODE];
-  my $header=[$_[HEADER]->@*];
+  my $header=$_[HEADER]?[$_[HEADER]->@*]:[];
 
   #$_[CODE]=0;
   

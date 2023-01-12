@@ -8,7 +8,7 @@ no warnings "experimental";
 no feature "indirect";
 
 use Time::HiRes qw<time>;
-use uSAC::HTTP::StateCookie qw<state_cookie>;
+use uSAC::HTTP::Middleware::State::Cookie qw<state_cookie>;
 use JSON;
 
 

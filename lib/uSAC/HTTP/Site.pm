@@ -455,6 +455,8 @@ our $Dir_Path=		qr{(?:<=[/])([^?]*+)(?<=[/])};
 
 #NOTE Comp matching only matches between slashes
 our $Comp=		qr{(?:[^/?]+)};		#Path component
+our $Decimal=   qr{(?:\d+)};    #Decimal Integer
+our $Word=      qr{(?:\w+)};    #Word
 
 #our $Query=		qr{(?:([^#]+))?};
 #our $Fragment=		qr{(?:[#]([^ ]+)?)?};

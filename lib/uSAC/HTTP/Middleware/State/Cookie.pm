@@ -1,4 +1,4 @@
-package uSAC::HTTP::StateCookie;
+package uSAC::HTTP::Middleware::State::Cookie;
 use strict;
 use warnings;
 use feature "try";
