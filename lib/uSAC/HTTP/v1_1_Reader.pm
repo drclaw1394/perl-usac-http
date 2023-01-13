@@ -32,8 +32,10 @@ our $UTF_8=find_encoding "utf-8";
 use Time::HiRes qw/gettimeofday/;
 use Scalar::Util 'refaddr', 'weaken';
 
-use uSAC::HTTP::Session;
-use uSAC::HTTP::Rex;
+#use uSAC::HTTP::Session;
+#use uSAC::HTTP::Rex;
+use uSAC::HTTP::Code qw<:constants>;
+use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use constant MAX_READ_SIZE => 128 * 1024;
 
@@ -500,5 +502,65 @@ sub make_reader{
 
   };
 }
+
+my @index=map {$_*2} 0..99;
+
+sub make_serialize{
+  my %options=@_;
+  my $static_headers="";
+
+  $static_headers.="$options{static_headers}[$_]:$options{static_headers}[$_+1]".CRLF
+  for(@index[0..$options{static_headers}->@*/2-1]);
+
+
+  sub {
+    #continue stack reset on error condition. The IO layer resets
+    #on a write call with no arguemts;
+    if($_[CODE]){
+      #no warnings qw<numeric uninitialized>;
+      #return unless $_[CODE];
+      Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
+      #my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
+      #The last item in the outerware
+      # renders the headers to the output sub
+      # then calls 
+      #
+      my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
+
+      if($_[HEADER]){
+        \my @h=$_[HEADER];
+
+        my $reply="HTTP/1.1 $_[CODE] ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
+        #####################################
+        # $reply.= $h[$_].": $h[$_+1]".CRLF #
+        # for(@index[0..@h/2-1]);           #
+        #####################################
+
+        foreach my ($k,$v)(@h){
+          $reply.= $k.": $v".CRLF 
+        }
+        $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
+        $reply.=$static_headers;
+
+        Log::OK::DEBUG and log_debug "->Serialize: headers:";
+        Log::OK::DEBUG and log_debug $reply;
+
+
+        $_[HEADER]=undef;	#mark headers as done
+
+        $reply.=CRLF.$_[PAYLOAD]//"";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
+      }
+      else{
+        $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);
+      }
+    }
+    else{
+      $_[REX][uSAC::HTTP::Rex::write_]();
+    }
+  }
+};
+
+
 
 1;

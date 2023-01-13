@@ -12,6 +12,7 @@ use Cwd qw<abs_path>;
 use File::Spec::Functions;
 use Exporter "import";
 use uSAC::HTTP::Constants;
+#use uSAC::HTTP::v1_1_Reader;
 use URI;
 
 my @redirects=qw<
@@ -29,7 +30,7 @@ usac_error_not_found
 	usac_error_route
 >;	
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
+our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_controller usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
 	), @errors,@redirects);
 
 our @EXPORT=@EXPORT_OK;
@@ -54,7 +55,7 @@ use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
 
 #Class attribute keys
-use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ error_uris_ end_));
+use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ built_label_ error_uris_ controller_ end_));
 
 use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	end_-server_+1;
@@ -111,7 +112,7 @@ my @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 sub _add_route {
   local $,=" ";
   my $self=shift;
-  my $end=pop;
+  my $end;#=pop;
   my $method_matcher=shift;
   my $path_matcher=shift;
   my @inner;
@@ -121,11 +122,6 @@ sub _add_route {
 
 
 
-  unless (ref $end eq "CODE"){
-    push @_, $end; #Put it back
-    $end= \&rex_write;
-    Log::OK::DEBUG and log_debug "No end point provided, using rex write";
-  }
 
 
   my @names;
@@ -134,13 +130,27 @@ sub _add_route {
   unshift @_, chunked();
  
   #Process other middleware
-  for(@_){
-    #If the element is a code ref it is innerware ONLY
+  while(@_){
+    $end=$_;
+    $_=shift;
+    # If the element is a code ref it is innerware ONLY
     if(ref($_) eq "CODE"){
-      push @inner, $_;
+      # A straight code reference does not have any calls to 'next'.
+      # wrap it in one
+      my $target=$_; #User supplied sub
+      
+      my $sub=sub {  #Sub which will be called during linking
+        my $next=shift;
+        sub {         #wrapper sub (inner middleware)
+          &$target;   #User supplied
+          &$next unless $_[REX][uSAC::HTTP::Rex::in_progress_];     #Call next here
+        }
+      };
+      push @inner, $sub;
     }
-    #if its an array ref, then it might contain both inner
-    #and outerware and possible a name
+
+    # If its an array ref, then it might contain both inner
+    # and outerware and possible a name
     elsif(ref($_) eq "ARRAY"){
       #check at least for one code ref
       if(ref($_->[0]) ne "CODE"){
@@ -154,17 +164,39 @@ sub _add_route {
       push @outer, $_->[1];
 
 
-      if(!defined($_[2])){
-        $_[2]="Middleware";
+      if(!defined($_->[2])){
+        $_->[2]="Middleware";
       }
       push @names, $_->[2];
 
+    }
+    elsif(!defined){
+      die Exception::Class::Base->throw("Undefined Middleware attempted");
+    }
+    elsif (ref eq "" ){
+      # Scalar used as a method name. Call method on controller
+      # and unshift the result to be processed
+      # TODO: need a iteration limit here...
+      my $a;
+      try {
+        die Exception::Class::Base->throw("No controller set for site. Cannot call method by name")unless $self->[controller_];
+        
+        my $string='$self->[controller_]->'.$_;
+        $a=eval $string;
+        die Exception::Class::Base->throw("Could not run controller $self->[controller_] with method $_") if $@;
+      }
+      catch($e){
+        log_error STDERR Error::Show::tracer  $e;
+        exit -1;
+      }
+      unshift @_, $a;
     }
     else {
       #Ignore anything else
       #TODO: check of PSGI middleware and wrap
     }
   }
+  $end= \&rex_write;
 
 
   # Innerware run form parent to child to route in
@@ -179,72 +211,70 @@ sub _add_route {
   #unshift @inner, $self->_strip_prefix;
   unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($self->[built_prefix_]);
 
-  # if $self->built_prefix;
-  # #$self->[prefix_];	
-  # #make strip prefix first of middleware
 
-
-  #my @matching=grep { /$method_matcher/ } @methods;
   my @matching=($method_matcher);
   local $"=",";
   Log::OK::TRACE and log_trace "Methods array : @matching";
 
-  my $outer;
 
-  if(@inner){
-    my $middler=uSAC::HTTP::Middler->new();
-    for(@inner){
-      $middler->register($_);
-    }
-    $end=$middler->link($end);
-  }
+
   my @index=map {$_*2} 0..99;
 
   #my $server= $self->[server_];
   my $static_headers=$self->[server_]->static_headers;
-  my $serialize=
-  sub{
-    #continue stack reset on error condition. The IO layer resets
-    #on a write call with no arguemts;
-    if($_[CODE]){
-      #no warnings qw<numeric uninitialized>;
-      #return unless $_[CODE];
-      Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
-      #my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
-      #The last item in the outerware
-      # renders the headers to the output sub
-      # then calls 
-      #
-      my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
 
-      if($_[HEADER]){
-        \my @h=$_[HEADER];
+  #TODO: Need to rework this for other HTTP versions
+  my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize static_headers=>$static_headers;
+  ##########################################################################################
+  # sub{                                                                                   #
+  #   #continue stack reset on error condition. The IO layer resets                        #
+  #   #on a write call with no arguemts;                                                   #
+  #   if($_[CODE]){                                                                        #
+  #     #no warnings qw<numeric uninitialized>;                                            #
+  #     #return unless $_[CODE];                                                           #
+  #     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;  #
+  #     #my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;                   #
+  #     #The last item in the outerware                                                    #
+  #     # renders the headers to the output sub                                            #
+  #     # then calls                                                                       #
+  #     #                                                                                  #
+  #     my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];                                 #
+  #                                                                                        #
+  #     if($_[HEADER]){                                                                    #
+  #       \my @h=$_[HEADER];                                                               #
+  #                                                                                        #
+  #       my $reply="HTTP/1.1 $_[CODE] ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF; #
+  #       #last if $_ >= @h;                                                               #
+  #       $reply.= $h[$_].": $h[$_+1]".CRLF                                                #
+  #       for(@index[0..@h/2-1]);                                                          #
+  #                                                                                        #
+  #       #last if  $_ >= $static_headers->@*;                                             #
+  #       $reply.="$static_headers->[$_]:$static_headers->[$_+1]".CRLF                     #
+  #       for(@index[0..$static_headers->@*/2-1]);                                         #
+  #                                                                                        #
+  #       $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;                           #
+  #                                                                                        #
+  #       Log::OK::DEBUG and log_debug "->Serialize: headers:";                            #
+  #       Log::OK::DEBUG and log_debug $reply;                                             #
+  #                                                                                        #
+  #                                                                                        #
+  #       $_[HEADER]=undef;       #mark headers as done                                    #
+  #       $reply.=CRLF.$_[PAYLOAD]//"";                                                    #
+  #       $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);                            #
+  #     }                                                                                  #
+  #     else{                                                                              #
+  #       $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);                         #
+  #     }                                                                                  #
+  #   }                                                                                    #
+  #   else{                                                                                #
+  #     $_[REX][uSAC::HTTP::Rex::write_]();                                                #
+  #   }                                                                                    #
+  # };                                                                                     #
+  ##########################################################################################
 
-        my $reply="HTTP/1.1 $_[2] ". $uSAC::HTTP::Code::code_to_name[$_[2]]. CRLF;
-        #last if $_ >= @h;
-        $reply.= $h[$_].": $h[$_+1]".CRLF 
-        for(@index[0..@h/2-1]);
 
-        #last if  $_ >= $static_headers->@*;
-        $reply.="$static_headers->[$_]:$static_headers->[$_+1]".CRLF
-        for(@index[0..$static_headers->@*/2-1]);
 
-        $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
-
-        Log::OK::DEBUG and log_debug "->Serialize: headers:";
-        Log::OK::DEBUG and log_debug $reply;
-        $_[HEADER]=undef;	#mark headers as done
-        $reply.=CRLF.$_[PAYLOAD]//"";
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
-      }
-      else{
-        $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);
-      }
-    }
-    else{
-      $_[REX][uSAC::HTTP::Rex::write_]();
-    }
-  };
+  my $outer;
   if(@outer){
     my $middler=uSAC::HTTP::Middler->new();
     $middler->register($_) for(@outer);
@@ -254,6 +284,20 @@ sub _add_route {
   else {
     $outer=$serialize;
   }
+
+  #$end;#=$outer;
+
+  if(@inner){
+    my $middler=uSAC::HTTP::Middler->new();
+    for(@inner){
+      $middler->register($_);
+    }
+    $end=$middler->link($end);
+  }
+
+
+
+
 
   my @hosts;
   my $matcher;
@@ -266,6 +310,7 @@ sub _add_route {
   #$hosts{"*.*"}//= {};
   Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
   my $pm;
+
   for my $uri (@hosts){
     my $host;
     if(ref $uri){
@@ -277,6 +322,7 @@ sub _add_route {
     else {
       $host=$uri;	#match all
     }
+
 
     for my $method (@matching){
       Log::OK::TRACE and log_trace "$host=>$method";
@@ -317,38 +363,6 @@ sub _add_route {
     }
   }
 }
-
-########################################################################################################
-# #middleware to strip prefix                                                                          #
-# sub _strip_prefix {                                                                                  #
-#         my $self=shift;                                                                              #
-#         my $prefix=$self->[built_prefix_];                                                           #
-#         my $len=length($prefix)//0;                                                                  #
-#         sub {                                                                                        #
-#                 my $inner_next=shift;                                                                #
-#                 sub {                                                                                #
-#       return &$inner_next unless $_[CODE];                                                           #
-#       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";                                        #
-#       $_[REX][uSAC::HTTP::Rex::uri_stripped_]//= substr($_[REX]->[uSAC::HTTP::Rex::uri_raw_], $len); #
-#                                                                                                      #
-#       &$inner_next; #call the next                                                                   #
-#                                                                                                      #
-#       #Check the inprogress flag                                                                     #
-#       #here we force write unless the rex is in progress                                             #
-#                                                                                                      #
-#       unless($_[REX][uSAC::HTTP::Rex::in_progress_]){                                                #
-#         Log::OK::TRACE and log_trace "REX not in progress";                                          #
-#         $_[CB]=undef;                                                                                #
-#         &rex_write;                                                                                  #
-#       }                                                                                              #
-#                                                                                                      #
-#       Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";                                  #
-#                                                                                                      #
-#     },                                                                                               #
-#                                                                                                      #
-#         }                                                                                            #
-# }                                                                                                    #
-########################################################################################################
 
 sub server: lvalue {
 	return $_[0][server_];
@@ -433,6 +447,18 @@ sub prefix {
 
 sub host {
 	$_[0]->[host_];
+}
+
+sub built_label {
+	my $parent_label;
+	if($_[0]->parent_site){
+		$parent_label=$_[0]->parent_site->built_label;
+	}
+	else {
+		$parent_label="";
+
+	}
+	$_[0][built_label_]//($_[0]->set_built_prefix($parent_label.$_[0]->build_label));
 }
 
 
@@ -641,6 +667,25 @@ sub add_route {
 		#normal	
 		$self->_add_route(@_);
 	}
+}
+
+sub usac_controller {
+      my $controller=pop;
+      unless($controller){
+        # If controller is called with no arguments then make it the same package as the caller?
+        my ($controller,undef,undef)=caller;
+      }
+      my %options=@_;
+      my $self=$options{parent}//$uSAC::HTTP::Site;
+      $self->controller(%options, $controller);
+}
+
+sub controller{
+  my $self=shift;
+
+  my $controller=pop;
+  my %options=@_;
+  $self->[controller_]=$controller;
 }
 
 sub usac_id {

@@ -111,7 +111,7 @@ sub log_simple_in {
             #say STDERR Data::Dumper::Dumper $_[1]->headers if $dump_headers;
           }
 			}
-			&$inner_next;		#alway call next. this is just loggin
+			&$inner_next;		#alway call next. this is just logging
 		}
 	};
 	
@@ -249,7 +249,12 @@ sub chunked{
           #$bypass=undef;#reset
           \my @headers=$_[HEADER];
 
-          (($_ eq HTTP_CONTENT_LENGTH)) and return &$next for(@headers[@key_indexes[0..@headers/2-1]]);
+          for my ($k,$v)(@headers){
+            $k eq HTTP_CONTENT_LENGTH and return &$next
+          }
+
+          #(($_ eq HTTP_CONTENT_LENGTH)) and return &$next for(@headers[@key_indexes[0..@headers/2-1]]);
+
           $exe=1;
 
           Log::OK::TRACE and log_trace "Middelware: Chunked execute".($exe//"");
@@ -257,9 +262,19 @@ sub chunked{
           #we actually have  headers and Data. this is the first call
           #Add to headers the chunked trasfer encoding
           #
+
           my $index;
-          $_ eq HTTP_TRANSFER_ENCODING and ($index=$_+1, last)
-            for @headers[@key_indexes[0..@headers/2-1]];
+          my $i=1;
+          for my ($k,$v)(@headers){
+            $i+=2;
+            $index=$i and last if $k eq HTTP_TRANSFER_ENCODING;
+          }
+
+          ########################################################
+          # my $index;                                           #
+          # $_ eq HTTP_TRANSFER_ENCODING and ($index=$_+1, last) #
+          #   for @headers[@key_indexes[0..@headers/2-1]];       #
+          ########################################################
 
           unless($index){	
             push @headers, HTTP_TRANSFER_ENCODING, "chunked";

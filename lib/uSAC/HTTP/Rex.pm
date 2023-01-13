@@ -16,12 +16,6 @@ use Carp qw<carp>;
 use File::Spec::Functions qw<catfile>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
-use uSAC::HTTP::v1_1_Reader;
-#use uSAC::HTTP::Server;
-
-
-#use uSAC::HTTP::Session;
-#use uSAC::HTTP::Server;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Constants;
 use IO::FD;
