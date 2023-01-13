@@ -282,6 +282,7 @@ sub prepare {
 	};
   
   alarm $interval;
+  Log::OK::INFO and log_info "Accepting connections on PID: $$";
 
 }
 
@@ -291,7 +292,7 @@ sub prepare {
 sub do_accept{
   #Accept is only for SOCK_STREAM 
   state $seq=0;
-  Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
+  Log::OK::DEBUG and log_debug __PACKAGE__. " Accepting connections";
   weaken( my $self = shift );
   \my @zombies=$self->[zombies_]; #Alias to the zombie sessions for reuse
   \my %sessions=$self->[sessions_];	#Keep track of the sessions
@@ -307,10 +308,14 @@ sub do_accept{
     #   https
     #   http2/s
     #   sni
+
+    #
+    # Create an acceptor here but we start it later
+    #
+    #
     $self->[aws_]{ $fl } =my $acceptor=uSAC::IO::Acceptor->create(fh=>$fl, on_accept=>$do_client, on_error=>sub {});
-    #$acceptor->start;
   }
-  Log::OK::INFO and log_info "SETUP PASSIVE COMPLETE";
+  Log::OK::TRACE and log_trace "Setup of stream passive socket complete";
 }
 
 
@@ -419,7 +424,7 @@ sub site {
 sub rebuild_dispatch {
   my $self=shift;
 
-  Log::OK::INFO and log_info(__PACKAGE__. " rebuilding dispatch...");
+  Log::OK::DEBUG and log_debug(__PACKAGE__. " rebuilding dispatch...");
   #Install error routes per site
   #Error routes are added after other routes.
 
@@ -433,7 +438,7 @@ sub rebuild_dispatch {
       my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
       $site->parent_site=$self;
       $self->register_site($site);
-      Log::OK::TRACE and log_trace "Adding default handler to $host";
+      Log::OK::DEBUG and log_debug "Adding default handler to $host";
 
       $site->add_route([$Any_Method], undef, _default_handler);
     }
@@ -457,7 +462,7 @@ sub rebuild_dispatch {
   $self->[cb_]=sub {
     #my ($host, $input, $rex)=@_;#, $rex, $rcode, $rheaders, $data, $cb)=@_;
 
-    my $table=$lookup{$_[0]}//$lookup{"*.*"};
+    my $table=$lookup{$_[0]//""}//$lookup{"*.*"};
     (my $route, my $captures)= $table->[0]($_[1]);
 
     #Hustle table entry structure:
@@ -512,11 +517,11 @@ sub run {
 	$self->rebuild_dispatch;
 
   if($self->[options_]{show_routes}){
-	  Log::OK::INFO and log_info(__PACKAGE__. " Listing routes for hosts: ".join ", ", $self->[options_]{show_routes}->@*);
-	  $self->dump_routes;
+    Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $self->[options_]{show_routes}->@*);
+    $self->dump_routes;
     #return;
   }
-	Log::OK::INFO and log_info(__PACKAGE__. " starting server...");
+	Log::OK::TRACE and log_trace(__PACKAGE__. " starting server...");
   
 	$self->do_passive;
 	$self->do_accept;

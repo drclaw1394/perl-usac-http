@@ -1,8 +1,16 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use version; our $VERSION=version->declare("v0.1");
-use feature qw<say>;
+use version; our $VERSION=version->declare("v0.1.0");
+use feature qw<try say>;
+no warnings "experimental";
+
+use EV;
+use AnyEvent;
+use uSAC::HTTP;
+use uSAC::HTTP::Server;
+use uSAC::HTTP::Static;
+use uSAC::HTTP::Middleware qw<log_simple>;
 
 use Log::ger;
 use Log::ger::Output "Screen";
@@ -17,10 +25,6 @@ use File::Basename qw<dirname basename>;
 use Cwd;
 
 #usac-http server command line utility
-use uSAC::HTTP;
-use uSAC::HTTP::Server;
-use uSAC::HTTP::Static;
-use uSAC::HTTP::Middleware qw<log_simple>;
 
 use Socket;
 use Socket::More ":all";
@@ -29,6 +33,7 @@ use Socket::More ":all";
 use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 
 use Getopt::Long;
+Getopt::Long::Configure("pass_through");
 my %options;
 my $verbose=0;
 $options{quiet}=sub {$verbose=0};
@@ -59,6 +64,8 @@ GetOptions \%options,
 	"interface=s@",
 	"group=s@",
 	"address=s@",
+  "read-size=i"
+  #"workers=i"
 
 
 
@@ -100,80 +107,91 @@ Log::OK::INFO and log_info $welcome;
 
 my $server;
 $server=usac_server{
-	#set the sub product
-	usac_middleware log_simple dump_headers=>1 if $options{log};
-	#add all listeners
-	my @spec;
-	my $listeners=$options{listen};
+  #set the sub product
+  usac_middleware log_simple dump_headers=>1 if $options{log};
+  #add all listeners
+  my @spec;
+  my $listeners=$options{listen};
 
-	if(@$listeners){
-		for my $listener (@$listeners){
-			push @spec, parse_passive_spec($listener);
-		}
-	}
-	else {
-		#Add the default listener on all INET.* interfaces, port 5000
-		push @spec, {
-			#interface=>[".*"],
-			address=>["localhost"],
-			family=>[AF_INET, AF_INET6],
-			type=>[SOCK_STREAM],
-			port=>5000
-		};
-	}
+  if(@$listeners){
+    for my $listener (@$listeners){
+      push @spec, parse_passive_spec($listener);
+    }
+  }
+  else {
+    #Add the default listener on all INET.* interfaces, port 5000
+    push @spec, {
+      #interface=>[".*"],
+      address=>["localhost"],
+      family=>[AF_INET, AF_INET6],
+      type=>[SOCK_STREAM],
+      port=>5000
+    };
+  }
 
-	usac_listen($_) for @spec;
-	usac_sub_product "test";
+  usac_listen($_) for @spec;
+  usac_sub_product "test";
 
-	#add additional files
-	my $includes=$options{preclude};
+  #add additional files
+  my $includes=$options{preclude};
 
-	for my $include (@$includes){
-		#convert to abs for intended behaviour	
-		my $target=rel2abs($include,getcwd);
-		Log::OK::INFO and log_info "Including config from source:\n $target";
-		usac_include $target;
-	}
+  for my $include (@$includes){
+    #convert to abs for intended behaviour	
+    my $target=rel2abs($include,getcwd);
+    Log::OK::INFO and log_info "Including config from source:\n $target";
+    usac_include $target;
+  }
 
-	usac_site {
-		#add the hosts we respond to (add all listeners)
-		usac_id "test";
+  usac_site {
+    #add the hosts we respond to (add all listeners)
+    usac_id "test";
 
-		#add additional files
-		my $hosts=$options{hosts};
-		for my $host (@$hosts){
-			Log::OK::INFO and log_info "Virtual host $host";
-			usac_host $hosts;
-		}
-		unless(@$hosts){
-			Log::OK::WARN and log_warn "No virtual host setup. Accepting for any host";
-		}
+    #add additional files
+    my $hosts=$options{hosts};
+    for my $host (@$hosts){
+      Log::OK::INFO and log_info "Virtual host $host";
+      usac_host $hosts;
+    }
+    unless(@$hosts){
+      Log::OK::WARN and log_warn "No virtual host setup. Accepting for any host";
+    }
 
-		#add the routes
-		#usac_route "/static/$File_Path" => usac_file_from "../data";
+    #add the routes
+    #usac_route "/static/$File_Path" => usac_file_from "../data";
 
-                #add static file routes
-                my $static=$options{"www-root"};
-		my @roots;
-                for my $s (@$static){
-                        push @roots, usac_file_under list_dir=>$options{"list-dir"}, $s;
-                } 
-		usac_route ["GET", "HEAD"],"/", state_json, @roots;
+    #add static file routes
+    my $static=$options{"www-root"};
+    my @roots;
 
-		#TODO: fix dir listing so it can be chainable
+    no warnings "experimental";
+    for my $s (@$static){
+      try {
+        push @roots, 
+        usac_file_under list_dir=>$options{"list-dir"}
+        ,read_size=>$options{"read-size"}
+        ,$s;
+      }
+      catch($e){
+        log_error "No access to static files in $s";
+        exit;
+      }
+    } 
+    if(@roots){
+      usac_route ["GET", "HEAD"],"/", @roots;#,state_json, @roots;
+    }
+    #TODO: fix dir listing so it can be chainable
+  };
 
-
-	};
-
-	#add additional files
-	$includes=$options{postclude};
-	for my $include (@$includes){
-		#convert to abs for intended behaviour	
-		my $target=rel2abs($include,getcwd);
-		Log::OK::INFO and log_info "Including config from source: $target";
-		usac_include $target;
-	}
+  #add additional files
+  $includes=$options{postclude};
+  for my $include (@$includes){
+    #convert to abs for intended behaviour	
+    my $target=rel2abs($include,getcwd);
+    Log::OK::INFO and log_info "Including config from source: $target";
+    usac_include $target;
+  }
 };
+
 $server->parse_cli_options(@ARGV);
 $server->run();
 __END__

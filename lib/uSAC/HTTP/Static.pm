@@ -4,6 +4,7 @@ use warnings;
 
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
+use Carp;
 use Log::ger;
 use Log::OK;
 use JSON;
@@ -350,8 +351,6 @@ sub send_file_uri_norange {
 		#and if no_encodingflag is set
 		#
 
-    say "Out headers: ".join ", ", $out_headers->@*;
-    say "Count of out headers ". scalar @$out_headers;
     unshift($out_headers->@*,
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
@@ -655,7 +654,8 @@ sub usac_file_under {
   Log::OK::INFO and log_info "Filename Filter: ".($filter?$filter: "**NONE**");
   Log::OK::INFO and log_info "Readsize: $read_size";
   Log::OK::INFO and log_info "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
-  Log::OK::INFO and log_info "Preencoding filter: ".($pre_encoded?$pre_encoded:"**NONE**");
+  local $"=", ";
+  Log::OK::INFO and log_info "Preencoding filter: ".(@$pre_encoded?(@$pre_encoded):"**NONE**");
   Log::OK::INFO and log_info "Sendfile: ".($sendfile?"yes $sendfile":"no");
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
@@ -665,7 +665,7 @@ sub usac_file_under {
   $html_root=$static->[html_root_];
   my $list_dir=$static->make_list_dir(%options);
 
-  die "Can not access dir $html_root to serve static files" unless -d $html_root;
+  croak "Can not access dir $html_root to serve static files" unless -d $html_root;
   #check for mime type in parent 
   my $inner=sub {
     #create the sub to use the static files here

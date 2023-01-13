@@ -115,6 +115,7 @@ sub _add_route {
   my $end;#=pop;
   my $method_matcher=shift;
   my $path_matcher=shift;
+
   my @inner;
   my @outer;
 
@@ -323,6 +324,23 @@ sub _add_route {
       $host=$uri;	#match all
     }
 
+    ##########################################
+    # say caller;                            #
+    # say "Method matcher: $method_matcher"; #
+    # say "Path matcher: $path_matcher";     #
+    ##########################################
+
+    # 
+    # Fix the path matcher to a regex if the method matcher 
+    # is a regex.
+    #
+    if(ref($method_matcher) eq "Regexp"
+        and defined $path_matcher
+        and ref($path_matcher) ne "Regexp"){
+      # Force pathmatcher to re if method  matcher is an re
+      $path_matcher=qr{$path_matcher} ;
+
+    }
 
     for my $method (@matching){
       Log::OK::TRACE and log_trace "$host=>$method";
@@ -604,20 +622,34 @@ sub usac_route {
 	my $self=$uSAC::HTTP::Site;
 	$self->add_route(@_);
 }
+
+
 sub add_route {
 	my $self=shift;
   die "route needs at least two parameters" unless @_>=2;
   
   if(!defined($_[0])){
-    ##
-    #Sets the default for the host
+    # 
+    # Sets the default for the host
+    #
     shift; unshift @_, $Any_Method, undef;
 		$self->_add_route(@_);
   }
 	elsif(ref($_[0]) eq "ARRAY"){
-		#Methods specified as an array ref
+    #
+		# Methods specified as an array ref, which will get
+    # converted to a regexp
+    # Also means the path matcher must also be changed
+    #
 		my $a=shift;
-		unshift @_, "(?:".join("|", @$a).")";
+    #unshift @_, "(?:".join("|", @$a).")";
+    $a= "(?:".join("|", @$a).")";
+
+    $a=qr{$a};
+    my $b=shift;
+    $b=qr{$b} if defined $b;
+    unshift @_, $a, $b;
+
 		$self->_add_route(@_);
 	}
 	elsif(ref($_[0]) eq "Regexp"){
@@ -993,7 +1025,7 @@ sub usac_redirect_found{
 	my $url =pop;
 	sub {
 		$_[4]=$url;
-		&rex_redirect_found;@_, $url;
+		&rex_redirect_found;#@_, $url;
 	}
 }
 
@@ -1009,7 +1041,7 @@ sub usac_redirect_not_modified {
 	my $url =pop;
 	sub {
 		$_[4]=$url;
-		&rex_redirect_not_modified;@_, $url;
+		&rex_redirect_not_modified;#@_, $url;
 	}
 }
 
