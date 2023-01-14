@@ -26,7 +26,7 @@ use Log::OK {
 
 use feature qw<refaliasing say state current_sub>;
 use constant NAME=>"uSAC";
-use constant VERSION=>"0.1";
+use constant VERSION=>"v0.1.0";
 
 #our @Subproducts;#=();		#Global to be provided by applcation
 
@@ -377,11 +377,15 @@ sub current_cb {
 	shift->[cb_];
 }
 
-
+# Accessor
 sub static_headers {
 	shift->[static_headers_];
 }
 
+#
+# This is how the server is told to add a route to a host. Not really for
+# direct access. use the add_route method on a site instead
+#
 sub add_host_end_point{
 	my ($self, $host, $matcher, $ctx, $type)=@_;
 
@@ -516,6 +520,11 @@ sub run {
 
 	$self->rebuild_dispatch;
 
+  if($self->routes == keys $self->[host_tables_]->%*){
+    log_error "No routes, nothing to serve";
+    exit;
+  }
+
   if($self->[options_]{show_routes}){
     Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $self->[options_]{show_routes}->@*);
     $self->dump_routes;
@@ -539,7 +548,7 @@ sub run {
       require Sys::Info;
       my $info=Sys::Info->new;
       $self->[workers_]=$info->device("cpu")->count;
-      Log::OK::WARN and log_warn "Attempting to quess a nice worker count...";
+      Log::OK::WARN and log_warn "Attempting to guess a nice worker count...";
 
     }
     catch($e){
@@ -606,6 +615,17 @@ sub dump_listeners {
 	}
 }
 
+sub routes {
+  my $self=shift;
+  my @routes;
+  for my $host (sort keys $self->[host_tables_]->%*){
+    my $table= $self->[host_tables_]{$host};
+    for my $entry ($table->[0]->@*){
+      push @routes, $entry;
+    }
+  }
+  @routes;
+}
 sub dump_routes {
 	my ($self)=@_;
   use re qw(is_regexp regexp_pattern);

@@ -648,15 +648,15 @@ sub usac_file_under {
   \my @indexes=$options{indexes}//[];
   #TODO: Need to check only supported encodings are provided.
 
-  Log::OK::INFO and log_info "Static files from: $html_root";
-  Log::OK::INFO and log_info "DIR Listing: ".($do_dir?"yes":"no");
-  Log::OK::INFO and log_info "DIR index: ".(@indexes?join(", ", @indexes):"no");
-  Log::OK::INFO and log_info "Filename Filter: ".($filter?$filter: "**NONE**");
-  Log::OK::INFO and log_info "Readsize: $read_size";
-  Log::OK::INFO and log_info "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
+  Log::OK::DEBUG and log_debug "Static files from: $html_root";
+  Log::OK::DEBUG and log_debug "DIR Listing: ".($do_dir?"yes":"no");
+  Log::OK::DEBUG and log_debug "DIR index: ".(@indexes?join(", ", @indexes):"no");
+  Log::OK::DEBUG and log_debug "Filename Filter: ".($filter?$filter: "**NONE**");
+  Log::OK::DEBUG and log_debug "Readsize: $read_size";
+  Log::OK::DEBUG and log_debug "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
   local $"=", ";
-  Log::OK::INFO and log_info "Preencoding filter: ".(@$pre_encoded?(@$pre_encoded):"**NONE**");
-  Log::OK::INFO and log_info "Sendfile: ".($sendfile?"yes $sendfile":"no");
+  Log::OK::DEBUG and log_debug "Preencoding filter: ".(@$pre_encoded?(@$pre_encoded):"**NONE**");
+  Log::OK::DEBUG and log_debug "Sendfile: ".($sendfile?"yes $sendfile":"no");
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
   my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);

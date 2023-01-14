@@ -100,7 +100,9 @@ if($options{help}){
 
 #set default listener if non provided
 
-my $welcome="uSAC Server version $VERSION";
+my $welcome=
+"uSAC HTTP Server $VERSION - Copyright 2023 Ruben Westerberg
+";
 Log::OK::INFO and log_info $welcome;
 
 
@@ -137,14 +139,14 @@ $server=usac_server{
 
   for my $include (@$includes){
     #convert to abs for intended behaviour	
-    my $target=rel2abs($include,getcwd);
-    Log::OK::INFO and log_info "Including config from source:\n $target";
-    usac_include $target;
+    my $target=rel2abs($include, getcwd);
+    Log::OK::INFO and log_info "Loading from source:\n $target";
+    usac_load $target;
   }
 
   usac_site {
     #add the hosts we respond to (add all listeners)
-    usac_id "test";
+    usac_id "Static files";
 
     #add additional files
     my $hosts=$options{hosts};
@@ -187,8 +189,8 @@ $server=usac_server{
   for my $include (@$includes){
     #convert to abs for intended behaviour	
     my $target=rel2abs($include,getcwd);
-    Log::OK::INFO and log_info "Including config from source: $target";
-    usac_include $target;
+    Log::OK::INFO and log_info "Loading from source: $target";
+    usac_load $target;
   }
 };
 

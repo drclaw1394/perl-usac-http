@@ -133,7 +133,6 @@ sub websocket_in {
           #write reply	
           Log::OK::DEBUG and log_debug __PACKAGE__." setting in progress flag";
           #$session->[uSAC::HTTP::Session::in_progress_]=1;
-          $rex->[uSAC::HTTP::Rex::in_progress_]=1;
           local $/=", ";
           #for($session->[uSAC::HTTP::Session::write_]){
 
@@ -143,15 +142,31 @@ sub websocket_in {
                 my $ws=uSAC::HTTP::Server::WS->new($session);
                 #$ws->[PMD_]=$deflate_flag;
                 $ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);
-                $_[PAYLOAD]=$ws;
-                #$cb->($line, $rex, $code, $headers, $ws);
-                #&$cb;
-                &$next;
-                #defer the open callback
-                AnyEvent::postpone {$ws->[on_open_]->($ws)};
 
-                #read and write setup create a new ws with just the session
-                #uSAC::HTTP::Server::WS->new($_);
+                $_[ROUTE]=$line;
+                $_[REX]=$rex;
+                $_[CODE]= HTTP_SWITCHING_PROTOCOLS;
+                $_[HEADER]=$headers;
+                $_[PAYLOAD]=$ws;
+                $_[CB]=undef;
+
+                # 
+                # Mark the request in progress to the automatic rex_write
+                # doesn't execute
+                #
+                $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
+
+                #Call next, the websocke is the payload
+                &$next;
+
+                # defer the open callback to execute after the middlware has
+                # been called
+                #
+                AnyEvent::postpone {
+                  $ws->[on_open_]->($ws)
+                };
+
+                # We don't need this reader anymore.
                 $_=undef;
               });
           }
@@ -159,8 +174,9 @@ sub websocket_in {
 
         else{
           Log::OK::DEBUG and log_debug __PACKAGE__." Websocket did not match";
-          #reply
-          #$session->[uSAC::HTTP::Session::closeme_]=1;
+          #
+          # Force a close on the connection when it failed
+          #
           $rex->[uSAC::HTTP::Rex::closeme_]->$*=1;
           uSAC::HTTP::Rex::rex_error_forbidden $line, $rex;
           return;
@@ -398,7 +414,6 @@ sub _make_websocket_server_writer {
 	my $self=shift;
 	my $session=shift;	#session
 
-	say  "SESSSION REX WRITE: ", $session->write;
 	my ($entry_point,$stack)=uSAC::HTTP::Middler->new()
 		->register(\&_websocket_writer)
 		->link($session->write);#rex->[uSAC::HTTP::Rex::write_]);

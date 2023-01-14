@@ -131,6 +131,7 @@ sub _add_route {
   unshift @_, chunked();
  
   #Process other middleware
+  #Log::OK::DEBUG and log_debug "About to process MIDDLEWARES: ".join ", ",@_;
   while(@_){
     $end=$_;
     $_=shift;
@@ -187,7 +188,7 @@ sub _add_route {
         die Exception::Class::Base->throw("Could not run controller $self->[controller_] with method $_") if $@;
       }
       catch($e){
-        log_error STDERR Error::Show::tracer  $e;
+        log_error Error::Show::tracer  $e;
         exit -1;
       }
       unshift @_, $a;
