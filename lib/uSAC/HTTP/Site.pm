@@ -188,7 +188,7 @@ sub _add_route {
         die Exception::Class::Base->throw("Could not run controller $self->[controller_] with method $_") if $@;
       }
       catch($e){
-        log_error Error::Show::tracer  $e;
+        log_error Error::Show::context message=>$e, frames=>\$e->trace->frames;
         exit -1;
       }
       unshift @_, $a;

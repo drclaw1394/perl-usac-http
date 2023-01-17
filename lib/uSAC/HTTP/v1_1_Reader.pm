@@ -486,7 +486,7 @@ sub make_reader{
       #If debugging is enabled. dump the stack trace?
 
       my $context;
-        $context=Error::Show::tracer error=>$e;
+        $context=Error::Show::context message=>$e, frames=>\$e->trace->frames;
         Log::OK::ERROR and log_error  $context;
 
       if(Log::OK::DEBUG){
