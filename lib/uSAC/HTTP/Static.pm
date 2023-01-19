@@ -241,7 +241,7 @@ sub open_cache {
       Log::OK::ERROR and log_error " Error opening file $abs_path: $!";
     }
 	}
-  Log::OK::WARN and log_warn "Could not open file $abs_path";
+  #Log::OK::WARN and log_warn "Could not open file $abs_path";
   undef;
 }
 
@@ -320,7 +320,6 @@ sub send_file_uri_norange {
     unless(@ranges){
       $code=HTTP_RANGE_NOT_SATISFIABLE;
       push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
-
       $next->( $matcher,$rex,$code,$out_headers,"");
       return;
     }
@@ -408,87 +407,91 @@ sub send_file_uri_norange {
     };
 
     Log::OK::TRACE  and log_trace "Writing sendfile header";
-    return $next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
+    #return $next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
+
+    # Use a 0 for the callback to indicate we don't want one
+    # and not to execute the default
+    $next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
+    #return $do_sendfile->();
   }
 
+  else{
+    #
+    # the normal copy and write
+    #
+    
+    #Clamp the readsize to the file size if its smaller
+    $read_size=$content_length if $content_length < $read_size;
 
-  #else do the normal copy and write
-
-  #Clamp the readsize to the file size if its smaller
-  $read_size=$content_length if $content_length < $read_size;
-
-  my $t;
-  my $count=0;
-  (sub {
-      $count++;
-      #This is the callback for itself
-      #if no arguments an error occured
-      unless(@_){
-        #undef $sub;
-        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
-        undef $rex;
-        return;
-      }
-
-      my $sub=__SUB__;
-
-      $reply=IO::FD::SV 4096; #reset//allocate buffer
-      
-      #NON Send file
-      #
-      #IO::FD::sysseek $in_fh, $offset, 0;
-
-      my $sz=($content_length-$total);
-      $sz=$read_size if $sz>$read_size;
-      #$total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
-      $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
-      $offset+=$rc;
-
-      #non zero read length.. do the write
-
-      #When we have read the required amount of data
-      if($total==$content_length){
-        if(@ranges){
-          return $next->( $matcher, $rex, $code, $out_headers, $reply, sub {
-              unless(@_){
-                return $sub->();
-              }
-
-              #TODO: FIX MULTIPART RANGE RESPONSE
-              my $r=shift @ranges;
-              $offset=$r->[0];
-              $total=0;
-              $content_length=$r->[1];
-
-              #write new multipart header
-              return $sub->(undef);           #Call with arg
-            })
+    my $t;
+    my $count=0;
+    (sub {
+        $count++;
+        #This is the callback for itself
+        #if no arguments an error occured
+        unless(@_){
+          #undef $sub;
+          $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+          undef $rex;
+          return;
         }
-        else{
-          IO::FD::close $in_fh unless $entry->[cached_];
-          return $next->($matcher, $rex, $code, $out_headers, $reply, undef);
+
+        my $sub=__SUB__;
+
+
+        #NON Send file
+        #
+        #IO::FD::sysseek $in_fh, $offset, 0;
+        my $sz=($content_length-$total);
+        $sz=$read_size if $sz>$read_size;
+        $reply=IO::FD::SV $sz; #reset//allocate buffer
+        #$total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
+        $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
+        $offset+=$rc;
+
+        #non zero read length.. do the write
+
+        #When we have read the required amount of data
+        if($total==$content_length){
+          if(@ranges){
+            return $next->( $matcher, $rex, $code, $out_headers, $reply, sub {
+                unless(@_){
+                  return $sub->();
+                }
+
+                #TODO: FIX MULTIPART RANGE RESPONSE
+                my $r=shift @ranges;
+                $offset=$r->[0];
+                $total=0;
+                $content_length=$r->[1];
+
+                #write new multipart header
+                return $sub->(undef);           #Call with arg
+              })
+          }
+          else{
+            IO::FD::close $in_fh unless $entry->[cached_];
+            return $next->($matcher, $rex, $code, $out_headers, $reply, undef);
+          }
         }
-      }
 
-      #Data read by more to do
-      $rc and	($rex
-        ?return $next->($matcher, $rex, $code, $out_headers, $reply, __SUB__)
-        :return undef $sub);
+        #Data read by more to do
+        $rc and	($rex
+          ?return $next->($matcher, $rex, $code, $out_headers, $reply, __SUB__)
+          :return undef $sub);
 
-      #if ($rc);
+        #if ($rc);
 
-      #No data but error
-      if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
-        log_error "Static files: READ ERROR from file";
-        log_error "Error: $!";
-        IO::FD::close $in_fh;
-        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
-        undef $sub;
-      }
-    })->(undef); #call with an argument to prevent error
-
-
-
+        #No data but error
+        if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
+          log_error "Static files: READ ERROR from file";
+          log_error "Error: $!";
+          IO::FD::close $in_fh;
+          $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+          undef $sub;
+        }
+      })->(undef); #call with an argument to prevent error
+  }
 }
 
 
@@ -648,6 +651,7 @@ sub usac_file_under {
   Log::OK::DEBUG and log_debug "Filename Filter: ".($filter?$filter: "**NONE**");
   Log::OK::DEBUG and log_debug "Readsize: $read_size";
   Log::OK::DEBUG and log_debug "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
+
   local $"=", ";
   Log::OK::DEBUG and log_debug "Preencoding filter: ".(@$pre_encoded?(@$pre_encoded):"**NONE**");
   Log::OK::DEBUG and log_debug "Sendfile: ".($sendfile?"yes $sendfile":"no");
@@ -666,19 +670,33 @@ sub usac_file_under {
     my $next=shift;
     my $p;	#tmp variable
     sub {
-        #Stack reset
-        return &$next unless($_[CODE]);
+      # Stack reset
+      return &$next unless($_[CODE]);
+
+    
 
       if($_[HEADER]){
+
+      
+        #
+        # Previous middleware did not find anything, or we don't have a
+        # response just yet
+        #
+        return &$next unless($_[CODE]<0 or $_[CODE]==HTTP_NOT_FOUND);
+       
+        
         $p=$_[REX][uSAC::HTTP::Rex::uri_stripped_];
 
         my $path=$html_root.$p;
 
-
+        #
+        # First this is to report not found  and call next middleware
+        # if the filter doesn't match (if a filter exists)
+        #
         if($filter and $path !~ /$filter/o){
           $_[PAYLOAD]="";
           $_[CODE]=HTTP_NOT_FOUND;
-          push $_[HEADER]->@*, HTTP_CONTENT_LENGTH,0;
+          push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
           return &$next;
         }
 
@@ -687,11 +705,30 @@ sub usac_file_under {
 
         Log::OK::TRACE and log_trace "static: html_root: $html_root";
 
-        #Server dir listing if option is specified
-        #
-        #=========================================
 
-        if($do_dir || @indexes and substr($path, -1) eq "/") {
+
+
+
+        # File serving
+        #
+        # Attempts to open the file and send it. If it fails, the next static middleware is called if present
+
+        my $pre_encoded_ok=($pre_encoded and $path=~/gz$/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
+        ?$pre_encoded
+        :[];
+
+
+        my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
+
+
+        if($entry){
+          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/));
+
+        }
+        elsif($do_dir || @indexes and substr($path, -1) eq "/") {
+          #Server dir listing if option is specified
+          #
+          #=========================================
           #attempt to do automatic index file.
           my $entry;
           for(@indexes){
@@ -715,37 +752,21 @@ sub usac_file_under {
           }
           else {
             Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
+            $_[PAYLOAD]="";
+            $_[CODE]=HTTP_NOT_FOUND;
+            push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
+            &$next;
             #no valid index found so 404
-            &rex_error_not_found;# @_;
-            return 1;
+            #&rex_error_not_found;# @_;
+            #return 1;
           }
         }
-
-
-
-
-        # File serving
-        #
-        # Attempts to open the file and send it. If it fails, the next static middleware is called if present
-
-        my $pre_encoded_ok=($path=~/gz$/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
-          ?$pre_encoded
-          :[];
-
-
-        my $entry;
-        $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
-
-
-        if($entry){
-          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/));
-
-        }
         else{
-          #Middle ware setup. Should not get here normally
+          # We did not locate the file. Set a not found error and forward to
+          # the next middleware
           $_[PAYLOAD]="";
           $_[CODE]=HTTP_NOT_FOUND;
-          push $_[HEADER]->@*, HTTP_CONTENT_LENGTH,0;
+          push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
           &$next;
         }
       }

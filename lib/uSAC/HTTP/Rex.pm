@@ -359,6 +359,10 @@ sub rex_redirect_internal {
 		$uri="/".$uri;	
 	}
 
+  # TODO: 
+  # Should the code be force reset to -1 on internal redirect, or leave it to the
+  # programmer?
+  #
   my $code=$_[CODE];
   my $header=$_[HEADER]?[$_[HEADER]->@*]:[];
 

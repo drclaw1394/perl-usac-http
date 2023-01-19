@@ -105,7 +105,7 @@ sub make_reader{
   my $pos3;
   my $k;
   my $val;
-  my $code=200;
+  my $code=-1;
   my $payload="";
 
   sub {
@@ -119,7 +119,9 @@ sub make_reader{
     state $multi_state=0;
     state $first=1;
     ##my %h;
-    $code=200;
+
+    # Set default HTTP code
+    $code=-1;
     state $out_header=[];
     state $dummy_cb=sub {};
     try {
@@ -525,7 +527,18 @@ sub make_serialize{
       # renders the headers to the output sub
       # then calls 
       #
+      #
+
+      # If the callback is undefined, use the dropper to 'end' the session
+      # Otherwise use the provided callback.
+      # The writer will only execute the callback if it is a 'true' value.
+      # If middleware explicitly sets the callback to 0, it effectively causes
+      # a synchronous write with now callback. Which is  useful writing out 
+      # small amounts of header data before a body.
+      #
       my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
+
+      $_[CODE]=HTTP_OK if $_[CODE]<0;
 
       if($_[HEADER]){
         \my @h=$_[HEADER];
