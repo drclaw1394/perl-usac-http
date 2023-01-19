@@ -261,8 +261,8 @@ sub prepare {
 
 	#Timeout timer
 	#
-  $SIG{ALRM}=
-  #$self->[stream_timer_]=AE::timer 0, $interval,
+  #$SIG{ALRM}=
+  $self->[stream_timer_]=AE::timer 0, $interval,
   sub {
 		#iterate through all connections and check the difference between the last update
 		$self->[server_clock_]+=$interval;
@@ -278,10 +278,10 @@ sub prepare {
 			}
 		}
 		
-	  alarm	 $interval;# if $self->[sessions_]->%*; #only start interval if something to watch?
+    #alarm	 $interval;# if $self->[sessions_]->%*; #only start interval if something to watch?
 	};
   
-  alarm $interval;
+  #alarm $interval;
   Log::OK::INFO and log_info "Accepting connections on PID: $$";
 
 }
@@ -511,12 +511,10 @@ sub stop {
 
 sub run {
 	my $self=shift;
-        #######################################
-        # my $sig; $sig=AE::signal(INT=>sub { #
-        #         $self->stop;                #
-        #         $sig=undef;                 #
-        # });                                 #
-        #######################################
+        my $sig; $sig=AE::signal(INT=>sub {
+                $self->stop;
+                $sig=undef;
+        });
 
 	$self->rebuild_dispatch;
 

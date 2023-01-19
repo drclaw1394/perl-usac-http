@@ -46,7 +46,6 @@ use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ ca
 use constant KET_COUNT=>end_-mime_+1;
 use constant RECURSION_LIMIT=>10;
 use IO::FD;
-use constant DISABLE_CACHE=>undef;
 
 sub new {
 	my $package=shift//__PACKAGE__;
@@ -62,8 +61,8 @@ sub new {
 	$self->[cache_sweep_interval_]=$options{cache_sweep_interval}//120;
 	$self->[cache_size_]=$options{cache_size};
 	bless $self, $package;
-  #$self->enable_cache;
-  $self->disable_cache;
+  $self->enable_cache;
+  #$self->disable_cache;
 	$self;
 }
 
@@ -360,6 +359,7 @@ sub send_file_uri_norange {
 		#and if no_encodingflag is set
 		#
 
+    
     unshift($out_headers->@*,
 			HTTP_VARY, "Accept",
 			$entry->[last_modified_header_]->@*,
@@ -368,19 +368,11 @@ sub send_file_uri_norange {
 				? (HTTP_CONTENT_ENCODING, "identity")
 				: $entry->[content_encoding_]->@*,
 
-			#HTTP_CONTENT_TYPE, "text/plain",
-			#HTTP_CONTENT_ENCODING, "gzip",
-
-			#HTTP_CONTENT_LENGTH, $content_length,			#need to be length of multipart
 
 			HTTP_ETAG, $etag,
 			HTTP_ACCEPT_RANGES,"bytes"
     )
 			;
-			#@$user_headers
-
-
-			#];
 
 		if(!$as_error and $headers->{RANGE}){
 			Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{RANGE}";
@@ -464,7 +456,6 @@ sub send_file_uri_norange {
         $offset+=$rc;
 
         #non zero read length.. do the write
-        #DISABLE_CACHE and $total==$content_length and IO::FD::close $in_fh;
 
         #When we have read the required amount of data
         if($total==$content_length){
@@ -748,16 +739,15 @@ sub usac_file_under {
         #
         # Attempts to open the file and send it. If it fails, the next static middleware is called if present
 
-        my $pre_encoded_ok=($path=~/gz/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
-        ?$pre_encoded
-        :[];
+        my $pre_encoded_ok=($path=~/gz$/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
+          ?$pre_encoded
+          :[];
+
 
         my $entry;
-        $entry=$cache->{$path} unless DISABLE_CACHE;
-        $entry//=$static->open_cache($path,$open_modes, $pre_encoded_ok);
+        $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
 
 
-        #$_[HEADER]=[];
         if($entry){
           my @args=@_;
           send_file_uri_norange(@args, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/));
