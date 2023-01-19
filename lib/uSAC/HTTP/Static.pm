@@ -249,254 +249,243 @@ sub open_cache {
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
 sub send_file_uri_norange {
-	#return a sub with cache an sysroot aliased
+  #return a sub with cache an sysroot aliased
   #use  integer;
 
-		my ($matcher, $rex, $code, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $no_encoding)=@_;
+  my ($matcher, $rex, $code, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $no_encoding)=@_;
 
-		Log::OK::TRACE and log_trace("send file no range");
-		
-		$rex->[uSAC::HTTP::Rex::in_progress_]=1;
-		my $in_fh=$entry->[fh_];
-    
-		my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
+  Log::OK::TRACE and log_trace("send file no range");
 
-		$reply="";
-		#process caching headers
-		my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
-		#my $code=HTTP_OK;
-		my $etag="\"$mod_time-$content_length\"";
+  $rex->[uSAC::HTTP::Rex::in_progress_]=1;
+  my $in_fh=$entry->[fh_];
 
-		my $offset=0;	#Current offset in file
-		my $total=0;	#Current total read from file
-		my $rc;
+  my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
 
-		my @ranges;
+  $reply="";
+  #process caching headers
+  my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
+  #my $code=HTTP_OK;
+  my $etag="\"$mod_time-$content_length\"";
 
-		#Send file
-		#======
-		# call sendfile. If remaining data to send, setup write watcher to 
-		# trigger next call
-		my $do_sendfile;
-		if($sendfile){
+  my $offset=0;	#Current offset in file
+  my $total=0;	#Current total read from file
+  my $rc;
+
+  my @ranges;
+
+
+  #Ignore caching headers if we are processing as an error
+  my $as_error= HTTP_BAD_REQUEST<=$code;
+  if(!$as_error){
+    #TODO: needs testing
+    for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
+      $code=HTTP_OK and last unless $t;
+      $code=HTTP_OK and last if  $etag !~ /$t/;
+      $code=HTTP_NOT_MODIFIED and last;	#no body to be sent
+
+    }
+
+    #TODO: needs testing
+    for(my $time=$headers->{"IF-MODIFIED-SINCE"}){
+      #attempt to parse
+      $code=HTTP_OK and last unless $time;
+      my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
+      $code=HTTP_OK  and last if $mod_time>$tp->epoch;
+      $code=HTTP_NOT_MODIFIED;	#no body to be sent
+    }
+  }
+
+  #Add no compress (ie identity) if encoding is not set
+  #and if no_encodingflag is set
+  #
+
+
+  unshift($out_headers->@*,
+    HTTP_VARY, "Accept",
+    $entry->[last_modified_header_]->@*,
+    $entry->[content_type_header_]->@*,
+    (!$entry->[content_encoding_]->@* and $no_encoding)
+    ? (HTTP_CONTENT_ENCODING, "identity")
+    : $entry->[content_encoding_]->@*,
+
+
+    HTTP_ETAG, $etag,
+    HTTP_ACCEPT_RANGES,"bytes"
+  )
+  ;
+
+  if(!$as_error and $headers->{RANGE}){
+    Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{RANGE}";
+    @ranges=_check_ranges $rex, $content_length;
+    unless(@ranges){
+      $code=HTTP_RANGE_NOT_SATISFIABLE;
+      push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
+
+      $next->( $matcher,$rex,$code,$out_headers,"");
+      return;
+    }
+    elsif(@ranges==1){
+      $code=HTTP_PARTIAL_CONTENT;
+      my $total_length=0;
+      $total_length+=($_->[1]-$_->[0]+1) for @ranges;
+      push @$out_headers,
+      HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
+      HTTP_CONTENT_LENGTH, $total_length;
+
+      $content_length=$total_length;
+      $offset= $ranges[0][0];
+      shift @ranges;
+    }
+    else{
+
+    }
+  }
+  else {
+    push @$out_headers, HTTP_CONTENT_LENGTH, $content_length;
+
+  }
+
+  Log::OK::TRACE and log_trace join ", ", @$out_headers;
+
+
+  $next->($matcher, $rex, $code, $out_headers, "" ) and return
+  if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
+      or $code==HTTP_NOT_MODIFIED);
+
+  # Send file
+  # We only use send file if content length is larger than $sendfile
+  # and if $sendfile was non zero
+  #
+  if(($sendfile<=$content_length) && $sendfile){
     no warnings "uninitialized";
+    my $do_sendfile;
     my $ww;
-	    my $session=$rex->[uSAC::HTTP::Rex::session_];
-      my $out_fh=$session->fh;
+    my $session=$rex->[uSAC::HTTP::Rex::session_];
+    my $out_fh=$session->fh;
 
-			$do_sendfile=sub {
-				Log::OK::TRACE  and log_trace "Doing send file";
-				#Do send file here?
-				#seek $in_fh,$total,0;
-				#in, out, size, input_offset
+    $do_sendfile=sub {
+      Log::OK::TRACE  and log_trace "Doing send file";
+      $total+=$rc=IO::FD::sendfile($out_fh, $in_fh, $read_size, $offset);
+      $offset+=$rc;
 
+      #non zero read length.. do the write
+      if($total==$content_length){    #end of file
+        #Goto next range,
+        if(@ranges){
+          $total=0;
+          my $r=shift @ranges;
+          $offset=$r->[0];
+          $content_length=$r->[1];
 
-        $total+=$rc=IO::FD::sendfile($out_fh, $in_fh, $read_size, $offset);
-        $offset+=$rc;
+          #write header
 
-				#non zero read length.. do the write
-				if($total==$content_length){    #end of file
-					#Goto next range,
-					if(@ranges){
-						$total=0;
-						my $r=shift @ranges;
-						$offset=$r->[0];
-						$content_length=$r->[1];
-						
-						#write header
-						
-						&__SUB__;	#restart
-						return;	
-					}
-					$rex->[uSAC::HTTP::Rex::dropper_]->(1);
-          $do_sendfile=undef;
-					$out_fh=undef;
-					$ww=undef;
-					return;
-				}
+          &__SUB__;	#restart
+          return;	
+        }
+        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        $do_sendfile=undef;
+        $out_fh=undef;
+        $ww=undef;
+        return;
+      }
 
-				elsif($rc){
-					$ww=AE::io $out_fh, 1, __SUB__ unless $ww;
-          #return;
-				}
-				elsif( $! != EAGAIN and  $! != EINTR and $! != EBUSY){
-          #log_error "Send file error $!";
-          $ww=undef;
-					$rex->[uSAC::HTTP::Rex::dropper_]->(1);
-          $do_sendfile=undef;
-          #return;
-				}
+      elsif($rc){
+        $ww=AE::io $out_fh, 1, __SUB__ unless $ww;
+        #return;
+      }
+      elsif( $! != EAGAIN and  $! != EINTR and $! != EBUSY){
+        #log_error "Send file error $!";
+        $ww=undef;
+        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        $do_sendfile=undef;
+        #return;
+      }
 
-				else {  
-					Log::OK::TRACE and log_trace "Static file read: EAGAIN";
-				}
+      else {  
+        Log::OK::TRACE and log_trace "Static file read: EAGAIN";
+      }
 
-			};
-		}
+    };
 
-		#Ignore caching headers if we are processing as an error
-		my $as_error= HTTP_BAD_REQUEST<=$code;
-		if(!$as_error){
-			#TODO: needs testing
-			for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
-				$code=HTTP_OK and last unless $t;
-				$code=HTTP_OK and last if  $etag !~ /$t/;
-				$code=HTTP_NOT_MODIFIED and last;	#no body to be sent
-
-			}
-
-			#TODO: needs testing
-			for(my $time=$headers->{"IF-MODIFIED-SINCE"}){
-				#attempt to parse
-				$code=HTTP_OK and last unless $time;
-				my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
-				$code=HTTP_OK  and last if $mod_time>$tp->epoch;
-				$code=HTTP_NOT_MODIFIED;	#no body to be sent
-			}
-		}
-			
-		#Add no compress (ie identity) if encoding is not set
-		#and if no_encodingflag is set
-		#
-
-    
-    unshift($out_headers->@*,
-			HTTP_VARY, "Accept",
-			$entry->[last_modified_header_]->@*,
-			$entry->[content_type_header_]->@*,
-			(!$entry->[content_encoding_]->@* and $no_encoding)
-				? (HTTP_CONTENT_ENCODING, "identity")
-				: $entry->[content_encoding_]->@*,
+    Log::OK::TRACE  and log_trace "Writing sendfile header";
+    return $next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
+  }
 
 
-			HTTP_ETAG, $etag,
-			HTTP_ACCEPT_RANGES,"bytes"
-    )
-			;
+  #else do the normal copy and write
 
-		if(!$as_error and $headers->{RANGE}){
-			Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{RANGE}";
-			@ranges=_check_ranges $rex, $content_length;
-			unless(@ranges){
-				$code=HTTP_RANGE_NOT_SATISFIABLE;
-				push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
+  #Clamp the readsize to the file size if its smaller
+  $read_size=$content_length if $content_length < $read_size;
 
-				$next->( $matcher,$rex,$code,$out_headers,"");
-				return;
-			}
-			elsif(@ranges==1){
-				$code=HTTP_PARTIAL_CONTENT;
-				my $total_length=0;
-				$total_length+=($_->[1]-$_->[0]+1) for @ranges;
-				push @$out_headers,
-				HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
-				HTTP_CONTENT_LENGTH, $total_length;
+  my $t;
+  my $count=0;
+  (sub {
+      $count++;
+      #This is the callback for itself
+      #if no arguments an error occured
+      unless(@_){
+        #undef $sub;
+        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        undef $rex;
+        return;
+      }
 
-				$content_length=$total_length;
-				$offset= $ranges[0][0];
-				shift @ranges;
-			}
-			else{
+      my $sub=__SUB__;
 
-			}
-		}
-		else {
-				push @$out_headers, HTTP_CONTENT_LENGTH, $content_length;
-
-		}
-
-		Log::OK::TRACE and log_trace join ", ", @$out_headers;
-		
-
-		$next->($matcher, $rex, $code, $out_headers, "" ) and return
-			if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
-				or $code==HTTP_NOT_MODIFIED);
-
-		#my $sendfile=1;
-		#Enable using send file if content length is greater than threshold
-		if($sendfile and $content_length>=$sendfile){
-			Log::OK::TRACE  and log_trace "Writing sendfile header";
-			#Write header out and then issue send file
-
-			#Setup writable event listener
+      $reply=IO::FD::SV 4096; #reset//allocate buffer
       
-			$next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
-			return;
-		}
+      #NON Send file
+      #
+      #IO::FD::sysseek $in_fh, $offset, 0;
 
-		#else do the normal copy and write
+      my $sz=($content_length-$total);
+      $sz=$read_size if $sz>$read_size;
+      #$total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
+      $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
+      $offset+=$rc;
 
-		#Clamp the readsize to the file size if its smaller
-		$read_size=$content_length if $content_length < $read_size;
+      #non zero read length.. do the write
 
-		my $t;
-		my $count=0;
-    (sub {
-        $count++;
-        #This is the callback for itself
-        #if no arguments an error occured
-        unless(@_){
-          #undef $sub;
-          $rex->[uSAC::HTTP::Rex::dropper_]->(1);
-          undef $rex;
-          return;
+      #When we have read the required amount of data
+      if($total==$content_length){
+        if(@ranges){
+          return $next->( $matcher, $rex, $code, $out_headers, $reply, sub {
+              unless(@_){
+                return $sub->();
+              }
+
+              #TODO: FIX MULTIPART RANGE RESPONSE
+              my $r=shift @ranges;
+              $offset=$r->[0];
+              $total=0;
+              $content_length=$r->[1];
+
+              #write new multipart header
+              return $sub->(undef);           #Call with arg
+            })
         }
-
-        my $sub=__SUB__;
-
-
-        $reply=""; #reset buffer
-        #NON Send file
-        #
-        IO::FD::sysseek $in_fh, $offset, 0;
-
-        my $sz=($content_length-$total);
-        $sz=$read_size if $sz>$read_size;
-        $total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
-        $offset+=$rc;
-
-        #non zero read length.. do the write
-
-        #When we have read the required amount of data
-        if($total==$content_length){
-          if(@ranges){
-            return $next->( $matcher, $rex, $code, $out_headers, $reply, sub {
-                unless(@_){
-                  return $sub->();
-                }
-
-                #TODO: FIX MULTIPART RANGE RESPONSE
-                my $r=shift @ranges;
-                $offset=$r->[0];
-                $total=0;
-                $content_length=$r->[1];
-
-                #write new multipart header
-                return $sub->(undef);           #Call with arg
-              })
-          }
-          else{
-            IO::FD::close $in_fh unless $entry->[cached_];
-            return $next->($matcher, $rex, $code, $out_headers, $reply, undef);
-          }
+        else{
+          IO::FD::close $in_fh unless $entry->[cached_];
+          return $next->($matcher, $rex, $code, $out_headers, $reply, undef);
         }
+      }
 
-        #Data read by more to do
-        $rc and	($rex
-          ?return $next->($matcher, $rex, $code, $out_headers, $reply, __SUB__)
-          :return undef $sub);
+      #Data read by more to do
+      $rc and	($rex
+        ?return $next->($matcher, $rex, $code, $out_headers, $reply, __SUB__)
+        :return undef $sub);
 
-        #if ($rc);
+      #if ($rc);
 
-        #No data but error
-        if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
-          log_error "Static files: READ ERROR from file";
-          log_error "Error: $!";
-          IO::FD::close $in_fh;
-          $rex->[uSAC::HTTP::Rex::dropper_]->(1);
-          undef $sub;
-        }
-      })->(undef); #call with an argument to prevent error
+      #No data but error
+      if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
+        log_error "Static files: READ ERROR from file";
+        log_error "Error: $!";
+        IO::FD::close $in_fh;
+        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        undef $sub;
+      }
+    })->(undef); #call with an argument to prevent error
 
 
 
@@ -749,8 +738,7 @@ sub usac_file_under {
 
 
         if($entry){
-          my @args=@_;
-          send_file_uri_norange(@args, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/));
+          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/));
 
         }
         else{
