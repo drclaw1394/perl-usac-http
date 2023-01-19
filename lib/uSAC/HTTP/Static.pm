@@ -39,7 +39,7 @@ use constant  READ_SIZE=>4096;
 
 #my %stat_cache;
 
-use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_>;
+use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_>;
 use constant KEY_OFFSET=>0;
 
 use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
@@ -62,7 +62,8 @@ sub new {
 	$self->[cache_sweep_interval_]=$options{cache_sweep_interval}//120;
 	$self->[cache_size_]=$options{cache_size};
 	bless $self, $package;
-	$self->enable_cache;
+  #$self->enable_cache;
+  $self->disable_cache;
 	$self;
 }
 
@@ -224,17 +225,25 @@ sub open_cache {
 		else{
 			$entry[content_encoding_]=[];
 		}
-		IO::FD::sysopen $in_fh,$path,OPEN_MODE|($mode//0) or return;
-		#say $in_fh;
-		#open $in_fh,"<:mmap", $path or return;
-		$entry[fh_]=$in_fh;
-		Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
-		Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
-		my $tp=gmtime($entry[mt_]);
-		$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
-
-		return $self->[cache_]{$abs_path}=\@entry;
+    
+    if(defined IO::FD::sysopen $in_fh,$path,OPEN_MODE|($mode//0)){
+      #say $in_fh;
+      #open $in_fh,"<:mmap", $path or return;
+      $entry[fh_]=$in_fh;
+      Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
+      Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
+      my $tp=gmtime($entry[mt_]);
+      $entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
+      # Cache the entry only if cache is enabled
+      $entry[cached_]=1 and $self->[cache_]{$abs_path}=\@entry if $self->[cache_timer_];
+      return \@entry;
+    }
+    else {
+      Log::OK::ERROR and log_error " Error opening file $abs_path: $!";
+    }
 	}
+  Log::OK::WARN and log_warn "Could not open file $abs_path";
+  undef;
 }
 
 
@@ -455,26 +464,31 @@ sub send_file_uri_norange {
         $offset+=$rc;
 
         #non zero read length.. do the write
-        DISABLE_CACHE and $total==$content_length and IO::FD::close $in_fh;
+        #DISABLE_CACHE and $total==$content_length and IO::FD::close $in_fh;
 
         #When we have read the required amount of data
-        $total==$content_length and
-        (@ranges
-          ?return $next->( $matcher, $rex, $code, $out_headers, $reply, sub {
-            unless(@_){
-              return $sub->();
-            }
+        if($total==$content_length){
+          if(@ranges){
+            return $next->( $matcher, $rex, $code, $out_headers, $reply, sub {
+                unless(@_){
+                  return $sub->();
+                }
 
-            #TODO: FIX MULTIPART RANGE RESPONSE
-            my $r=shift @ranges;
-            $offset=$r->[0];
-            $total=0;
-            $content_length=$r->[1];
+                #TODO: FIX MULTIPART RANGE RESPONSE
+                my $r=shift @ranges;
+                $offset=$r->[0];
+                $total=0;
+                $content_length=$r->[1];
 
-            #write new multipart header
-            return $sub->(undef);           #Call with arg
-          })
-          :return $next->($matcher, $rex, $code, $out_headers, $reply, undef));
+                #write new multipart header
+                return $sub->(undef);           #Call with arg
+              })
+          }
+          else{
+            IO::FD::close $in_fh unless $entry->[cached_];
+            return $next->($matcher, $rex, $code, $out_headers, $reply, undef);
+          }
+        }
 
         #Data read by more to do
         $rc and	($rex

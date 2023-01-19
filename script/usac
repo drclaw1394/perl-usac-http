@@ -64,8 +64,8 @@ GetOptions \%options,
 	"interface=s@",
 	"group=s@",
 	"address=s@",
-  "read-size=i"
-  #"workers=i"
+  "read-size=i",
+  "indexes=s@"
 
 
 
@@ -73,6 +73,11 @@ GetOptions \%options,
     require Pod::Usage;
     Pod::Usage::pod2usage(verbose=>1);
   };
+
+
+# default static files from the current directory
+$options{"www-root"}//=["."];
+
 
 if($options{help}){
   require Pod::Usage;
@@ -169,9 +174,10 @@ $server=usac_server{
     for my $s (@$static){
       try {
         push @roots, 
-        usac_file_under list_dir=>$options{"list-dir"}
-        ,read_size=>$options{"read-size"}
-        ,$s;
+        usac_file_under list_dir=>$options{"list-dir"},
+          read_size=>$options{"read-size"},
+          indexes=>$options{indexes},
+          $s;
       }
       catch($e){
         log_error "No access to static files in $s";
