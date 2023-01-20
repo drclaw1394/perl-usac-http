@@ -12,7 +12,7 @@ use Log::OK {
 
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Site;
-use uSAC::HTTP::Static;
+use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Rex;
 #use uSAC::HTTP::Middleware qw<dummy_mw log_simple>;
 use uSAC::HTTP::Code ":constants";
@@ -39,7 +39,7 @@ sub import {
 		#Also http constants and headers are rexported
 		#
 		for(keys %uSAC::HTTP::){
-			#print $_."\n";
+      #print $_."\n";
 			no strict "refs";
 			if( /^usac_/ or /^rex_/ or  /^HTTP_/){
 				*{$caller."::".$_}=\*{"uSAC::HTTP::".$_};

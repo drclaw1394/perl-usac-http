@@ -29,7 +29,7 @@ WriteMakefile(
 		"URI"		=> 0,
 		"URL::Encode"	=> 0,
 		"URL::Encode::XS" =>0,
-    "Data::UUID"
+    "Data::UUID"=>0
 
 	},
 	ABSTRACT_FROM     => 'lib/uSAC/HTTP.pod', # retrieve abstract from docs

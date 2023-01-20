@@ -1,4 +1,4 @@
-package uSAC::HTTP::Static;
+package uSAC::HTTP::Middleware::Static;
 use strict;
 use warnings;
 
@@ -30,7 +30,7 @@ use uSAC::HTTP::Constants;
 
 use Errno qw<EAGAIN EINTR EBUSY>;
 use Exporter 'import';
-our @EXPORT_OK =qw<send_file send_file_uri send_file_uri_aio send_file_uri_sys send_file_uri_aio2 usac_file_under list_dir>;
+our @EXPORT_OK =qw<usac_file_under usac_static_under>;
 our @EXPORT=@EXPORT_OK;
 
 #my $path_ext=	qr{\.([^.]*)$}ao;
@@ -234,7 +234,7 @@ sub open_cache {
       my $tp=gmtime($entry[mt_]);
       $entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
       # Cache the entry only if cache is enabled
-      $entry[cached_]=1 and $self->[cache_]{$abs_path}=\@entry if $self->[cache_timer_];
+      ($entry[cached_]=1) and $self->[cache_]{$abs_path}=\@entry if $self->[cache_timer_];
       return \@entry;
     }
     else {
@@ -660,7 +660,7 @@ sub usac_file_under {
   Log::OK::DEBUG and log_debug "Sendfile: ".($sendfile?"yes $sendfile":"no");
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
-  my $static=uSAC::HTTP::Static->new(html_root=>$html_root, %options);
+  my $static=uSAC::HTTP::Middleware::Static->new(html_root=>$html_root, %options);
 
   my $cache=$static->[cache_];
   $html_root=$static->[html_root_];
@@ -784,6 +784,6 @@ sub usac_file_under {
 
   [$inner, $outer];
 }
-*static_under=\*usac_file_under;
+*usac_static_under=\*usac_file_under;
 
 1;

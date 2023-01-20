@@ -112,7 +112,7 @@ my $server; $server=usac_server {
                 # #                                                                                                            # #
                 usac_route "/static"=>
                 gzip()=>deflate()=>
-                usac_file_under (
+                usac_static_under (
                         #filter=>'txt$',
                         read_size=>4096*16,
                         #pre_encoded=>[qw<gz>],
