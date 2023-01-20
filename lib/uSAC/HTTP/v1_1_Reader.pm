@@ -488,8 +488,13 @@ sub make_reader{
       #If debugging is enabled. dump the stack trace?
 
       my $context;
+      if(ref($e)){
         $context=Error::Show::context message=>$e, frames=>\$e->trace->frames;
-        Log::OK::ERROR and log_error  $context;
+      }
+      else {
+        $context=Error::Show::context $e;
+      }
+      Log::OK::ERROR and log_error  $context;
 
       if(Log::OK::DEBUG){
         uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b=[HTTP_CONTENT_LENGTH,length $context] ,my $c=$context, my $d=undef);

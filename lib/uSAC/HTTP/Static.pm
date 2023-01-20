@@ -576,10 +576,14 @@ sub make_list_dir {
 
 		my $abs_path=$html_root.$uri;
 		stat $abs_path;
+    Log::OK::TRACE and "DIR LISTING for $abs_path";
 		unless(-d _ and  -r _){
 
-			rex_error_not_found $line, $rex;
-			return;
+      Log::OK::TRACE and "No dir here $abs_path";
+      #rex_error_not_found $line, $rex;
+      $_[CODE]=HTTP_NOT_FOUND;
+      $_[PAYLOAD]="";
+			return &$next;
 		}
 
 		#build uri from sysroot
@@ -593,15 +597,14 @@ sub make_list_dir {
 		}
 		state $labels=[qw<name dev inode mode nlink uid gid rdev size access_time modification_time change_time block_size blocks>];
 		my @results
-                        =map {
-                        #if(-r){                        #only list items we can read
-                                my $isDir= -d;
-                                s|^$html_root/||;                       #strip out html_root
-                                my $base=(split "/")[-1].($isDir? "/":"");
+      =map {
+        my $isDir= -d;
+        s|^$html_root/||;                       #strip out html_root
+        my $base=(split "/")[-1].($isDir? "/":"");
 
-                                ["$rex->[uSAC::HTTP::Rex::uri_raw_]$base", $base, stat _]
-                }
-		@fs_paths;
+        ["$rex->[uSAC::HTTP::Rex::uri_raw_]$base", $base, stat _]
+      }
+      @fs_paths;
 		my $ren=$renderer//&_html_dir_list;
 
 		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
@@ -744,11 +747,9 @@ sub usac_file_under {
           if($do_dir){
             Log::OK::TRACE and log_trace "Static: Listing dir $p";
             #dir listing
-            $_[PAYLOAD]=$p;
-            $_[CB]=$next;
+            $_[PAYLOAD]=$p;   # hack
+            $_[CB]=$next;     # hack
             &$list_dir;
-            #$list_dir->(@_, $p);
-            return 1;
           }
           else {
             Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
@@ -783,5 +784,6 @@ sub usac_file_under {
 
   [$inner, $outer];
 }
+*static_under=\*usac_file_under;
 
 1;
