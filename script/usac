@@ -9,7 +9,7 @@ use EV;
 use AnyEvent;
 use uSAC::HTTP;
 use uSAC::HTTP::Server;
-use uSAC::HTTP::Static;
+use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware qw<log_simple>;
 
 use Log::ger;
