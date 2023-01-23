@@ -489,7 +489,7 @@ sub make_reader{
 
       my $context;
       if(ref($e)){
-        $context=Error::Show::context message=>$e, frames=>\$e->trace->frames;
+        $context=Error::Show::context message=>$e, frames=>[reverse $e->trace->frames];
       }
       else {
         $context=Error::Show::context $e;
@@ -497,7 +497,7 @@ sub make_reader{
       Log::OK::ERROR and log_error  $context;
 
       if(Log::OK::DEBUG){
-        uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b=[HTTP_CONTENT_LENGTH,length $context] ,my $c=$context, my $d=undef);
+        uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b=[HTTP_CONTENT_LENGTH, length $context] ,my $c=$context, my $d=undef);
       }
       else {
         uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b=[HTTP_CONTENT_LENGTH, 0],my $c="", my $d=undef);
@@ -510,20 +510,26 @@ sub make_reader{
   };
 }
 
-my @index=map {$_*2} 0..99;
+#my @index=map {$_*2} 0..99;
 
 sub make_serialize{
   my %options=@_;
   my $static_headers="";
+  
 
-  $static_headers.="$options{static_headers}[$_]:$options{static_headers}[$_+1]".CRLF
-  for(@index[0..$options{static_headers}->@*/2-1]);
+  #
+  # Pre render static headers
+  #
+  for my ($k, $v)($options{static_headers}->@*){
+    $static_headers.="$k: $v".CRLF;
+  }
 
 
   sub {
     #continue stack reset on error condition. The IO layer resets
     #on a write call with no arguemts;
-    if($_[CODE]){
+    return $_[REX][uSAC::HTTP::Rex::write_]() unless $_[CODE];
+    #if($_[CODE]){
       #no warnings qw<numeric uninitialized>;
       #return unless $_[CODE];
       Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
@@ -543,18 +549,15 @@ sub make_serialize{
       #
       my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
 
-      $_[CODE]=HTTP_OK if $_[CODE]<0;
 
-      if($_[HEADER]){
-        \my @h=$_[HEADER];
+      return $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]) unless $_[HEADER];
+      #if($_[HEADER]){
+        #\my @h=$_[HEADER];
 
+        $_[CODE]=HTTP_OK if $_[CODE]<0;
         my $reply="HTTP/1.1 $_[CODE] ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
-        #####################################
-        # $reply.= $h[$_].": $h[$_+1]".CRLF #
-        # for(@index[0..@h/2-1]);           #
-        #####################################
 
-        foreach my ($k,$v)(@h){
+        foreach my ($k,$v)(@{$_[HEADER]}){
           $reply.= $k.": $v".CRLF 
         }
         $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
@@ -566,16 +569,20 @@ sub make_serialize{
 
         $_[HEADER]=undef;	#mark headers as done
 
-        $reply.=CRLF.$_[PAYLOAD]//"";
+        $reply.=CRLF.$_[PAYLOAD];
         $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
-      }
-      else{
-        $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);
-      }
-    }
-    else{
-      $_[REX][uSAC::HTTP::Rex::write_]();
-    }
+      ##############################################################
+      # }                                                          #
+      # else{                                                      #
+      #   $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]); #
+      # }                                                          #
+      ##############################################################
+    #########################################
+    # }                                     #
+    # else{                                 #
+    #   $_[REX][uSAC::HTTP::Rex::write_](); #
+    # }                                     #
+    #########################################
   }
 };
 

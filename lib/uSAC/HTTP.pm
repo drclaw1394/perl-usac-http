@@ -6,8 +6,8 @@ use warnings;
 use version; our $VERSION=version->declare("v0.1");
 use Log::ger;
 use Log::OK {
-	lvl=>"info",
-	opt=>"verbose",
+  lvl=>"info",
+  opt=>"verbose",
 };
 
 use uSAC::HTTP::Server;
@@ -22,47 +22,50 @@ use uSAC::HTTP::Method ":constants";
 
 use uSAC::HTTP::Constants;
 
+# This is the current site variable when using the usac_* functions
 
 our $Site;
-#use Exporter "import";
-sub import {
-	my $caller=caller;
-	strict->import;
-	warnings->import;
-	feature->import(qw<say state refaliasing current_sub>);
-	#feature->unimport(qw<indirect>);
-	utf8->import;
 
-	#say join ", ", @_;
-	if(@_==1){
-		#Anything sub with usac or rex prefix is rexported
-		#Also http constants and headers are rexported
-		#
-		for(keys %uSAC::HTTP::){
+# Re-export any symbols that start with usac_, rex_ or certain  constants
+#
+sub import {
+  my $caller=caller;
+  strict->import;
+  warnings->import;
+  feature->import(qw<say state refaliasing current_sub>);
+  #feature->unimport(qw<indirect>);
+  utf8->import;
+
+  #say join ", ", @_;
+  if(@_==1){
+    #Anything sub with usac or rex prefix is rexported
+    #Also http constants and headers are rexported
+    #
+    for(keys %uSAC::HTTP::){
       #print $_."\n";
-			no strict "refs";
-			if( /^usac_/ or /^rex_/ or  /^HTTP_/){
-				*{$caller."::".$_}=\*{"uSAC::HTTP::".$_};
-			}
-			elsif(/Dir_Path/ or /File_Path/ or /Comp/ ){
-				#print 'Symbol name: '.$_."\n";;
-				s/\$//;
-				my $name=$caller."::".$_;
-				*{$name}=\${'uSAC::HTTP::Site::'.$_};
-			}
-		}
-	}
-        if(@_==1 or grep /:constants/, @_){
-                #Export contants
-                my $i=0;
-                for(qw<ROUTE REX CODE HEADER PAYLOAD CB LF>){
-                        no strict "refs";
-                        my $name=$caller."::".$_;
-                        my $a=$i;
+      no strict "refs";
+      if( /^usac_/ or /^rex_/ or  /^HTTP_/){
+        *{$caller."::".$_}=\*{"uSAC::HTTP::".$_};
+      }
+      elsif(/Dir_Path/ or /File_Path/ or /Comp/ ){
+        #print 'Symbol name: '.$_."\n";;
+        s/\$//;
+        my $name=$caller."::".$_;
+        *{$name}=\${'uSAC::HTTP::Site::'.$_};
+      }
+    }
+  }
+  if(@_==1 or grep /:constants/, @_){
+    #Export contants
+    my $i=0;
+    for(qw<ROUTE REX CODE HEADER PAYLOAD CB LF>){
+      no strict "refs";
+      my $name=$caller."::".$_;
+      my $a=$i;
       #*{$name}=sub {$a};#\${'uSAC::HTTP::'.$_};
       *{$name}=\&{$_};
-                        $i++;
-                }
-        }
+      $i++;
+    }
+  }
 }
 1;

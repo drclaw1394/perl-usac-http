@@ -75,11 +75,13 @@ my $server; $server=usac_server {
     };
 
 		usac_route '/static/hot.txt' =>	gzip()=>deflate()=>usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
+
     usac_route "/die"=> sub {
-      #Carp::croak "DId not want t live";
-      #my $a=10/0
+      return unless $_[CODE];
+      say "a;lskjas;ldkjfa;lskjdf;lasjdf;lakjsdf;lakjsdf;lkajsdf;lkjasdfasf";
+      my $a=10/0;
       use Exception::Class::Base;
-      $_[CODE] and Exception::Class::Base->throw("Did not want to live");
+      Exception::Class::Base->throw("Did not want to live");
     };  
 
     usac_route "/no_write"=>gzip()=>deflate()=>sub {

@@ -13,19 +13,19 @@ WriteMakefile(
 		JSON		=> 0,
 		'Cpanel::JSON::XS'     	=> 0,
 		enum	    	=> 0,
+
 		"Hustle::Table" => "0.5.5",	#Bug fix for updating default matcher
 		"uSAC::IO"	=> 0,
 		"IO::FD"	=> "0.2.0",
     "Error::Show"=>0,
-    #"Sys::Sendfile" => 0,
+		"Socket::More"	=> 0,
+		"uSAC::MIME"	=> 0,
 		
 
 		"Crypt::JWT"	=> 0,
 		"Log::ger"	=> 0,
 		"Log::ger::Output::Screen" => 0,
 		"Log::OK"	=> "v0.1.5",
-		"Socket::More"	=> 0,
-		"uSAC::MIME"	=> 0,
 		"URI"		=> 0,
 		"URL::Encode"	=> 0,
 		"URL::Encode::XS" =>0,

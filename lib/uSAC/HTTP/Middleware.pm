@@ -233,18 +233,20 @@ sub chunked{
   sub {
     my $next=shift;
     #my $bypass;
-    my $tmp;
-    my $scratch;
+    #my $tmp;
+    #my $scratch;
+    my $index;
+    my $i=1;
+    my $ctx;
     sub {
       #say @_;
-      my $ctx;
       if($_[CODE] and $_[CODE]!=304){
-
+        $ctx=undef;
         Log::OK::TRACE  and log_trace "Middeware: Chunked Outerware";
         Log::OK::TRACE  and log_trace "Key count chunked: ". scalar keys %out_ctx;
         Log::OK::TRACE  and log_trace "Chunked: ". join " ", caller;
         #\my $bypass=\$out_ctx{$_[1]}; #access the statefull info for this instance and requst
-        my $exe;
+        #my $exe;
         if($_[HEADER]){
           #$bypass=undef;#reset
           \my @headers=$_[HEADER];
@@ -255,16 +257,17 @@ sub chunked{
 
           #(($_ eq HTTP_CONTENT_LENGTH)) and return &$next for(@headers[@key_indexes[0..@headers/2-1]]);
 
-          $exe=1;
+          #$exe=1;
+          $ctx=1;
 
-          Log::OK::TRACE and log_trace "Middelware: Chunked execute".($exe//"");
+          Log::OK::TRACE and log_trace "Middelware: Chunked execute".($ctx//"");
 
           #we actually have  headers and Data. this is the first call
           #Add to headers the chunked trasfer encoding
           #
 
-          my $index;
-          my $i=1;
+          $index=undef;
+          $i=1;
           for my ($k,$v)(@headers){
             $i+=2;
             $index=$i and last if $k eq HTTP_TRANSFER_ENCODING;
@@ -284,7 +287,7 @@ sub chunked{
             $headers[$index].=",chunked";
 
           }
-          $ctx=$exe;
+          #$ctx=$exe;
           $out_ctx{$_[REX]}=$ctx if $_[CB]; #save context if multishot
           #no need to save is single shot
         }
@@ -298,22 +301,28 @@ sub chunked{
           Log::OK::TRACE and log_trace "DOING CHUNKS";
 
           # my $scratch=sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF if $_[PAYLOAD];
-          $tmp="$_[PAYLOAD]";
-          $scratch = $tmp?sprintf("%02X".CRLF, length $tmp).$tmp.CRLF : "";
+          #$tmp=$_[PAYLOAD];
+          #$scratch = $tmp?sprintf("%02X".CRLF, length $tmp).$tmp.CRLF : "";
+          #$scratch = $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+          $_[PAYLOAD]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
 
           unless($_[CB]){
             Log::OK::TRACE  and log_trace "Middleware chunked: no callback";
-            $scratch.="00".CRLF.CRLF;
-            delete $out_ctx{$_[REX]} unless $_[HEADER];	#Last call, delete
+            #$scratch.="00".CRLF.CRLF;
+            $_[PAYLOAD].="00".CRLF.CRLF;
+
+            # Only need to delete if the is unset and no cb. (multicall)
+            # Otherwise it is a single call so not saved, thus no delete
+            delete $out_ctx{$_[REX]} unless $_[HEADER];	
           }
 
-          $_[PAYLOAD]=$scratch;
+          #$_[PAYLOAD]=$scratch;
           &$next;
         }
         else {
           #nothing to process
           Log::OK::TRACE  and log_trace "Middeware: Chunked ; no context. bybass";
-          &$next 
+          &$next
         }
       }
       else{
