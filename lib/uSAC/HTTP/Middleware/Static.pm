@@ -2,22 +2,24 @@ package uSAC::HTTP::Middleware::Static;
 use strict;
 use warnings;
 
+
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
+use uSAC::HTTP::FileMetaCache;
 use Carp;
 use Log::ger;
 use Log::OK;
 use JSON;
 #no feature "indirect";
-use Devel::Peek qw<SvREFCNT>;
+#use Devel::Peek qw<SvREFCNT>;
 #use Scalar::Util qw<weaken>;
 #use Errno qw<:POSIX EACCES ENOENT>;
-use Fcntl qw(O_NONBLOCK O_RDONLY);
+#use Fcntl qw(O_NONBLOCK O_RDONLY);
 #use File::Spec;
 use File::Basename qw<basename dirname>;
-use Time::Piece;
-use Cwd;
-use AnyEvent;
+#use Time::Piece;
+#use Cwd;
+#use AnyEvent;
 #use Sys::Sendfile;
 use IO::FD;
 
@@ -58,10 +60,10 @@ sub new {
 	$self->[cache_]={};#$options{mime_lookup}//{};		#A mime lookup hash
 	$self->[cache_sweep_size_]=$options{cache_sweep_size}//100;
 	$self->[cache_timer_]=undef;
-	$self->[cache_sweep_interval_]=$options{cache_sweep_interval}//120;
+	$self->[cache_sweep_interval_]=$options{cache_sweep_interval}//30;
 	$self->[cache_size_]=$options{cache_size};
 	bless $self, $package;
-  $self->enable_cache;
+  #$self->enable_cache;
   #$self->disable_cache;
 	$self;
 }
@@ -163,88 +165,95 @@ sub _check_ranges{
 #
 
 
-sub disable_cache {
-	my $self=shift;
-	#delete all keys
-	for (keys $self->[cache_]->%*){
-		delete $self->[cache_]{$_};
-	}
-	#stop timer
-	$self->[cache_timer_]=undef;
-}
-
-sub enable_cache {
-	my $self=shift;
-	unless ($self->[cache_timer_]){
-		$self->[cache_timer_]=AE::timer 0, $self->[cache_sweep_interval_], sub {
-			my $i;
-			for(keys $self->[cache_]->%*){
-				delete $self->[cache_]{$_} if SvREFCNT $self->[cache_]{$_}[0]==1;
-				last if ++$i >= $self->[cache_sweep_size_];
-			}
-		};
-	}
-}
-
-my %encoding_map =(
-	gz=>"gzip",
-);
-
-use constant OPEN_MODE=>O_RDONLY|O_NONBLOCK;
-
-sub open_cache {
-	my ($self, $abs_path, $mode, $pre_encoded)=@_;
-	my $in_fh;
-	my $enc_path;
-	#my @search=map $abs_path.".$_", @$pre_encoded;
-	#push @search, $abs_path;
-
-	for my $pre (@$pre_encoded,""){
-
-		my $path= $abs_path.($pre?".$pre":"");
-
-		Log::OK::TRACE and log_trace "Static: Searching for: $path";
-
-		next unless stat($path) and -r _ and ! -d _; #undef if stat fails
-		#or incorrect premissions
-
-		#lookup mime type
-		#
-		my $ext=substr $abs_path, rindex($abs_path, ".")+1;
-		#next if $ext==$pre;
-
-		my @entry;
-		$entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])];
-		#say stat _;
-		$entry[size_]=(stat _)[7];
-		$entry[mt_]=(stat _)[9];
-		if($pre){
-			$entry[content_encoding_]=[HTTP_CONTENT_ENCODING, $encoding_map{$pre}];
-		}
-		else{
-			$entry[content_encoding_]=[];
-		}
-    
-    if(defined IO::FD::sysopen $in_fh,$path,OPEN_MODE|($mode//0)){
-      #say $in_fh;
-      #open $in_fh,"<:mmap", $path or return;
-      $entry[fh_]=$in_fh;
-      Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
-      Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
-      my $tp=gmtime($entry[mt_]);
-      $entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
-      # Cache the entry only if cache is enabled
-      ($entry[cached_]=1) and $self->[cache_]{$abs_path}=\@entry if $self->[cache_timer_];
-      return \@entry;
-    }
-    else {
-      Log::OK::ERROR and log_error " Error opening file $abs_path: $!";
-    }
-	}
-  #Log::OK::WARN and log_warn "Could not open file $abs_path";
-  undef;
-}
-
+#####################################################################################################################
+# sub disable_cache {                                                                                               #
+#         my $self=shift;                                                                                           #
+#         #delete all keys                                                                                          #
+#         for (keys $self->[cache_]->%*){                                                                           #
+#                 delete $self->[cache_]{$_};                                                                       #
+#         }                                                                                                         #
+#         #stop timer                                                                                               #
+#         $self->[cache_timer_]=undef;                                                                              #
+# }                                                                                                                 #
+#                                                                                                                   #
+# sub enable_cache {                                                                                                #
+#         my $self=shift;                                                                                           #
+#         unless ($self->[cache_timer_]){                                                                           #
+#                 $self->[cache_timer_]=AE::timer 0, $self->[cache_sweep_interval_], sub {                          #
+#                         my $i=0;                                                                                  #
+#                         for(keys $self->[cache_]->%*){                                                            #
+#         if(SvREFCNT($self->[cache_]{$_}[0])==1){                                                                  #
+#           Log::OK::TRACE and log_trace "Static Meta Cache: Deleting meta data for $_";                            #
+#           IO::FD::close $self->[cache_]{$_}[0];                                                                   #
+#                                   delete $self->[cache_]{$_}                                                      #
+#                                                                                                                   #
+#         }                                                                                                         #
+#                                 last if ++$i >= $self->[cache_sweep_size_];                                       #
+#                         }                                                                                         #
+#                 };                                                                                                #
+#         }                                                                                                         #
+# }                                                                                                                 #
+#                                                                                                                   #
+# my %encoding_map =(                                                                                               #
+#         gz=>"gzip",                                                                                               #
+# );                                                                                                                #
+#                                                                                                                   #
+# use constant OPEN_MODE=>O_RDONLY|O_NONBLOCK;                                                                      #
+#                                                                                                                   #
+# sub open_cache {                                                                                                  #
+#         my ($self, $abs_path, $mode, $pre_encoded)=@_;                                                            #
+#         my $in_fh;                                                                                                #
+#         my $enc_path;                                                                                             #
+#         #my @search=map $abs_path.".$_", @$pre_encoded;                                                           #
+#         #push @search, $abs_path;                                                                                 #
+#                                                                                                                   #
+#         for my $pre (@$pre_encoded,""){                                                                           #
+#                                                                                                                   #
+#                 my $path= $abs_path.($pre?".$pre":"");                                                            #
+#                                                                                                                   #
+#                 Log::OK::TRACE and log_trace "Static: Searching for: $path";                                      #
+#                                                                                                                   #
+#                 next unless stat($path) and -r _ and ! -d _; #undef if stat fails                                 #
+#                 #or incorrect premissions                                                                         #
+#                                                                                                                   #
+#                 #lookup mime type                                                                                 #
+#                 #                                                                                                 #
+#                 my $ext=substr $abs_path, rindex($abs_path, ".")+1;                                               #
+#                 #next if $ext==$pre;                                                                              #
+#                                                                                                                   #
+#                 my @entry;                                                                                        #
+#                 $entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($self->[mime_]{$ext}//$self->[default_mime_])]; #
+#                 #say stat _;                                                                                      #
+#                 $entry[size_]=(stat _)[7];                                                                        #
+#                 $entry[mt_]=(stat _)[9];                                                                          #
+#                 if($pre){                                                                                         #
+#                         $entry[content_encoding_]=[HTTP_CONTENT_ENCODING, $encoding_map{$pre}];                   #
+#                 }                                                                                                 #
+#                 else{                                                                                             #
+#                         $entry[content_encoding_]=[];                                                             #
+#                 }                                                                                                 #
+#                                                                                                                   #
+#     if(defined IO::FD::sysopen $in_fh,$path,OPEN_MODE|($mode//0)){                                                #
+#       #say $in_fh;                                                                                                #
+#       #open $in_fh,"<:mmap", $path or return;                                                                     #
+#       $entry[fh_]=$in_fh;                                                                                         #
+#       Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;                                               #
+#       Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;                #
+#       my $tp=gmtime($entry[mt_]);                                                                                 #
+#       $entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];                   #
+#       # Cache the entry only if cache is enabled                                                                  #
+#       ($entry[cached_]=1) and $self->[cache_]{$abs_path}=\@entry if $self->[cache_timer_];                        #
+#       return \@entry;                                                                                             #
+#     }                                                                                                             #
+#     else {                                                                                                        #
+#       Log::OK::ERROR and log_error " Error opening file $abs_path: $!";                                           #
+#     }                                                                                                             #
+#         }                                                                                                         #
+#   #Log::OK::WARN and log_warn "Could not open file $abs_path";                                                    #
+#   undef;                                                                                                          #
+# }                                                                                                                 #
+#                                                                                                                   #
+#####################################################################################################################
 
 #process without considering ranges
 #This is useful for constantly chaning files and remove overhead of rendering byte range headers
@@ -252,7 +261,7 @@ sub send_file_uri_norange {
   #return a sub with cache an sysroot aliased
   #use  integer;
 
-  my ($matcher, $rex, $code, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $no_encoding)=@_;
+  my ($matcher, $rex, $code, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $no_encoding, $closer)=@_;
 
   Log::OK::TRACE and log_trace("send file no range");
 
@@ -470,7 +479,9 @@ sub send_file_uri_norange {
               })
           }
           else{
-            IO::FD::close $in_fh unless $entry->[cached_];
+
+            $closer->($entry);
+            #IO::FD::close $in_fh unless $entry->[cached_];
             return $next->($matcher, $rex, $code, $out_headers, $reply, undef);
           }
         }
@@ -486,7 +497,8 @@ sub send_file_uri_norange {
         if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
           log_error "Static files: READ ERROR from file";
           log_error "Error: $!";
-          IO::FD::close $in_fh;
+          #IO::FD::close $in_fh;
+          $closer->($entry);
           $rex->[uSAC::HTTP::Rex::dropper_]->(1);
           undef $sub;
         }
@@ -548,7 +560,7 @@ sub make_list_dir {
 	my $self=shift;
 
 	\my $html_root=\$self->[html_root_];
-	\my %cache=$self->[cache_];
+  #\my %cache=$self->[cache_];
 	my %options=@_;
 	my $renderer=$options{renderer};
 	my @type;
@@ -583,6 +595,7 @@ sub make_list_dir {
       #rex_error_not_found $line, $rex;
       $_[CODE]=HTTP_NOT_FOUND;
       $_[PAYLOAD]="";
+      $_[CB]=undef;
 			return &$next;
 		}
 
@@ -661,8 +674,12 @@ sub usac_file_under {
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
   my $static=uSAC::HTTP::Middleware::Static->new(html_root=>$html_root, %options);
+  my $fmc=uSAC::HTTP::FileMetaCache->new(html_root=>$html_root, mime=>$options{mime}, default_mime=>$options{default_mime});
+  $fmc->enable;
+  my $opener=$fmc->opener;
+  my $closer=$fmc->closer;
 
-  my $cache=$static->[cache_];
+  #my $cache=$static->[cache_];
   $html_root=$static->[html_root_];
   my $list_dir=$static->make_list_dir(%options);
 
@@ -721,11 +738,12 @@ sub usac_file_under {
         :[];
 
 
-        my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
+        #my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
+        my $entry=$opener->($path,$open_modes, $pre_encoded_ok);
 
 
         if($entry){
-          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/));
+          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/),$closer);
 
         }
         elsif($do_dir || @indexes and substr($path, -1) eq "/") {
@@ -737,10 +755,11 @@ sub usac_file_under {
           for(@indexes){
             my $path=$html_root.$p.$_;
             Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
-            $entry=$cache->{$path}//$static->open_cache($path);
+            #$entry=$cache->{$path}//$static->open_cache($path);
+            $entry=$opener->($path);
             next unless $entry;
             $_[HEADER]=[];
-            send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry);
+            send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, undef, $closer);
             return 1;
           }
 
