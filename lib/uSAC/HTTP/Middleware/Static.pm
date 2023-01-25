@@ -308,7 +308,6 @@ sub send_file_uri_norange {
   #and if no_encodingflag is set
   #
 
-
   unshift($out_headers->@*,
     HTTP_VARY, "Accept",
     $entry->[last_modified_header_]->@*,
@@ -738,28 +737,18 @@ sub usac_file_under {
         ?$pre_encoded
         :[];
 
-
-        #my $entry=$cache->{$path}//$static->open_cache($path,$open_modes, $pre_encoded_ok);
-        my $entry=$opener->($path,$open_modes, $pre_encoded_ok);
-
-
-        if($entry){
-          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/), $closer);
-
-        }
-        elsif($do_dir || @indexes and substr($path, -1) eq "/") {
+        
+        my $entry;
+        if($do_dir || @indexes and substr($path, -1) eq "/") {
           #Server dir listing if option is specified
           #
           #=========================================
           #attempt to do automatic index file.
-          my $entry;
           for(@indexes){
             my $path=$html_root.$p.$_;
             Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
-            #$entry=$cache->{$path}//$static->open_cache($path);
             $entry=$opener->($path);
             next unless $entry;
-            $_[HEADER]=[];
             send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, undef, $closer);
             return 1;
           }
@@ -777,10 +766,11 @@ sub usac_file_under {
             $_[CODE]=HTTP_NOT_FOUND;
             push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
             &$next;
-            #no valid index found so 404
-            #&rex_error_not_found;# @_;
-            #return 1;
           }
+        }
+        elsif($entry=$opener->($path, $open_modes, $pre_encoded_ok)){
+          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/), $closer);
+
         }
         else{
           # We did not locate the file. Set a not found error and forward to
@@ -792,7 +782,7 @@ sub usac_file_under {
         }
       }
       else {
-        #Not HEADER
+        #No HEADER
         &$next;
       }
     }

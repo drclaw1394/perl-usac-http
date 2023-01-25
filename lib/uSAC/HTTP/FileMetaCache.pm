@@ -162,4 +162,23 @@ uSAC::HTTP::FileMetaCache - File Meta Data Cache
   use uSAC::HTTP::FileMetaCache;
 
   my $cache=uSAC::HTTP::FileMetaCache->new(html_root=>"...");
-  $cache->open($path);
+  $cache->enable;
+  my $opener=$cache->opener;
+  my $entry=$opener->($path);
+
+
+
+=head1 DESCRIPTION
+
+Provides caching of file meta data, but not content. File size, etag, content
+type and times are all read/generated when a file is opened with an opener.
+
+On subsequent open operations, if the entry matching the path is found in the
+cache, the refernce to that entry is increase, and the refernce is returned.
+
+This dramatically increases the usability of a file, as it avoids the long time
+it takes to open a file.
+
+Must use seek sysread/syswrite or pread/pwrite, as the filedescriptor is shared
+with other parts of the program.
+
