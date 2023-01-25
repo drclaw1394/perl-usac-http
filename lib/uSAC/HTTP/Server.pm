@@ -61,7 +61,7 @@ use Carp 'croak';
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ options_ total_requests_>
+	"sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ options_ read_size_ application_parser_ total_requests_>
 );
 
 
@@ -336,6 +336,11 @@ sub make_basic_client{
 
   my $session;
   my $seq=0;
+  unless($self->[application_parser_]){
+    require uSAC::HTTP::v1_1_Reader;
+    $self->[application_parser_]=\&uSAC::HTTP::v1_1_Reader::make_reader;
+  }
+  my $parser=$self->[application_parser_]; 
 
   sub {
     my ($fhs, $peers)=@_;
@@ -358,8 +363,10 @@ sub make_basic_client{
       }
       else {
         $session=uSAC::HTTP::Session->new;
-        $session->init($id,$fh,$self->[sessions_],$self->[zombies_],$self, $scheme, $peers->[$i]);
-        $session->push_reader(make_reader $session, MODE_SERVER);
+        $session->init($id, $fh, $self->[sessions_],$self->[zombies_],$self, $scheme, $peers->[$i],$self->[read_size_]);
+
+        #$session->push_reader(make_reader $session, MODE_SERVER);
+        $session->push_reader($parser->($session, MODE_SERVER));
       }
       $i++;
       $sessions{ $id } = $session;
@@ -872,6 +879,31 @@ sub usac_sub_product {
 	HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )];
 }
 
+sub usac_read_size {
+	my $read_size=pop;	#Content is the last item
+	my %options=@_;
+	my $server=$options{parent}//$uSAC::HTTP::Site;
+  $server->read_size=$read_size;
+
+}
+
+sub read_size :lvalue{
+  my $self=shift;
+  $self->[read_size_];
+}
+
+sub usac_application_parser {
+	my $parser=pop;	#Content is the last item
+	my %options=@_;
+	my $server=$options{parent}//$uSAC::HTTP::Site;
+  $server->application_parser=$parser;
+}
+
+sub application_parser :lvalue {
+  my $self=shift;
+  $self->[application_parser_]
+    
+}
 
 sub parse_cli_options {
   my $self=shift;
@@ -883,7 +915,8 @@ sub parse_cli_options {
   Getopt::Long::GetOptionsFromArray(\@options,\%options,
     "workers=i",
     "listener=s@",
-    "show=s@"
+    "show=s@",
+    "read-size=i"
     
   ) or die "Invalid arguments";
 
@@ -896,6 +929,9 @@ sub parse_cli_options {
     }
     elsif($key eq "show"){
       $self->[options_]{show_routes}=$value
+    }
+    elsif($key eq "read-size"){
+      $self->[read_size_]=$value;
     }
 
     else {

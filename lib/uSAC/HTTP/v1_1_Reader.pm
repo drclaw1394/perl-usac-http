@@ -14,9 +14,6 @@ use URL::Encode qw<url_decode_utf8>;
 use uSAC::HTTP::Constants;
 our @EXPORT_OK=qw<
 		make_reader
-		make_form_data_reader
-		make_form_urlencoded_reader
-		make_socket_writer
 		parse_form
 		MODE_SERVER
 		MODE_CLIENT
@@ -24,6 +21,9 @@ our @EXPORT_OK=qw<
 
 our @EXPORT=@EXPORT_OK;
 
+#make_form_data_reader
+##		make_form_urlencoded_reader
+#		make_socket_writer
 
 #Package global for decoding utf8. Faster than using decode_utf8 function.
 our $UTF_8=find_encoding "utf-8";
@@ -232,7 +232,7 @@ sub make_reader{
                 redo;
                 #return $dropper->();
               }
-              warn "Need more";
+              #warn "Need more";
               return;
             }
           }

@@ -21,7 +21,7 @@ use AnyEvent;
 
 use Errno qw(EAGAIN EINTR);
 
-use constant MAX_READ_SIZE => 128 * 1024;
+use constant MAX_READ_SIZE => 4096*16;
 
 field $_id;
 field $_fh;
@@ -50,6 +50,7 @@ field $_write_queue;
 field $_sr;
 field $_sw;
 field $_in_progress;
+field $_read_size;
 #field $_on_body;
 
 our $Date;		#Date string for http
@@ -62,7 +63,7 @@ sub drop;
 method init {
 
   $_time=$Time;   #Copy value of clock to time
-  ($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme, $_peer)=@_;
+  ($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme, $_peer, $_read_size)=@_;
   \my @zombies= $zombies;
 
   #make reader
@@ -78,7 +79,7 @@ method init {
   };
   $_sr=uSAC::IO::SReader->create(
     fh=>$_fh,
-    max_read_size=>4096*16,
+    max_read_size=>$_read_size//MAX_READ_SIZE,
     on_eof =>$s,
     on_error=>$s2,
     time=>\$_time,
