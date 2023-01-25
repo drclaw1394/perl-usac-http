@@ -87,7 +87,7 @@ sub log_simple_in {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
 
-      return &$inner_next unless $_[CODE] and $_[HEADER];
+      goto &$inner_next unless $_[CODE] and $_[HEADER];
 			my $time=time;
 
       package uSAC::HTTP::Rex {
@@ -126,7 +126,7 @@ sub log_simple_out {
 		my $outer_next=shift;
 		sub {
 			#matcher, rex, code, header, body, cb, arg
-      return &$outer_next unless $_[CODE] and $_[HEADER];
+      goto &$outer_next unless $_[CODE] and $_[HEADER];
 
       say STDERR "\n<<<---";
       say STDERR "Depature time:		".time;
@@ -252,7 +252,7 @@ sub chunked{
           \my @headers=$_[HEADER];
 
           for my ($k,$v)(@headers){
-            $k eq HTTP_CONTENT_LENGTH and return &$next
+            $k eq HTTP_CONTENT_LENGTH and goto &$next
           }
 
           #(($_ eq HTTP_CONTENT_LENGTH)) and return &$next for(@headers[@key_indexes[0..@headers/2-1]]);
@@ -317,19 +317,19 @@ sub chunked{
           }
 
           #$_[PAYLOAD]=$scratch;
-          &$next;
+          goto &$next;
         }
         else {
           #nothing to process
           Log::OK::TRACE  and log_trace "Middeware: Chunked ; no context. bybass";
-          &$next
+          goto &$next
         }
       }
       else{
         #Error condition. Reset stack
         Log::OK::TRACE  and log_trace "Middeware: Chunked Passing on error condition";
         delete $out_ctx{$_[REX]};
-        &$next;
+        goto &$next;
       }
     };
   };

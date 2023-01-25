@@ -66,11 +66,15 @@ sub deflate {
           my $exe;
           my $ctx;
           if($_[HEADER]){
+            for($_[REX]->headers->{ACCEPT_ENCODING}){
+                # Do next unless header is defined and contains gzip
+                goto &$next unless $_ and /deflate/;
+            }
             Log::OK::TRACE and log_debug "Deflate: in header processing";
             \my @headers=$_[HEADER]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "deflate: looking for accept";
 
-            ($_[REX]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa and return &$next;
+            #($_[REX]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa and return &$next;
             #Also disable if we are already encoded
             $exe=1;
             my $bypass;
@@ -217,11 +221,15 @@ sub gzip{
           my $exe;
           my $ctx;
           if($_[HEADER]){
+            for($_[REX]->headers->{ACCEPT_ENCODING}){
+                # Do next unless header is defined and contains gzip
+                goto &$next unless $_ and /gzip/;
+            }
             Log::OK::TRACE and log_debug "gzipin header processing";
             \my @headers=$_[HEADER]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "gzip: looking for accept encoding";
 
-            ($_[REX]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa and return &$next;
+            #($_[REX]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa and return &$next;
 
             #Also disable if we are already encoded
             $exe=1;

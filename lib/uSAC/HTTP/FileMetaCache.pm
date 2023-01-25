@@ -2,19 +2,19 @@ package uSAC::HTTP::FileMetaCache;
 use Object::Pad;
 class uSAC::HTTP::FileMetaCache;
 use feature "say";
+
 use AnyEvent;   # TODO: abstract away...
 use IO::FD;     # For IO
 use Log::ger;   # Logger
 use Log::OK;    # Logger enabler
 use uSAC::HTTP::Header qw<:constants>;
 
-#use Devel::Peek qw<SvREFCNT>;   # For active usage
-use Time::Piece;                # Generating time info
+use POSIX();
 
 # Default Opening Mode
 use Fcntl qw(O_NONBLOCK O_RDONLY);
 use constant OPEN_MODE=>O_RDONLY|O_NONBLOCK;
-use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_ key_>;
+use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_ key_ etag_>;
 
 
 field $_html_root :param;
@@ -35,18 +35,6 @@ my %encoding_map =(
 	gz=>"gzip",
 );
 
-# Generates a sub to close a cached fd
-# removes meta data from the cache also
-#
-method closer {
-  $_closer//=sub {
-      my $entry=$_[0];
-      unless(--$entry->[cached_]>0){
-        IO::FD::close $entry->[fh_]; 
-        delete $_cache{$entry->[key_]};
-      }
-  }
-}
 # returns a sub to execute. Object::Pad method lookup is slow. so bypass it
 # when we don't need it
 #
@@ -58,60 +46,62 @@ method opener{
     my $enc_path;
 
     my $entry=$_cache{$abs_path};
-    if($entry){
-      $entry->[cached_]++;
-      return $entry;
-    }
+    unless($entry){
+      for my $pre (@$pre_encoded,""){
 
-    for my $pre (@$pre_encoded,""){
+        my $path= $abs_path.($pre?".$pre":"");
 
-      my $path= $abs_path.($pre?".$pre":"");
+        Log::OK::TRACE and log_trace "Static: Searching for: $path";
 
-      Log::OK::TRACE and log_trace "Static: Searching for: $path";
+        next unless stat($path) and -r _ and ! -d _; #undef if stat fails
 
-      next unless stat($path) and -r _ and ! -d _; #undef if stat fails
+        # Lookup mime type
+        #
+        my $ext=substr $abs_path, rindex($abs_path, ".")+1;
 
-      # Lookup mime type
-      #
-      my $ext=substr $abs_path, rindex($abs_path, ".")+1;
+        my @entry;
+        $entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($_mime->{$ext}//$_default_mime)];
+        $entry[size_]=(stat _)[7];
+        $entry[mt_]=(stat _)[9];
+        $entry[key_]=$abs_path;
 
-      my @entry;
-      $entry[content_type_header_]=[HTTP_CONTENT_TYPE, ($_mime->{$ext}//$_default_mime)];
-      $entry[size_]=(stat _)[7];
-      $entry[mt_]=(stat _)[9];
-      $entry[key_]=$abs_path;
-
-      if($pre){
-        $entry[content_encoding_]=[HTTP_CONTENT_ENCODING, $encoding_map{$pre}];
-      }
-      else{
-        $entry[content_encoding_]=[];
-      }
-
-      if(defined IO::FD::sysopen $in_fh, $path, OPEN_MODE|($mode//0)){
-        #say $in_fh;
-        #open $in_fh,"<:mmap", $path or return;
-        $entry[fh_]=$in_fh;
-        Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
-        Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
-        my $tp=gmtime($entry[mt_]);
-
-        $entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
-        $entry[cached_]=2;
-
-        $entry=\@entry;
-
-        # Cache the entry only if cache is enabled
-        if($_timer){
-          $_cache{$abs_path}=$entry;
+        if($pre){
+          $entry[content_encoding_]=[HTTP_CONTENT_ENCODING, $encoding_map{$pre}];
+        }
+        else{
+          $entry[content_encoding_]=[];
         }
 
-      }
-      else {
-        Log::OK::ERROR and log_error " Error opening file $abs_path: $!";
+        if(defined IO::FD::sysopen $in_fh, $path, OPEN_MODE|($mode//0)){
+          #say $in_fh;
+          #open $in_fh,"<:mmap", $path or return;
+          $entry[fh_]=$in_fh;
+          Log::OK::DEBUG and log_debug "Static: preencoded com: ".$pre;
+          Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
+          #my $tp=gmtime($entry[mt_]);
+          my @time=CORE::gmtime($entry[mt_]);
+
+          #$entry[last_modified_header_]=[HTTP_LAST_MODIFIED, $tp->strftime("%a, %d %b %Y %T GMT")];
+          $entry[last_modified_header_]=[HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",@time)];
+          $entry[etag_]="\"$entry[mt_]-$entry[size_]\"";
+          $entry[cached_]=1;
+
+          $entry=\@entry;
+
+          # Cache the entry only if cache is enabled
+          if($_timer){
+            $_cache{$abs_path}=$entry;
+          }
+
+        }
+        else {
+          Log::OK::ERROR and log_error " Error opening file $abs_path: $!";
+        }
       }
     }
     #Log::OK::WARN and log_warn "Could not open file $abs_path";
+    
+    $entry->[cached_]++;
     $entry;
   }
 }
@@ -125,6 +115,20 @@ method disable{
   %_cache=();
 }
 
+# Generates a sub to close a cached fd
+# removes meta data from the cache also
+#
+method closer {
+  $_closer//=sub {
+      my $entry=$_[0];
+      #say "Closer called: ".$entry->[cached_];
+      if(--$entry->[cached_] <=0){
+        IO::FD::close $entry->[fh_]; 
+        delete $_cache{$entry->[key_]};
+      }
+  }
+}
+
 # Create a timer which checks for any file changes (if enabled)
 # and closes the fd if nothing is referencing it and 
 method enable{
@@ -132,15 +136,15 @@ method enable{
     $_timer=AE::timer 0, $_sweep_interval, sub {
       #say "Doing timer";
       my $i=0;
+      my $entry;
+      my $closer=$self->closer;
       for(keys %_cache){
-        #if(SvREFCNT($_cache{$_}[0])==1){
-        # say $_cache{$_}[cached_];
-        if($_cache{$_}[cached_]==1){
-          Log::OK::TRACE and log_trace "Static Meta Cache: Deleting meta data for $_";
-          IO::FD::close $_cache{$_}[0];
-          delete $_cache{$_};
+        $entry=$_cache{$_};
 
-        }
+        # If the cached_ field reaches 1, this is the last code to use it. so close it
+        # 
+        #say "Timer for entry: $entry->[key_]";
+        $closer->($entry) if($entry->[cached_]==1);
         last if ++$i >= $_sweep_size;
       }
     };

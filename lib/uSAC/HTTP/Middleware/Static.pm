@@ -41,7 +41,7 @@ use constant  READ_SIZE=>4096;
 
 #my %stat_cache;
 
-use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_>;
+use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_ key_ etag_>;
 use constant KEY_OFFSET=>0;
 
 use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
@@ -274,7 +274,7 @@ sub send_file_uri_norange {
   #process caching headers
   my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
   #my $code=HTTP_OK;
-  my $etag="\"$mod_time-$content_length\"";
+  # my $etag="\"$mod_time-$content_length\"";
 
   my $offset=0;	#Current offset in file
   my $total=0;	#Current total read from file
@@ -289,7 +289,7 @@ sub send_file_uri_norange {
     #TODO: needs testing
     for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
       $code=HTTP_OK and last unless $t;
-      $code=HTTP_OK and last if  $etag !~ /$t/;
+      $code=HTTP_OK and last if  $entry->[etag_] !~ /$t/;
       $code=HTTP_NOT_MODIFIED and last;	#no body to be sent
 
     }
@@ -318,7 +318,7 @@ sub send_file_uri_norange {
     : $entry->[content_encoding_]->@*,
 
 
-    HTTP_ETAG, $etag,
+    HTTP_ETAG, $entry->[etag_],
     HTTP_ACCEPT_RANGES,"bytes"
   )
   ;
@@ -453,7 +453,7 @@ sub send_file_uri_norange {
         #IO::FD::sysseek $in_fh, $offset, 0;
         my $sz=($content_length-$total);
         $sz=$read_size if $sz>$read_size;
-        $reply=IO::FD::SV $sz; #reset//allocate buffer
+        #$reply=IO::FD::SV $sz; #reset//allocate buffer
         #$total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
         $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
         $offset+=$rc;
@@ -675,6 +675,7 @@ sub usac_file_under {
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
   my $static=uSAC::HTTP::Middleware::Static->new(html_root=>$html_root, %options);
   my $fmc=uSAC::HTTP::FileMetaCache->new(html_root=>$html_root, mime=>$options{mime}, default_mime=>$options{default_mime});
+
   $fmc->enable;
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
@@ -733,7 +734,7 @@ sub usac_file_under {
         #
         # Attempts to open the file and send it. If it fails, the next static middleware is called if present
 
-        my $pre_encoded_ok=($pre_encoded and $path=~/gz$/ or $_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/)
+        my $pre_encoded_ok=(@$pre_encoded and ($_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/))
         ?$pre_encoded
         :[];
 
@@ -743,7 +744,7 @@ sub usac_file_under {
 
 
         if($entry){
-          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/),$closer);
+          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, ($no_encoding and $path =~ /$no_encoding/), $closer);
 
         }
         elsif($do_dir || @indexes and substr($path, -1) eq "/") {

@@ -131,7 +131,7 @@ sub rex_write{
 	#
 	
 
-	&{$_[0][1][2]};	#Execute the outerware for this site/location
+	goto &{$_[0][1][2]};	#Execute the outerware for this site/location
   Log::OK::TRACE and log_trace "Rex: End of rex write. after outerware";
 
 }
