@@ -101,7 +101,7 @@ method opener{
     }
     #Log::OK::WARN and log_warn "Could not open file $abs_path";
     
-    $entry->[cached_]++;
+    $entry->[cached_]++ if $entry;
     $entry;
   }
 }
