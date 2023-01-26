@@ -70,7 +70,7 @@ use constant KEY_COUNT=> total_requests_ - sites_+1;
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Session;
-use uSAC::HTTP::v1_1_Reader;
+#use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Rex;
 use uSAC::MIME;
 use Exporter 'import';
@@ -340,6 +340,7 @@ sub make_basic_client{
     require uSAC::HTTP::v1_1_Reader;
     $self->[application_parser_]=\&uSAC::HTTP::v1_1_Reader::make_reader;
   }
+  
   my $parser=$self->[application_parser_]; 
 
   sub {
@@ -366,7 +367,7 @@ sub make_basic_client{
         $session->init($id, $fh, $self->[sessions_],$self->[zombies_],$self, $scheme, $peers->[$i],$self->[read_size_]);
 
         #$session->push_reader(make_reader $session, MODE_SERVER);
-        $session->push_reader($parser->($session, MODE_SERVER));
+        $session->push_reader($parser->($session, 0));#MODE_SERVER));
       }
       $i++;
       $sessions{ $id } = $session;
@@ -527,7 +528,7 @@ sub run {
 
   if($self->routes == keys $self->[host_tables_]->%*){
     log_error "No routes, nothing to serve";
-    exit;
+    #exit;
   }
 
   if($self->[options_]{show_routes}){

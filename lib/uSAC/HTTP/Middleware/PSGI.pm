@@ -293,13 +293,14 @@ sub psgi {
 
         for(ref($res->[2])){
           if($_ eq "ARRAY"){
+            Log::OK::TRACE and log_trace "IN DO ARRAY";
             #do_array($usac, $rex, $res);
             $next->($usac, $rex, $res->[0], $res->[1], join("", $res->[2]->@*),undef);
             #delete $ctx{$_[REX]} if $buffer;  #Immediate respose dispose of context if it was created
           }
           #elsif($_ eq "GLOB" or $res->[2] isa "IO::Handle"){
           else{
-            do_glob($usac, $rex, $res);
+            do_glob($usac, $rex, $res, $next);
           }
         }
         delete $ctx{$_[REX]};
@@ -317,21 +318,25 @@ sub psgi {
   [$inner, $outer];
 }
 
-sub do_array {
-	my ($usac,$rex, $res)=@_;
-	my $session=$rex->[uSAC::HTTP::Rex::session_];
-
-	rex_write $usac,$rex,
-		$res->[0],
-		$res->[1],
-		join "", $res->[2]->@*;
-
-}
+##########################################################
+# sub do_array {                                         #
+#         my ($usac,$rex, $res)=@_;                      #
+#         my $session=$rex->[uSAC::HTTP::Rex::session_]; #
+#                                                        #
+#         rex_write $usac,$rex,                          #
+#                 $res->[0],                             #
+#                 $res->[1],                             #
+#                 join "", $res->[2]->@*;                #
+#                                                        #
+# }                                                      #
+##########################################################
 
 sub do_glob {
-	my ($usac, $rex, $res)=@_;
+  Log::OK::TRACE and log_trace "IN DO GLOB";
+	my ($usac, $rex, $res,$next)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	my $dropper=$session->dropper;#$rex->[uSAC::HTTP::Rex::session_]->dropper;#[uSAC::HTTP::Session::dropper_];
+
 	my ($code, $psgi_headers, $psgi_body)=@$res;
 
 
@@ -352,6 +357,7 @@ sub do_glob {
 	my $do_it;
   $do_it=sub{
     unless (@_){
+      Log::OK::TRACE and log_trace "ERROR CB";
       #callback error. Close file
         $psgi_body->close;
         $do_it=undef;
@@ -360,17 +366,18 @@ sub do_glob {
     }
 		$data=$psgi_body->getline;#<$psgi_body>;
 		if(defined($data) or length($data)){
-      #say STDERR "FILE READ: line: $data";
-			rex_write($usac, $rex, $code, $psgi_headers, $data, __SUB__);
+      Log::OK::TRACE and log_trace "FILE READ: line: $data";
+			$next->($usac, $rex, $code, $psgi_headers, $data, __SUB__);
       $psgi_headers=undef;
 		}
 		else {
+      Log::OK::TRACE and log_trace "END OF GLOB";
       $do_it=undef;     #Release this sub
 			$psgi_body->close; #close the file
       $psgi_body=undef;
       
       #Do the final write with no callback
-			rex_write($usac, $rex, $code, $psgi_headers, my $a=undef, my$b=undef);
+			$next->($usac, $rex, $code, $psgi_headers, my $a="", my$b=undef);
       #$dropper->();
 		}
 	};
