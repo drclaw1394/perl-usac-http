@@ -49,7 +49,7 @@ use uSAC::HTTP::v1_1_Reader;
 #use Hustle::Table;
 #
 use uSAC::HTTP::Middler;
-use uSAC::HTTP::Middleware qw<log_simple chunked>;
+use uSAC::HTTP::Middleware qw<log_simple>;
 
 use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
@@ -128,7 +128,7 @@ sub _add_route {
   my @names;
   #Add chunked always. Add at start of total middleware
   # and last for outerware
-  unshift @_, chunked();
+  #unshift @_, chunked();
  
   #Process other middleware
   #Log::OK::DEBUG and log_debug "About to process MIDDLEWARES: ".join ", ",@_;
@@ -220,59 +220,12 @@ sub _add_route {
 
 
 
-  my @index=map {$_*2} 0..99;
 
   #my $server= $self->[server_];
   my $static_headers=$self->[server_]->static_headers;
 
   #TODO: Need to rework this for other HTTP versions
   my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize static_headers=>$static_headers;
-  ##########################################################################################
-  # sub{                                                                                   #
-  #   #continue stack reset on error condition. The IO layer resets                        #
-  #   #on a write call with no arguemts;                                                   #
-  #   if($_[CODE]){                                                                        #
-  #     #no warnings qw<numeric uninitialized>;                                            #
-  #     #return unless $_[CODE];                                                           #
-  #     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;  #
-  #     #my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;                   #
-  #     #The last item in the outerware                                                    #
-  #     # renders the headers to the output sub                                            #
-  #     # then calls                                                                       #
-  #     #                                                                                  #
-  #     my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];                                 #
-  #                                                                                        #
-  #     if($_[HEADER]){                                                                    #
-  #       \my @h=$_[HEADER];                                                               #
-  #                                                                                        #
-  #       my $reply="HTTP/1.1 $_[CODE] ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF; #
-  #       #last if $_ >= @h;                                                               #
-  #       $reply.= $h[$_].": $h[$_+1]".CRLF                                                #
-  #       for(@index[0..@h/2-1]);                                                          #
-  #                                                                                        #
-  #       #last if  $_ >= $static_headers->@*;                                             #
-  #       $reply.="$static_headers->[$_]:$static_headers->[$_+1]".CRLF                     #
-  #       for(@index[0..$static_headers->@*/2-1]);                                         #
-  #                                                                                        #
-  #       $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;                           #
-  #                                                                                        #
-  #       Log::OK::DEBUG and log_debug "->Serialize: headers:";                            #
-  #       Log::OK::DEBUG and log_debug $reply;                                             #
-  #                                                                                        #
-  #                                                                                        #
-  #       $_[HEADER]=undef;       #mark headers as done                                    #
-  #       $reply.=CRLF.$_[PAYLOAD]//"";                                                    #
-  #       $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);                            #
-  #     }                                                                                  #
-  #     else{                                                                              #
-  #       $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]);                         #
-  #     }                                                                                  #
-  #   }                                                                                    #
-  #   else{                                                                                #
-  #     $_[REX][uSAC::HTTP::Rex::write_]();                                                #
-  #   }                                                                                    #
-  # };                                                                                     #
-  ##########################################################################################
 
 
 

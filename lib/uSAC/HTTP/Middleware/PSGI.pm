@@ -19,7 +19,7 @@ use Plack::TempBuffer;
 use uSAC::HTTP;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
-use uSAC::HTTP::Middleware qw<chunked>;
+#use uSAC::HTTP::Middleware qw<chunked>;
 use uSAC::HTTP::Constants;
 use URL::Encode qw<url_decode_utf8 url_decode url_encode_utf8 url_encode>;
 

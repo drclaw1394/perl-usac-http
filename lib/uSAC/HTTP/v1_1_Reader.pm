@@ -524,65 +524,123 @@ sub make_serialize{
     $static_headers.="$k: $v".CRLF;
   }
 
+    my $index;
+    my $i=1;
+    my $ctx;
+
+  my %out_ctx;
 
   sub {
     #continue stack reset on error condition. The IO layer resets
     #on a write call with no arguemts;
-    return $_[REX][uSAC::HTTP::Rex::write_]() unless $_[CODE];
-    #if($_[CODE]){
-      #no warnings qw<numeric uninitialized>;
-      #return unless $_[CODE];
-      Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
-      #my ($matcher, $rex, $code, $headers, $data,$callback, $arg)=@_;
-      #The last item in the outerware
-      # renders the headers to the output sub
-      # then calls 
+    unless($_[CODE]){
+      delete $out_ctx{$_[REX]};
+      return $_[REX][uSAC::HTTP::Rex::write_]() 
+    }
+    Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
+    Log::OK::TRACE and log_trace join ", ", @_;
+    use Data::Dumper;
+    Log::OK::TRACE and log_trace Dumper $_[HEADER];
+
+    $ctx=undef;
+
+
+
+    # If the callback is undefined, use the dropper to 'end' the session
+    # Otherwise use the provided callback.
+    # The writer will only execute the callback if it is a 'true' value.
+    # If middleware explicitly sets the callback to 0, it effectively causes
+    # a synchronous write with now callback. Which is  useful writing out 
+    # small amounts of header data before a body.
+    #
+    my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
+
+
+    if($_[HEADER]){
+      # Header with a potential body attached.
       #
-      #
+      \my @headers=$_[HEADER];
 
-      # If the callback is undefined, use the dropper to 'end' the session
-      # Otherwise use the provided callback.
-      # The writer will only execute the callback if it is a 'true' value.
-      # If middleware explicitly sets the callback to 0, it effectively causes
-      # a synchronous write with now callback. Which is  useful writing out 
-      # small amounts of header data before a body.
-      #
-      my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
+      $index=undef;
+      for my ($k,$v)(@headers){
+        $index=1  and last if $k eq HTTP_CONTENT_LENGTH;
+      }
 
-
-      return $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]) unless $_[HEADER];
-      #if($_[HEADER]){
-        #\my @h=$_[HEADER];
-
-        $_[CODE]=HTTP_OK if $_[CODE]<0;
-        my $reply="HTTP/1.1 $_[CODE] ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
-
-        foreach my ($k,$v)(@{$_[HEADER]}){
-          $reply.= $k.": $v".CRLF 
+      # Do chunked if we don't find a content length
+      # update appropriate headers
+      unless($index){
+        $ctx=1; 
+        $index=undef;
+        $i=1;
+        for my ($k,$v)(@headers){
+          $i+=2;
+          $index=$i and last if $k eq HTTP_TRANSFER_ENCODING;
         }
-        $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
-        $reply.=$static_headers;
 
-        Log::OK::DEBUG and log_debug "->Serialize: headers:";
-        Log::OK::DEBUG and log_debug $reply;
+        unless($index){	
+          push @headers, HTTP_TRANSFER_ENCODING, "chunked";
+
+        }
+        else{
+          $headers[$index].=",chunked";
+
+        }
+
+        # save context if multishot
+        # no need to save is single shot
+        $out_ctx{$_[REX]}=$ctx if $_[CB]; 
+      }
+
+      # If no valid code is set then set default 200
+      #
+      $_[CODE]=HTTP_OK if $_[CODE]<0;
+      my $reply="HTTP/1.1 $_[CODE] ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
+
+      # Render headers
+      #
+      foreach my ($k,$v)(@{$_[HEADER]}){
+        $reply.= $k.": $v".CRLF 
+      }
+
+      $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
+      $reply.=$static_headers;
+      $reply.=CRLF;
+
+      Log::OK::DEBUG and log_debug "->Serialize: headers:";
+      Log::OK::DEBUG and log_debug $reply;
+
+      # mark headers as done
+      #
+      $_[HEADER]=undef;	
 
 
-        $_[HEADER]=undef;	#mark headers as done
+      if($ctx){
+        # this is only set if we want chunked
+        #
+        $reply.= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+        $reply.="00".CRLF.CRLF unless $_[CB];
 
-        $reply.=CRLF.$_[PAYLOAD];
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
-      ##############################################################
-      # }                                                          #
-      # else{                                                      #
-      #   $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6]); #
-      # }                                                          #
-      ##############################################################
-    #########################################
-    # }                                     #
-    # else{                                 #
-    #   $_[REX][uSAC::HTTP::Rex::write_](); #
-    # }                                     #
-    #########################################
+      }
+      else {
+        $reply.=$_[PAYLOAD];
+      }
+
+      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
+    }
+    else{
+      # No header specified. Just a body
+      #
+      if($ctx//=$out_ctx{$_[REX]}){
+
+        $_[PAYLOAD]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+        unless($_[CB]){
+          $_[PAYLOAD].="00".CRLF.CRLF;
+          delete $out_ctx{$_[REX]};
+        }
+      }
+
+      $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6])
+    }
   }
 };
 
