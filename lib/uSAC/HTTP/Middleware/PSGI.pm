@@ -7,6 +7,7 @@ use feature qw<switch say refaliasing state>;
 no warnings "experimental";
 use Log::ger;
 use Log::OK;
+use Error::Show;
 
 use List::Util qw<pairs first>;
 
@@ -85,7 +86,7 @@ sub psgi {
     #assume a file path
     my $path=usac_path %options, $app;
     Log::OK::INFO and log_info "Attempting to load psgi: $path";
-		my $app=eval "require '$path'";
+		$app=eval "require '$path'";
 
     if(my $context=Error::Show::context){
       log_error "Could not load PSGI file $path: $app";
@@ -110,8 +111,8 @@ sub psgi {
     sub {
       my ($usac, $rex)=@_;	
       
-
       unless($_[CODE]){
+
         #stack reset
         delete $ctx{$_[REX]};
         &$next;
@@ -263,15 +264,20 @@ sub psgi {
 
         #Execute the PSGI application
         
-        my $res;
-        $res=eval{$app->($env)};
+        #############################################
+        # my $res;                                  #
+        # $res=eval{$app->($env)};                  #
+        #                                           #
+        # if(!defined($res) and $@){                #
+        #   my $context=Error::Show::context;       #
+        #   delete $ctx{$_[REX]};                   #
+        #   $_[HEADER]=[];                          #
+        #   $_[PAYLOAD]=$context;                   #
+        #   return &rex_error_internal_server_error #
+        # }                                         #
+        #############################################
 
-        if(!defined($res) and $@){
-          delete $ctx{$_[REX]};
-          $_[HEADER]=[];
-          return &rex_error_internal_server_error
-        }
-
+        my $res=$app->($env);
 
 
         if(ref($res) eq  "CODE"){
@@ -300,6 +306,7 @@ sub psgi {
           }
           #elsif($_ eq "GLOB" or $res->[2] isa "IO::Handle"){
           else{
+            Log::OK::TRACE and log_trace "DOING GLOB";
             do_glob($usac, $rex, $res, $next);
           }
         }

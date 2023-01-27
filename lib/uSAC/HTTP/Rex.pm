@@ -953,7 +953,7 @@ sub mw_dead_horse_stripper {
       }
 
       Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
-
+      undef;
     },
 
 	}
