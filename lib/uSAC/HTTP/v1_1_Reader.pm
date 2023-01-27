@@ -515,7 +515,7 @@ sub make_reader{
 sub make_serialize{
   my %options=@_;
   my $static_headers="";
-  
+
 
   #
   # Pre render static headers
@@ -524,9 +524,9 @@ sub make_serialize{
     $static_headers.="$k: $v".CRLF;
   }
 
-    my $index;
-    my $i=1;
-    my $ctx;
+  my $index;
+  my $i=1;
+  my $ctx;
 
   my %out_ctx;
 
@@ -538,7 +538,7 @@ sub make_serialize{
       return $_[REX][uSAC::HTTP::Rex::write_]() 
     }
     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
-    Log::OK::TRACE and log_trace join ", ", @_;
+    #Log::OK::TRACE and log_trace join ", ", @_;
     use Data::Dumper;
     Log::OK::TRACE and log_trace Dumper $_[HEADER];
 

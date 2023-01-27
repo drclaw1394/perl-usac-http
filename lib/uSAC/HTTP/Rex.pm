@@ -500,7 +500,7 @@ sub new {
 	$self->[recursion_count_]=0;
   $self->[captures_]=$_[8];
   $self->[in_progress_]=undef;
-  $self->[uri_decoded_]=url_decode_utf8 $self->[uri_raw_];
+  #$self->[uri_decoded_]=url_decode_utf8 $self->[uri_raw_];
 	$self;
 }
 
@@ -933,13 +933,21 @@ sub mw_dead_horse_stripper {
 	sub {
 		my $inner_next=shift;
 		sub {
-      return &$inner_next unless $_[CODE];
+      goto &$inner_next unless $_[CODE];
 
       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
-      $_[REX][uri_stripped_]= 
-      ($_[HEADER] and $len)
+      if($_[HEADER]){
+        $_[REX][uri_stripped_]= 
+        $len
         ?substr($_[REX][uri_raw_], $len)
         : $_[REX][uri_raw_];
+      }
+      ######################################
+      # $_[REX][uri_stripped_]=            #
+      # ($_[HEADER] and $len)              #
+      #   ?substr($_[REX][uri_raw_], $len) #
+      #   : $_[REX][uri_raw_];             #
+      ######################################
 
       &$inner_next; #call the next
 
@@ -949,7 +957,7 @@ sub mw_dead_horse_stripper {
       unless($_[REX][in_progress_]){
         Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef";
         $_[CB]=undef;
-        &rex_write;
+        goto &rex_write;
       }
 
       Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
