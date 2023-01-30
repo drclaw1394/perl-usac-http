@@ -103,6 +103,7 @@ sub make_reader{
 
   #Temp variables
   my $host;
+  my $connection;
   my $tmp;
   my $pos3;
   my $ppos=0;
@@ -165,6 +166,7 @@ sub make_reader{
               $state   = STATE_HEADERS;
               %h=();
               $host=undef;
+              $connection="";
               #++$seq;
 
               #$buf=substr $buf, $pos3+2;
@@ -195,7 +197,8 @@ sub make_reader{
             $pos3=index $buf, CRLF, $ppos;
             #if($pos3>0){
             if($pos3>$ppos){
-              ($k, $val)=split ":", substr($buf, 0, $pos3), 2;
+              #($k, $val)=split ":", substr($buf, 0, $pos3), 2;
+              ($k, $val)=split ":", substr($buf, $ppos, $pos3-$ppos), 2;
               $k=~tr/-/_/;
               $k=uc $k;
 
@@ -205,19 +208,26 @@ sub make_reader{
               $e?($e.=",$val"):($e=$val);
 
 
-              $host=$val if !$host and $k eq "HOST";
-
+              $ppos=$pos3+2;
+              if($k eq "HOST"){
+                $host=$val;
+              }
+              elsif($k eq "CONTENT_LENGTH"){
+                $body_len= int $val;
+              }
+              elsif($k eq "CONNECTION"){
+                $connection=$val;
+              }
+              
               #TODO what about proxied requests with X-Forwarded-for?
               #Shoult this set the host as well
               #
               #$buf=substr $buf, $pos3+2;
-              $ppos=$pos3+2;
 
               #redo;
             }
             #elsif($pos3 == 0){
             elsif($pos3 == $ppos){
-              say "last";
               $ppos=0;
               $buf=substr($buf, $pos3+2);
               last;
@@ -239,18 +249,15 @@ sub make_reader{
 
 
 
-          $tmp=$h{CONNECTION}//"";
+          #$tmp=$h{CONNECTION}//"";
           $version eq "HTTP/1.0"
-          ? ($closeme=$tmp !~ /keep-alive/ai)
-          : ($closeme=$tmp =~ /close/ai);
+          ? ($closeme=$connection!~ /keep-alive/ai)
+          : ($closeme=$connection and $connection=~ /close/ai);
 
 
           Log::OK::DEBUG and log_debug "Version: $version, Close me set to: $closeme";
           Log::OK::DEBUG and log_debug "$uri";
 
-          say $method;
-          say $host;
-          say length $method;
           #Find route
           ($route, $captures)=$cb->($host, "$method $uri");
           #
@@ -262,7 +269,7 @@ sub make_reader{
 
           #Push reader. 
           $processed=0; 
-          $body_len = $h{CONTENT_LENGTH}//0; #number of bytes to read, or 0 if undefined
+          #$body_len = $h{CONTENT_LENGTH}//0; #number of bytes to read, or 0 if undefined
           if($body_len==0){ 
             #No body
             $state=$start_state;
