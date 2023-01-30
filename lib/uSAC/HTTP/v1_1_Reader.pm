@@ -105,6 +105,7 @@ sub make_reader{
   my $host;
   my $tmp;
   my $pos3;
+  my $ppos=0;
   my $k;
   my $val;
   my $code=-1;
@@ -149,11 +150,13 @@ sub make_reader{
         #	$version => comment
         #
         if ($state == STATE_REQUEST) {
-          $pos3=index $buf, CRLF;
+          $pos3=index $buf, CRLF, $ppos;
           $body_type=undef;	
           $body_len=0;
-          if($pos3>=0){
-            ($method, $uri, $version)=split " ", substr($buf, 0, $pos3);
+          #if($pos3>=0){
+          if($pos3>=$ppos){
+            #($method, $uri, $version)=split " ", substr($buf, $ppos, $pos3);
+            ($method, $uri, $version)=split " ", substr($buf, $ppos, $pos3-$ppos);
 
             if($uri and $version){
               #$uri=url_decode_utf8 $uri;
@@ -161,9 +164,11 @@ sub make_reader{
               #end of line found
               $state   = STATE_HEADERS;
               %h=();
+              $host=undef;
               #++$seq;
 
-              $buf=substr $buf, $pos3+2;
+              #$buf=substr $buf, $pos3+2;
+              $ppos=$pos3+2;
             }
             else {
               $state= STATE_ERROR; 
@@ -187,14 +192,14 @@ sub make_reader{
 
         elsif ($state == STATE_HEADERS) {
           while () {
-            $pos3=index $buf, CRLF;
-            if($pos3>0){
+            $pos3=index $buf, CRLF, $ppos;
+            #if($pos3>0){
+            if($pos3>$ppos){
               ($k, $val)=split ":", substr($buf, 0, $pos3), 2;
               $k=~tr/-/_/;
               $k=uc $k;
 
               $val=builtin::trim $val;  #perl 5.36 required
-
 
               \my $e=\$h{$k};
               $e?($e.=",$val"):($e=$val);
@@ -205,10 +210,15 @@ sub make_reader{
               #TODO what about proxied requests with X-Forwarded-for?
               #Shoult this set the host as well
               #
-              $buf=substr $buf, $pos3+2;
+              #$buf=substr $buf, $pos3+2;
+              $ppos=$pos3+2;
+
               #redo;
             }
-            elsif($pos3 == 0){
+            #elsif($pos3 == 0){
+            elsif($pos3 == $ppos){
+              say "last";
+              $ppos=0;
               $buf=substr($buf, $pos3+2);
               last;
             }	#empty line.
@@ -238,6 +248,9 @@ sub make_reader{
           Log::OK::DEBUG and log_debug "Version: $version, Close me set to: $closeme";
           Log::OK::DEBUG and log_debug "$uri";
 
+          say $method;
+          say $host;
+          say length $method;
           #Find route
           ($route, $captures)=$cb->($host, "$method $uri");
           #
