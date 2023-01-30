@@ -51,14 +51,16 @@ use constant MAX_READ_SIZE => 128 * 1024;
 #         #return decode("utf8", $octets);                                    #
 # }                                                                           #
 ###############################################################################
-sub uri_decode_inplace {
-	$_[0]=~ tr/+/ /;
-	$_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;
-	#$UTF_8->decode($_[0]);
-	Encode::utf8::decode $UTF_8, @_;
-	#decode_utf8($_[0]);
-	#return decode("utf8", $octets);
-}
+#########################################################
+# sub uri_decode_inplace {                              #
+#         $_[0]=~ tr/+/ /;                              #
+#         $_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge; #
+#         #$UTF_8->decode($_[0]);                       #
+#         Encode::utf8::decode $UTF_8, @_;              #
+#         #decode_utf8($_[0]);                          #
+#         #return decode("utf8", $octets);              #
+# }                                                     #
+#########################################################
 
 sub parse_form {
 	map { (split "=", $_)} split "&", $_[0] =~ tr/ //dr;
@@ -175,14 +177,8 @@ sub make_reader{
             if( length($buf) >MAX_READ_SIZE){
               #TODO: create a rex a respond with bad request
 
-              #$r->[uSAC::HTTP::Session::closeme_]=1;
-              #$r->[uSAC::HTTP::Session::dropper_]->() 
-              #$r->closeme=1;
-              #$r->dropper->();
               $state=STATE_ERROR;
               redo;
-              #$closeme=1;
-              #$dropper->();
 
             }
             last;
@@ -190,9 +186,6 @@ sub make_reader{
         }
 
         elsif ($state == STATE_HEADERS) {
-          # headers
-          #my $pos3;
-          #my $index;
           while () {
             $pos3=index $buf, CRLF;
             if($pos3>0){
@@ -202,8 +195,6 @@ sub make_reader{
 
               $val=builtin::trim $val;  #perl 5.36 required
 
-              #$val=~s/^[\t ]//g;  #Strip leading whitespace
-              #$val=~s/[\t ]$//g;  #Strep trailing whitespace
 
               \my $e=\$h{$k};
               $e?($e.=",$val"):($e=$val);
@@ -226,11 +217,8 @@ sub make_reader{
               #-1	Need more
               if (length($buf) > MAX_READ_SIZE) {
 
-                #return $r->[uSAC::HTTP::Session::dropper_]->();
-                #return $r->dropper->();
                 $state=STATE_ERROR;
                 redo;
-                #return $dropper->();
               }
               #warn "Need more";
               return;

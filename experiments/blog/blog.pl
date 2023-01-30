@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
-#BEGIN{
-  #$ENV{LIBEV_FLAGS}=1; #POLL
-  #}
+BEGIN{
+  #$ENV{LIBEV_FLAGS}=8; #POLL
+}
 
 
 use EV;

@@ -182,3 +182,6 @@ it takes to open a file.
 Must use seek sysread/syswrite or pread/pwrite, as the filedescriptor is shared
 with other parts of the program.
 
+
+Uses relative paths for faster opening times
+

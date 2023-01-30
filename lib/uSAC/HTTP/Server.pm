@@ -368,6 +368,7 @@ sub make_basic_client{
 
         #$session->push_reader(make_reader $session, MODE_SERVER);
         $session->push_reader($parser->($session, 0));#MODE_SERVER));
+        
       }
       $i++;
       $sessions{ $id } = $session;
@@ -440,7 +441,9 @@ sub rebuild_dispatch {
   #Install error routes per site
   #Error routes are added after other routes.
 
-  #Create a special default site for each host that matches any method and uri
+  # Create a special default site for each host that matches any method and uri
+  #  An entry is only added if the dummy_defualt is currently the default
+  #
   for my $host (keys $self->[host_tables_]->%*) {
     #If the table has a dummy catch all then lets make an fallback
     my $entry=$self->[host_tables_]{$host};
@@ -457,6 +460,17 @@ sub rebuild_dispatch {
   }
 
 
+  # Show a warning (if enabled) if the there is exactly the same number of
+  # routes as hosts. This means that all host tables will only fail matching to
+  # either defaults at all times
+
+  if($self->routes == keys $self->[host_tables_]->%*){
+    Log::OK::WARN and log_warn "Multiple host tables, but each only contain default route matching";
+    #exit;
+  }
+
+  # Build the look up table of Hustle::Table and its associated caching hash 
+  #
   my %lookup=map {
       $_, [
       #table
@@ -466,15 +480,43 @@ sub rebuild_dispatch {
       ]
     } keys $self->[host_tables_]->%*;
 
+
+    # Pre lookup the any host
+    my $any_host=$lookup{"*.*"};
+
+
+    # If we only have single host table, it is the anyhost. It it only has one
+    # route it is the default. So we are in single end point mode. no need to
+    # perform any routing lookups as we already know which one to use
     #
-    # Parser call the following to identify / match a route for header and path
+    my $single_end_point_mode=
+      $self->routes == keys $self->[host_tables_]->%*
+        and keys $self->[host_tables_]->%*==1;
+
+
+    if($single_end_point_mode){
+
+      (my $route, my $captures)=$any_host->[0]("");
+      $self->[cb_]=sub {
+        #Always return the default out of the any_host table
+        $route->[1][4]++;	
+        ($route, $captures);
+      };
+      Log::OK::WARN and log_warn "Single end point enabled";
+      return;
+    }
+
+
+
+    #
+    # Parser calls the following to identify / match a route for header and path
     # information. The route contains the middlewares prelinked to process the
     # requests
     #
   $self->[cb_]=sub {
     #my ($host, $input, $rex)=@_;#, $rex, $rcode, $rheaders, $data, $cb)=@_;
 
-    my $table=$lookup{$_[0]//""}//$lookup{"*.*"};
+    my $table=$lookup{$_[0]//""}//$any_host;#$lookup{"*.*"};
     (my $route, my $captures)= $table->[0]($_[1]);
 
     #Hustle table entry structure:
@@ -526,10 +568,7 @@ sub run {
 
 	$self->rebuild_dispatch;
 
-  if($self->routes == keys $self->[host_tables_]->%*){
-    log_error "No routes, nothing to serve";
-    #exit;
-  }
+  
 
   if($self->[options_]{show_routes}){
     Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $self->[options_]{show_routes}->@*);
