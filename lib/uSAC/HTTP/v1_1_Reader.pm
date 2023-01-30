@@ -602,15 +602,15 @@ sub make_serialize{
       # If no valid code is set then set default 200
       #
       $_[CODE]=HTTP_OK if $_[CODE]<0;
-      my $reply="HTTP/1.1 $_[CODE] ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
+      my $reply="HTTP/1.1 ".$_[CODE]." ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
 
       # Render headers
       #
       foreach my ($k,$v)(@{$_[HEADER]}){
-        $reply.= $k.": $v".CRLF 
+        $reply.= $k.": ".$v.CRLF 
       }
 
-      $reply.=HTTP_DATE.": $uSAC::HTTP::Session::Date".CRLF;
+      $reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
       $reply.=$static_headers;
       $reply.=CRLF;
 
