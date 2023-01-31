@@ -65,10 +65,6 @@ method opener{
     my $entry=$_cache{$key_path};
 
     unless($entry){
-      #for my $suffix (@$suffix_list){
-
-      #my $path=$key_path.$suffix;
-
         Log::OK::TRACE and log_trace "Static: Searching for: $key_path";
 
         return unless stat($key_path) and -r _ and ! -d _; #undef if stat fails
@@ -81,8 +77,6 @@ method opener{
 
         if(defined IO::FD::sysopen $in_fh, $key_path, OPEN_MODE|($mode//0)){
           $entry[fh_]=$in_fh;
-          #Log::OK::DEBUG and log_debug "Static: preencoded com: ".$suffix ;
-          #Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
           $entry[cached_]=1;
 
           $entry=\@entry;
@@ -92,7 +86,6 @@ method opener{
         else {
           Log::OK::ERROR and log_error " Error opening file $key_path: $!";
         }
-        #}
     }
 
     # Increment the  counter 
