@@ -19,9 +19,7 @@ use constant OPEN_MODE=>O_RDONLY|O_NONBLOCK;
 use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_ key_ etag_ source_ user_>;
 
 
-#field $_html_root :param;
 field $_sweep_size; # :param;
-#field $_sweep_interval;# :param;
 field $_mime_table  :param; 
 field $_default_mime :param;
 field $_timer;
@@ -33,7 +31,6 @@ field $_closer;
 field $_http_headers;
 
 BUILD{
-  #$_sweep_interval//=5;
   $_sweep_size//=100;
   $_enabled=1;
 }
@@ -148,29 +145,7 @@ method close {
 # Create a timer which checks for any file changes (if enabled)
 # and closes the fd if nothing is referencing it and 
 #
-method enable{
-  $_enabled=1;
-
-  ########################################################################################
-  # unless ($_timer){                                                                    #
-  #   $_timer=AE::timer 0, $_sweep_interval, sub {                                       #
-  #     #say "Doing timer";                                                              #
-  #     my $i=0;                                                                         #
-  #     my $entry;                                                                       #
-  #     my $closer=$self->closer;                                                        #
-  #     for(keys %_cache){                                                               #
-  #       $entry=$_cache{$_};                                                            #
-  #                                                                                      #
-  #       # If the cached_ field reaches 1, this is the last code to use it. so close it #
-  #       #                                                                              #
-  #       #say "Timer for entry: $entry->[key_]";                                        #
-  #       $closer->($entry) if($entry->[cached_]==1);                                    #
-  #       last if ++$i >= $_sweep_size;                                                  #
-  #     }                                                                                #
-  #   };                                                                                 #
-  # }                                                                                    #
-  ########################################################################################
-}
+method enable{ $_enabled=1; }
 
 1;
 

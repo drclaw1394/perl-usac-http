@@ -655,7 +655,7 @@ sub usac_file_under {
 
         
         my $entry;
-        my $path=$html_root.$p;
+        #my $path=$html_root.$p;
         my $enc="";
         my $content_type;
 
@@ -708,10 +708,10 @@ sub usac_file_under {
           $content_type=$mime->{$ext}//$default_mime;
                 
 
-          if($pre_encoded and $_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//""=~/(gzip)/){
+          if($pre_encoded and ($_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//"")=~/(gzip)/){
             # Attempt to find a pre encoded file when the client asks and if its enabled
             #
-
+            #say  $_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"};
             $enc=$1;
             my $enc_ext=$pre_encoded->{$1};
             $entry=$opener->($path.$enc_ext, $open_modes) if $enc_ext;

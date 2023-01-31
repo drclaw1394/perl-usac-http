@@ -57,9 +57,9 @@ my $server; $server=usac_server {
   #usac_middleware log_simple dump_headers=>1;
 	usac_site {
     usac_id "blog";
-		usac_host "127.0.0.1:8084";
-		usac_host "localhost:8084";
-		usac_host "192.168.1.102:8084";
+    #usac_host "127.0.0.1:8084";
+    #usac_host "localhost:8084";
+    #usac_host "192.168.1.102:8084";
 
 
 		#
@@ -70,8 +70,7 @@ my $server; $server=usac_server {
   
     usac_route "/getme/($Comp)"=>sub {
       return unless $_[CODE];
-
-      $_[PAYLOAD]=join ", ",&rex_captures->@*;#"GOT IT";
+      $_[PAYLOAD]=join ", ", &rex_captures->@*;
     };
 
 		usac_route '/static/hot.txt' =>	gzip()=>deflate()=>usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
