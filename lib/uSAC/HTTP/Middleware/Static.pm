@@ -525,9 +525,6 @@ sub make_list_dir {
 
 
 
-my %encoding_map =(
-	gz=>"gzip",
-);
 
 #Server static files under the specified root dir
 #Dual mode. Also acts as innerware
@@ -551,7 +548,7 @@ sub usac_file_under {
   my $filter=$options{filter};
   my $no_encoding=$options{no_encoding}//"";
   my $do_dir=$options{list_dir}//$options{do_dir};
-  my $pre_encoded=$options{pre_encoded}//[];
+  my $pre_encoded=$options{pre_encoded}//{};
 
   \my @indexes=$options{indexes}//[];
 
@@ -564,13 +561,22 @@ sub usac_file_under {
     my $index=$_; 
     (map {
       $index.$_
-    } @$pre_encoded);
+    } keys %$pre_encoded);
   } @indexes;
 
-  push @$pre_encoded, "";
 
-  #Add unencoded options at end of list
+  # Add unencoded options at end of list
+  #
   push @suffix_indexes, @indexes;
+
+
+  # Setup the prencoded  array to iterate through for 'normal' files
+  # Add the empty suffix to allow matching of unencoded content.
+  # Assumes file names are in the form of index.html.gz
+  #
+  my @pre_encoded= ((map {".$_"} keys(%$pre_encoded)), "");
+
+
 
 
   #TODO: Need to check only supported encodings are provided.
@@ -583,7 +589,7 @@ sub usac_file_under {
   Log::OK::DEBUG and log_debug "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
 
   local $"=", ";
-  Log::OK::DEBUG and log_debug "Preencoding filter: ".(@$pre_encoded?(@$pre_encoded):"**NONE**");
+  Log::OK::DEBUG and log_debug "Preencoding filter: ".(%$pre_encoded?(%$pre_encoded):"**NONE**");
   Log::OK::DEBUG and log_debug "Sendfile: ".($sendfile?"yes $sendfile":"no");
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
@@ -642,30 +648,39 @@ sub usac_file_under {
 
 
 
-        # File serving
+        # File and Directory serving 
         #
-        # Attempts to open the file and send it. If it fails, the next static middleware is called if present
-
-        
-        my $pre_encoded_ok=(@$pre_encoded and ($_[1]->headers->{ACCEPT_ENCODING}//"" !~ /gzip/))
-        ?$pre_encoded
-        :[];
+        # Attempts to open the file and send it. If it fails, the next static
+        # middleware is called if present
 
         
         my $entry;
+        my $path=$html_root.$p;
+        my $enc="";
+        my $content_type;
+
         if(substr($path, -1) eq "/") {
+          # Attempt to match a file within a directory to that in the index list
+          # Update content type to the located file
+          #
           if(@suffix_indexes ){
-            #Server dir listing if option is specified
-            #
-            #=========================================
-            #attempt to do automatic index file.
-            #for(@indexes){
-            my $path=$html_root.$p;#.$_;
+
             Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
-            $entry=$opener->($path, $open_modes, \@suffix_indexes);
+            for(@suffix_indexes){
+              my $_path=$path.$_;
+              $entry=$opener->($_path, $open_modes);#, \@suffix_indexes);
+              if($entry){
+                my $index=rindex $_path, ".";
+                my $ext=substr $_path, $index+1;
+                $content_type=$mime->{$ext}//$default_mime;
+                last;
+              }
+            }
             #goto SEND_FILE if $entry
           }
           elsif($do_dir){
+            # Don't want an index file, just a dir listing
+            #
             Log::OK::TRACE and log_trace "Static: Listing dir $p";
             #dir listing
             $_[PAYLOAD]=$p;   # hack
@@ -673,6 +688,9 @@ sub usac_file_under {
             goto &$list_dir;
           }
           else {
+            # Normally dir listing and index is disabled.
+            # Return non found
+            #
             Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
             $_[PAYLOAD]="";
             $_[CODE]=HTTP_NOT_FOUND;
@@ -680,18 +698,38 @@ sub usac_file_under {
             goto &$next;
           }
         }
+
         else {
-
+          # Attempt a normal file serve
+          #
           Log::OK::TRACE and log_trace "Working on opening normal file";
-          # Attempt a normal file read
-          #use Data::Dumper;
-          #say Dumper $path, $pre_encoded;
-          $entry=$opener->($path, $open_modes, $pre_encoded);
+          my $index=rindex $path, ".";
+          my $ext=substr $path, $index+1;
+          $content_type=$mime->{$ext}//$default_mime;
+                
 
-          #say Dumper $entry;
+          if($pre_encoded and $_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//""=~/(gzip)/){
+            # Attempt to find a pre encoded file when the client asks and if its enabled
+            #
+
+            $enc=$1;
+            my $enc_ext=$pre_encoded->{$1};
+            $entry=$opener->($path.$enc_ext, $open_modes) if $enc_ext;
+            unless($entry){
+              $entry=$opener->($path, $open_modes);
+              $enc=($no_encoding and $ext=~/$no_encoding/)?"identity":"";
+
+            }
+          }
+          else{
+            # No preencoded files enabled
+            $entry=$opener->($path, $open_modes);
+          }
+
           unless($entry){
             # We did not locate the file. Set a not found error and forward to
             # the next middleware
+            #
             $_[PAYLOAD]="";
             $_[CODE]=HTTP_NOT_FOUND;
             push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
@@ -699,29 +737,22 @@ sub usac_file_under {
           }
         }
 
-        #SEND_FILE:
-          # Setup Headers if they don't exist
-          unless($entry->[user_]){
-            my $index=rindex $entry->[source_], ".";
-            my $enc_ext=substr $entry->[source_], $index+1;
+        # Setup meta cache fields if they don't exist
+        #
+        unless($entry->[user_]){
+          $entry->[user_]=[
+            HTTP_CONTENT_TYPE, $content_type, #($mime->{$ext}//$default_mime),
+            HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
+              CORE::gmtime($entry->[mt_])),
+            HTTP_ETAG, "\"$entry->[mt_]-$entry->[size_]\"",
+          ];
+        }
 
-            $index=rindex $entry->[key_], ".";
-            my $ext=substr $entry->[key_], $index+1;
+        # Finally push the content encoding encountered along the way
+        #
+        push @{$_[HEADER]}, HTTP_CONTENT_ENCODING, $enc if $enc;
 
-            # Build up the user info
-            $entry->[user_]=[
-              HTTP_CONTENT_TYPE, ($mime->{$ext}//$default_mime),
-              (HTTP_CONTENT_ENCODING, $enc_ext eq $ext
-                ? ("identity")
-                : ("gzip")),
-
-              HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
-                  CORE::gmtime($entry->[mt_])),
-
-              HTTP_ETAG, "\"$entry->[mt_]-$entry->[size_]\"",
-            ];
-          }
-          send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, $closer);
+        send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, $closer);
 
       }
       else {

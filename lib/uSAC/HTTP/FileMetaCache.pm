@@ -37,9 +37,6 @@ BUILD{
   $_sweep_size//=100;
   $_enabled=1;
 }
-my %encoding_map =(
-	gz=>"gzip",
-);
 
 method sweeper {
   $_sweeper//= sub {
@@ -71,24 +68,23 @@ method opener{
     my $entry=$_cache{$key_path};
 
     unless($entry){
-      for my $suffix (@$suffix_list){
+      #for my $suffix (@$suffix_list){
 
-        my $path=$key_path.$suffix;
+      #my $path=$key_path.$suffix;
 
-        Log::OK::TRACE and log_trace "Static: Searching for: $path";
+        Log::OK::TRACE and log_trace "Static: Searching for: $key_path";
 
-        next unless stat($path) and -r _ and ! -d _; #undef if stat fails
+        return unless stat($key_path) and -r _ and ! -d _; #undef if stat fails
 
         my @entry;
         
         $entry[size_]=(stat _)[7];
         $entry[mt_]=(stat _)[9];
         $entry[key_]=$key_path;
-        $entry[source_]=$path;
 
-        if(defined IO::FD::sysopen $in_fh, $path, OPEN_MODE|($mode//0)){
+        if(defined IO::FD::sysopen $in_fh, $key_path, OPEN_MODE|($mode//0)){
           $entry[fh_]=$in_fh;
-          Log::OK::DEBUG and log_debug "Static: preencoded com: ".$suffix ;
+          #Log::OK::DEBUG and log_debug "Static: preencoded com: ".$suffix ;
           #Log::OK::TRACE and log_trace "content encoding: ". join ", ", $entry[content_encoding_]->@*;
           $entry[cached_]=1;
 
@@ -97,9 +93,9 @@ method opener{
 
         }
         else {
-          Log::OK::ERROR and log_error " Error opening file $path: $!";
+          Log::OK::ERROR and log_error " Error opening file $key_path: $!";
         }
-      }
+        #}
     }
 
     # Increment the  counter 

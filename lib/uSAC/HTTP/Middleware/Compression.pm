@@ -77,23 +77,32 @@ sub deflate {
             #($_[REX]->headers->{ACCEPT_ENCODING}//"") !~ /deflate/iaa and return &$next;
             #Also disable if we are already encoded
             $exe=1;
-            my $bypass;
-            ($bypass= $_ eq HTTP_CONTENT_ENCODING) and last for @headers[@key_indexes[0.. @headers/2-1]];
-            $exe&&=!$bypass;	
+            #my $bypass;
+            for my ($k,$v)(@headers){
+                return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
+            }
+            #($bypass= $_ eq HTTP_CONTENT_ENCODING) and last for @headers[@key_indexes[0.. @headers/2-1]];
+            #$exe&&=!$bypass;	
 
             Log::OK::TRACE  and log_trace "exe ". $exe; 
             Log::OK::TRACE  and log_trace "Single shot: ". !$_[CB];
 
             $ctx=$exe;
 
-            return &$next unless $exe; #bypass is default
+            #return &$next unless $exe; #bypass is default
 
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
             $index=@headers;
 
-            $headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
-            for @key_indexes[0..@headers/2-1];
+            my $i=0;
+
+            #$headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
+            #for @key_indexes[0..@headers/2-1];
+            for my ($k, $v)(@headers){
+              $index=$i if $k eq HTTP_CONTENT_LENGTH;
+              $i+=2;
+            }
 
             Log::OK::TRACE and log_debug "Content length index: $index";
 
@@ -233,22 +242,32 @@ sub gzip{
 
             #Also disable if we are already encoded
             $exe=1;
-            my $bypass;
-            ($bypass = $_ eq HTTP_CONTENT_ENCODING)  and last for @headers[@key_indexes[0.. @headers/2-1]];
-            $exe&&=!$bypass;	
+            #my $bypass;
+            for my ($k,$v)(@headers){
+                return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
+            }
+
+            #($bypass = $_ eq HTTP_CONTENT_ENCODING)  and last for @headers[@key_indexes[0.. @headers/2-1]];
+            #$exe&&=!$bypass;	
+
             Log::OK::TRACE  and log_trace "exe ". $exe; 
             Log::OK::TRACE  and log_trace "Single shot: ". !$_[CB];
 
             $ctx=$exe;
 
-            return &$next unless $exe; #bypass is default
+            #return &$next unless $exe; #bypass is default
 
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
             $index=@headers;
 
-            $headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
-            for @key_indexes[0..@headers/2-1];
+            my $i=0;
+            #$headers[$_] eq HTTP_CONTENT_LENGTH and ($index=$_, last)
+            #for @key_indexes[0..@headers/2-1];
+            for my ($k, $v)(@headers){
+              $index=$i if $k eq HTTP_CONTENT_LENGTH;
+              $i+=2;
+            }
 
             Log::OK::TRACE and log_debug join ", ", @headers;	
             Log::OK::TRACE and log_debug "Content length index: $index";
@@ -296,9 +315,9 @@ sub gzip{
           Log::OK::TRACE and log_trace "Processing gzip content";
           # Only process if setup correctly
           #
-          Log::OK::TRACE and log_trace $_[1];
+          Log::OK::TRACE and log_trace $_[REX];
 
-          $ctx//=$out_ctx{$_[1]};
+          $ctx//=$out_ctx{$_[REX]};
 
 
           return &$next unless $ctx;

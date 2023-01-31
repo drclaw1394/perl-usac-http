@@ -117,10 +117,10 @@ my $server; $server=usac_server {
                 usac_static_under (
                         #filter=>'txt$',
                         read_size=>4096*16,
-                        #pre_encoded=>[qw<gz>],
+                        pre_encoded=>{gzip=>".gz"},
                         #no_compress=>qr/txt$/,
                         do_dir=>1,
-                        #indexes=>["index.html"],
+                        indexes=>["index.html"],
                         sendfile=>4096*32,
                         usac_dirname #  "static"
                 );
