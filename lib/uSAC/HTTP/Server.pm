@@ -981,6 +981,44 @@ sub parse_cli_options {
 }
 
 1; 
+=head1 NAME
+
+uSAC::HTTP::Server - Streaming HTTP server
+
+=head1 SYNOPSIS
+
+  use EV;
+  use AnyEvent;
+
+
+  use Log::ger;
+  use Log::OK;
+  use Log::ger::Output "Screen";
+
+
+  use uSAC::HTTP;
+
+  usac_server {
+    usac_listen ...;
+      ... 
+    usac_run;
+  };
+
+=head1 DESCRIPTION
+
+Implements event based HTTP Server, supporting websockets and focusing on
+efficient middleware execution to facility data 'streaming';
+
+=head1 API
+
+=head2 DSL
+
+=head3 usac_listen
+
+=head3 usac_host;
+
+=cut
+
 __DATA__
 <!doctype html>
 <html>

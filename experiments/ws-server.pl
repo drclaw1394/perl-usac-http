@@ -8,7 +8,7 @@ use AnyEvent;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware qw<log_simple>;
-use uSAC::HTTP::Server::WS;
+use uSAC::HTTP::Middleware::Websocket qw<websocket>;
 
 use Log::ger::Output "Screen";
 
@@ -106,13 +106,13 @@ $server->add_route("GET"=>"/chunks"=>()=>sub {
 	$sub->();
 });
 
-
+$server->parse_cli_options(@ARGV);
 $server->run;
 
 __DATA__
 <html>
 	<head>
-		<title>WS test </title>
+		<title>Websocket test </title>
 	</head>
 	<body>
     <div id="messages"></div>
@@ -143,3 +143,4 @@ __DATA__
 
 	</body>
 <html>
+

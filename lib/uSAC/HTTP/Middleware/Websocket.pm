@@ -1,4 +1,4 @@
-package uSAC::HTTP::Server::WS;
+package uSAC::HTTP::Server::Websocket;
 use strict;
 use warnings;
 no warnings "experimental";
@@ -139,7 +139,7 @@ sub websocket_in {
 
           for($rex->[uSAC::HTTP::Rex::write_]){
             $_->($reply.CRLF , sub {
-                my $ws=uSAC::HTTP::Server::WS->new($session);
+                my $ws=uSAC::HTTP::Server::Websocket->new($session);
                 #$ws->[PMD_]=$deflate_flag;
                 $ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);
 
@@ -555,3 +555,44 @@ sub ping_interval {
 
 
 1;
+
+=head1 NAME 
+
+uSAC::HTTP::Middleware::Websocket - Websocket
+
+
+=head1 SYNOPSIS
+
+  use uSAC::HTTP;
+  use usAC::HTTP::Middleware::Websocket qw<websocket>;
+
+  usac_server { 
+    ...
+    usac_route GET=>"/path_to_url"=>websocket=>sub {
+        my $ws=$_[PAYLOAD];
+        $ws->on_open(...);
+        $ws->on_close(...);
+
+        $ws->on_error(...);
+        $ws->on_message(...);
+        $ws->on_connect(...);
+    }
+    ...
+  }
+
+
+=head1 DESCRIPTION
+
+Implements websocket communication as middleware for the L<uSAC::HTTP> system.
+It processes middleware input, and generates middleware output. The output
+C<$_[PAYLOAD]> variable is set the the newly created websocket object. 
+
+To use this object add a additional middlware which manipulates the object.
+
+=head1 TODO
+
+Make client version
+
+=cut
+
+

@@ -24,8 +24,8 @@ my @redirects=qw<
 	>;
 
 my @errors=qw<
-usac_catch_route
-usac_error_not_found
+  usac_catch_route
+  usac_error_not_found
 	usac_error_page
 	usac_error_route
 >;	
@@ -532,8 +532,6 @@ sub resolve_mime_default {
 
 =item C<usac_site>
 
-Creates a new site and sets the server to the C<$_> dynamic variable
-After the server is set. the C<$_> in localised and set to the new site
 
 =back
 
@@ -547,12 +545,9 @@ sub usac_site :prototype(&) {
 	my $self= uSAC::HTTP::Site->new(server=>$server);
 	$self->[parent_]=$options{parent}//$uSAC::HTTP::Site;
 	$self->[id_]=$options{id}//join ", ", caller;
-  #$self->[prefix_]=$options{prefix}//"";
 	$self->set_prefix(%options,$options{prefix}//'');
-	#$self->[parent_]=$_;
 	
 	local  $uSAC::HTTP::Site=$self;
-	#local  $_=$self;
 	$sub->($self);
 	$self;
 }
@@ -738,6 +733,7 @@ sub add_host {
 
 
 sub usac_middleware {
+  #TODO: fix so specifid like a route
 	#my $self=$_;
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
@@ -746,6 +742,7 @@ sub usac_middleware {
 }
 
 sub add_middleware {
+  #TODO: fix so specifid like a route
 	my $self=shift;
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
@@ -1016,3 +1013,158 @@ sub usac_error_not_found {
 
 
 1;
+
+=head1 NAME
+
+uSAC::HTTP::Site -  Grouping facility of related routes
+
+=head1 SYNOPSIS
+
+
+  use uSAC::HTTP;
+
+    # Within a usac_server call...
+    #
+    usac_site {
+        add_route ...
+
+        add_catch_route ...
+    }
+
+=head1 DESCRIPTION
+
+Provides grouping facility of related routes withing a C<uSAC::HTTP::Server>.
+It does this by implementing a hierarchy or sites, with a server ( a subclass
+of this class) at the root.
+
+Each site can specifiy an id and a prefix, which is used in identifiying and routing requests.
+
+
+=head1 ROUTING PROCESS
+
+
+
+=head1 API
+
+=head2 DSL
+
+The DLS API is only intended to be utilised withing the configuration stage of
+a program running. Normally the API is only called within the a C<usac_site> or
+C<usac_server>. This automatically resolves the hierarchy of groups (ie
+parent). This can be manually overwritten by specifiying a manual B<parent>
+option in api calls
+
+=head3 usac_site
+
+  usac_site {...};
+
+Creates a new site and adds it to the current parent item in
+C<$uSAC::HTTP::Site>.  Only takes a single argument, which is a block of code
+with contains other C<uSAC::Site> API calls.
+
+It configures the generated site with a default id  which is generated from the
+caller information. This helps identifiying the site when route listing and
+debugging.
+
+=head2 Route Configuration
+
+=head3 usac_route
+
+  usac_route undef,$middleware,...;         (1)
+  usac_route $url=>$middleware, ...         (2)
+  usac_route $method=>$url=>$middleware, ...(3)
+
+Adds a route to the containing site. The information from parents sites/groups
+is used to construct the route.
+
+In the first form (1), takes two or more arguments. If the the first argument
+to the function is C<undef>, this overwrites the default matcher for any of the
+hosts this route will apply to. This is will be the route that will be used if
+no other routes match for a host. All methods match this route.
+
+
+The second form (2), takes two or more arguments. It is a short cut for
+specifiying a GET request method. The first argument is a url path matching
+specification. This can be either a string, or a compiled regexp. Remaining
+arguments are middleware (including your 'end point'). If a string is used, it
+B<MUST> start with a '/', otherwise it will be interpreted as a method.
+
+The third form (3), takes three or more arguments. The first argument is the
+method specification. This can be a uppercase string for an individual method
+(ie GET or POST), or it can be regexp to match methods, or it can be an
+reference to an array, containing methods names/matchers. In this case, it is
+converted internally into a regexp with each item used as an alternative match
+(ie matcher1|matcher2|matcher3....)
+
+
+Its important to note, that if the method matching is specified as a regexp or
+converted internally to a regexp, then the path portion will also be treated as
+a regexp.
+
+
+The path/url argument is subject to the prefix of the enclosing site and the
+parent sites.  This prefix is automaticlly added to the url/path, and is
+ultimately what is used to match and dispatch incoming requests.
+
+  eg 
+      usac_site {
+        usac_prefix "AA";
+
+        usac_site {
+          usac_prefix "BB";
+
+          usac_route "foo", sub { $_[PAYLOAD]="GOT BAR" if $_[CODE]};
+
+        }
+
+In this example the route 'foo' will actuall match a url path starting with
+/AA/BB/foo.
+
+=head2 Site Configuation
+
+=head3 usac_host
+
+  usac_host $string;    (1)
+  usac_host $array_ref; (2)
+
+Specifies the hosts to which this group/site will have its routes added to.
+
+
+In the first (1) form, a single host stirng can be specified. The second form
+(2) takes a reference to an array of host strings.
+
+B<NOTE:> the host stirng B<MUST> contain the port number to identify the host.
+
+  eg 
+    usac_host "localhost:8080";
+    usac_host [qw<localhost:8080 my_name:8080 localhost:443>];
+
+=head3 usac_prefix
+
+  usac_prefix  $string;
+
+Set the string prefix fragment to use at the current level in the site hierrarchy.
+
+
+=head3 usac_controller
+
+  usac_controller $package_name;
+  usac_controller $object;
+
+Set the controller variable for the enclosing site. This is only needed if
+middleware is specified by name instead of CODE/ARRAY refs.
+
+=head3 usac_id 
+
+  usac_id $string;
+
+Set the id representing the site for listing and debugging purposes. Does not
+have to be unique.
+
+=head3 usac_middleware
+
+  usac_middleware $mw;
+
+  TODO: Fix this 
+
+
