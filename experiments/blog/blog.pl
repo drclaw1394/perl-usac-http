@@ -9,8 +9,11 @@ use AnyEvent;
 use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
+
 use uSAC::HTTP::Middleware qw<log_simple>;
 use uSAC::HTTP::Middleware::Compression qw<gzip deflate>;
+use uSAC::HTTP::Middleware::AccumulateContent qw<
+urlencoded_slurp urlencoded_file multipart_slurp multipart_file>;
 
 use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;

@@ -489,9 +489,9 @@ sub rebuild_dispatch {
     # route it is the default. So we are in single end point mode. no need to
     # perform any routing lookups as we already know which one to use
     #
-    my $single_end_point_mode=
-      $self->routes == keys $self->[host_tables_]->%*
-        and keys $self->[host_tables_]->%*==1;
+    my $single_end_point_mode=(
+      ($self->routes == keys $self->[host_tables_]->%*)
+        and (keys $self->[host_tables_]->%*)==1);
 
 
     if($single_end_point_mode){
