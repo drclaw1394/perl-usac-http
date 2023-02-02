@@ -675,10 +675,15 @@ sub usac_file_under {
                 $content_type=$mime->{$ext}//$default_mime;
                 last;
               }
+              else {
+                Log::OK::TRACE and log_trace "Static: did not locate index: $path";
+              }
             }
             #goto SEND_FILE if $entry
           }
-          elsif($do_dir){
+
+          #
+          if($do_dir and !$entry){
             # Don't want an index file, just a dir listing
             #
             Log::OK::TRACE and log_trace "Static: Listing dir $p";
@@ -687,7 +692,7 @@ sub usac_file_under {
             $_[CB]=$next;     # hack
             goto &$list_dir;
           }
-          else {
+          elsif(!$entry){
             # Normally dir listing and index is disabled.
             # Return non found
             #
