@@ -1,4 +1,4 @@
-package uSAC::HTTP::Server::Websocket;
+package uSAC::HTTP::Middleware::Websocket;
 use strict;
 use warnings;
 no warnings "experimental";
@@ -139,7 +139,7 @@ sub websocket_in {
 
           for($rex->[uSAC::HTTP::Rex::write_]){
             $_->($reply.CRLF , sub {
-                my $ws=uSAC::HTTP::Server::Websocket->new($session);
+                my $ws=uSAC::HTTP::Middleware::Websocket->new($session);
                 #$ws->[PMD_]=$deflate_flag;
                 $ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1);
 
