@@ -570,8 +570,11 @@ sub make_serialize{
       \my @headers=$_[HEADER];
 
       $index=undef;
-      for my ($k,$v)(@headers){
-        $index=1  and last if $k eq HTTP_CONTENT_LENGTH;
+      for my ($k, $v)(@headers){
+        if($k eq HTTP_CONTENT_LENGTH){
+          $index=1;
+          last;
+        }
       }
 
       # Do chunked if we don't find a content length

@@ -61,7 +61,7 @@ use Carp 'croak';
 use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
 
 use enum (
-	"sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ options_ read_size_ application_parser_ total_requests_>
+	"sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ options_ application_parser_ total_requests_>
 );
 
 
@@ -955,7 +955,7 @@ sub parse_cli_options {
   Getopt::Long::GetOptionsFromArray(\@options,\%options,
     "workers=i",
     "listener=s@",
-    "show=s@",
+    "show:s@",
     "read-size=i"
     
   ) or die "Invalid arguments";
@@ -968,7 +968,7 @@ sub parse_cli_options {
       $self->add_listeners($_) for(@$value);
     }
     elsif($key eq "show"){
-      $self->[options_]{show_routes}=$value
+      $self->[options_]{show_routes}=$value||".*";
     }
     elsif($key eq "read-size"){
       $self->[read_size_]=$value;

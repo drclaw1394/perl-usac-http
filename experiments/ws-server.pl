@@ -14,8 +14,6 @@ use Log::ger::Output "Screen";
 
 my %clients;
 
-
-
 my $server=uSAC::HTTP::Server->new();
 
 #FIXME:
