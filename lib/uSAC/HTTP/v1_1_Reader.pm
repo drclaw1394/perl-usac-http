@@ -38,6 +38,7 @@ use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use constant MAX_READ_SIZE => 128 * 1024;
+use constant CRLF2=>CRLF.CRLF;
 
 
 
@@ -112,22 +113,24 @@ sub make_reader{
   my $code=-1;
   my $payload="";
 
-  sub {
-    state $route;
-    state $captures;
-    my $processed=0;
-    state $body_len=0;
-    state $body_type;
-    state $form_headers={};
+    my $route;
+    my $captures;
+    my $body_len=0;
+    my $body_type;
+    my $form_headers={};
+    my $multi_state=0;
+    my $first=1;
+    my $out_header=[];
+    my $dummy_cb=sub {};
 
-    state $multi_state=0;
-    state $first=1;
+
+  sub {
+    my $processed=0;
+
     ##my %h;
 
     # Set default HTTP code
     $code=-1;
-    state $out_header=[];
-    state $dummy_cb=sub {};
     try {
       unless(@_){
         Log::OK::TRACE and log_trace "PASSING ON ERROR IN HTTP parser";
@@ -137,7 +140,8 @@ sub make_reader{
       }
       \my $buf=\$_[0];
 
-      while ( $len=length $buf) {
+      #while ( $len=length $buf) {
+      while ($buf) {
 
         #Dual mode variables:
         #	server:
@@ -194,7 +198,7 @@ sub make_reader{
 
         elsif ($state == STATE_HEADERS) {
           #sleep 1;
-          my $end=index $buf, CRLF.CRLF, $ppos;
+          my $end=index $buf, CRLF2, $ppos;
           if ($end>MAX_READ_SIZE) {
             $state=STATE_ERROR;
             redo;
@@ -208,13 +212,15 @@ sub make_reader{
 
           for my ($k, $val)(
             map split(":", $_, 2) ,
-              split("\015\012", substr $buf, $ppos)
+              split("\015\012", substr($buf, $ppos))
             ){
             #say "$k=>$val";
               $k=~tr/-/_/;
               $k=uc $k;
 
-              $val=builtin::trim $val;  #perl 5.36 required
+              #$val=builtin::trim $val;  #perl 5.36 required
+              $val=~s/\A\s+//;#uo;
+              $val=~s/\s+\z//;#uo;
 
               \my $e=\$h{$k};
               $e?($e.=",$val"):($e=$val);
@@ -618,10 +624,7 @@ sub make_serialize{
 
       $index=undef;
       for my ($k, $v)(@headers){
-        if($k eq HTTP_CONTENT_LENGTH){
-          $index=1;
-          last;
-        }
+        $index=1 and last if($k eq HTTP_CONTENT_LENGTH);
       }
 
       # Do chunked if we don't find a content length

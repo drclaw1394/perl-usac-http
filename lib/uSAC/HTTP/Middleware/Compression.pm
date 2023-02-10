@@ -66,10 +66,10 @@ sub deflate {
           my $exe;
           my $ctx;
           if($_[HEADER]){
-            for($_[REX]->headers->{ACCEPT_ENCODING}){
-                # Do next unless header is defined and contains gzip
-                goto &$next unless $_ and /deflate/;
-            }
+              # Do next unless header is defined and contains gzip
+              goto &$next unless 
+                $_=$_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} and /deflate/;
+
             Log::OK::TRACE and log_debug "Deflate: in header processing";
             \my @headers=$_[HEADER]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "deflate: looking for accept";
@@ -79,7 +79,7 @@ sub deflate {
             $exe=1;
             #my $bypass;
             for my ($k,$v)(@headers){
-                return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
+                goto &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
             }
             #($bypass= $_ eq HTTP_CONTENT_ENCODING) and last for @headers[@key_indexes[0.. @headers/2-1]];
             #$exe&&=!$bypass;	
@@ -230,10 +230,10 @@ sub gzip{
           my $exe;
           my $ctx;
           if($_[HEADER]){
-            for($_[REX]->headers->{ACCEPT_ENCODING}){
-                # Do next unless header is defined and contains gzip
-                goto &$next unless $_ and /gzip/;
-            }
+              # Do next unless header is defined and contains gzip
+              goto &$next unless 
+                $_=$_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} and /gzip/;
+
             Log::OK::TRACE and log_debug "gzipin header processing";
             \my @headers=$_[HEADER]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "gzip: looking for accept encoding";
@@ -244,7 +244,7 @@ sub gzip{
             $exe=1;
             #my $bypass;
             for my ($k,$v)(@headers){
-                return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
+                goto &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
             }
 
             #($bypass = $_ eq HTTP_CONTENT_ENCODING)  and last for @headers[@key_indexes[0.. @headers/2-1]];
@@ -340,7 +340,7 @@ sub gzip{
             $status=$ctx->flush($scratch);
             #$scratch.=pack("V V", $ctx->crc32(), $ctx->total_in());
 
-            delete $out_ctx{$_[1]};
+            delete $out_ctx{$_[REX]};
 
             $ctx->deflateReset;
             Log::OK::TRACE and log_debug "about to push for multicall";
