@@ -193,12 +193,24 @@ sub make_reader{
         }
 
         elsif ($state == STATE_HEADERS) {
-          while () {
-            $pos3=index $buf, CRLF, $ppos;
-            #if($pos3>0){
-            if($pos3>$ppos){
-              #($k, $val)=split ":", substr($buf, 0, $pos3), 2;
-              ($k, $val)=split ":", substr($buf, $ppos, $pos3-$ppos), 2;
+          #sleep 1;
+          my $end=index $buf, CRLF.CRLF, $ppos;
+          if ($end>MAX_READ_SIZE) {
+            $state=STATE_ERROR;
+            redo;
+          }
+          elsif($end < $ppos){
+            #Not enough
+            warn "not enough";
+            return;
+          }
+        
+
+          for my ($k, $val)(
+            map split(":", $_, 2) ,
+              split("\015\012", substr $buf, $ppos)
+            ){
+            #say "$k=>$val";
               $k=~tr/-/_/;
               $k=uc $k;
 
@@ -218,33 +230,68 @@ sub make_reader{
               elsif($k eq "CONNECTION"){
                 $connection=$val;
               }
-              
-              #TODO what about proxied requests with X-Forwarded-for?
-              #Shoult this set the host as well
-              #
-              #$buf=substr $buf, $pos3+2;
 
-              #redo;
-            }
-            #elsif($pos3 == 0){
-            elsif($pos3 == $ppos){
-              $ppos=0;
-              $buf=substr($buf, $pos3+2);
-              last;
-            }	#empty line.
 
-            else{
-              #-1	Need more
-              if (length($buf) > MAX_READ_SIZE) {
-
-                $state=STATE_ERROR;
-                redo;
-              }
-              #warn "Need more";
-              return;
-            }
           }
+          $ppos=0;
+          $buf=substr($buf, $end+4);
 
+        
+
+          ##################################################################
+          # while () {                                                     #
+          #   $pos3=index $buf, CRLF, $ppos;                               #
+          #   #if($pos3>0){                                                #
+          #   if($pos3>$ppos){                                             #
+          #     #($k, $val)=split ":", substr($buf, 0, $pos3), 2;          #
+          #     ($k, $val)=split ":", substr($buf, $ppos, $pos3-$ppos), 2; #
+          #     $k=~tr/-/_/;                                               #
+          #     $k=uc $k;                                                  #
+          #                                                                #
+          #     $val=builtin::trim $val;  #perl 5.36 required              #
+          #                                                                #
+          #     \my $e=\$h{$k};                                            #
+          #     $e?($e.=",$val"):($e=$val);                                #
+          #                                                                #
+          #                                                                #
+          #     $ppos=$pos3+2;                                             #
+          #     if($k eq "HOST"){                                          #
+          #       $host=$val;                                              #
+          #     }                                                          #
+          #     elsif($k eq "CONTENT_LENGTH"){                             #
+          #       $body_len= int $val;                                     #
+          #     }                                                          #
+          #     elsif($k eq "CONNECTION"){                                 #
+          #       $connection=$val;                                        #
+          #     }                                                          #
+          #                                                                #
+          #     #TODO what about proxied requests with X-Forwarded-for?    #
+          #     #Shoult this set the host as well                          #
+          #     #                                                          #
+          #     #$buf=substr $buf, $pos3+2;                                #
+          #                                                                #
+          #     #redo;                                                     #
+          #   }                                                            #
+          #   #elsif($pos3 == 0){                                          #
+          #   elsif($pos3 == $ppos){                                       #
+          #     $ppos=0;                                                   #
+          #     $buf=substr($buf, $pos3+2);                                #
+          #     last;                                                      #
+          #   }   #empty line.                                             #
+          #                                                                #
+          #   else{                                                        #
+          #     #-1       Need more                                        #
+          #     if (length($buf) > MAX_READ_SIZE) {                        #
+          #                                                                #
+          #       $state=STATE_ERROR;                                      #
+          #       redo;                                                    #
+          #     }                                                          #
+          #     #warn "Need more";                                         #
+          #     return;                                                    #
+          #   }                                                            #
+          # }                                                              #
+          #                                                                #
+          ##################################################################
           #Done with headers. 
 
 
