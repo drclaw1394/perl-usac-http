@@ -11,7 +11,8 @@ use Log::ger::Output 'Screen';
 use uSAC::HTTP;
 
 use uSAC::HTTP::Middleware qw<log_simple>;
-use uSAC::HTTP::Middleware::Compression qw<gzip deflate>;
+use uSAC::HTTP::Middleware::Deflate qw<deflate>;
+use uSAC::HTTP::Middleware::Gzip qw<gzip>;
 use uSAC::HTTP::Middleware::AccumulateContent qw<
 urlencoded_slurp urlencoded_file multipart_slurp multipart_file>;
 
@@ -76,7 +77,9 @@ my $server; $server=usac_server {
       $_[PAYLOAD]=join ", ", &rex_captures->@*;
     };
 
-		usac_route '/static/hot.txt' =>	gzip()=>deflate()=>usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
+		usac_route '/static/hot.txt' =>	
+    gzip()=>deflate()=>
+    usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
 
     usac_route "/die"=> sub {
       return unless $_[CODE];
