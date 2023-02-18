@@ -690,7 +690,7 @@ sub usac_file_under {
             #dir listing
             $_[PAYLOAD]=$p;   # hack
             $_[CB]=$next;     # hack
-            goto &$list_dir;
+            return &$list_dir;
           }
           elsif(!$entry){
             # Normally dir listing and index is disabled.
@@ -700,7 +700,7 @@ sub usac_file_under {
             $_[PAYLOAD]="";
             $_[CODE]=HTTP_NOT_FOUND;
             push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
-            goto &$next;
+            return &$next;
           }
         }
 
@@ -738,7 +738,7 @@ sub usac_file_under {
             $_[PAYLOAD]="";
             $_[CODE]=HTTP_NOT_FOUND;
             push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
-            goto &$next;
+            return &$next;
           }
         }
 

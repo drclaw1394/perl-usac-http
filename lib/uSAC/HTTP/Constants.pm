@@ -14,6 +14,19 @@ use constant::more {
     CRLF=>"\015\012"
 
 };
+
+########################
+# use constant::more { #
+#     PAYLOAD=>0,      #
+#     CB=>1,           #
+#     ROUTE=>2,        #
+#     REX=>3,          #
+#     CODE=>4,         #
+#     HEADER=>5,       #
+#     CRLF=>"\015\012" #
+#                      #
+# };                   #
+########################
 use Exporter "import";
 
 our @EXPORT_OK=qw<ROUTE REX CODE HEADER PAYLOAD CB CRLF>;

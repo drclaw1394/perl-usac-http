@@ -20,6 +20,7 @@ WriteMakefile(
     "Error::Show"=>0,
 		"Socket::More"	=> 0,
 		"uSAC::MIME"	=> 0,
+    "Sub::Middler"=>0,
 		
 
 		"Crypt::JWT"	=> 0,

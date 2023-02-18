@@ -56,7 +56,7 @@ sub gzip{
           Log::OK::TRACE and log_debug "Input data length: ".length  $_[PAYLOAD];
           # 0	1 	2   3	    4     5
           # usac, rex, code, headers, data, cb
-          \my $buf=\$_[4];
+          \my $buf=\$_[PAYLOAD];
 
           Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
           Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
@@ -69,7 +69,7 @@ sub gzip{
           if($_[HEADER]){
             no warnings "uninitialized";
             # Do next unless header is defined and contains gzip
-            goto &$next unless 
+            return &$next unless 
               $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} =~ /gzip/;
 
             Log::OK::TRACE and log_debug "gzipin header processing";
@@ -82,7 +82,7 @@ sub gzip{
             $exe=1;
             #my $bypass;
             for my ($k,$v)(@headers){
-                goto &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
+                return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
             }
 
 
@@ -139,8 +139,8 @@ sub gzip{
             }
             else{
               #multiple calls required so setup context
-              Log::OK::TRACE and log_trace "Multicalls required $_[1]";
-              $out_ctx{$_[1]}=$ctx;
+              Log::OK::TRACE and log_trace "Multicalls required $_[REX]";
+              $out_ctx{$_[REX]}=$ctx;
 
 
             }

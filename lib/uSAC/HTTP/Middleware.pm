@@ -86,7 +86,7 @@ sub log_simple_in {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
 
-      goto &$inner_next unless $_[CODE] and $_[HEADER];
+      return &$inner_next unless $_[CODE] and $_[HEADER];
 			my $time=time;
 
       package uSAC::HTTP::Rex {
@@ -125,7 +125,7 @@ sub log_simple_out {
 		my $outer_next=shift;
 		sub {
 			#matcher, rex, code, header, body, cb, arg
-      goto &$outer_next unless $_[CODE] and $_[HEADER];
+      return &$outer_next unless $_[CODE] and $_[HEADER];
 
       say STDERR "\n<<<---";
       say STDERR "Depature time:		".time;

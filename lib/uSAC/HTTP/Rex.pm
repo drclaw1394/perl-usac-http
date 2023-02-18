@@ -87,6 +87,7 @@ use enum (
 	recursion_count_
 	peer_
   uri_decoded_
+  mw_ctx_
 	end_
 	>
 );
@@ -120,7 +121,7 @@ sub rex_write{
 	#
 	
 
-	goto &{$_[0][1][2]};	#Execute the outerware for this site/location
+	return &{$_[ROUTE][1][2]};	#Execute the outerware for this site/location
   Log::OK::TRACE and log_trace "Rex: End of rex write. after outerware";
 
 }
@@ -194,15 +195,15 @@ sub rex_site_url {
 #returns the site object associate with this request
 #match, rex, na
 sub rex_site {
-	$_[0][1][0];	
+	$_[ROUTE][1][0];	
 }
 
 sub rex_state :lvalue{
-	$_[1][state_];
+	$_[REX][state_];
 }
 
 sub rex_peer {
-  $_[1][peer_];
+  $_[REX][peer_];
 }
 
 #redirect to within site
@@ -215,10 +216,10 @@ sub rex_peer {
 
 sub rex_redirect_moved{
   if($_[CODE]){
-    my $url=$_[4];
-    $_[2]=HTTP_MOVED_PERMANENTLY;
-    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-    $_[4]="";
+    my $url=$_[PAYLOAD];
+    $_[CODE]=HTTP_MOVED_PERMANENTLY;
+    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[PAYLOAD]="";
   }
 	&rex_write;
 }
@@ -236,10 +237,10 @@ sub rex_redirect_see_other{
 sub rex_redirect_found {
 	#my $url=pop;
   if($_[CODE]){
-    my $url=$_[4];
-    $_[2]=HTTP_FOUND;
-    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-    $_[4]="";
+    my $url=$_[PAYLOAD];
+    $_[CODE]=HTTP_FOUND;
+    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[PAYLOAD]="";
   }
 	&rex_write;
 	
@@ -247,11 +248,11 @@ sub rex_redirect_found {
 
 sub rex_redirect_temporary {
   if($_[CODE]){
-    my $url=$_[4];
-    $_[2]=HTTP_TEMPORARY_REDIRECT;
-    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    my $url=$_[PAYLOAD];
+    $_[CODE]=HTTP_TEMPORARY_REDIRECT;
+    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
 
-    $_[4]="";
+    $_[PAYLOAD]="";
   }
 	&rex_write;
 	
@@ -259,10 +260,10 @@ sub rex_redirect_temporary {
 
 sub rex_redirect_permanent {
   if($_[CODE]){
-    my $url=$_[4];
-    $_[2]=HTTP_PERMANENT_REDIRECT;
-    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-    $_[4]="";
+    my $url=$_[PAYLOAD];
+    $_[CODE]=HTTP_PERMANENT_REDIRECT;
+    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[PAYLOAD]="";
   }
 	&rex_write;
 	
@@ -270,10 +271,10 @@ sub rex_redirect_permanent {
 
 sub rex_redirect_not_modified {
   if($_[CODE]){
-    my $url=$_[4];
-    $_[2]=HTTP_NOT_MODIFIED;
-    push $_[3]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
-    $_[4]="";
+    my $url=$_[PAYLOAD];
+    $_[CODE]=HTTP_NOT_MODIFIED;
+    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    $_[PAYLOAD]="";
   }
 	&rex_write;
 }
@@ -284,7 +285,7 @@ sub rex_redirect_internal;
 #General error call, Takes an additional argument of new status code
 sub rex_error {
   if($_[CODE]){
-    my $site=$_[0][1][0];
+    my $site=$_[ROUTE][1][0];
     $_[CB]=undef;
     $_[REX][method_]="GET";
     $_[REX][in_progress_]=1;
@@ -391,7 +392,7 @@ sub rex_redirect_internal {
 }
 
 sub rex_headers {
-	return $_[1]->[headers_];
+	return $_[REX]->[headers_];
 }
 
 sub rex_reply_json {
@@ -489,6 +490,7 @@ sub new {
 	$self->[recursion_count_]=0;
   $self->[captures_]=$_[8];
   $self->[in_progress_]=undef;
+  $self->[mw_ctx_]=[];
   #$self->[uri_decoded_]=url_decode_utf8 $self->[uri_raw_];
 	$self;
 }
@@ -499,8 +501,8 @@ sub new {
 sub usac_multipart_stream {
 		my $cb=pop;
 		sub {
-			my $line=$_[0];#shift;
-			my $rex=$_[1];#shift;
+			my $line=$_[ROUTE];#shift;
+			my $rex=$_[REX];#shift;
 			#shift;		#remove place holder for mime
 			my $session=$rex->[uSAC::HTTP::Rex::session_];
 			#check if content type is correct first
@@ -591,7 +593,7 @@ sub mw_dead_horse_stripper {
 	sub {
 		my $inner_next=shift;
 		sub {
-      goto &$inner_next unless $_[CODE];
+      return &$inner_next unless $_[CODE];
 
       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
       if($_[HEADER]){
@@ -615,7 +617,7 @@ sub mw_dead_horse_stripper {
       unless($_[REX][in_progress_]){
         Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef";
         $_[CB]=undef;
-        goto &rex_write;
+        return &rex_write;
       }
 
       Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";

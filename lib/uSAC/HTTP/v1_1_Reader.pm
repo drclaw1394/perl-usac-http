@@ -7,6 +7,8 @@ use EV;
 use Log::ger;
 use Log::OK;
 
+use Error::Show;
+use uSAC::HTTP::Rex;
 use Exporter 'import';
 use Encode qw<find_encoding decode encode decode_utf8>;
 use URL::Encode::XS;
@@ -575,6 +577,10 @@ sub make_reader{
 
 sub make_serialize{
   my %options=@_;
+  my $protocol=$options{protocol}//"HTTP/1.1";
+  my $mode=$options{mode}//MODE_SERVER;
+  my $code_to_name=$options{information}//\@uSAC::HTTP::Code::code_to_name;
+
   my $static_headers="";
 
 
@@ -600,8 +606,8 @@ sub make_serialize{
     }
     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
     #Log::OK::TRACE and log_trace join ", ", @_;
-    use Data::Dumper;
-    Log::OK::TRACE and log_trace Dumper $_[HEADER];
+    #use Data::Dumper;
+    #Log::OK::TRACE and log_trace Dumper $_[HEADER];
 
     $ctx=undef;
 
@@ -614,7 +620,12 @@ sub make_serialize{
     # a synchronous write with now callback. Which is  useful writing out 
     # small amounts of header data before a body.
     #
-    my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
+    #NOTE: experimenting with not using dropper when undefined.
+    # For HTTP/1.1 dropper will be called from other locations on error
+    # for HTTP/1.0 dropper is called on close anyhow.
+    # saves call
+    #
+    my $cb=$_[CB];#//$_[REX][uSAC::HTTP::Rex::dropper_];
 
 
     if($_[HEADER]){
@@ -655,7 +666,20 @@ sub make_serialize{
       # If no valid code is set then set default 200
       #
       $_[CODE]=HTTP_OK if $_[CODE]<0;
-      my $reply="HTTP/1.1 ".$_[CODE]." ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
+
+
+      #my $reply="HTTP/1.1 ".$_[CODE]." ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
+
+      my $reply="";
+      if($mode == MODE_SERVER){
+        # serialize in server mode is a response
+        $reply=$protocol." ".$_[CODE]." ". $code_to_name->[$_[CODE]]. CRLF;
+      }
+      else {
+        # serialize in client mode is a request
+        $reply="$_[REX][uSAC::HTTP::Rex::method_] $_[REX][uSAC::HTTP::Rex::uri_raw_] $protocol".CRLF;
+        #$reply=$protocol." ".$_[CODE]." ". $code_to_name->[$_[CODE]]. CRLF;
+      }
 
       # Render headers
       #

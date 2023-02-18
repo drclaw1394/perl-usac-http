@@ -12,7 +12,10 @@ use Cwd qw<abs_path>;
 use File::Spec::Functions;
 use Exporter "import";
 use uSAC::HTTP::Constants;
-#use uSAC::HTTP::v1_1_Reader;
+
+use Error::Show;
+use Exception::Class::Base;
+
 use URI;
 
 my @redirects=qw<
@@ -42,13 +45,13 @@ use uSAC::HTTP::Constants;
 
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie qw<:all>;
-use uSAC::HTTP::v1_1_Reader;
+use uSAC::HTTP::v1_1_Reader;      #TODO: this will be dynamically linked in
 #use uSAC::HTTP::Static;
 #
 #use uSAC::HTTP::Server::WS;
 #use Hustle::Table;
 #
-use uSAC::HTTP::Middler;
+use Sub::Middler;
 use uSAC::HTTP::Middleware qw<log_simple>;
 
 use File::Spec::Functions qw<rel2abs abs2rel>;
@@ -61,7 +64,24 @@ use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	end_-server_+1;
 
 
+my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 
+our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS) /;
+our $ANY_URL=qr/.*+ /;
+our $ANY_VERS=qr/HTTP.*$/;
+our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS)/;
+
+our $Method=		qr{^([^ ]+)};
+
+#NOTE Path matching tests for a preceeding /
+our $Path=		qr{(?:<=[/])([^?]*)};		#Remainder of path components  in request line
+our $File_Path=		qr{(?:<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
+our $Dir_Path=		qr{(?:<=[/])([^?]*+)(?<=[/])};
+
+#NOTE Comp matching only matches between slashes
+our $Comp=		qr{(?:[^/?]+)};		#Path component
+our $Decimal=   qr{(?:\d+)};    #Decimal Integer
+our $Word=      qr{(?:\w+)};    #Word
 
 my $id=0;
 sub new {
@@ -108,9 +128,9 @@ sub new {
 #If the server is configured for virtual hosts, the matching mechanism also includes the host matcher
 #specified in the site initialization
 #
-my @methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 sub _add_route {
   local $,=" ";
+  say caller;
   my $self=shift;
   my $end;#=pop;
   my $method_matcher=shift;
@@ -119,9 +139,19 @@ sub _add_route {
   my @inner;
   my @outer;
 
+  $self->_method_match_check($method_matcher);
+  say "METHOD MATCHR: ",$method_matcher;
   my $bp=$self->built_prefix;                                      #
 
 
+  # Test we have a valid method matcher
+  my $ok=grep  {
+    $_=~ $method_matcher; 
+  }
+    $self->supported_methods;
+  die "Method specification invalid for route" unless $ok;
+
+  my @matching=($method_matcher);
 
 
 
@@ -188,7 +218,8 @@ sub _add_route {
         die Exception::Class::Base->throw("Could not run controller $self->[controller_] with method $_") if $@;
       }
       catch($e){
-        log_error Error::Show::context message=>$e, frames=>\$e->trace->frames;
+        say $e;
+        log_error Error::Show::context message=>$e, frames=>[$e->trace->frames];
         exit -1;
       }
       unshift @_, $a;
@@ -214,7 +245,6 @@ sub _add_route {
   unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($self->[built_prefix_]);
 
 
-  my @matching=($method_matcher);
   local $"=",";
   Log::OK::TRACE and log_trace "Methods array : @matching";
 
@@ -231,7 +261,7 @@ sub _add_route {
 
   my $outer;
   if(@outer){
-    my $middler=uSAC::HTTP::Middler->new();
+    my $middler=Sub::Middler->new();
     $middler->register($_) for(@outer);
 
     $outer=$middler->link($serialize);
@@ -243,7 +273,7 @@ sub _add_route {
   #$end;#=$outer;
 
   if(@inner){
-    my $middler=uSAC::HTTP::Middler->new();
+    my $middler=Sub::Middler->new();
     for(@inner){
       $middler->register($_);
     }
@@ -439,22 +469,6 @@ sub built_label {
 
 #Take matcher, list of innerware and endpoint sub
 
-our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS) /;
-our $ANY_URL=qr/.*+ /;
-our $ANY_VERS=qr/HTTP.*$/;
-our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS)/;
-
-our $Method=		qr{^([^ ]+)};
-
-#NOTE Path matching tests for a preceeding /
-our $Path=		qr{(?:<=[/])([^?]*)};		#Remainder of path components  in request line
-our $File_Path=		qr{(?:<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
-our $Dir_Path=		qr{(?:<=[/])([^?]*+)(?<=[/])};
-
-#NOTE Comp matching only matches between slashes
-our $Comp=		qr{(?:[^/?]+)};		#Path component
-our $Decimal=   qr{(?:\d+)};    #Decimal Integer
-our $Word=      qr{(?:\w+)};    #Word
 
 #our $Query=		qr{(?:([^#]+))?};
 #our $Fragment=		qr{(?:[#]([^ ]+)?)?};
@@ -562,7 +576,14 @@ sub find_root {
 	}
 	$parent;
 }
+sub supported_methods {
+  @supported_methods;
+}
 
+sub default_method {
+  "GET";
+}
+sub any_method { $Any_Method; }
 #Fixes missing slashes in urls
 #As it is likely that the url is a constant, @_ is shifted/unshifted
 #to create new variables for the things we need to correct
@@ -572,18 +593,29 @@ sub usac_route {
 	$self->add_route(@_);
 }
 
+sub _method_match_check{
+    my $result;
+    my ($self,$matcher)=@_;
+    $result =$matcher if grep $_ =~ /$matcher/, $self->supported_methods;
+    die "Invalid method matcher. Does not match any methods" unless $result;
+    $matcher;
+
+}
 
 sub add_route {
 	my $self=shift;
   die "route needs at least two parameters" unless @_>=2;
+  say @_;
   
   if(!defined($_[0])){
     # 
     # Sets the default for the host
     #
-    shift; unshift @_, $Any_Method, undef;
+    shift; unshift @_, $self->any_method, undef;
 		$self->_add_route(@_);
   }
+
+
 	elsif(ref($_[0]) eq "ARRAY"){
     #
 		# Methods specified as an array ref, which will get
@@ -593,6 +625,9 @@ sub add_route {
 		my $a=shift;
     #unshift @_, "(?:".join("|", @$a).")";
     $a= "(?:".join("|", @$a).")";
+    
+    #Test the methods actually match somthing
+
 
     $a=qr{$a};
     my $b=shift;
@@ -601,6 +636,8 @@ sub add_route {
 
 		$self->_add_route(@_);
 	}
+
+
 	elsif(ref($_[0]) eq "Regexp"){
 		if(@_>=3){
 			#method matcher specified
@@ -614,38 +651,44 @@ sub add_route {
 	}
 	elsif($_[0]=~m|^/|){
 		#starting with a slash, short cut for GET and head
-		unshift @_, "GET";
+    Log::OK::WARN and log_warn "No method supplied.  Assuming ".$self->default_method;
+		unshift @_, $self->default_method;
 		$self->_add_route(@_);
 	}
-	elsif(!($_[0]=~m|^[/]|) and !($_[0]=~m|^$Any_Method|)){
-		#not starting with a forward slash but with a method
-		my $url=shift @_;
-
-		#only add a slash if the string is not empty
-		$url="/".$url if $url ne "";
-
-		unshift @_, $url;
-
-		unshift @_, "GET";
-		$self->_add_route(@_);
-
-	}
-	elsif(
-		$_[0]=~m|^$Any_Method| and
-		$_[1]=~m|^[^/]| and
-		ref($_[1]) ne "Regexp"
-	){
-		#Method specified but route missing a leading slash
-		my $method=shift;
-		my $url=shift;
-
-		$url="/".$url if $url ne "";
-		unshift @_, $method, $url;
-
-		$self->_add_route(@_);
-	}
+    ###########################################################################
+    #     elsif(!($_[0]=~m|^[/]|) and !($_[0]=~m|^@{[$self->any_method]}|)){  #
+    #             # not starting with a forward slash  and  not with a method #
+    # # Assume it is a url needing fixing?                                    #
+    #             my $url=shift @_;                                           #
+    #                                                                         #
+    #             #only add a slash if the string is not empty                #
+    #             $url="/".$url if $url ne "";                                #
+    #                                                                         #
+    #             unshift @_, $url;                                           #
+    #                                                                         #
+    #             unshift @_, "GET";                                          #
+    #             $self->_add_route(@_);                                      #
+    #                                                                         #
+    #     }                                                                   #
+    ###########################################################################
+        ###############################################################
+        # elsif(                                                      #
+        #         $_[0]=~m|^@{[$self->any_method]}| and               #
+        #         $_[1]=~m|^[^/]| and                                 #
+        #         ref($_[1]) ne "Regexp"                              #
+        # ){                                                          #
+        #         #Method specified but route missing a leading slash #
+        #         my $method=shift;                                   #
+        #         my $url=shift;                                      #
+        #                                                             #
+        #         $url="/".$url if $url ne "";                        #
+        #         unshift @_, $method, $url;                          #
+        #                                                             #
+        #         $self->_add_route(@_);                              #
+        # }                                                           #
+        ###############################################################
 	else{
-		#normal	
+		# method, url and middleware specified
 		$self->_add_route(@_);
 	}
 }
@@ -756,7 +799,6 @@ sub add_middleware {
 
 sub usac_catch_route {
 	#Add a route matching all methods and any path	
-  #$uSAC::HTTP::Site->add_route([$Any_Method],qr{.*},pop);
 	$uSAC::HTTP::Site->add_route(qr{(?#SITE CATCH ALL)[^\s]+} ,qr{.*},pop);
 }
 

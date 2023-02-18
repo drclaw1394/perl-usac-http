@@ -48,7 +48,7 @@ sub deflate {
     my $index;
     (sub {
         if($_[CODE]){
-          Log::OK::TRACE and log_debug "Input data length: ".length  $_[4];
+          Log::OK::TRACE and log_debug "Input data length: ".length  $_[PAYLOAD];
           # 0	1 	2   3	    4     5
           # usac, rex, code, headers, data, cb
           \my $buf=\$_[PAYLOAD];
@@ -62,7 +62,7 @@ sub deflate {
           if($_[HEADER]){
             no warnings "uninitialized";
               # Do next unless header is defined and contains gzip
-              goto &$next unless 
+              return &$next unless 
                 $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} =~ /deflate/;
 
             Log::OK::TRACE and log_debug "Deflate: in header processing";
@@ -71,7 +71,7 @@ sub deflate {
 
             $exe=1;
             for my ($k,$v)(@headers){
-                goto &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
+                return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
             }
 
             Log::OK::TRACE  and log_trace "exe ". $exe; 
@@ -116,7 +116,7 @@ sub deflate {
               #multiple calls required so setup context
               #my $scratch="";
               $ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
-              Log::OK::TRACE and log_trace "Multicalls required $_[1]";
+              Log::OK::TRACE and log_trace "Multicalls required $_[REX]";
               $out_ctx{$_[REX]}=$ctx;
 
 

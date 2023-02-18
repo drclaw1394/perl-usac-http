@@ -513,10 +513,11 @@ sub rebuild_dispatch {
     # information. The route contains the middlewares prelinked to process the
     # requests
     #
+  my $table;
   $self->[cb_]=sub {
     #my ($host, $input, $rex)=@_;#, $rex, $rcode, $rheaders, $data, $cb)=@_;
 
-    my $table=$lookup{$_[0]//""}//$any_host;#$lookup{"*.*"};
+    $table=$lookup{$_[0]//""}//$any_host;#$lookup{"*.*"};
     (my $route, my $captures)= $table->[0]($_[1]);
 
     #Hustle table entry structure:
