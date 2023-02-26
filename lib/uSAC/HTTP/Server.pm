@@ -562,10 +562,10 @@ sub stop {
 
 sub run {
 	my $self=shift;
-        my $sig; $sig=AE::signal(INT=>sub {
-                $self->stop;
-                $sig=undef;
-        });
+  my $sig; $sig=AE::signal(INT=>sub {
+          $self->stop;
+          $sig=undef;
+  });
 
 	$self->rebuild_dispatch;
 

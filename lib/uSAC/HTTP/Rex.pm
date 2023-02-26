@@ -98,7 +98,12 @@ use constant KEY_COUNT=>end_-version_+1;
 
 require uSAC::HTTP::Middleware;
 		
-#Main output subroutine
+# TODO: rename this subroutine
+# This is routine is the glue between server innerware and server outerware
+# The innerware is linked to this target at the end.
+# Should only be called if you want to jump remaining innerware and go the start
+# of outerware
+#
 #Arguments are matcher, rex, code, header, data, cb
 #		0     ,	 1 ,	2,	3,    4,  5
 sub rex_write{
@@ -124,6 +129,16 @@ sub rex_write{
 	return &{$_[ROUTE][1][2]};	#Execute the outerware for this site/location
   Log::OK::TRACE and log_trace "Rex: End of rex write. after outerware";
 
+}
+
+# Terminates a client innerware
+# Client counterpart to rex_write.
+# This is used as the 'dispatcher' when linking middleware
+#
+sub rex_terminate {
+  # TODO: implement!
+  #Currently does nothing. Just used as an end point
+  # Could push a session back to the pool, etc
 }
 
 
@@ -586,6 +601,8 @@ sub parse_query_params_old {
 	return $kv;
 }
 
+# Strips site prefix and also monitors if the REX has been marked activly in
+# progress
 #
 sub mw_dead_horse_stripper {
   my ($package, $prefix)=@_;

@@ -58,7 +58,7 @@ use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
 
 #Class attribute keys
-use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ built_label_ error_uris_ controller_ end_));
+use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ built_label_ error_uris_ controller_  mode_ end_));
 
 use constant KEY_OFFSET=>	0;
 use constant KEY_COUNT=>	end_-server_+1;
@@ -132,38 +132,183 @@ sub _add_route {
   local $,=" ";
   say caller;
   my $self=shift;
-  my $end;#=pop;
+  my $end;
   my $method_matcher=shift;
   my $path_matcher=shift;
 
-  my @inner;
-  my @outer;
+  #my @inner;
+  #my @outer;
 
   $self->_method_match_check($method_matcher);
-  say "METHOD MATCHR: ",$method_matcher;
-  my $bp=$self->built_prefix;                                      #
+  say "METHOD MATCHER: ", $method_matcher;
 
 
-  # Test we have a valid method matcher
+  # Test we have a valid method matcher against supported methods
+  #
   my $ok=grep  {
     $_=~ $method_matcher; 
   }
     $self->supported_methods;
   die "Method specification invalid for route" unless $ok;
 
-  my @matching=($method_matcher);
+
+  #my @matching=($method_matcher);
+
+  # Fix up and break out middleware
+  #
+  \my (@inner, @outer, @names)=$self->wrap_middleware(@_);
+
+
+  # Innerware run form parent to child to route in
+  # the order of listing
+  #
+  unshift @inner, $self->construct_middleware;
+
+  # Outerware is in reverse order
+  unshift @outer, $self->construct_outerware;
+  @outer=reverse @outer;
+
+  unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($self->[built_prefix_]);
+
+
+  # TODO: fix this for client support.
+  # Server has the rex_write hook at the start of outerware
+  # Client will need to hook at end of outerware?
+  $end= \&rex_write;
 
 
 
+
+
+  #my $server= $self->[server_];
+  my $static_headers=$self->[server_]->static_headers;
+
+  #TODO: Need to rework this for other HTTP versions
+  my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize static_headers=>$static_headers;
+
+  my $outer;
+  if(@outer){
+    my $middler=Sub::Middler->new();
+    $middler->register($_) for(@outer);
+
+    $outer=$middler->link($serialize);
+  }
+  else {
+    $outer=$serialize;
+  }
+
+
+  if(@inner){
+    my $middler=Sub::Middler->new();
+    for(@inner){
+      $middler->register($_);
+    }
+    $end=$middler->link($end);
+  }
+
+
+
+
+
+  my @hosts;
+  #my $matcher;
+
+  @hosts=$self->build_hosts;	#List of hosts (as urls) 
+
+  push @hosts, "*.*" unless @hosts;
+
+
+  #$hosts{"*.*"}//= {};
+  Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
+  my $pm;
+
+  for my $uri (@hosts){
+    my $host;
+    if(ref $uri){
+      $host=$uri->host;
+      if($uri->port!=80 or $uri->port !=443){
+        $host.=":".$uri->port;
+      }
+    }
+    else {
+      $host=$uri;	#match all
+    }
+
+
+    # 
+    # Fix the path matcher to a regex if the method matcher 
+    # is a regex.
+    #
+    if(ref($method_matcher) eq "Regexp"
+        and defined $path_matcher
+        and ref($path_matcher) ne "Regexp"){
+      # Force pathmatcher to re if method  matcher is an re
+      $path_matcher=qr{$path_matcher} ;
+
+    }
+
+    my ($matcher, $type)=$self->__add_route($host, $method_matcher, $path_matcher);
+    $self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
+    last unless defined $matcher;
+
+  }
+}
+
+sub __add_route {
+  my ($self, $host, $method_matcher, $path_matcher)=@_;
+  my $matcher;
+  my $type;
+    # $host, @matcher (for method), $path_matcher
+  local $"=",";
+  my $bp=$self->built_prefix;                                      #
+  Log::OK::TRACE and log_trace "$host=>$method_matcher ";
+  #test if $path_matcher is a regex
+
+  if(ref($path_matcher) eq "Regexp"){
+    $type=undef;
+    #$pm=$path_matcher;
+    $matcher=qr{^$method_matcher $bp$path_matcher};
+  }
+  elsif(!defined $path_matcher){
+    $type=undef;
+    #$pm=$path_matcher;
+    $matcher=undef;
+    #$matcher=qr{$method_matcher $bp$path_matcher};
+  }
+  #is this right?
+  elsif($path_matcher =~ /[(\^\$]/){
+    $type=undef;
+    #$pm=$path_matcher;
+    $matcher=qr{^$method_matcher $bp$path_matcher};
+  }
+
+  elsif($path_matcher =~ /\$$/){
+    #$pm=substr $path_matcher, 0, -1;
+    Log::OK::TRACE and log_trace "Exact match";
+    $type="exact";
+    $matcher="$method_matcher $bp$path_matcher";
+  }
+  else {
+    $type="begin";
+    #$pm=$path_matcher;
+    $matcher="$method_matcher $bp$path_matcher";
+  }
+  #$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
+  #last unless defined $matcher;
+  ($matcher, $type);
+}
+
+# Fix middle described only as a sub
+# Resolve controller-by-name middleware specs
+#
+sub wrap_middleware {
+  my $self=shift;
+  my @inner;
+  my @outer;
   my @names;
-  #Add chunked always. Add at start of total middleware
-  # and last for outerware
-  #unshift @_, chunked();
- 
-  #Process other middleware
-  #Log::OK::DEBUG and log_debug "About to process MIDDLEWARES: ".join ", ",@_;
+
   while(@_){
-    $end=$_;
+    #$end=$_;
     $_=shift;
     # If the element is a code ref it is innerware ONLY
     if(ref($_) eq "CODE"){
@@ -229,141 +374,9 @@ sub _add_route {
       #TODO: check of PSGI middleware and wrap
     }
   }
-  $end= \&rex_write;
+  # Return references
+  (\@inner, \@outer, \@names);
 
-
-  # Innerware run form parent to child to route in
-  # the order of listing
-  #
-  unshift @inner, $self->construct_middleware;
-
-  # Outerware is in reverse order
-  unshift @outer, $self->construct_outerware;
-  @outer=reverse @outer;
-
-  #unshift @inner, $self->_strip_prefix;
-  unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($self->[built_prefix_]);
-
-
-  local $"=",";
-  Log::OK::TRACE and log_trace "Methods array : @matching";
-
-
-
-
-  #my $server= $self->[server_];
-  my $static_headers=$self->[server_]->static_headers;
-
-  #TODO: Need to rework this for other HTTP versions
-  my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize static_headers=>$static_headers;
-
-
-
-  my $outer;
-  if(@outer){
-    my $middler=Sub::Middler->new();
-    $middler->register($_) for(@outer);
-
-    $outer=$middler->link($serialize);
-  }
-  else {
-    $outer=$serialize;
-  }
-
-  #$end;#=$outer;
-
-  if(@inner){
-    my $middler=Sub::Middler->new();
-    for(@inner){
-      $middler->register($_);
-    }
-    $end=$middler->link($end);
-  }
-
-
-
-
-
-  my @hosts;
-  my $matcher;
-
-  @hosts=$self->build_hosts;	#List of hosts (as urls) 
-
-  push @hosts, "*.*" unless @hosts;
-
-
-  #$hosts{"*.*"}//= {};
-  Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
-  my $pm;
-
-  for my $uri (@hosts){
-    my $host;
-    if(ref $uri){
-      $host=$uri->host;
-      if($uri->port!=80 or $uri->port !=443){
-        $host.=":".$uri->port;
-      }
-    }
-    else {
-      $host=$uri;	#match all
-    }
-
-    ##########################################
-    # say caller;                            #
-    # say "Method matcher: $method_matcher"; #
-    # say "Path matcher: $path_matcher";     #
-    ##########################################
-
-    # 
-    # Fix the path matcher to a regex if the method matcher 
-    # is a regex.
-    #
-    if(ref($method_matcher) eq "Regexp"
-        and defined $path_matcher
-        and ref($path_matcher) ne "Regexp"){
-      # Force pathmatcher to re if method  matcher is an re
-      $path_matcher=qr{$path_matcher} ;
-
-    }
-
-    for my $method (@matching){
-      Log::OK::TRACE and log_trace "$host=>$method";
-      #test if $path_matcher is a regex
-      my $type;
-
-      if(ref($path_matcher) eq "Regexp"){
-        $type=undef;
-        #$pm=$path_matcher;
-        $matcher=qr{^$method $bp$path_matcher};
-      }
-      elsif(!defined $path_matcher){
-        $type=undef;
-        #$pm=$path_matcher;
-        $matcher=undef;
-        #$matcher=qr{$method $bp$path_matcher};
-      }
-      #is this right?
-      elsif($path_matcher =~ /[(\^\$]/){
-        $type=undef;
-        #$pm=$path_matcher;
-        $matcher=qr{^$method $bp$path_matcher};
-      }
-
-      elsif($path_matcher =~ /\$$/){
-        $pm=substr $path_matcher, 0, -1;
-        Log::OK::TRACE and log_trace "Exact match";
-        $type="exact";
-        $matcher="$method $bp$path_matcher";
-      }
-      else {
-        $type="begin";
-        #$pm=$path_matcher;
-        $matcher="$method $bp$path_matcher";
-      }
-      $self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
-      last unless defined $matcher;
-    }
-  }
 }
 
 sub server: lvalue {
@@ -718,6 +731,7 @@ sub usac_id {
         my $self=$options{parent}//$uSAC::HTTP::Site;
         $self->set_id(%options, $id);
 }
+
 sub set_id {
 	my $self=shift;
 	my $id=pop;
@@ -795,7 +809,7 @@ sub add_middleware {
 }
 
 
-########## Error handling
+########## Error handling - server side
 
 sub usac_catch_route {
 	#Add a route matching all methods and any path	
@@ -1008,7 +1022,7 @@ sub usac_path {
 sub usac_redirect_see_other {
 	my $url =pop;
 	sub {
-		$_[4]=$url;
+		$_[PAYLOAD]=$url;
 		&rex_redirect_see_other;#@_, $url;
 	}
 
@@ -1017,7 +1031,7 @@ sub usac_redirect_see_other {
 sub usac_redirect_found{
 	my $url =pop;
 	sub {
-		$_[4]=$url;
+		$_[PAYLOAD]=$url;
 		&rex_redirect_found;#@_, $url;
 	}
 }
@@ -1025,7 +1039,7 @@ sub usac_redirect_found{
 sub usac_redirect_temporary {
 	my $url =pop;
 	sub {
-		$_[4]=$url;
+		$_[PAYLOAD]=$url;
 		&rex_redirect_temporary;#@_, $url;
 	}
 }
@@ -1033,7 +1047,7 @@ sub usac_redirect_temporary {
 sub usac_redirect_not_modified {
 	my $url =pop;
 	sub {
-		$_[4]=$url;
+		$_[PAYLOAD]=$url;
 		&rex_redirect_not_modified;#@_, $url;
 	}
 }
@@ -1041,7 +1055,7 @@ sub usac_redirect_not_modified {
 sub usac_redirect_internal {
 	my $url =pop;
 	sub {
-		$_[4]=$url;
+		$_[PAYLOAD]=$url;
 		&rex_redirect_internal;# @_, $url;
 		#rex_write (@_,HTTP_NOT_MODIFIED, [HTTP_LOCATION, $url],"");
 	}

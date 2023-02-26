@@ -5,7 +5,8 @@ use warnings;
 
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
-use uSAC::HTTP::FileMetaCache;
+#use uSAC::HTTP::FileMetaCache;
+use File::Meta::Cache;
 use Carp;
 use Log::ger;
 use Log::OK;
@@ -32,7 +33,8 @@ use constant  READ_SIZE=>4096;
 
 #my %stat_cache;
 
-use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_ key_ etag_ source_ user_>;
+#use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_ key_ etag_ source_ user_>;
+#
 use constant KEY_OFFSET=>0;
 
 use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
@@ -167,9 +169,9 @@ sub send_file_uri_norange {
 
 
   $rex->[uSAC::HTTP::Rex::in_progress_]=1;
-  my $in_fh=$entry->[fh_];
+  my $in_fh=$entry->[File::Meta::Cache::fd_];
 
-  my ($content_length, $mod_time)=($entry->[size_],$entry->[mt_]);
+  my ($content_length, $mod_time)=($entry->[File::Meta::Cache::stat_][7],$entry->[File::Meta::Cache::stat_][9]);
 
   $reply="";
   #process caching headers
@@ -190,7 +192,7 @@ sub send_file_uri_norange {
     #TODO: needs testing
     for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
       $code=HTTP_OK and last unless $t;
-      $code=HTTP_OK and last if  $entry->[etag_] !~ /$t/;
+      #$code=HTTP_OK and last if  $entry->[etag_] !~ /$t/;
       $code=HTTP_NOT_MODIFIED and last;	#no body to be sent
 
     }
@@ -210,7 +212,7 @@ sub send_file_uri_norange {
   #
 
   push @$out_headers, 
-    $entry->[user_]->@*, 
+    $entry->[File::Meta::Cache::user_]->@*, 
     HTTP_VARY, "Accept",
     HTTP_ACCEPT_RANGES,"bytes";
 
@@ -594,7 +596,10 @@ sub usac_file_under {
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
   my $static=uSAC::HTTP::Middleware::Static->new(html_root=>$html_root, %options);
-  my $fmc=uSAC::HTTP::FileMetaCache->new(mime_table=>$options{mime}, default_mime=>$options{default_mime});
+  #my $fmc=uSAC::HTTP::FileMetaCache->new(mime_table=>$options{mime}, default_mime=>$options{default_mime});
+
+  # We want to use pread from IO::FD. That means we don't need the filehandle
+  my $fmc=File::Meta::Cache->new(no_fh=>1);
 
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
@@ -623,8 +628,11 @@ sub usac_file_under {
         #
         return &$next unless($_[CODE]<0 or $_[CODE]==HTTP_NOT_FOUND);
        
-        
-        $p=$_[REX][uSAC::HTTP::Rex::uri_stripped_];
+        # 
+        # Path is either given with the rex object or passed in by the payload
+        # middleware argument.
+        #
+        $p=$_[PAYLOAD]||$_[REX][uSAC::HTTP::Rex::uri_stripped_];
 
         my $path=$html_root.$p;
 
@@ -744,12 +752,12 @@ sub usac_file_under {
 
         # Setup meta cache fields if they don't exist
         #
-        unless($entry->[user_]){
-          $entry->[user_]=[
+        unless($entry->[File::Meta::Cache::user_]){
+          $entry->[File::Meta::Cache::user_]=[
             HTTP_CONTENT_TYPE, $content_type, #($mime->{$ext}//$default_mime),
             HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
-              CORE::gmtime($entry->[mt_])),
-            HTTP_ETAG, "\"$entry->[mt_]-$entry->[size_]\"",
+              CORE::gmtime($entry->[File::Meta::Cache::stat_][9])),
+            HTTP_ETAG, "\"$entry->[File::Meta::Cache::stat_][9]-$entry->[File::Meta::Cache::stat_][7]\"",
           ];
         }
 
