@@ -2,6 +2,7 @@ use v5.36;
 package uSAC::HTTP::Server; 
 use feature "try";
 
+use Object::Pad;
 use Log::ger;
 use Log::OK;
 use Socket;
@@ -33,7 +34,7 @@ use constant VERSION=>"v0.1.0";
 use version; our $VERSION = version->declare('v0.1.0');
 
 no warnings "experimental";
-use parent 'uSAC::HTTP::Site';
+#use parent 'uSAC::HTTP::Site';
 
 use uSAC::HTTP::Site;
 
@@ -58,15 +59,17 @@ use Carp 'croak';
 #max_header_size_
 #
 
-use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;
-
-use enum (
-	"sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ options_ application_parser_ total_requests_>
-);
-
-
-use constant KEY_COUNT=> total_requests_ - sites_+1;
-
+################################################################################################################################################################################################################################################################################################################################################################
+# use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;                                                                                                                                                                                                                                                                          #
+#                                                                                                                                                                                                                                                                                                                                                              #
+# use enum (                                                                                                                                                                                                                                                                                                                                                   #
+#         "sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ options_ application_parser_ total_requests_> #
+# );                                                                                                                                                                                                                                                                                                                                                           #
+#                                                                                                                                                                                                                                                                                                                                                              #
+#                                                                                                                                                                                                                                                                                                                                                              #
+# use constant KEY_COUNT=> total_requests_ - sites_+1;                                                                                                                                                                                                                                                                                                         #
+#                                                                                                                                                                                                                                                                                                                                                              #
+################################################################################################################################################################################################################################################################################################################################################################
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Session;
@@ -115,42 +118,106 @@ sub _default_handler {
 		};
 }
 
+class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 
-sub new {
-	my $pkg = shift;
-	my $self = $pkg->SUPER::new();#bless [], $pkg;
-	my %options=@_;
+field $_sites;
+field $_host_tables;
+field $_cb;
+field $_listen;
+field $_listen2;
+field $_graceful;
+field $_aws;
+field $_aws2;
+field $_fh;
+field $_fhs;
+field $_fhs2;
+field $_fhs3;
+field $_backlog;
+field $_read_size;
+field $_upgraders;
+field $_sessions;
+field $_active_connections;
+field $_total_connections;
+field $_active_requests;
+field $_zombies;
+field $_zombie_limit;
+field $_stream_timer;
+field $_server_clock;
+field $_www_roots;
+field $_mime;
+field $_workers;
+field $_cv;
+field $_options;
+field $_application_parser;
+field $_total_requests;
+field $_mime_db;
+field $_mime_default;
+field $_static_headers :mutator;
 
-	$self->[host_tables_]={};
-	$self->[cb_]=$options{cb}//sub { (200,"Change me")};
-	$self->[zombies_]=[];
-	$self->[zombie_limit_]=$options{"zombie_limit"}//100;
-	$self->[static_headers_]=[];#STATIC_HEADERS;
+
+BUILD {
+	$_mime_db//=uSAC::MIME->new;
+	$_mime_default="application/octet-stream";
+
+	$_host_tables={};
+  #$_cb=$options{cb}//sub { (200,"Change me")};
+  $_zombies=[];
+	$_zombie_limit//=100;
+	$_static_headers=[];#STATIC_HEADERS;
 
 	my $default=$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", server=>$self));
 	$default->add_route([$Any_Method], undef, _default_handler);
 
-	$self->[backlog_]=4096;
-	$self->[read_size_]=4096;
-	$self->[workers_]=undef;
-  $self->[options_]={};
+	$_backlog=4096;
+	$_read_size=4096;
+	$_workers=undef;
+  $_options={};
 
 	#$self->[max_header_size_]=MAX_READ_SIZE;
-	$self->[sessions_]={};
+	$_sessions={};
 
-	$self->[listen_]=[];
-	$self->[listen2_]=[];
+	$_listen=[];
+	$_listen2=[];
 
-	$self->mime_db=uSAC::MIME->new;
-	$self->mime_default="application/octet-stream";
-	#$self->[mime_lookup_]=$self->mime_db->index;
-  
-	return $self;
 }
 
+###############################################################################################################
+# sub new {                                                                                                   #
+#         my $pkg = shift;                                                                                    #
+#         my $self = $pkg->SUPER::new();#bless [], $pkg;                                                      #
+#         my %options=@_;                                                                                     #
+#                                                                                                             #
+#         $self->[host_tables_]={};                                                                           #
+#         $self->[cb_]=$options{cb}//sub { (200,"Change me")};                                                #
+#         $self->[zombies_]=[];                                                                               #
+#         $self->[zombie_limit_]=$options{"zombie_limit"}//100;                                               #
+#         $self->[static_headers_]=[];#STATIC_HEADERS;                                                        #
+#                                                                                                             #
+#         my $default=$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", server=>$self)); #
+#         $default->add_route([$Any_Method], undef, _default_handler);                                        #
+#                                                                                                             #
+#         $self->[backlog_]=4096;                                                                             #
+#         $self->[read_size_]=4096;                                                                           #
+#         $self->[workers_]=undef;                                                                            #
+#   $self->[options_]={};                                                                                     #
+#                                                                                                             #
+#         #$self->[max_header_size_]=MAX_READ_SIZE;                                                           #
+#         $self->[sessions_]={};                                                                              #
+#                                                                                                             #
+#         $self->[listen_]=[];                                                                                #
+#         $self->[listen2_]=[];                                                                               #
+#                                                                                                             #
+#         $self->mime_db=uSAC::MIME->new;                                                                     #
+#         $self->mime_default="application/octet-stream";                                                     #
+#         #$self->[mime_lookup_]=$self->mime_db->index;                                                       #
+#                                                                                                             #
+#         return $self;                                                                                       #
+# }                                                                                                           #
+###############################################################################################################
 
-sub _setup_dgram_passive {
-	my ($self,$l)=@_;
+
+method _setup_dgram_passive {
+	my ($l)=@_;
 	#Create a socket from results from interface
 	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or Carp::croak "listen/socket: $!";
 
@@ -176,12 +243,12 @@ sub _setup_dgram_passive {
 	}
 
 	IO::FD::fcntl $fh, F_SETFL,O_NONBLOCK;
-	$self->[fhs3_]{$fh} = $fh;
+	$_fhs3->{$fh} = $fh;
 }
 
 
-sub _setup_stream_passive{
-	my ($self, $l)=@_;
+method _setup_stream_passive{
+	my ($l)=@_;
 
 	#Create a socket from results from interface
 	defined IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or Carp::croak "listen/socket: $!";
@@ -213,23 +280,23 @@ sub _setup_stream_passive{
 
 	defined IO::FD::fcntl $fh, F_SETFL, $flags or die "COULD NOT SET NON BLOCK on $fh: $!";
 
-	$self->[fhs2_]{$fh} = $fh;
+	$_fhs2->{$fh} = $fh;
 
 
 	#Finally run the listener
-	for ( values  %{ $self->[fhs2_] } ) {
-		IO::FD::listen $_, $self->[backlog_]
+	for ( values  %$_fhs2 ) {
+		IO::FD::listen $_, $_backlog
 			or Carp::croak "listen/listen on ".( $_).": $!";
 	}
 }
 
 
 #Filter the interface listeners to the right place
-sub do_passive {
-	my $self = shift;
+method do_passive {
+  #my $self = shift;
 	#Listeners are in interface format
-	die "No listeners could be found" unless $self->[listen2_]->@*;
-	for my $l ($self->[listen2_]->@*){
+	die "No listeners could be found" unless $_listen2->@*;
+	for my $l ($_listen2->@*){
 		#Need to associate user protocol handler to listener type... how?
 		if($l->{type}==SOCK_STREAM){
 			$self->_setup_stream_passive($l);
@@ -247,31 +314,31 @@ sub do_passive {
 # 
 # Each worker calls this after spawning. Sets up timers, signal handlers etc
 #
-sub prepare {
+method prepare {
 	#setup timer for constructing date header once a second
-	my ($self)=shift;
+  #my ($self)=shift;
 
   #Start the acceptors running on this worker 
-  $_->start for(values $self->[aws_]->%*);
+  $_->start for(values $_aws->%*);
   
   #Setup the watchdog timer for the any active connections
 	my $interval=1;
 	my $timeout=20;
-	$self->[server_clock_]=time;	
+	$_server_clock=time;	
 
 	#Timeout timer
 	#
   #$SIG{ALRM}=
-  $self->[stream_timer_]=AE::timer 0, $interval,
+  $_stream_timer=AE::timer 0, $interval,
   sub {
 		#iterate through all connections and check the difference between the last update
-		$self->[server_clock_]+=$interval;
+		$_server_clock+=$interval;
 		#and the current tick
 		my $session;
-		for(keys $self->[sessions_]->%*){
-			$session=$self->[sessions_]{$_};
+		for(keys $_sessions->%*){
+			$session=$_sessions->{$_};
 
-			if(($self->[server_clock_]-$session->time)> $timeout){
+			if(($_server_clock-$session->time)> $timeout){
 				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
 				$session->closeme=1;
 				$session->drop;
@@ -289,19 +356,19 @@ sub prepare {
 #
 # Iterate over passive sockets and setup an asyncrhonous acceptor
 # 
-sub do_accept{
+method do_accept{
   #Accept is only for SOCK_STREAM 
   state $seq=0;
   Log::OK::DEBUG and log_debug __PACKAGE__. " Accepting connections";
-  weaken( my $self = shift );
-  \my @zombies=$self->[zombies_]; #Alias to the zombie sessions for reuse
-  \my %sessions=$self->[sessions_];	#Keep track of the sessions
+  #weaken( my $self = shift );
+  \my @zombies=$_zombies; #Alias to the zombie sessions for reuse
+  \my %sessions=$_sessions;	#Keep track of the sessions
 
   my $do_client=$self->make_basic_client;
 
   my @peers;
   my @afh;
-  for my $fl ( values %{ $self->[fhs2_] }) {
+  for my $fl ( values %$_fhs2 ) {
     #TODO: based on per listener settings route to different processing subs
     # eg
     #   http
@@ -313,7 +380,7 @@ sub do_accept{
     # Create an acceptor here but we start it later
     #
     #
-    $self->[aws_]{ $fl } =my $acceptor=uSAC::IO::Acceptor->create(fh=>$fl, on_accept=>$do_client, on_error=>sub {});
+    $_aws->{ $fl } =my $acceptor=uSAC::IO::Acceptor->create(fh=>$fl, on_accept=>$do_client, on_error=>sub {});
   }
   Log::OK::TRACE and log_trace "Setup of stream passive socket complete";
 }
@@ -328,20 +395,20 @@ sub make_do_dgram_client {
 #
 #Returns a sub for processing new TCP client connections
 #
-sub make_basic_client{
+method make_basic_client{
 
-  my ($self)=@_;
-  \my @zombies=$self->[zombies_];
-  \my %sessions=$self->[sessions_];
+  #my ($self)=@_;
+  \my @zombies=$_zombies;
+  \my %sessions=$_sessions;
 
   my $session;
   my $seq=0;
-  unless($self->[application_parser_]){
+  unless($_application_parser){
     require uSAC::HTTP::v1_1_Reader;
-    $self->[application_parser_]=\&uSAC::HTTP::v1_1_Reader::make_reader;
+    $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_reader;
   }
   
-  my $parser=$self->[application_parser_]; 
+  my $parser=$_application_parser; 
 
   sub {
     my ($fhs, $peers)=@_;
@@ -364,7 +431,7 @@ sub make_basic_client{
       }
       else {
         $session=uSAC::HTTP::Session->new;
-        $session->init($id, $fh, $self->[sessions_],$self->[zombies_],$self, $scheme, $peers->[$i],$self->[read_size_]);
+        $session->init($id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
 
         #$session->push_reader(make_reader $session, MODE_SERVER);
         $session->push_reader($parser->($session, 0));#MODE_SERVER));
@@ -382,27 +449,23 @@ sub make_basic_client{
   }
 }
 
-sub current_cb {
-	shift->[cb_];
+method current_cb {
+  $_cb;
 }
 
-# Accessor
-sub static_headers {
-	shift->[static_headers_];
-}
 
 #
 # This is how the server is told to add a route to a host. Not really for
 # direct access. use the add_route method on a site instead
 #
-sub add_host_end_point{
-	my ($self, $host, $matcher, $ctx, $type)=@_;
+method add_host_end_point{
+	my ( $host, $matcher, $ctx, $type)=@_;
 
 	#ctx is array
 	#[$site, $endpoint, $outer, $default_flag]
 	#This becomes the value field in hustle table entry
 	#[matcher, value, type, default]
-	my $table=$self->[host_tables_]{$host}//=[
+	my $table=$_host_tables->{$host}//=[
 		Hustle::Table->new($dummy_default),{}
 	];
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
@@ -410,32 +473,32 @@ sub add_host_end_point{
 
 #registers a site object with the server
 #returns the object
-sub register_site {
-	my $self=shift;
+method register_site {
+  #my $self=shift;
 	my $site=shift;
 	#$site->[uSAC::HTTP::server_]=$self;
 	$site->server=$self;
 	my $name=$site->id;#$site->[uSAC::HTTP::id_];
-	$self->[sites_]{$name}=$site;
+	$_sites->{$name}=$site;
 	$site;
 }
 #returns the default site
-sub default_site {
-	my $self=shift;
-	$self->[sites_]{default};
+method default_site {
+  #my $self=shift;
+	$_sites->{default};
 }
 
 #returns the site registered with the specified name
 #Returns default if not specififed
-sub site {
-	my $self=shift;
+method site {
+  #my $self=shift;
 	my $name=shift;
-	$self->[sites_]{$name//"default"}
+	$_sites->{$name//"default"}
 }
 
 
-sub rebuild_dispatch {
-  my $self=shift;
+method rebuild_dispatch {
+  #my $self=shift;
 
   Log::OK::DEBUG and log_debug(__PACKAGE__. " rebuilding dispatch...");
   #Install error routes per site
@@ -444,9 +507,9 @@ sub rebuild_dispatch {
   # Create a special default site for each host that matches any method and uri
   #  An entry is only added if the dummy_defualt is currently the default
   #
-  for my $host (keys $self->[host_tables_]->%*) {
+  for my $host (keys $_host_tables->%*) {
     #If the table has a dummy catch all then lets make an fallback
-    my $entry=$self->[host_tables_]{$host};
+    my $entry=$_host_tables->{$host};
     my $last=$entry->[0]->@*-1;
     if($entry->[0][$last] == $dummy_default){
 
@@ -464,7 +527,7 @@ sub rebuild_dispatch {
   # routes as hosts. This means that all host tables will only fail matching to
   # either defaults at all times
 
-  if($self->routes == keys $self->[host_tables_]->%*){
+  if($self->routes == keys $_host_tables->%*){
     Log::OK::WARN and log_warn "Multiple host tables, but each only contain default route matching";
     #exit;
   }
@@ -474,11 +537,11 @@ sub rebuild_dispatch {
   my %lookup=map {
       $_, [
       #table
-      $self->[host_tables_]{$_}[0]->prepare_dispatcher(cache=>$self->[host_tables_]{$_}[1]),
+      $_host_tables->{$_}[0]->prepare_dispatcher(cache=>$_host_tables->{$_}[1]),
       #cache for table
-      $self->[host_tables_]{$_}[1]
+      $_host_tables->{$_}[1]
       ]
-    } keys $self->[host_tables_]->%*;
+    } keys $_host_tables->%*;
 
 
     # Pre lookup the any host
@@ -490,14 +553,14 @@ sub rebuild_dispatch {
     # perform any routing lookups as we already know which one to use
     #
     my $single_end_point_mode=(
-      ($self->routes == keys $self->[host_tables_]->%*)
-        and (keys $self->[host_tables_]->%*)==1);
+      ($self->routes == keys $_host_tables->%*)
+        and (keys $_host_tables->%*)==1);
 
 
     if($single_end_point_mode){
 
       (my $route, my $captures)=$any_host->[0]("");
-      $self->[cb_]=sub {
+      $_cb=sub {
         #Always return the default out of the any_host table
         $route->[1][4]++;	
         ($route, $captures);
@@ -514,7 +577,7 @@ sub rebuild_dispatch {
     # requests
     #
   my $table;
-  $self->[cb_]=sub {
+  $_cb=sub {
     #my ($host, $input, $rex)=@_;#, $rex, $rcode, $rheaders, $data, $cb)=@_;
 
     $table=$lookup{$_[0]//""}//$any_host;#$lookup{"*.*"};
@@ -555,13 +618,13 @@ sub rebuild_dispatch {
 }
 
 
-sub stop {
-	my $self=shift;
-	$self->[cv_]->send;
+method stop {
+  #my $self=shift;
+	$_cv->send;
 }
 
-sub run {
-	my $self=shift;
+method run {
+  #my $self=shift;
   my $sig; $sig=AE::signal(INT=>sub {
           $self->stop;
           $sig=undef;
@@ -571,8 +634,8 @@ sub run {
 
   
 
-  if($self->[options_]{show_routes}){
-    Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $self->[options_]{show_routes}->@*);
+  if($_options->{show_routes}){
+    Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $_options->{show_routes}->@*);
     $self->dump_routes;
     #return;
   }
@@ -588,29 +651,29 @@ sub run {
   #Calles to accept are serialised. Use SO_REUSEPORT for 'zero' downtime
   #server reloads
 
-  if(not defined($self->[workers_]) or $self->[workers_]<0){
+  if(not defined($_workers) or $_workers<0){
     #Attempt to auto pick the number of workers based on cpu information
     try {
       require Sys::Info;
       my $info=Sys::Info->new;
-      $self->[workers_]=$info->device("cpu")->count;
+      $_workers=$info->device("cpu")->count;
       Log::OK::WARN and log_warn "Attempting to guess a nice worker count...";
 
     }
     catch($e){
-      $self->[workers_]=0;
+      $_workers=0;
       Log::OK::WARN and log_warn "Error guessing worker count. Running in single process mode (workers =0)";
     }
   }
-  if($self->[workers_]){
-    Log::OK::INFO and log_info "Running $self->[workers_] workers + manager";
+  if($_workers){
+    Log::OK::INFO and log_info "Running $_workers workers + manager";
   }
   else {
     Log::OK::INFO and log_info "Running single process mode";
   }
 
-  if($self->[workers_]){
-    for(1..$self->[workers_]){
+  if($_workers){
+    for(1..$_workers){
       my $pid=fork;
       if($pid){
         #server
@@ -627,17 +690,15 @@ sub run {
   }
 
   require AnyEvent;
-	my $cv=AE::cv;
-	$self->[cv_]=$cv;
-	$cv->recv();
+	$_cv=AE::cv;
+	$_cv->recv();
 }
 
 
-
-sub dump_listeners {
+method dump_listeners {
 	#Generate a table of all the listeners
 	
-	my ($self)=@_;
+  #my ($self)=@_;
 	try {
 		require Text::Table;
 		my $tab=Text::Table->new("Interface", "Address", "Family", "Group", "Port", "Path", "Type");
@@ -651,7 +712,7 @@ sub dump_listeners {
 				sock_to_string($_->{type}),
 
 				])
-			for $self->[listen2_]->@*;
+			for $_listen2->@*;
 			#$tab->load(@data);
 		Log::OK::INFO and log_info join "", $tab->table;
 
@@ -661,32 +722,32 @@ sub dump_listeners {
 	}
 }
 
-sub routes {
-  my $self=shift;
+method routes {
+  #my $self=shift;
   my @routes;
-  for my $host (sort keys $self->[host_tables_]->%*){
-    my $table= $self->[host_tables_]{$host};
+  for my $host (sort keys $_host_tables->%*){
+    my $table= $_host_tables->{$host};
     for my $entry ($table->[0]->@*){
       push @routes, $entry;
     }
   }
   @routes;
 }
-sub dump_routes {
-	my ($self)=@_;
+method dump_routes {
+  #my ($self)=@_;
   use re qw(is_regexp regexp_pattern);
   try {
     require Text::Table;
-    for my $host (sort keys $self->[host_tables_]->%*){
-      my $table= $self->[host_tables_]{$host};
+    for my $host (sort keys $_host_tables->%*){
+      my $table= $_host_tables->{$host};
       my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
       #
       # table is hustle table and cache entry
       # 
 
       # Only dump the host routes if the route spec
-      last unless $self->[options_]{show_routes};
-      next unless grep $host=~ $_, $self->[options_]{show_routes}->@*;
+      last unless $_options->{show_routes};
+      next unless grep $host=~ $_, $_options->{show_routes}->@*;
 
       
       for my $entry ($table->[0]->@*){
@@ -832,7 +893,7 @@ sub usac_listen2 {
 	my $spec=pop;		#The spec for interface matching
 	my %options=@_;		#Options for creating hosts
 	my $site=$options{parent}//$uSAC::HTTP::Site;
-	$site->add_listeners(%options,$spec);
+	$site->add_listeners(%options, $spec);
 }
 
 *usac_listen=*usac_listen2;
@@ -863,8 +924,8 @@ sub usac_listen2 {
 #	usac_listener type=>"http1", ssl=>undef, "address::port";
 #	
 
-sub add_listeners {
-	my $site=shift;
+method add_listeners {
+  #my $site=shift;
 	my $spec=pop;
 	my %options=@_;
 
@@ -887,12 +948,12 @@ sub add_listeners {
   }
 
 	@addresses=sockaddr_passive(@spec);
-	push $site->[listen2_]->@*, @addresses;
+	push $_listen2->@*, @addresses;
 }
 
-sub listeners:lvalue {
-  my $self=shift;
-  $self->[listen2_];
+method listeners:lvalue {
+  #my $self=shift;
+  $_listen2;
 }
 
 sub usac_workers {
@@ -904,20 +965,20 @@ sub usac_workers {
   $site->workers=$workers;
 }
 
-sub workers: lvalue {
-  my $self=shift;
+method workers: lvalue {
+  #my $self=shift;
   my $workers=pop;
-  my %options=@_;
-  $self->[workers_]=shift;
+  #my %options=@_;
+  $_workers=shift;
 }
 
 
 sub usac_sub_product {
 	my $sub_product=pop;	#Content is the last item
 	my %options=@_;
-	my $server=$options{parent}//$uSAC::HTTP::Site;
-	$server->[static_headers_]=[
-	HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )];
+	my $server=($options{parent}//$uSAC::HTTP::Site)->find_root;
+	$server->static_headers=[
+	  HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )];
 }
 
 sub usac_read_size {
@@ -928,9 +989,9 @@ sub usac_read_size {
 
 }
 
-sub read_size :lvalue{
-  my $self=shift;
-  $self->[read_size_];
+method read_size :lvalue{
+  #my $self=shift;
+  $_read_size;
 }
 
 sub usac_application_parser {
@@ -940,14 +1001,14 @@ sub usac_application_parser {
   $server->application_parser=$parser;
 }
 
-sub application_parser :lvalue {
-  my $self=shift;
-  $self->[application_parser_]
+method application_parser :lvalue {
+  #my $self=shift;
+  $_application_parser;
     
 }
 
-sub parse_cli_options {
-  my $self=shift;
+method parse_cli_options {
+  #my $self=shift;
   my @options=@_;
 
   #Attempt to parse the CLI options
@@ -969,10 +1030,10 @@ sub parse_cli_options {
       $self->add_listeners($_) for(@$value);
     }
     elsif($key eq "show"){
-      $self->[options_]{show_routes}=$value||".*";
+      $_options->{show_routes}=$value||".*";
     }
     elsif($key eq "read-size"){
-      $self->[read_size_]=$value;
+      $_read_size=$value;
     }
 
     else {

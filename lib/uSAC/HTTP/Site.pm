@@ -1,10 +1,12 @@
 package uSAC::HTTP::Site;
 use warnings;
 use strict;
-
 use version; our $VERSION=version->declare("v0.0.1");
 use feature ":all";
 no warnings "experimental";
+
+use Object::Pad;
+
 
 use Log::ger;
 use Log::OK;
@@ -57,11 +59,34 @@ use uSAC::HTTP::Middleware qw<log_simple>;
 use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
 
-#Class attribute keys
-use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ built_label_ error_uris_ controller_  mode_ end_));
+######################################################################################################################################################################################################
+# #Class attribute keys                                                                                                                                                                              #
+# use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ built_label_ error_uris_ controller_  end_)); #
+#                                                                                                                                                                                                    #
+# use constant KEY_OFFSET=>       0;                                                                                                                                                                 #
+# use constant KEY_COUNT=>        end_-server_+1;                                                                                                                                                    #
+######################################################################################################################################################################################################
 
-use constant KEY_OFFSET=>	0;
-use constant KEY_COUNT=>	end_-server_+1;
+class uSAC::HTTP::Site;
+
+field $_server      :mutator :param=undef;
+field $_parent      :mutator :param=undef;
+field $_prefix      :reader :param =undef;
+field $_host        :reader :param =[];
+field $_id          :mutator :param=undef;
+field $_innerware   :mutator :param=[];
+field $_outerware   :mutator :param=[];
+field $_error_uris  :param={};
+field $_controller  :mutator :param=undef;
+
+field $_mime_default:mutator;
+field $_mime_db     :mutator;
+field $_mime_lookup :mutator;
+field $_mount;
+field $_cors;
+field $_unsupported;
+field $_built_prefix;
+field $_built_label;
 
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
@@ -84,39 +109,37 @@ our $Decimal=   qr{(?:\d+)};    #Decimal Integer
 our $Word=      qr{(?:\w+)};    #Word
 
 my $id=0;
-sub new {
-  if(@_%2){
-    #last element is exepected to be setup code
-  }
-	my $self=[];
-	my $package=shift//__PACKAGE__;
-	my %options=@_;
-	$self->[server_]=	$options{server}//$self;
-	$self->[id_]=		$options{id}//$id++;
-	$self->[prefix_]=	$options{prefix}//"";
-	$self->[cors_]=		$options{cors}//"";
-	$self->[innerware_]=	$options{middleware}//[];
-	$self->[outerware_]=	$options{outerware}//[];
+
+BUILD{
+  #my $self=[];
+  #my $package=shift//__PACKAGE__;
+  #my %options=@_;
+  #$self->[server_]=	$options{server}//$self;
+  $_server//=$self;
+  #$self->[id_]=		$options{id}//$id++;
+  $_id//=$id++;
+  #$self->[prefix_]=	$options{prefix}//"";
+  $_prefix//="";
+  #$self->[cors_]=		$options{cors}//"";
+  #$self->[innerware_]=	$options{middleware}//[];
+  #$_innerware//=[];
+  #$self->[outerware_]=	$options{outerware}//[];
   #$self->[unsupported_]=[];
-	$self->[error_uris_]={};
+  #$self->[error_uris_]={};
 
-	if(ref($options{host}) eq "ARRAY"){
-		$self->[host_]=$options{host};
-
-	}
-	else{
-		if(defined($options{host})){
-			$self->[host_]=[$options{host}];
-		}
-		else {
-			$self->[host_]=[];
-		}
-	}
+  if(defined($_host) and ref $_host ne "ARRAY"){
+    #$self->[host_]=[$options{host}];
+    $_host=[$_host];
+  }
+  else {
+    #$self->[host_]=[];
+    $_host=[];
+  }
 
 	#die "No server provided" unless $self->[server_];
 	#die "No id provided" unless $self->[id_];
 
-	bless $self, $package;
+  #bless $self, $package;
 }
 
 #Adds routes to a servers dispatch table
@@ -128,10 +151,10 @@ sub new {
 #If the server is configured for virtual hosts, the matching mechanism also includes the host matcher
 #specified in the site initialization
 #
-sub _add_route {
+method _add_route {
   local $,=" ";
   say caller;
-  my $self=shift;
+  #my $self=shift;
   my $end;
   my $method_matcher=shift;
   my $path_matcher=shift;
@@ -168,7 +191,7 @@ sub _add_route {
   unshift @outer, $self->construct_outerware;
   @outer=reverse @outer;
 
-  unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($self->[built_prefix_]);
+  unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($_built_prefix);
 
 
   # TODO: fix this for client support.
@@ -181,7 +204,7 @@ sub _add_route {
 
 
   #my $server= $self->[server_];
-  my $static_headers=$self->[server_]->static_headers;
+  my $static_headers=$_server->static_headers;
 
   #TODO: Need to rework this for other HTTP versions
   my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize static_headers=>$static_headers;
@@ -248,14 +271,14 @@ sub _add_route {
     }
 
     my ($matcher, $type)=$self->__add_route($host, $method_matcher, $path_matcher);
-    $self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
+    $_server->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
     last unless defined $matcher;
 
   }
 }
 
-sub __add_route {
-  my ($self, $host, $method_matcher, $path_matcher)=@_;
+method __add_route {
+  my ($host, $method_matcher, $path_matcher)=@_;
   my $matcher;
   my $type;
     # $host, @matcher (for method), $path_matcher
@@ -301,8 +324,8 @@ sub __add_route {
 # Fix middle described only as a sub
 # Resolve controller-by-name middleware specs
 #
-sub wrap_middleware {
-  my $self=shift;
+method wrap_middleware {
+#my $self=shift;
   my @inner;
   my @outer;
   my @names;
@@ -356,11 +379,11 @@ sub wrap_middleware {
       # TODO: need a iteration limit here...
       my $a;
       try {
-        die Exception::Class::Base->throw("No controller set for site. Cannot call method by name")unless $self->[controller_];
+        die Exception::Class::Base->throw("No controller set for site. Cannot call method by name")unless $_controller;
         
-        my $string='$self->[controller_]->'.$_;
+        my $string='$_controller->'.$_;
         $a=eval $string;
-        die Exception::Class::Base->throw("Could not run controller $self->[controller_] with method $_") if $@;
+        die Exception::Class::Base->throw("Could not run controller $_controller with method $_") if $@;
       }
       catch($e){
         say $e;
@@ -379,21 +402,23 @@ sub wrap_middleware {
 
 }
 
-sub server: lvalue {
-	return $_[0][server_];
-}
+##################################
+# sub server: lvalue {           #
+#         return $_[0][server_]; #
+# }                              #
+#                                #
+# sub id: lvalue {               #
+#         return $_[0][id_];     #
+# }                              #
+#                                #
+# sub add_end_point {            #
+#                                #
+# }                              #
+##################################
 
-sub id: lvalue {
-	return $_[0][id_];
-}
 
-sub add_end_point {
-
-}
-
-
-sub parent_site :lvalue{
-	$_[0][parent_];
+method parent_site :lvalue{
+  $_parent;
 }
 
 sub usac_site_url {
@@ -406,23 +431,24 @@ sub usac_site_url {
 }
 
 #returns (and builds if required), the prefixs for this sub site
-sub built_prefix {
+method built_prefix {
 	my $parent_prefix;
-	if($_[0]->parent_site){
-		$parent_prefix=$_[0]->parent_site->built_prefix;
+	if($self->parent_site){
+		$parent_prefix=$self->parent_site->built_prefix;
 	}
 	else {
 		$parent_prefix="";
 
 	}
-	$_[0][built_prefix_]//($_[0]->set_built_prefix($parent_prefix.$_[0]->prefix));#$_[0][prefix_]);
+	$_built_prefix//($self->set_built_prefix($parent_prefix.$self->prefix));#$_[0][prefix_]);
 }
 
-sub set_built_prefix {
-	$_[0][built_prefix_]=$_[1];
+method set_built_prefix {
+  $_built_prefix=$_[0];
+#$_[0][built_prefix_]=$_[1];
 }
 
-sub build_hosts {
+method build_hosts {
 	my $parent=$_[0];
 	my @hosts;
 	while($parent) {
@@ -434,7 +460,7 @@ sub build_hosts {
 }
 
 #find the root and unshift middlewares along the way
-sub construct_middleware {
+method construct_middleware {
 	my $parent=$_[0];
 	my @middleware;
 	while($parent){
@@ -446,7 +472,7 @@ sub construct_middleware {
 	@middleware;
 }
 
-sub construct_outerware {
+method construct_outerware {
 	my $parent=$_[0];
 	my @outerware;
 	while($parent){
@@ -456,15 +482,17 @@ sub construct_outerware {
 	@outerware;
 }
 
-sub prefix {
-	$_[0]->[prefix_];
-}
+#############################
+# sub prefix {              #
+#         $_[0]->[prefix_]; #
+# }                         #
+#                           #
+# sub host {                #
+#         $_[0]->[host_];   #
+# }                         #
+#############################
 
-sub host {
-	$_[0]->[host_];
-}
-
-sub built_label {
+method built_label {
 	my $parent_label;
 	if($_[0]->parent_site){
 		$parent_label=$_[0]->parent_site->built_label;
@@ -473,7 +501,7 @@ sub built_label {
 		$parent_label="";
 
 	}
-	$_[0][built_label_]//($_[0]->set_built_prefix($parent_label.$_[0]->build_label));
+	$_built_label//($_[0]->set_built_prefix($parent_label.$_[0]->build_label));
 }
 
 
@@ -502,29 +530,35 @@ sub built_label {
 # }                                              #
 #                                                #
 ##################################################
-sub site_route {
-	my $self=shift;
-	$self->add_route(@_);
-}
-#accessor
-sub mime_default : lvalue {
-	$_[0]->[mime_default_];
-}
+#################################
+# sub site_route {              #
+#         my $self=shift;       #
+#         $self->add_route(@_); #
+# }                             #
+#################################
+###################################
+# #accessor                       #
+# sub mime_default : lvalue {     #
+#         $_[0]->[mime_default_]; #
+# }                               #
+###################################
 
 #accessor 
-sub mime_db: lvalue {
-	$_[0]->[mime_db_];
-}
-sub mime_lookup: lvalue {
-	$_[0]->[mime_lookup_];
-}
-
-sub innerware {
-	$_[0]->[innerware_];
-}
-sub outerware{
-	$_[0]->[outerware_];
-}
+##################################
+# sub mime_db: lvalue {          #
+#         $_[0]->[mime_db_];     #
+# }                              #
+# sub mime_lookup: lvalue {      #
+#         $_[0]->[mime_lookup_]; #
+# }                              #
+#                                #
+# sub innerware {                #
+#         $_[0]->[innerware_];   #
+# }                              #
+# sub outerware{                 #
+#         $_[0]->[outerware_];   #
+# }                              #
+##################################
 
 
 
@@ -570,8 +604,8 @@ sub usac_site :prototype(&) {
 	my $sub=pop;
   my %options=@_;
 	my $self= uSAC::HTTP::Site->new(server=>$server);
-	$self->[parent_]=$options{parent}//$uSAC::HTTP::Site;
-	$self->[id_]=$options{id}//join ", ", caller;
+	$self->parent=$options{parent}//$uSAC::HTTP::Site;
+	$self->id=$options{id}//join ", ", caller;
 	$self->set_prefix(%options,$options{prefix}//'');
 	
 	local  $uSAC::HTTP::Site=$self;
@@ -579,8 +613,8 @@ sub usac_site :prototype(&) {
 	$self;
 }
 
-sub find_root {
-	my $self=$_[0];
+method find_root {
+  #my $self=$_[0];
 	#locates the top level server/group/site in the tree
 	my $parent=$self;
 
@@ -593,9 +627,10 @@ sub supported_methods {
   @supported_methods;
 }
 
-sub default_method {
+method default_method {
   "GET";
 }
+
 sub any_method { $Any_Method; }
 #Fixes missing slashes in urls
 #As it is likely that the url is a constant, @_ is shifted/unshifted
@@ -606,17 +641,17 @@ sub usac_route {
 	$self->add_route(@_);
 }
 
-sub _method_match_check{
+method _method_match_check{
     my $result;
-    my ($self,$matcher)=@_;
+    my ($matcher)=@_;
     $result =$matcher if grep $_ =~ /$matcher/, $self->supported_methods;
     die "Invalid method matcher. Does not match any methods" unless $result;
     $matcher;
 
 }
 
-sub add_route {
-	my $self=shift;
+method add_route {
+  #my $self=shift;
   die "route needs at least two parameters" unless @_>=2;
   say @_;
   
@@ -668,38 +703,6 @@ sub add_route {
 		unshift @_, $self->default_method;
 		$self->_add_route(@_);
 	}
-    ###########################################################################
-    #     elsif(!($_[0]=~m|^[/]|) and !($_[0]=~m|^@{[$self->any_method]}|)){  #
-    #             # not starting with a forward slash  and  not with a method #
-    # # Assume it is a url needing fixing?                                    #
-    #             my $url=shift @_;                                           #
-    #                                                                         #
-    #             #only add a slash if the string is not empty                #
-    #             $url="/".$url if $url ne "";                                #
-    #                                                                         #
-    #             unshift @_, $url;                                           #
-    #                                                                         #
-    #             unshift @_, "GET";                                          #
-    #             $self->_add_route(@_);                                      #
-    #                                                                         #
-    #     }                                                                   #
-    ###########################################################################
-        ###############################################################
-        # elsif(                                                      #
-        #         $_[0]=~m|^@{[$self->any_method]}| and               #
-        #         $_[1]=~m|^[^/]| and                                 #
-        #         ref($_[1]) ne "Regexp"                              #
-        # ){                                                          #
-        #         #Method specified but route missing a leading slash #
-        #         my $method=shift;                                   #
-        #         my $url=shift;                                      #
-        #                                                             #
-        #         $url="/".$url if $url ne "";                        #
-        #         unshift @_, $method, $url;                          #
-        #                                                             #
-        #         $self->_add_route(@_);                              #
-        # }                                                           #
-        ###############################################################
 	else{
 		# method, url and middleware specified
 		$self->_add_route(@_);
@@ -714,38 +717,44 @@ sub usac_controller {
       }
       my %options=@_;
       my $self=$options{parent}//$uSAC::HTTP::Site;
-      $self->controller(%options, $controller);
+      #$self->controller(%options, $controller);
+      $self->controller=$controller;
 }
 
-sub controller{
-  my $self=shift;
-
-  my $controller=pop;
-  my %options=@_;
-  $self->[controller_]=$controller;
-}
+#######################################
+# sub controller{                     #
+#   my $self=shift;                   #
+#                                     #
+#   my $controller=pop;               #
+#   my %options=@_;                   #
+#   $self->[controller_]=$controller; #
+# }                                   #
+#######################################
 
 sub usac_id {
         my $id=pop;
         my %options=@_;
         my $self=$options{parent}//$uSAC::HTTP::Site;
-        $self->set_id(%options, $id);
+        #$self->set_id(%options, $id);
+        $self->id=$id;
 }
 
-sub set_id {
-	my $self=shift;
-	my $id=pop;
-	$self->[id_]=$id;
-}
-
+#############################
+# sub set_id {              #
+#         my $self=shift;   #
+#         my $id=pop;       #
+#         $self->[id_]=$id; #
+# }                         #
+#                           #
+#############################
 sub usac_prefix {
         my $prefix=pop;
         my %options=@_;
         my $self=$options{parent}//$uSAC::HTTP::Site;
         $self->set_prefix(%options,$prefix);
 }
-sub set_prefix {
-	my $self=shift;
+method set_prefix {
+  #my $self=shift;
   my $prefix=pop;
 	my %options=@_;
   return unless $prefix;
@@ -756,10 +765,9 @@ sub set_prefix {
 		$prefix="/".$prefix;
 	}
 	#$self->[prefix_]=$_;
-	$self->[prefix_]=$prefix;#$uSAC::HTTP::Site;
-	$self->[built_prefix_]=undef;	#force rebuilding
+	$_prefix=$prefix;#$uSAC::HTTP::Site;
+	$_built_prefix=undef;	#force rebuilding
 	$self->built_prefix;		#build abs prefix
-
 }
 
 
@@ -771,8 +779,8 @@ sub usac_host {
 }
 
 #Options could include CA and server key paths
-sub add_host {
-	my $self=shift;
+method add_host {
+  #my $self=shift;
 	my $host=pop;	#Content is the last item
 	my %options=@_;
 	my @uri;
@@ -785,7 +793,7 @@ sub add_host {
 	for(@uri){
 		die "Error parsing hosts: $_ " unless ref;
 	}
-	push $self->host->@*, @uri;
+	push $_host->@*, @uri;
 }
 
 
@@ -798,13 +806,13 @@ sub usac_middleware {
 	$self->add_middleware(%options, $mw);
 }
 
-sub add_middleware {
+method add_middleware {
   #TODO: fix so specifid like a route
-	my $self=shift;
+  #my $self=shift;
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
-	push $self->innerware->@*, $mw->[0];
-	push $self->outerware->@*, $mw->[1];
+	push $_innerware->@*, $mw->[0];
+	push $_outerware->@*, $mw->[1];
 
 }
 
@@ -820,8 +828,8 @@ sub usac_error_route {
 	$uSAC::HTTP::Site->add_error_route(@_);
 }
 
-sub add_error_route {
-	my $self=shift;
+method add_error_route {
+  #my $self=shift;
 	#Force the method to match GET
 	unshift @_, "GET";
 	$self->add_route(@_);
@@ -832,17 +840,17 @@ sub usac_error_page {
 	$uSAC::HTTP::Site->set_error_page(@_);
 }
 
-sub set_error_page {
-	my $self=shift;
+method set_error_page {
+  #my $self=shift;
 	my $bp=$self->built_prefix;
 
 	for my($k, $v)(@_){
-		$self->[error_uris_]{$k}="$bp$v";
+		$_error_uris->{$k}="$bp$v";
 	}
 }
 
-sub error_uris {
-	$_[0][error_uris_]
+method error_uris {
+  $_error_uris;
 }
 
 #########
@@ -857,8 +865,8 @@ sub usac_static_content {
 	$self->add_static_content(%options, $static);
 }
 
-sub add_static_content {
-	my $self=shift;
+method add_static_content {
+  #my $self=shift;
 	my $static=pop;	#Content is the last item
 	my %options=@_;
 	my $mime=$options{mime}//$self->resolve_mime_default;
@@ -895,8 +903,8 @@ sub usac_cached_file {
 	$self->add_cached_file(%options, $path);
 }
 
-sub add_cached_file {
-	my $self=shift;
+method add_cached_file {
+#my $self=shift;
 	my $path=pop;
 	my %options=@_;
 	#resolve the file relative path or 
@@ -942,8 +950,8 @@ sub usac_mime_default{
 	$self->set_mime_default(%options, $self);
 }
 
-sub set_mime_default {
-	my $self=shift;
+method set_mime_default {
+  #my $self=shift;
 	my $default=pop;
 	my %options=@_;
 	$self->mime_default=$default//"application/octet-stream";
@@ -959,8 +967,8 @@ sub usac_mime_db{
 	$self->set_mime_db(%options, $db);
 }
 
-sub set_mime_db {
-	my $self=shift;
+method set_mime_db {
+#my $self=shift;
 	my $db=pop;
 	my %options=@_;
 	$self->mime_db=$db;
