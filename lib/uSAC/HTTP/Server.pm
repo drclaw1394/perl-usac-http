@@ -34,16 +34,20 @@ use constant VERSION=>"v0.1.0";
 use version; our $VERSION = version->declare('v0.1.0');
 
 no warnings "experimental";
-#use parent 'uSAC::HTTP::Site';
+
 
 use uSAC::HTTP::Site;
+
 
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Constants;
 
+
 use Hustle::Table;		#dispatching of endpoints
 
+
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+use enum ("HOST_TABLE=0", qw<HOST_TABLE_CACHE HOST_TABLE_DISPATCH ADDR REQ_QUEUE IDLE_POOL ACTIVE_COUNT>);
 
 
 #use AnyEvent;
@@ -53,23 +57,7 @@ inet_pton);
 
 use Carp 'croak';
 
-#use constant MAX_READ_SIZE => 128 * 1024;
 
-#Class attribute keys
-#max_header_size_
-#
-
-################################################################################################################################################################################################################################################################################################################################################################
-# use constant KEY_OFFSET=> uSAC::HTTP::Site::KEY_OFFSET+uSAC::HTTP::Site::KEY_COUNT;                                                                                                                                                                                                                                                                          #
-#                                                                                                                                                                                                                                                                                                                                                              #
-# use enum (                                                                                                                                                                                                                                                                                                                                                   #
-#         "sites_=".KEY_OFFSET, qw<host_tables_ cb_ listen_ listen2_ graceful_ aws_ aws2_ fh_ fhs_ fhs2_ fhs3_ backlog_ read_size_ upgraders_ sessions_ active_connections_ total_connections_ active_requests_ zombies_ zombie_limit_ stream_timer_ server_clock_ www_roots_ static_headers_ mime_ workers_ cv_ options_ application_parser_ total_requests_> #
-# );                                                                                                                                                                                                                                                                                                                                                           #
-#                                                                                                                                                                                                                                                                                                                                                              #
-#                                                                                                                                                                                                                                                                                                                                                              #
-# use constant KEY_COUNT=> total_requests_ - sites_+1;                                                                                                                                                                                                                                                                                                         #
-#                                                                                                                                                                                                                                                                                                                                                              #
-################################################################################################################################################################################################################################################################################################################################################################
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Session;
@@ -82,6 +70,7 @@ our @EXPORT_OK=qw<usac_server usac_run usac_load usac_include usac_listen usac_l
 our @EXPORT=@EXPORT_OK;
 
 
+my $session_id=0;
 
 # Basic handlers
 #
@@ -120,6 +109,7 @@ sub _default_handler {
 
 class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 
+no warnings "experimental";
 field $_sites;
 field $_host_tables;
 field $_cb;
@@ -153,6 +143,7 @@ field $_total_requests;
 field $_mime_db;
 field $_mime_default;
 field $_static_headers :mutator;
+#field $_mode           :mutator :param=undef;
 
 
 BUILD {
@@ -165,7 +156,7 @@ BUILD {
 	$_zombie_limit//=100;
 	$_static_headers=[];#STATIC_HEADERS;
 
-	my $default=$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", server=>$self));
+	my $default=$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", server=>$self, mode=>$self->mode));
 	$default->add_route([$Any_Method], undef, _default_handler);
 
 	$_backlog=4096;
@@ -358,7 +349,6 @@ method prepare {
 # 
 method do_accept{
   #Accept is only for SOCK_STREAM 
-  state $seq=0;
   Log::OK::DEBUG and log_debug __PACKAGE__. " Accepting connections";
   #weaken( my $self = shift );
   \my @zombies=$_zombies; #Alias to the zombie sessions for reuse
@@ -402,7 +392,6 @@ method make_basic_client{
   \my %sessions=$_sessions;
 
   my $session;
-  my $seq=0;
   unless($_application_parser){
     require uSAC::HTTP::v1_1_Reader;
     $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_reader;
@@ -420,26 +409,25 @@ method make_basic_client{
       #CONFIG::set_no_delay and IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1 or Carp::croak "listen/so_nodelay $!";
 
 
-      my $id = ++$seq;
       my $scheme="http";
 
-      Log::OK::DEBUG and log_debug "Server new client connection: id $id";
+      Log::OK::DEBUG and log_debug "Server new client connection: id $session_id";
 
       if(@zombies){
         $session=pop @zombies;
-        $session->revive($id, $fh, $scheme, $peers->[$i]);
+        $session->revive($session_id, $fh, $scheme, $peers->[$i]);
       }
       else {
         $session=uSAC::HTTP::Session->new;
-        $session->init($id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
-
-        #$session->push_reader(make_reader $session, MODE_SERVER);
-        $session->push_reader($parser->($session, 0));#MODE_SERVER));
+        $session->init($session_id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
+        $session->push_reader($parser->($session, 0, $self->current_cb));
         
       }
-      $i++;
-      $sessions{ $id } = $session;
 
+      $i++;
+      $sessions{ $session_id } = $session;
+
+      $session_id++;
       #$active_connections++;
       #$total_connections++;
 
@@ -466,8 +454,11 @@ method add_host_end_point{
 	#This becomes the value field in hustle table entry
 	#[matcher, value, type, default]
 	my $table=$_host_tables->{$host}//=[
-		Hustle::Table->new($dummy_default),{}
+		Hustle::Table->new($dummy_default), # Table
+    {},                                  # Table cache
+    undef,                              #  dispatcher
 	];
+
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
@@ -508,12 +499,14 @@ method rebuild_dispatch {
   #  An entry is only added if the dummy_defualt is currently the default
   #
   for my $host (keys $_host_tables->%*) {
+    Log::OK::TRACE and log_trace(__PACKAGE__. " $host");
     #If the table has a dummy catch all then lets make an fallback
-    my $entry=$_host_tables->{$host};
-    my $last=$entry->[0]->@*-1;
-    if($entry->[0][$last] == $dummy_default){
+    my $entry=$_host_tables->{$host}; 
+    my $last=$entry->[0]->@*-1; #Index of default in hustle table
 
-      my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self);
+    if($entry->[0][$last] == $dummy_default){
+      Log::OK::TRACE and log_trace(__PACKAGE__. " host table special default. detected. Adding special site");
+      my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self, mode=>$self->mode);
       $site->parent_site=$self;
       $self->register_site($site);
       Log::OK::DEBUG and log_debug "Adding default handler to $host";
@@ -534,18 +527,28 @@ method rebuild_dispatch {
 
   # Build the look up table of Hustle::Table and its associated caching hash 
   #
-  my %lookup=map {
-      $_, [
-      #table
-      $_host_tables->{$_}[0]->prepare_dispatcher(cache=>$_host_tables->{$_}[1]),
-      #cache for table
-      $_host_tables->{$_}[1]
-      ]
-    } keys $_host_tables->%*;
+  ##########################################################################################################
+  # my %lookup=map {                                                                                       #
+  #     $_, [                                                                                              #
+  #     #table                                                                                             #
+  #     $_host_tables->{$_}[HOST_TABLE]->prepare_dispatcher(cache=>$_host_tables->{$_}[HOST_TABLE_CACHE]), #
+  #     #cache for table                                                                                   #
+  #     $_host_tables->{$_}[HOST_TABLE_CACHE]                                                              #
+  #     ]                                                                                                  #
+  #   } keys $_host_tables->%*;                                                                            #
+  ##########################################################################################################
+
+    # prepare dispatcher 
+    for(values $_host_tables->%*){
+      Log::OK::TRACE and log_trace __PACKAGE__." processing table entry for rebuild";
+      $_->[HOST_TABLE_DISPATCH]=$_->[HOST_TABLE]->prepare_dispatcher(cache=>$_->[HOST_TABLE_CACHE]);
+      say join ", ", @$_;
+    } 
 
 
     # Pre lookup the any host
-    my $any_host=$lookup{"*.*"};
+    #my $any_host=$lookup{"*.*"};
+    my $any_host=$_host_tables->{"*.*"};
 
 
     # If we only have single host table, it is the anyhost. It it only has one
@@ -559,10 +562,10 @@ method rebuild_dispatch {
 
     if($single_end_point_mode){
 
-      (my $route, my $captures)=$any_host->[0]("");
+      (my $route, my $captures)=$any_host->[HOST_TABLE_DISPATCH]("");
       $_cb=sub {
         #Always return the default out of the any_host table
-        $route->[1][4]++;	
+        $route->[1][3]++;	
         ($route, $captures);
       };
       Log::OK::WARN and log_warn "Single end point enabled";
@@ -578,17 +581,28 @@ method rebuild_dispatch {
     #
   my $table;
   $_cb=sub {
-    #my ($host, $input, $rex)=@_;#, $rex, $rcode, $rheaders, $data, $cb)=@_;
+    Log::OK::TRACE and  log_trace "IN SERVER CB: @_";
 
-    $table=$lookup{$_[0]//""}//$any_host;#$lookup{"*.*"};
-    (my $route, my $captures)= $table->[0]($_[1]);
+    Log::OK::TRACE and  log_trace values $_host_tables->%*;
+    #my ($host, $input);
+    
+    # input is "method url"
+    
+    #$table=$lookup{$_[0]//""}//$any_host;
+    $table=$_host_tables->{$_[0]//""}//$any_host;
+    say "TABLE IS DEFAULt : ".($table==$any_host);
+
+    use Data::Dumper;
+    Log::OK::TRACE and  log_trace  join ", ",$table->@*;
+    #Log::OK::TRACE and  log_trace  $_[1];
+    (my $route, my $captures)= $table->[HOST_TABLE_DISPATCH]($_[1]);
 
     #Hustle table entry structure:
     #[matcher, value, type default]
     #
     #ctx/value is  a 'route' structure:
     #[site, linked_innerware, linked_outerware, counter]
-    #  0 ,		1 	,	2		,3	, 4
+    #  0 ,		1 	,	            2		,           3
 
     Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route;
     Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route->@*;
@@ -596,7 +610,7 @@ method rebuild_dispatch {
     #
     # Increment the counter on the route
     #
-    $route->[1][4]++;	
+    $route->[1][3]++;	
 
     #
     # NOTE: MAIN ENTRY TO  PROCESSING CHAIN / MIDDLEWARE
@@ -611,7 +625,7 @@ method rebuild_dispatch {
     # if the is_default flag is set, this is an unkown match.
     # so do not cache it
 
-    delete $table->[1]{$_[1]} if $route->[3];
+    delete $table->[HOST_TABLE_CACHE]{$_[1]} if $route->[3];
     #return the entry sub for body forwarding
     ($route, $captures);
   };
@@ -799,30 +813,6 @@ method dump_routes {
 sub list_routes {
 	#dump all routes	
 }
-######################################
-#                                    #
-# sub mime_default: lvalue {         #
-#         $_[0]->site->mime_default; #
-# }                                  #
-# sub mime_db: lvalue {              #
-#         $_[0]->site->mime_db;      #
-# }                                  #
-# sub mime_lookup: lvalue {          #
-#         $_[0]->site->mime_lookup;  #
-# }                                  #
-######################################
-
-#declarative setup
-
-
-#########################################################
-# sub usac_host {                                       #
-#         my $host=pop;   #Content is the last item     #
-#         my %options=@_;                               #
-#         my $self=$options{parent}//$uSAC::HTTP::Site; #
-#         push $self->site->host->@*, @_;               #
-# }                                                     #
-#########################################################
 
 sub usac_server :prototype(&) {
 	#my $sub=shift;
@@ -835,7 +825,7 @@ sub usac_server :prototype(&) {
 	unless(defined $server and ($server->isa( 'uSAC::HTTP::Site'  ))) {
 		#only create if one doesn't exist
 		log_info "Creating new server";
-		$server=uSAC::HTTP::Server->new();
+		$server=uSAC::HTTP::Server->new(mode=>0);
 	}
 
 	#Push the server as the lastest 'site'
@@ -1040,6 +1030,184 @@ method parse_cli_options {
       #Unsupported option
     }
   }
+}
+
+
+# Client side routing
+# Executes a request. the appropriate session and rex are configured 
+# at the start of the request. The incomming response calls this pre configured
+# value
+
+
+
+# Create a new stream connection to a server. Adds the connection to the idle pool
+method do_stream_connect {
+  Log::OK::TRACE and log_trace __PACKAGE__." do_stream_connect";
+  my ($host, $port, $on_connect, $on_error)=@_;
+  # Inititiate connection to server. This makes a new connection and adds to the pool
+
+  # DNS resolution
+  my $entry; 
+
+
+  my $id;
+  my $socket;
+  $socket=uSAC::IO->socket(AF_INET, SOCK_STREAM, 0);
+  die $! unless defined $socket;
+  if( $entry=$_host_tables->{$host} and $entry->[ADDR]){
+
+    # Don't do a name resolve as we already have it.
+    # 
+    #Create the socket 
+
+    die "$!" unless defined $socket;
+    $id=uSAC::IO->connect_addr($socket, $entry->[ADDR], $on_connect, $on_error);
+    
+  }
+  else {
+    $id=uSAC::IO->connect($socket, $host, $port, $on_connect, $on_error);
+  }
+  $id;
+}
+use uSAC::IO;
+method request {
+  Log::OK::TRACE and log_trace __PACKAGE__." request";
+  # Queue a request in host pool and trigger if queue is inactive
+  #
+  my($host, $method, $uri, $header, $payload, $cb)=@_;
+  $header//=[];
+  $payload//="";
+  my $version;
+  my $ex;
+  my $id;
+  my $fh;
+  my $scheme;
+  my $peers;
+  my $i;
+
+  my ($__host, $port)=split ":", $host;
+  $port//=80;
+  my $options;
+
+  # Attempt to connect to host if we have no connections  in the pool
+  state $any_host=$_host_tables->{"*.*"};
+  my $entry=$_host_tables->{$host}//$any_host;
+  
+  # We will always have a host table here, event if it is the default one
+  #
+  unless($entry->[IDLE_POOL] and $entry->[IDLE_POOL]->@*){
+    $self->do_stream_connect($__host, $port, sub {
+
+        my ($socket, $addr)=@_;
+        $entry->[ADDR]=$addr;
+        # Create a session here
+        #
+        my $scheme="http";
+        Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";
+        my $session=uSAC::HTTP::Session->new;
+        $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);
+
+        unless($_application_parser){
+          require uSAC::HTTP::v1_1_Reader;
+          $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_reader;
+        }
+        say "APPLICATION PARSER: ".$_application_parser;
+        $session->push_reader($_application_parser->($session, 1, sub {say "DUMMY PARSER CALLBACK====="}));
+        $_sessions->{ $session_id } = $session;
+
+        $session_id++;
+        push $entry->[IDLE_POOL]->@*, $session;
+
+
+        #trigger the que processing if requried
+        Log::OK::TRACE and log_trace __PACKAGE__." do stream connect callback======="; 
+        my $details=[$host, $method, $uri, $header, $payload, $cb];
+        if($entry->[ACTIVE_COUNT]==0){
+          $self->_request($entry, $details);
+        }
+        else {
+          push $entry->[REQ_QUEUE]->@*, $details;
+        }
+
+      },
+      sub {
+        say "error callback for stream connect";
+      }
+    );
+  }
+  else {
+    my $details=[$host, $method, $uri, $header, $payload, $cb];
+    if($entry->[ACTIVE_COUNT]==0){
+      $self->_request($entry, $details);
+    }
+    else {
+      push $entry->[REQ_QUEUE]->@*, $details;
+    }
+  }
+}
+
+method _request {
+  Log::OK::TRACE and log_trace __PACKAGE__." _request";
+  #Takes are host, method, url, headers, payload, cb
+  #finds a route in the tables
+  #  This returns middleware chains to execute
+  my ($table, $details)=@_;
+
+  #my($host, $port, $method, $uri, $header, $payload, $cb)=@_;
+
+  my $version;
+  my $ex;
+  #my $id;
+  #my $fh;
+  my $scheme;
+  my $peers;
+  my $i;
+  
+
+  $details//=pop $table->[REQ_QUEUE]->@*;
+  die "No request to process" unless $details;
+  my $host=$details->[0];
+  my $method=$details->[1];
+  my $uri=$details->[2];
+  my $header=$details->[3];
+  my $payload=$details->[4];
+  my $cb=$details->[5];
+
+  # At this point there should be at least one available session in the pool for the host
+
+  #say "Idle pool is: ".Dumper $table->[IDLE_POOL];
+  my $session=pop $table->[IDLE_POOL]->@*;
+  $table->[ACTIVE_COUNT]++;
+
+  # Do a route lookup
+  #
+  say Dumper $details;
+  my($route, $captures)=$table->[HOST_TABLE_DISPATCH]("$method $uri");
+
+  die "No route found for $host" unless $route;
+
+
+  #  Obtain session or create new. Update with the filehandle
+  my %h=();#%$_static_headers;   #Copy static headers
+
+
+
+  # Create the REX object
+  #
+  $ex=$session->exports;
+  $version="HTTP/1.1"; # TODO: FIX
+  my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $uri, $ex, $captures);
+
+
+  # Set the current rex and route for the session.
+  # This is need for the parser in client mode to reuse the this
+  $ex->[3]->$*=$rex;
+  $ex->[7]->$*=$route;
+
+
+  #Call the head of the outerware function
+  #
+  $route->[1][2]($route, $rex, my $code=-1, $header, $payload, $cb);
 }
 
 1; 

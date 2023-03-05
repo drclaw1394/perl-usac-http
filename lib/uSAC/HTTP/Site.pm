@@ -48,27 +48,15 @@ use uSAC::HTTP::Constants;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::v1_1_Reader;      #TODO: this will be dynamically linked in
-#use uSAC::HTTP::Static;
-#
-#use uSAC::HTTP::Server::WS;
-#use Hustle::Table;
-#
 use Sub::Middler;
-use uSAC::HTTP::Middleware qw<log_simple>;
 
 use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
 
-######################################################################################################################################################################################################
-# #Class attribute keys                                                                                                                                                                              #
-# use enum ("server_=0",qw(mime_default_ mime_db_ mime_lookup_ prefix_ id_ mount_ cors_ innerware_ outerware_ host_ parent_ unsupported_ built_prefix_ built_label_ error_uris_ controller_  end_)); #
-#                                                                                                                                                                                                    #
-# use constant KEY_OFFSET=>       0;                                                                                                                                                                 #
-# use constant KEY_COUNT=>        end_-server_+1;                                                                                                                                                    #
-######################################################################################################################################################################################################
 
 class uSAC::HTTP::Site;
 
+no warnings "experimental";
 field $_server      :mutator :param=undef;
 field $_parent      :mutator :param=undef;
 field $_prefix      :reader :param =undef;
@@ -87,6 +75,7 @@ field $_cors;
 field $_unsupported;
 field $_built_prefix;
 field $_built_label;
+field $_mode      :mutator :param; #server false, client true
 
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
@@ -128,11 +117,9 @@ BUILD{
   #$self->[error_uris_]={};
 
   if(defined($_host) and ref $_host ne "ARRAY"){
-    #$self->[host_]=[$options{host}];
     $_host=[$_host];
   }
   else {
-    #$self->[host_]=[];
     $_host=[];
   }
 
@@ -159,33 +146,28 @@ method _add_route {
   my $method_matcher=shift;
   my $path_matcher=shift;
 
-  #my @inner;
-  #my @outer;
-
-  $self->_method_match_check($method_matcher);
-  say "METHOD MATCHER: ", $method_matcher;
-
 
   # Test we have a valid method matcher against supported methods
   #
-  my $ok=grep  {
-    $_=~ $method_matcher; 
-  }
-    $self->supported_methods;
-  die "Method specification invalid for route" unless $ok;
+  $method_matcher=$self->_method_match_check($method_matcher);
+  say "METHOD MATCHER: ", $method_matcher;
+  die "Method specification invalid for route" unless $method_matcher;
 
 
-  #my @matching=($method_matcher);
 
   # Fix up and break out middleware
   #
   \my (@inner, @outer, @names)=$self->wrap_middleware(@_);
+  
+  use Data::Dumper;
+  say "INNER WARE: ".join ", ", @inner;
+  say "OUTER WARE: ".join ", ", @outer;
 
 
   # Innerware run form parent to child to route in
   # the order of listing
   #
-  unshift @inner, $self->construct_middleware;
+  unshift @inner, $self->construct_innerware;
 
   # Outerware is in reverse order
   unshift @outer, $self->construct_outerware;
@@ -194,10 +176,28 @@ method _add_route {
   unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($_built_prefix);
 
 
+  my $root=$self->find_root;
   # TODO: fix this for client support.
   # Server has the rex_write hook at the start of outerware
   # Client will need to hook at end of outerware?
-  $end= \&rex_write;
+  if($root->mode==0){
+    Log::OK::TRACE and log_trace __PACKAGE__. " end is server ".join ", ", caller;
+    use Error::Show;
+    my @frames;
+    my $i=0;
+    push @frames, [caller $i++] while caller $i;;
+    say Error::Show::context reverse=>1, frames=>\@frames;
+    $end= \&rex_write;
+  }
+  else{
+    #1 client
+    #
+    Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
+    $end=sub {
+      say STDERR __PACKAGE__.": END OF CLIENT INNNERWARE CHAIN";
+    };
+      
+  }
 
 
 
@@ -207,26 +207,32 @@ method _add_route {
   my $static_headers=$_server->static_headers;
 
   #TODO: Need to rework this for other HTTP versions
-  my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize static_headers=>$static_headers;
+  #my $root=$self->find_root;
 
-  my $outer;
+  my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$root->mode, static_headers=>$static_headers;
+
+  my $outer_head;
   if(@outer){
     my $middler=Sub::Middler->new();
     $middler->register($_) for(@outer);
 
-    $outer=$middler->link($serialize);
+    $outer_head=$middler->link($serialize);
   }
   else {
-    $outer=$serialize;
+    $outer_head=$serialize;
   }
 
 
+  my $inner_head;
   if(@inner){
     my $middler=Sub::Middler->new();
     for(@inner){
       $middler->register($_);
     }
-    $end=$middler->link($end);
+    $inner_head=$middler->link($end);
+  }
+  else{
+    $inner_head=$end;
   }
 
 
@@ -234,7 +240,6 @@ method _add_route {
 
 
   my @hosts;
-  #my $matcher;
 
   @hosts=$self->build_hosts;	#List of hosts (as urls) 
 
@@ -257,7 +262,6 @@ method _add_route {
       $host=$uri;	#match all
     }
 
-
     # 
     # Fix the path matcher to a regex if the method matcher 
     # is a regex.
@@ -271,7 +275,7 @@ method _add_route {
     }
 
     my ($matcher, $type)=$self->__add_route($host, $method_matcher, $path_matcher);
-    $_server->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
+    $_server->add_host_end_point($host, $matcher, [$self, $inner_head, $outer_head,0], $type);
     last unless defined $matcher;
 
   }
@@ -316,8 +320,7 @@ method __add_route {
     #$pm=$path_matcher;
     $matcher="$method_matcher $bp$path_matcher";
   }
-  #$self->[server_]->add_host_end_point($host, $matcher, [$self, $end, $outer,0], $type);
-  #last unless defined $matcher;
+
   ($matcher, $type);
 }
 
@@ -325,6 +328,7 @@ method __add_route {
 # Resolve controller-by-name middleware specs
 #
 method wrap_middleware {
+  Log::OK::TRACE and log_trace __PACKAGE__. " wrap_middleware";
 #my $self=shift;
   my @inner;
   my @outer;
@@ -332,9 +336,10 @@ method wrap_middleware {
 
   while(@_){
     #$end=$_;
-    $_=shift;
+    local $_=shift;
     # If the element is a code ref it is innerware ONLY
-    if(ref($_) eq "CODE"){
+    if(ref eq "CODE"){
+      Log::OK::TRACE and log_trace __PACKAGE__. " Plain singlar CODE ref. Wrapping as Innerware";
       # A straight code reference does not have any calls to 'next'.
       # wrap it in one
       my $target=$_; #User supplied sub
@@ -351,22 +356,28 @@ method wrap_middleware {
 
     # If its an array ref, then it might contain both inner
     # and outerware and possible a name
-    elsif(ref($_) eq "ARRAY"){
+    elsif(ref eq "ARRAY"){
+      Log::OK::TRACE and log_trace __PACKAGE__. " ARRAY ref. Unwrap as inner and outerware";
       #check at least for one code ref
       if(ref($_->[0]) ne "CODE"){
         $_->[0]=sub { state $next=shift};  #Force short circuit
       }
-      push @inner, $_->[0];
 
       if(ref($_->[1]) ne "CODE"){
         $_->[1]=sub { state $next=shift};  #Force short circuit
       }
-      push @outer, $_->[1];
 
 
       if(!defined($_->[2])){
         $_->[2]="Middleware";
       }
+
+      say "CODE: ".$_->[0];
+
+      say "CODE: ".$_->[1];
+
+      push @inner, $_->[0];
+      push @outer, $_->[1];
       push @names, $_->[2];
 
     }
@@ -381,9 +392,14 @@ method wrap_middleware {
       try {
         die Exception::Class::Base->throw("No controller set for site. Cannot call method by name")unless $_controller;
         
-        my $string='$_controller->'.$_;
+        my $string="require $_controller";
+        eval $string;
+        die Exception::Class::Base->throw("Could not require $_controller: $@") if $@;
+        $@=undef;
+
+        $string="$_controller->".$_;
         $a=eval $string;
-        die Exception::Class::Base->throw("Could not run controller $_controller with method $_") if $@;
+        die Exception::Class::Base->throw("Could not run $_controller with method $_. $@") if $@;
       }
       catch($e){
         say $e;
@@ -401,20 +417,6 @@ method wrap_middleware {
   (\@inner, \@outer, \@names);
 
 }
-
-##################################
-# sub server: lvalue {           #
-#         return $_[0][server_]; #
-# }                              #
-#                                #
-# sub id: lvalue {               #
-#         return $_[0][id_];     #
-# }                              #
-#                                #
-# sub add_end_point {            #
-#                                #
-# }                              #
-##################################
 
 
 method parent_site :lvalue{
@@ -460,7 +462,7 @@ method build_hosts {
 }
 
 #find the root and unshift middlewares along the way
-method construct_middleware {
+method construct_innerware {
 	my $parent=$_[0];
 	my @middleware;
 	while($parent){
@@ -482,16 +484,6 @@ method construct_outerware {
 	@outerware;
 }
 
-#############################
-# sub prefix {              #
-#         $_[0]->[prefix_]; #
-# }                         #
-#                           #
-# sub host {                #
-#         $_[0]->[host_];   #
-# }                         #
-#############################
-
 method built_label {
 	my $parent_label;
 	if($_[0]->parent_site){
@@ -503,65 +495,6 @@ method built_label {
 	}
 	$_built_label//($_[0]->set_built_prefix($parent_label.$_[0]->build_label));
 }
-
-
-
-
-
-#Take matcher, list of innerware and endpoint sub
-
-
-#our $Query=		qr{(?:([^#]+))?};
-#our $Fragment=		qr{(?:[#]([^ ]+)?)?};
-
-##################################################
-# sub begins_with {                              #
-#         my $test=$_[0];                        #
-#         sub{0 <= index $_[0], $test},          #
-# }                                              #
-#                                                #
-# sub matches_with {                             #
-#         return qr{$_[0]}o;                     #
-# }                                              #
-#                                                #
-# sub ends_with {                                #
-#         my $test=reverse $_[0];                #
-#         sub {0 <= index reverse($_[0]), $test} #
-# }                                              #
-#                                                #
-##################################################
-#################################
-# sub site_route {              #
-#         my $self=shift;       #
-#         $self->add_route(@_); #
-# }                             #
-#################################
-###################################
-# #accessor                       #
-# sub mime_default : lvalue {     #
-#         $_[0]->[mime_default_]; #
-# }                               #
-###################################
-
-#accessor 
-##################################
-# sub mime_db: lvalue {          #
-#         $_[0]->[mime_db_];     #
-# }                              #
-# sub mime_lookup: lvalue {      #
-#         $_[0]->[mime_lookup_]; #
-# }                              #
-#                                #
-# sub innerware {                #
-#         $_[0]->[innerware_];   #
-# }                              #
-# sub outerware{                 #
-#         $_[0]->[outerware_];   #
-# }                              #
-##################################
-
-
-
 
 #Resolves the ext to mime table the hierarchy. Checks self first, then parent
 sub resolve_mime_lookup {
@@ -589,21 +522,13 @@ sub resolve_mime_default {
 	$default?$default:"applcation/octet-stream";
 }
 
-=over 
-
-=item C<usac_site>
-
-
-=back
-
-=cut
 
 sub usac_site :prototype(&) {
 	#my $server=$_->find_root;
 	my $server=$uSAC::HTTP::Site->find_root;
 	my $sub=pop;
   my %options=@_;
-	my $self= uSAC::HTTP::Site->new(server=>$server);
+	my $self= uSAC::HTTP::Site->new(server=>$server, mode=>$server->mode);
 	$self->parent=$options{parent}//$uSAC::HTTP::Site;
 	$self->id=$options{id}//join ", ", caller;
 	$self->set_prefix(%options,$options{prefix}//'');
@@ -653,7 +578,8 @@ method _method_match_check{
 method add_route {
   #my $self=shift;
   die "route needs at least two parameters" unless @_>=2;
-  say @_;
+  say "\nAdding route: in site";
+  say join ", ",@_;
   
   if(!defined($_[0])){
     # 
@@ -721,15 +647,6 @@ sub usac_controller {
       $self->controller=$controller;
 }
 
-#######################################
-# sub controller{                     #
-#   my $self=shift;                   #
-#                                     #
-#   my $controller=pop;               #
-#   my %options=@_;                   #
-#   $self->[controller_]=$controller; #
-# }                                   #
-#######################################
 
 sub usac_id {
         my $id=pop;
@@ -739,20 +656,13 @@ sub usac_id {
         $self->id=$id;
 }
 
-#############################
-# sub set_id {              #
-#         my $self=shift;   #
-#         my $id=pop;       #
-#         $self->[id_]=$id; #
-# }                         #
-#                           #
-#############################
 sub usac_prefix {
         my $prefix=pop;
         my %options=@_;
         my $self=$options{parent}//$uSAC::HTTP::Site;
         $self->set_prefix(%options,$prefix);
 }
+
 method set_prefix {
   #my $self=shift;
   my $prefix=pop;
@@ -1075,160 +985,4 @@ sub usac_error_not_found {
 }
 
 
-
 1;
-
-=head1 NAME
-
-uSAC::HTTP::Site -  Grouping facility of related routes
-
-=head1 SYNOPSIS
-
-
-  use uSAC::HTTP;
-
-    # Within a usac_server call...
-    #
-    usac_site {
-        add_route ...
-
-        add_catch_route ...
-    }
-
-=head1 DESCRIPTION
-
-Provides grouping facility of related routes withing a C<uSAC::HTTP::Server>.
-It does this by implementing a hierarchy or sites, with a server ( a subclass
-of this class) at the root.
-
-Each site can specifiy an id and a prefix, which is used in identifiying and routing requests.
-
-
-=head1 ROUTING PROCESS
-
-
-
-=head1 API
-
-=head2 DSL
-
-The DLS API is only intended to be utilised withing the configuration stage of
-a program running. Normally the API is only called within the a C<usac_site> or
-C<usac_server>. This automatically resolves the hierarchy of groups (ie
-parent). This can be manually overwritten by specifiying a manual B<parent>
-option in api calls
-
-=head3 usac_site
-
-  usac_site {...};
-
-Creates a new site and adds it to the current parent item in
-C<$uSAC::HTTP::Site>.  Only takes a single argument, which is a block of code
-with contains other C<uSAC::Site> API calls.
-
-It configures the generated site with a default id  which is generated from the
-caller information. This helps identifiying the site when route listing and
-debugging.
-
-=head2 Route Configuration
-
-=head3 usac_route
-
-  usac_route undef,$middleware,...;         (1)
-  usac_route $url=>$middleware, ...         (2)
-  usac_route $method=>$url=>$middleware, ...(3)
-
-Adds a route to the containing site. The information from parents sites/groups
-is used to construct the route.
-
-In the first form (1), takes two or more arguments. If the the first argument
-to the function is C<undef>, this overwrites the default matcher for any of the
-hosts this route will apply to. This is will be the route that will be used if
-no other routes match for a host. All methods match this route.
-
-
-The second form (2), takes two or more arguments. It is a short cut for
-specifiying a GET request method. The first argument is a url path matching
-specification. This can be either a string, or a compiled regexp. Remaining
-arguments are middleware (including your 'end point'). If a string is used, it
-B<MUST> start with a '/', otherwise it will be interpreted as a method.
-
-The third form (3), takes three or more arguments. The first argument is the
-method specification. This can be a uppercase string for an individual method
-(ie GET or POST), or it can be regexp to match methods, or it can be an
-reference to an array, containing methods names/matchers. In this case, it is
-converted internally into a regexp with each item used as an alternative match
-(ie matcher1|matcher2|matcher3....)
-
-
-Its important to note, that if the method matching is specified as a regexp or
-converted internally to a regexp, then the path portion will also be treated as
-a regexp.
-
-
-The path/url argument is subject to the prefix of the enclosing site and the
-parent sites.  This prefix is automaticlly added to the url/path, and is
-ultimately what is used to match and dispatch incoming requests.
-
-  eg 
-      usac_site {
-        usac_prefix "AA";
-
-        usac_site {
-          usac_prefix "BB";
-
-          usac_route "foo", sub { $_[PAYLOAD]="GOT BAR" if $_[CODE]};
-
-        }
-
-In this example the route 'foo' will actuall match a url path starting with
-/AA/BB/foo.
-
-=head2 Site Configuation
-
-=head3 usac_host
-
-  usac_host $string;    (1)
-  usac_host $array_ref; (2)
-
-Specifies the hosts to which this group/site will have its routes added to.
-
-
-In the first (1) form, a single host stirng can be specified. The second form
-(2) takes a reference to an array of host strings.
-
-B<NOTE:> the host stirng B<MUST> contain the port number to identify the host.
-
-  eg 
-    usac_host "localhost:8080";
-    usac_host [qw<localhost:8080 my_name:8080 localhost:443>];
-
-=head3 usac_prefix
-
-  usac_prefix  $string;
-
-Set the string prefix fragment to use at the current level in the site hierrarchy.
-
-
-=head3 usac_controller
-
-  usac_controller $package_name;
-  usac_controller $object;
-
-Set the controller variable for the enclosing site. This is only needed if
-middleware is specified by name instead of CODE/ARRAY refs.
-
-=head3 usac_id 
-
-  usac_id $string;
-
-Set the id representing the site for listing and debugging purposes. Does not
-have to be unique.
-
-=head3 usac_middleware
-
-  usac_middleware $mw;
-
-  TODO: Fix this 
-
-

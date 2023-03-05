@@ -21,7 +21,7 @@ WriteMakefile(
 		"Socket::More"	=> 0,
 		"uSAC::MIME"	=> 0,
     "Sub::Middler"=>0,
-    "File::Meta::Cache"=>0
+    "File::Meta::Cache"=>0,
 		
 
 		"Crypt::JWT"	=> 0,

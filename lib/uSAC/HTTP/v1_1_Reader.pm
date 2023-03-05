@@ -43,28 +43,6 @@ use constant MAX_READ_SIZE => 128 * 1024;
 use constant CRLF2=>CRLF.CRLF;
 
 
-
-###############################################################################
-# sub uri_decode {                                                            #
-#         my $octets= shift;                                                  #
-#         $octets=~ s/\+/ /sg;                                                #
-#         $octets=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge;                     #
-#         return $UTF_8->decode($octets); #decode_utf8 calls this internally? #
-#         #return decode_utf8($octets);                                       #
-#         #return decode("utf8", $octets);                                    #
-# }                                                                           #
-###############################################################################
-#########################################################
-# sub uri_decode_inplace {                              #
-#         $_[0]=~ tr/+/ /;                              #
-#         $_[0]=~ s/%([[:xdigit:]]{2})/chr(hex($1))/ge; #
-#         #$UTF_8->decode($_[0]);                       #
-#         Encode::utf8::decode $UTF_8, @_;              #
-#         #decode_utf8($_[0]);                          #
-#         #return decode("utf8", $octets);              #
-# }                                                     #
-#########################################################
-
 sub parse_form {
 	map { (split "=", $_)} split "&", $_[0] =~ tr/ //dr;
 }
@@ -82,9 +60,14 @@ use enum (qw<STATE_REQUEST STATE_RESPONSE STATE_HEADERS STATE_BODY_CONTENT STATE
 
 #make a reader which is bound to a session
 sub make_reader{
-  #take a session and alias the variables to lexicals
+  # Session, MODE, route_callback;
+  # session and alias the variables to lexicals
+  # mode is server or  client
+  # route_callback is the interace to call to return a route/capture for the url and host
+  #
   my $r=shift;
   my $mode=shift; #Client or server
+  my $cb=shift;
   #default is server mode to handle client requests
   my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
 
@@ -95,11 +78,12 @@ sub make_reader{
   my $dropper=$ex->[1];
   \my $self=$ex->[2];
   \my $rex=$ex->[3];
+  \my $route=$ex->[7];
   weaken $r;
 
-  my $cb=$self->current_cb;	
-  my ($state,$seq) = ($start_state, 0);
-  my ($method,$uri,$version,$len,$pos, $req);
+  #my $cb=$self->current_cb;	
+  my ($state, $seq) = ($start_state, 0);
+  my ($method, $uri, $version, $len, $pos, $req);
   my $line;
 
   my %h;		#Define the header storage here, once per connection
@@ -115,7 +99,6 @@ sub make_reader{
   my $code=-1;
   my $payload="";
 
-    my $route;
     my $captures;
     my $body_len=0;
     my $body_type;
@@ -127,6 +110,7 @@ sub make_reader{
 
 
   sub {
+    say "____HTTP _PARSER:". join ", ", @_;
     my $processed=0;
 
     ##my %h;
@@ -156,7 +140,7 @@ sub make_reader{
         #	$url=> status code
         #	$version => comment
         #
-        if ($state == STATE_REQUEST) {
+        if ($state == STATE_REQUEST or $state== STATE_RESPONSE) {
           $pos3=index $buf, CRLF, $ppos;
           $body_type=undef;	
           $body_len=0;
@@ -199,13 +183,16 @@ sub make_reader{
         }
 
         elsif ($state == STATE_HEADERS) {
-          #sleep 1;
-          my $end=index $buf, CRLF2, $ppos;
-          if ($end>MAX_READ_SIZE) {
+          my $pos3=index $buf, CRLF2, $ppos;
+
+          say $pos3;
+          say substr $buf, $pos3-10;
+
+          if ($pos3>MAX_READ_SIZE) {
             $state=STATE_ERROR;
             redo;
           }
-          elsif($end < $ppos){
+          elsif($pos3< $ppos){
             #Not enough
             warn "not enough";
             return;
@@ -214,9 +201,9 @@ sub make_reader{
 
           for my ($k, $val)(
             map split(":", $_, 2) ,
-              split("\015\012", substr($buf, $ppos))
+              split("\015\012", substr($buf, $ppos, $pos3-$ppos))
             ){
-            #say "$k=>$val";
+            say "$k=>$val";
               $k=~tr/-/_/;
               $k=uc $k;
 
@@ -228,7 +215,7 @@ sub make_reader{
               $e?($e.=",$val"):($e=$val);
 
 
-              $ppos=$pos3+2;
+              #$ppos=$pos3+2;
               if($k eq "HOST"){
                 $host=$val;
               }
@@ -242,7 +229,7 @@ sub make_reader{
 
           }
           $ppos=0;
-          $buf=substr($buf, $end+4);
+          $buf=substr($buf, $pos3+4);
 
         
 
@@ -310,13 +297,19 @@ sub make_reader{
           : ($closeme=$connection and $connection=~ /close/ai);
 
 
-          Log::OK::DEBUG and log_debug "Version: $version, Close me set to: $closeme";
-          Log::OK::DEBUG and log_debug "$uri";
+          Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: $closeme";
+          Log::OK::DEBUG and log_debug "URI/Code: $uri";
+          Log::OK::DEBUG and log_debug "verison/description: $version";
 
           #Find route
-          ($route, $captures)=$cb->($host, "$method $uri");
-          #
-          $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex",$r, \%h, $host, $version, $method, $uri, $ex, $captures);
+          unless($rex){
+            ($route, $captures)=$cb->($host, "$method $uri");
+            #
+            $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex, $captures);
+          }
+          else {
+            # Assume session has rex already defined (ie client side)
+          }
 
           #Before calling the dispatch, setup the parser to process further data.
           #Attempt to further parse the message. It is up to middleware or application
@@ -541,6 +534,7 @@ sub make_reader{
           $body_len=0;
           $closeme=1;
           $dropper->();
+          last;
         }
         else {
           #Error state

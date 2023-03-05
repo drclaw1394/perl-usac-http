@@ -32,6 +32,7 @@ field $_server;
 field $_scheme :reader;
 field $_time :mutator;
 field $_closeme;
+field $_route;
 field $_rw;
 field $_ww;
 field $_wcb;
@@ -190,7 +191,8 @@ method revive {
 	$_scheme=$_[2];
 	$_peer=$_[3];
 
-  #$_rex=undef;
+  $_rex=undef;
+  $_route=undef;
 	@_write_stack=();
 	$_closeme=undef;
 	$_sr->start($_fh);
@@ -282,7 +284,7 @@ our $timer=AE::timer 0,1, sub {
 #Return an array of references to variables which are publically editable
 #Bypasses method calls for accessors
 method exports {
-	[\$_closeme, $_dropper, \$_server, \$_rex, \$_in_progress, $_write, $_peer];
+	[\$_closeme, $_dropper, \$_server, \$_rex, \$_in_progress, $_write, $_peer, \$_route];
 
 }
 ##################################################################################
