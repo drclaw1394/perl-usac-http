@@ -601,7 +601,7 @@ sub parse_query_params_old {
 	return $kv;
 }
 
-# Strips site prefix and also monitors if the REX has been marked activly in
+# First innerware. Strips site prefix and also monitors if the REX has been marked activly in
 # progress
 #
 sub mw_dead_horse_stripper {

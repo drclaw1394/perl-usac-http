@@ -47,7 +47,6 @@ use Hustle::Table;		#dispatching of endpoints
 
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
-use enum ("HOST_TABLE=0", qw<HOST_TABLE_CACHE HOST_TABLE_DISPATCH ADDR REQ_QUEUE IDLE_POOL ACTIVE_COUNT>);
 
 
 #use AnyEvent;
@@ -459,6 +458,10 @@ method add_host_end_point{
     undef,                              #  dispatcher
 	];
 
+  # NOTE: This is the route context. This is  a back refernce to the table
+  # TODO: Possibly weaken this
+  push $ctx->@*, $table;
+
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
@@ -541,7 +544,7 @@ method rebuild_dispatch {
     # prepare dispatcher 
     for(values $_host_tables->%*){
       Log::OK::TRACE and log_trace __PACKAGE__." processing table entry for rebuild";
-      $_->[HOST_TABLE_DISPATCH]=$_->[HOST_TABLE]->prepare_dispatcher(cache=>$_->[HOST_TABLE_CACHE]);
+      $_->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]=$_->[uSAC::HTTP::Site::HOST_TABLE]->prepare_dispatcher(cache=>$_->[uSAC::HTTP::Site::HOST_TABLE_CACHE]);
       say join ", ", @$_;
     } 
 
@@ -562,7 +565,7 @@ method rebuild_dispatch {
 
     if($single_end_point_mode){
 
-      (my $route, my $captures)=$any_host->[HOST_TABLE_DISPATCH]("");
+      (my $route, my $captures)=$any_host->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("");
       $_cb=sub {
         #Always return the default out of the any_host table
         $route->[1][3]++;	
@@ -595,7 +598,7 @@ method rebuild_dispatch {
     use Data::Dumper;
     Log::OK::TRACE and  log_trace  join ", ",$table->@*;
     #Log::OK::TRACE and  log_trace  $_[1];
-    (my $route, my $captures)= $table->[HOST_TABLE_DISPATCH]($_[1]);
+    (my $route, my $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
 
     #Hustle table entry structure:
     #[matcher, value, type default]
@@ -625,7 +628,7 @@ method rebuild_dispatch {
     # if the is_default flag is set, this is an unkown match.
     # so do not cache it
 
-    delete $table->[HOST_TABLE_CACHE]{$_[1]} if $route->[3];
+    delete $table->[uSAC::HTTP::Site::HOST_TABLE_CACHE]{$_[1]} if $route->[3];
     #return the entry sub for body forwarding
     ($route, $captures);
   };
@@ -1054,14 +1057,14 @@ method do_stream_connect {
   my $socket;
   $socket=uSAC::IO->socket(AF_INET, SOCK_STREAM, 0);
   die $! unless defined $socket;
-  if( $entry=$_host_tables->{$host} and $entry->[ADDR]){
+  if( $entry=$_host_tables->{$host} and $entry->[uSAC::HTTP::Site::ADDR]){
 
     # Don't do a name resolve as we already have it.
     # 
     #Create the socket 
 
     die "$!" unless defined $socket;
-    $id=uSAC::IO->connect_addr($socket, $entry->[ADDR], $on_connect, $on_error);
+    $id=uSAC::IO->connect_addr($socket, $entry->[uSAC::HTTP::Site::ADDR], $on_connect, $on_error);
     
   }
   else {
@@ -1095,11 +1098,13 @@ method request {
   
   # We will always have a host table here, event if it is the default one
   #
-  unless($entry->[IDLE_POOL] and $entry->[IDLE_POOL]->@*){
+  
+  unless($entry->[uSAC::HTTP::Site::IDLE_POOL] and $entry->[uSAC::HTTP::Site::IDLE_POOL]->@*){
+    Log::OK::TRACE and log_trace __PACKAGE__." Client Idle pool is empty. ";
     $self->do_stream_connect($__host, $port, sub {
 
         my ($socket, $addr)=@_;
-        $entry->[ADDR]=$addr;
+        $entry->[uSAC::HTTP::Site::ADDR]=$addr;
         # Create a session here
         #
         my $scheme="http";
@@ -1116,17 +1121,19 @@ method request {
         $_sessions->{ $session_id } = $session;
 
         $session_id++;
-        push $entry->[IDLE_POOL]->@*, $session;
+        push $entry->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
 
 
         #trigger the que processing if requried
         Log::OK::TRACE and log_trace __PACKAGE__." do stream connect callback======="; 
         my $details=[$host, $method, $uri, $header, $payload, $cb];
-        if($entry->[ACTIVE_COUNT]==0){
+        if($entry->[uSAC::HTTP::Site::ACTIVE_COUNT]==0){
+          Log::OK::TRACE and log_trace __PACKAGE__."  NO ACTIVE sessions"; 
           $self->_request($entry, $details);
         }
         else {
-          push $entry->[REQ_QUEUE]->@*, $details;
+          Log::OK::TRACE and log_trace __PACKAGE__."  ACTIVE sessions"; 
+          push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;
         }
 
       },
@@ -1136,12 +1143,15 @@ method request {
     );
   }
   else {
+    Log::OK::TRACE and log_trace __PACKAGE__." Client Idle pool is empty.";
     my $details=[$host, $method, $uri, $header, $payload, $cb];
-    if($entry->[ACTIVE_COUNT]==0){
+    if($entry->[uSAC::HTTP::Site::ACTIVE_COUNT]==0){
+      Log::OK::TRACE and log_trace __PACKAGE__."  NO ACTIVE sessions"; 
       $self->_request($entry, $details);
     }
     else {
-      push $entry->[REQ_QUEUE]->@*, $details;
+      Log::OK::TRACE and log_trace __PACKAGE__."  ACTIVE sessions"; 
+      push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;
     }
   }
 }
@@ -1164,8 +1174,10 @@ method _request {
   my $i;
   
 
-  $details//=pop $table->[REQ_QUEUE]->@*;
-  die "No request to process" unless $details;
+  $details//=pop $table->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
+
+  warn "No request to process" unless $details;
+  return unless $details;
   my $host=$details->[0];
   my $method=$details->[1];
   my $uri=$details->[2];
@@ -1176,13 +1188,13 @@ method _request {
   # At this point there should be at least one available session in the pool for the host
 
   #say "Idle pool is: ".Dumper $table->[IDLE_POOL];
-  my $session=pop $table->[IDLE_POOL]->@*;
-  $table->[ACTIVE_COUNT]++;
+  my $session=pop $table->[uSAC::HTTP::Site::IDLE_POOL]->@*;
+  $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
 
   # Do a route lookup
   #
   say Dumper $details;
-  my($route, $captures)=$table->[HOST_TABLE_DISPATCH]("$method $uri");
+  my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
 
   die "No route found for $host" unless $route;
 

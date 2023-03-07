@@ -6,6 +6,8 @@ use feature ":all";
 no warnings "experimental";
 
 use Object::Pad;
+use enum qw<ROUTE_CTX_SITE ROUTE_CTX_INNER_HEAD ROUTE_CTX_OUTER_HEAD ROUTE_CTX_COUNTER ROUTE_CTX_TABLE>;
+use enum ("HOST_TABLE=0", qw<HOST_TABLE_CACHE HOST_TABLE_DISPATCH ADDR REQ_QUEUE IDLE_POOL ACTIVE_COUNT>);
 
 
 use Log::ger;
@@ -195,8 +197,29 @@ method _add_route {
     Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
     $end=sub {
       say STDERR __PACKAGE__.": END OF CLIENT INNNERWARE CHAIN";
+      if($_[CB]){
+        #More data to come
+        say STDERR __PACKAGE__." CALLBACK, expecting more data from parser";
+        #
+      }
+      else {
+        #No there isn't
+        say STDERR __PACKAGE__." NO CALLBACK, expecting no more data from parser";
+
+        # Put the still connected session back into the pool for the table
+        #Push the session into the idle queue?
+        use Data::Dumper;
+        say join ", ", $_[ROUTE][1]->@*;
+        #$_[ROUTE][1][4][ACTIVE_COUNT]--;
+        $_[ROUTE][1][ROUTE_CTX_TABLE][ACTIVE_COUNT]--;
+        push $_[ROUTE][1][ROUTE_CTX_TABLE][IDLE_POOL]->@*, $_[REX][uSAC::HTTP::Rex::session_];
+        $self->_request($_[ROUTE][1][ROUTE_CTX_TABLE]);
+      }
+      #
+      # The route used is always associated with a host table. Use this table
+      # and attempt to the next item in the requst queue for the host
+
     };
-      
   }
 
 
@@ -360,10 +383,12 @@ method wrap_middleware {
       Log::OK::TRACE and log_trace __PACKAGE__. " ARRAY ref. Unwrap as inner and outerware";
       #check at least for one code ref
       if(ref($_->[0]) ne "CODE"){
+        Log::OK::WARN and log_warn __PACKAGE__." Innerware tuple did not have a code ref. Bypassing";
         $_->[0]=sub { state $next=shift};  #Force short circuit
       }
 
       if(ref($_->[1]) ne "CODE"){
+        Log::OK::WARN and log_warn __PACKAGE__." Outerware tuple did not have a code ref. Bypassing";
         $_->[1]=sub { state $next=shift};  #Force short circuit
       }
 

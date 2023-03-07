@@ -128,7 +128,7 @@ sub make_reader{
 
       #while ( $len=length $buf) {
       while ($buf) {
-
+        say "_____ Parser : $state";
         #Dual mode variables:
         #	server:
         #	$method => method
@@ -185,8 +185,8 @@ sub make_reader{
         elsif ($state == STATE_HEADERS) {
           my $pos3=index $buf, CRLF2, $ppos;
 
-          say $pos3;
-          say substr $buf, $pos3-10;
+          #say $pos3;
+          #say substr $buf, $pos3-10;
 
           if ($pos3>MAX_READ_SIZE) {
             $state=STATE_ERROR;
@@ -293,8 +293,8 @@ sub make_reader{
 
           #$tmp=$h{CONNECTION}//"";
           $version eq "HTTP/1.0"
-          ? ($closeme=$connection!~ /keep-alive/ai)
-          : ($closeme=$connection and $connection=~ /close/ai);
+          ? ($closeme=($connection!~ /keep-alive/ai))
+          : ($closeme=($connection and $connection=~ /close/ai));
 
 
           Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: $closeme";
@@ -531,6 +531,7 @@ sub make_reader{
 
         }
         elsif($state==STATE_ERROR){
+          say  "______ERROR STATE IN PARSER";
           $body_len=0;
           $closeme=1;
           $dropper->();
@@ -599,11 +600,17 @@ sub make_serialize{
       return $_[REX][uSAC::HTTP::Rex::write_]() 
     }
     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
-    #Log::OK::TRACE and log_trace join ", ", @_;
+    Log::OK::TRACE and log_trace join ", ", @_;
+    use Data::Dumper;
+    say Dumper $_[PAYLOAD];
     #use Data::Dumper;
     #Log::OK::TRACE and log_trace Dumper $_[HEADER];
 
     $ctx=undef;
+
+    # Getting this far in the middleware indicates we really are in progress
+    # Force this setting to make sure.
+    $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
 
 
 
