@@ -102,21 +102,9 @@ our $Word=      qr{(?:\w+)};    #Word
 my $id=0;
 
 BUILD{
-  #my $self=[];
-  #my $package=shift//__PACKAGE__;
-  #my %options=@_;
-  #$self->[server_]=	$options{server}//$self;
   $_server//=$self;
-  #$self->[id_]=		$options{id}//$id++;
   $_id//=$id++;
-  #$self->[prefix_]=	$options{prefix}//"";
   $_prefix//="";
-  #$self->[cors_]=		$options{cors}//"";
-  #$self->[innerware_]=	$options{middleware}//[];
-  #$_innerware//=[];
-  #$self->[outerware_]=	$options{outerware}//[];
-  #$self->[unsupported_]=[];
-  #$self->[error_uris_]={};
 
   if(defined($_host) and ref $_host ne "ARRAY"){
     $_host=[$_host];
@@ -124,11 +112,6 @@ BUILD{
   else {
     $_host=[];
   }
-
-	#die "No server provided" unless $self->[server_];
-	#die "No id provided" unless $self->[id_];
-
-  #bless $self, $package;
 }
 
 #Adds routes to a servers dispatch table
@@ -211,9 +194,15 @@ method _add_route {
         use Data::Dumper;
         say join ", ", $_[ROUTE][1]->@*;
         #$_[ROUTE][1][4][ACTIVE_COUNT]--;
-        $_[ROUTE][1][ROUTE_CTX_TABLE][ACTIVE_COUNT]--;
-        push $_[ROUTE][1][ROUTE_CTX_TABLE][IDLE_POOL]->@*, $_[REX][uSAC::HTTP::Rex::session_];
-        $self->_request($_[ROUTE][1][ROUTE_CTX_TABLE]);
+        #$_[ROUTE][1][ROUTE_CTX_TABLE][ACTIVE_COUNT]--;
+        #push $_[ROUTE][1][ROUTE_CTX_TABLE][IDLE_POOL]->@*, $_[REX][uSAC::HTTP::Rex::session_];
+        my $timer;
+        my ($entry, $session)= ($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+        $timer=AE::timer 0,0, sub {
+        #$self->_request($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+          $self->_request($entry, $session);
+          $timer=undef;
+        }
       }
       #
       # The route used is always associated with a host table. Use this table
@@ -370,8 +359,10 @@ method wrap_middleware {
       my $sub=sub {  #Sub which will be called during linking
         my $next=shift;
         sub {         #wrapper sub (inner middleware)
-          &$target;   #User supplied
-          &$next unless $_[REX][uSAC::HTTP::Rex::in_progress_];     #Call next here
+          #&$target;   #User supplied
+          #  &$next unless $_[REX][uSAC::HTTP::Rex::in_progress_];     #Call next here
+          #
+          &$target and &$next;
         }
       };
       push @inner, $sub;

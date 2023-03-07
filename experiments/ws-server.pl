@@ -14,7 +14,7 @@ use Log::ger::Output "Screen";
 
 my %clients;
 
-my $server=uSAC::HTTP::Server->new();
+my $server=uSAC::HTTP::Server->new(mode=>0);
 
 #FIXME:
 #the listeners and hosts needs to be setup before adding routes
@@ -65,6 +65,7 @@ $server->add_route(GET=>"/ws"=> websocket()=>sub{
 				undef $timer;
 			};
 
+      undef;
 	}
 );
 

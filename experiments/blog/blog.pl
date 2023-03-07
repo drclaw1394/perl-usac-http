@@ -56,7 +56,7 @@ my $server; $server=usac_server {
 
 		#usac_error_page 404 => "/error/404";
 	usac_sub_product "blog";
-  #usac_middleware log_simple dump_headers=>1;
+  usac_middleware log_simple dump_headers=>1;
 	
   #usac_middleware log_simple dump_headers=>1;
 	usac_site {
@@ -78,6 +78,7 @@ my $server; $server=usac_server {
     };
 
 		usac_route '/static/hot.txt' =>	
+    log_simple()=>
     gzip()=>deflate()=>
     usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
 
@@ -118,6 +119,7 @@ my $server; $server=usac_server {
                 # # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; # #
                 # #                                                                                                            # #
                 usac_route "/static"=>
+                log_simple()=>
                 gzip()=>deflate()=>
                 usac_static_under (
                         #filter=>'txt$',

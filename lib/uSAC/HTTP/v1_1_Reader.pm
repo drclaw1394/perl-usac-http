@@ -185,8 +185,6 @@ sub make_reader{
         elsif ($state == STATE_HEADERS) {
           my $pos3=index $buf, CRLF2, $ppos;
 
-          #say $pos3;
-          #say substr $buf, $pos3-10;
 
           if ($pos3>MAX_READ_SIZE) {
             $state=STATE_ERROR;
@@ -203,7 +201,6 @@ sub make_reader{
             map split(":", $_, 2) ,
               split("\015\012", substr($buf, $ppos, $pos3-$ppos))
             ){
-            say "$k=>$val";
               $k=~tr/-/_/;
               $k=uc $k;
 
@@ -302,7 +299,8 @@ sub make_reader{
           Log::OK::DEBUG and log_debug "verison/description: $version";
 
           #Find route
-          unless($rex){
+          #unless($rex){
+          unless($mode){
             ($route, $captures)=$cb->($host, "$method $uri");
             #
             $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex, $captures);

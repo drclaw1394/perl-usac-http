@@ -456,6 +456,11 @@ method add_host_end_point{
 		Hustle::Table->new($dummy_default), # Table
     {},                                  # Table cache
     undef,                              #  dispatcher
+    "",
+    [],
+    [],
+    0
+
 	];
 
   # NOTE: This is the route context. This is  a back refernce to the table
@@ -1072,6 +1077,7 @@ method do_stream_connect {
   }
   $id;
 }
+
 use uSAC::IO;
 method request {
   Log::OK::TRACE and log_trace __PACKAGE__." request";
@@ -1099,10 +1105,25 @@ method request {
   # We will always have a host table here, event if it is the default one
   #
   
-  unless($entry->[uSAC::HTTP::Site::IDLE_POOL] and $entry->[uSAC::HTTP::Site::IDLE_POOL]->@*){
-    Log::OK::TRACE and log_trace __PACKAGE__." Client Idle pool is empty. ";
-    $self->do_stream_connect($__host, $port, sub {
+  # Push to queue
+  my $details=[$host, $method, $uri, $header, $payload, $cb];
 
+  my $prev_queue_size=$entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
+
+  push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;
+
+  # Check the number of items outstnding in the queue vs how many connections we have
+  #
+  say "CURRENT ACTIVE COUNT IS: $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]";
+  my $limit =1;
+  if( 
+    ($limit<=0 or $entry->[uSAC::HTTP::Site::ACTIVE_COUNT] < $limit)  # Check limit
+
+    ){
+
+    $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+    #Create another connection so long as it is doesn't exceed the limit
+    $self->do_stream_connect($__host, $port, sub {
         my ($socket, $addr)=@_;
         $entry->[uSAC::HTTP::Site::ADDR]=$addr;
         # Create a session here
@@ -1118,42 +1139,85 @@ method request {
         }
         say "APPLICATION PARSER: ".$_application_parser;
         $session->push_reader($_application_parser->($session, 1, sub {say "DUMMY PARSER CALLBACK====="}));
-        $_sessions->{ $session_id } = $session;
+      $_sessions->{ $session_id } = $session;
 
-        $session_id++;
-        push $entry->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
+      $session_id++;
+      #if($prev_queue_size == 0){
+        #we need to kick up the first request
+        $self->_request($entry, $session);
+        #}
 
-
-        #trigger the que processing if requried
-        Log::OK::TRACE and log_trace __PACKAGE__." do stream connect callback======="; 
-        my $details=[$host, $method, $uri, $header, $payload, $cb];
-        if($entry->[uSAC::HTTP::Site::ACTIVE_COUNT]==0){
-          Log::OK::TRACE and log_trace __PACKAGE__."  NO ACTIVE sessions"; 
-          $self->_request($entry, $details);
-        }
-        else {
-          Log::OK::TRACE and log_trace __PACKAGE__."  ACTIVE sessions"; 
-          push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;
-        }
-
-      },
-      sub {
-        say "error callback for stream connect";
-      }
-    );
-  }
-  else {
-    Log::OK::TRACE and log_trace __PACKAGE__." Client Idle pool is empty.";
-    my $details=[$host, $method, $uri, $header, $payload, $cb];
-    if($entry->[uSAC::HTTP::Site::ACTIVE_COUNT]==0){
-      Log::OK::TRACE and log_trace __PACKAGE__."  NO ACTIVE sessions"; 
-      $self->_request($entry, $details);
+    },
+    sub {
+      # connection error
+      #
+      $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+      say "error callback for stream connect";
     }
-    else {
-      Log::OK::TRACE and log_trace __PACKAGE__."  ACTIVE sessions"; 
-      push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;
-    }
+    )
   }
+  else{
+    # Sit tight.. a connection will become available soon.. hopefully!
+    Log::OK::TRACE and log_trace __PACKAGE__. " request queued but waiting for in flight to finish";
+  }
+
+  #############################################################################################################
+  # unless($entry->[uSAC::HTTP::Site::IDLE_POOL] and $entry->[uSAC::HTTP::Site::IDLE_POOL]->@*){              #
+  #   Log::OK::TRACE and log_trace __PACKAGE__." Client Idle pool is empty. ";                                #
+  #   $self->do_stream_connect($__host, $port, sub {                                                          #
+  #                                                                                                           #
+  #       my ($socket, $addr)=@_;                                                                             #
+  #       $entry->[uSAC::HTTP::Site::ADDR]=$addr;                                                             #
+  #       # Create a session here                                                                             #
+  #       #                                                                                                   #
+  #       my $scheme="http";                                                                                  #
+  #       Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";                                   #
+  #       my $session=uSAC::HTTP::Session->new;                                                               #
+  #       $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);    #
+  #                                                                                                           #
+  #       unless($_application_parser){                                                                       #
+  #         require uSAC::HTTP::v1_1_Reader;                                                                  #
+  #         $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_reader;                                      #
+  #       }                                                                                                   #
+  #       say "APPLICATION PARSER: ".$_application_parser;                                                    #
+  #       $session->push_reader($_application_parser->($session, 1, sub {say "DUMMY PARSER CALLBACK====="})); #
+  #       $_sessions->{ $session_id } = $session;                                                             #
+  #                                                                                                           #
+  #       $session_id++;                                                                                      #
+  #       push $entry->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;                                           #
+  #                                                                                                           #
+  #                                                                                                           #
+  #       #trigger the que processing if requried                                                             #
+  #       Log::OK::TRACE and log_trace __PACKAGE__." do stream connect callback=======";                      #
+  #       my $details=[$host, $method, $uri, $header, $payload, $cb];                                         #
+  #       if($entry->[uSAC::HTTP::Site::ACTIVE_COUNT]==0){                                                    #
+  #         Log::OK::TRACE and log_trace __PACKAGE__."  NO ACTIVE sessions";                                  #
+  #         $self->_request($entry, $details);                                                                #
+  #       }                                                                                                   #
+  #       else {                                                                                              #
+  #         Log::OK::TRACE and log_trace __PACKAGE__."  ACTIVE sessions";                                     #
+  #         push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;                                         #
+  #       }                                                                                                   #
+  #                                                                                                           #
+  #     },                                                                                                    #
+  #     sub {                                                                                                 #
+  #       say "error callback for stream connect";                                                            #
+  #     }                                                                                                     #
+  #   );                                                                                                      #
+  # }                                                                                                         #
+  # else {                                                                                                    #
+  #   Log::OK::TRACE and log_trace __PACKAGE__." Client Idle pool is empty.";                                 #
+  #   my $details=[$host, $method, $uri, $header, $payload, $cb];                                             #
+  #   if($entry->[uSAC::HTTP::Site::ACTIVE_COUNT]==0){                                                        #
+  #     Log::OK::TRACE and log_trace __PACKAGE__."  NO ACTIVE sessions";                                      #
+  #     $self->_request($entry, $details);                                                                    #
+  #   }                                                                                                       #
+  #   else {                                                                                                  #
+  #     Log::OK::TRACE and log_trace __PACKAGE__."  ACTIVE sessions";                                         #
+  #     push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;                                             #
+  #   }                                                                                                       #
+  # }                                                                                                         #
+  #############################################################################################################
 }
 
 method _request {
@@ -1161,7 +1225,7 @@ method _request {
   #Takes are host, method, url, headers, payload, cb
   #finds a route in the tables
   #  This returns middleware chains to execute
-  my ($table, $details)=@_;
+  my ($table, $session, $details)=@_;
 
   #my($host, $port, $method, $uri, $header, $payload, $cb)=@_;
 
@@ -1174,10 +1238,18 @@ method _request {
   my $i;
   
 
-  $details//=pop $table->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
+  $details//=shift $table->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
+  unless($details){
+    # No more work to do so add the session to the idle pool
+    warn "No request to process";
+    push $table->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
+    $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+    return;
+  }
+  else {
+    #TODO Adjust active count
+  }
 
-  warn "No request to process" unless $details;
-  return unless $details;
   my $host=$details->[0];
   my $method=$details->[1];
   my $uri=$details->[2];
@@ -1188,8 +1260,8 @@ method _request {
   # At this point there should be at least one available session in the pool for the host
 
   #say "Idle pool is: ".Dumper $table->[IDLE_POOL];
-  my $session=pop $table->[uSAC::HTTP::Site::IDLE_POOL]->@*;
-  $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+  #my $session=pop $table->[uSAC::HTTP::Site::IDLE_POOL]->@*;
+  #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
 
   # Do a route lookup
   #
