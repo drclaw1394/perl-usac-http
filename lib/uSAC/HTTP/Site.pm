@@ -6,6 +6,7 @@ use feature ":all";
 no warnings "experimental";
 
 use Object::Pad;
+
 use enum qw<ROUTE_CTX_SITE ROUTE_CTX_INNER_HEAD ROUTE_CTX_OUTER_HEAD ROUTE_CTX_COUNTER ROUTE_CTX_TABLE>;
 use enum ("HOST_TABLE=0", qw<HOST_TABLE_CACHE HOST_TABLE_DISPATCH ADDR REQ_QUEUE IDLE_POOL ACTIVE_COUNT>);
 
@@ -77,7 +78,7 @@ field $_cors;
 field $_unsupported;
 field $_built_prefix;
 field $_built_label;
-field $_mode      :mutator :param; #server false, client true
+field $_mode      :mutator :param=undef; #server false, client true
 
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
@@ -101,6 +102,7 @@ our $Word=      qr{(?:\w+)};    #Word
 
 my $id=0;
 
+
 BUILD{
   $_server//=$self;
   $_id//=$id++;
@@ -113,6 +115,7 @@ BUILD{
     $_host=[];
   }
 }
+
 
 #Adds routes to a servers dispatch table
 #A handler is added for a successful match of method type

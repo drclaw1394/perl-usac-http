@@ -558,7 +558,7 @@ sub ping_interval {
 
 =head1 NAME 
 
-uSAC::HTTP::Middleware::Websocket - Websocket
+uSAC::HTTP::Middleware::Websocket - Websocket Client and Server
 
 
 =head1 SYNOPSIS
@@ -578,6 +578,18 @@ uSAC::HTTP::Middleware::Websocket - Websocket
         $ws->on_connect(...);
     }
     ...
+  }
+
+  usac_client {
+    usac_route GET=>"/path_to_url"=>websocket=>{
+        my $ws=$_[PAYLOAD];
+        $ws->on_open(...);
+        $ws->on_close(...);
+
+        $ws->on_error(...);
+        $ws->on_message(...);
+        $ws->on_connect(...);
+    };
   }
 
 

@@ -155,6 +155,8 @@ BUILD {
 	$_zombie_limit//=100;
 	$_static_headers=[];#STATIC_HEADERS;
 
+  $self->mode//=0; #Only set to server mode if it hasn't been defined.
+
 	my $default=$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", server=>$self, mode=>$self->mode));
 	$default->add_route([$Any_Method], undef, _default_handler);
 
@@ -598,11 +600,10 @@ method rebuild_dispatch {
     
     #$table=$lookup{$_[0]//""}//$any_host;
     $table=$_host_tables->{$_[0]//""}//$any_host;
-    say "TABLE IS DEFAULt : ".($table==$any_host);
+    #say "TABLE IS DEFAULt : ".($table==$any_host);
 
-    use Data::Dumper;
-    Log::OK::TRACE and  log_trace  join ", ",$table->@*;
-    #Log::OK::TRACE and  log_trace  $_[1];
+    #use Data::Dumper;
+    #Log::OK::TRACE and  log_trace  join ", ",$table->@*;
     (my $route, my $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
 
     #Hustle table entry structure:

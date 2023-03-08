@@ -110,7 +110,7 @@ sub make_reader{
 
 
   sub {
-    say "____HTTP _PARSER:". join ", ", @_;
+  #say "____HTTP _PARSER:". join ", ", @_;
     my $processed=0;
 
     ##my %h;
@@ -128,7 +128,7 @@ sub make_reader{
 
       #while ( $len=length $buf) {
       while ($buf) {
-        say "_____ Parser : $state";
+        #say "_____ Parser : $state";
         #Dual mode variables:
         #	server:
         #	$method => method
@@ -599,8 +599,8 @@ sub make_serialize{
     }
     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
     Log::OK::TRACE and log_trace join ", ", @_;
-    use Data::Dumper;
-    say Dumper $_[PAYLOAD];
+    #use Data::Dumper;
+    #say Dumper $_[PAYLOAD];
     #use Data::Dumper;
     #Log::OK::TRACE and log_trace Dumper $_[HEADER];
 
