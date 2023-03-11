@@ -1266,7 +1266,7 @@ method _request {
 
   # Do a route lookup
   #
-  say Dumper $details;
+  #say Dumper $details;
   my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
 
   die "No route found for $host" unless $route;

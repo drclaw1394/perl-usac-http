@@ -128,7 +128,8 @@ sub make_reader{
 
       #while ( $len=length $buf) {
       while ($buf) {
-        #say "_____ Parser : $state";
+        say "_____ Parser : $state";
+        say "____HTTP PARSER_LOOP:". join ", ", @_;
         #Dual mode variables:
         #	server:
         #	$method => method
@@ -306,6 +307,8 @@ sub make_reader{
             $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex, $captures);
           }
           else {
+            $rex->[uSAC::HTTP::Rex::headers_]=\%h;
+            $code=$uri;
             # Assume session has rex already defined (ie client side)
           }
 

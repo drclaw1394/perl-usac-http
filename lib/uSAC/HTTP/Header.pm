@@ -73,9 +73,10 @@ BEGIN {
 		WebSocket-Origin
 		WebSocket-Location
 		Sec-WebSocket-Origin
-		Sec-Websocket-Location
+		Sec-WebSocket-Location
 		Sec-WebSocket-Key
 		Sec-WebSocket-Accept
+    Sec-WebSocket-Version
 		Sec-WebSocket-Protocol
 		Sec-WebSocket-Extensions
 		DataServiceVersion

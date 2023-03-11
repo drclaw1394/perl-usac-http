@@ -43,7 +43,10 @@ $server->add_route(GET=>"/ws"=> websocket()=>sub{
     $ws->on_open=sub {
       $clients{$_[0]}=$_[0];
       $timer=AE::timer 0, 1, sub {
-        $ws->send_text_message("hello",sub {
+       my $string="hello";
+       utf8::encode $string;
+       say "Sending $string";
+        $ws->send_text_message($string, sub {
             say "CALLBACK";
           });
       };

@@ -231,7 +231,10 @@ method _add_route {
     my $middler=Sub::Middler->new();
     $middler->register($_) for(@outer);
 
-    $outer_head=$middler->link($serialize);
+    $outer_head=$middler->link($serialize); #TODO: Pass in the site or the route as a
+                                            # Configuration option
+                                            # Allows middleware to adjust for client
+                                            # or server
   }
   else {
     $outer_head=$serialize;
