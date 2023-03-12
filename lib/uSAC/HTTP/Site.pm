@@ -199,8 +199,10 @@ method _add_route {
         #$_[ROUTE][1][4][ACTIVE_COUNT]--;
         #$_[ROUTE][1][ROUTE_CTX_TABLE][ACTIVE_COUNT]--;
         #push $_[ROUTE][1][ROUTE_CTX_TABLE][IDLE_POOL]->@*, $_[REX][uSAC::HTTP::Rex::session_];
+
         my $timer;
         my ($entry, $session)= ($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+        # TODO: Remove explicit event loop timer
         $timer=AE::timer 0,0, sub {
         #$self->_request($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
           $self->_request($entry, $session);
@@ -231,7 +233,7 @@ method _add_route {
     my $middler=Sub::Middler->new();
     $middler->register($_) for(@outer);
 
-    $outer_head=$middler->link($serialize); #TODO: Pass in the site or the route as a
+    $outer_head=$middler->link($serialize, site=>$self); #TODO: Pass in the site or the route as a
                                             # Configuration option
                                             # Allows middleware to adjust for client
                                             # or server
@@ -247,7 +249,7 @@ method _add_route {
     for(@inner){
       $middler->register($_);
     }
-    $inner_head=$middler->link($end);
+    $inner_head=$middler->link($end, site=>$self);
   }
   else{
     $inner_head=$end;

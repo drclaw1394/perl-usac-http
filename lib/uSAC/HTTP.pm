@@ -3,6 +3,7 @@ use strict;
 use feature qw<say state refaliasing>;
 use utf8;
 use warnings;
+
 use version; our $VERSION=version->declare("v0.1");
 use Log::ger;
 use Log::OK {
@@ -10,21 +11,29 @@ use Log::OK {
   opt=>"verbose",
 };
 
-use uSAC::HTTP::Server;
-use uSAC::HTTP::Site;
-use uSAC::HTTP::Middleware::Static;
-use uSAC::HTTP::Rex;
-#use uSAC::HTTP::Middleware qw<dummy_mw log_simple>;
+# TODO: Event system to be via uSAC::IO eventually
+use AnyEvent;
+
+# HTTP constants for codes, methods and headers
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Method ":constants";
-#use enum qw<ROUTE REX CODE HEADER PAYLOAD CB>;
 
-use uSAC::HTTP::Constants;
+# Core of the uSAC::HTTP system
+use uSAC::HTTP::Constants;  # Constants for the message structure of middleware
+use uSAC::HTTP::Rex;        # Request and Response
+use uSAC::HTTP::Site;       # Route grouping and base class
+use uSAC::HTTP::Server;     # Main class to store routes and listen
+use uSAC::HTTP::Client;     # subclass for clients
 
-# This is the current site variable when using the usac_* functions
+# Common middleware
+#
+use uSAC::HTTP::Middleware::Static;
 
+
+# Contextual variables used in DSL
 our $Site;
+
 
 # Re-export any symbols that start with usac_, rex_ or certain  constants
 #
@@ -69,3 +78,26 @@ sub import {
   }
 }
 1;
+
+=head1 NAME
+
+uSAC::HTTP - Top Level HTTP Server and Client
+
+uSAC::HTTP - Duct tape meets chainsaw
+
+=head1 SYNOPSIS
+
+  use uSAC::HTTP;
+  usc uSAC::HTTP ":constants";
+
+=head1 DESCRIPTION
+
+A wrapper module which bundles multiple modules in the L<uSAC::HTTP>
+distrubution,re exporting constants and subrotines and setting up the run time
+environment.  It very quick to write high performance HTTP client and servers.
+
+
+
+
+
+

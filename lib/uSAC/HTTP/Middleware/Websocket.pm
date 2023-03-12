@@ -16,7 +16,7 @@ use Encode qw<decode encode>;
 
 use Compress::Raw::Zlib;
 
-our @EXPORT_OK=qw<websocket websocket_client>;
+our @EXPORT_OK=qw<websocket>;
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
@@ -66,8 +66,9 @@ use constant {
 use enum qw<STATE_HEADER STATE_BODY>;
 
 use constant HAS_QUAD=>1;
+
 sub  websocket_client {
-    [&websocket_client_in,&websocket_client_out];
+    [&websocket_client_in, &websocket_client_out];
 }
 
 my %ctx;
@@ -167,16 +168,65 @@ sub websocket_client_in {
   }
 }
 
-sub websocket {
-  #call with same options/arguments
-  [&websocket_in, &websocket_out]
+
+# Maker for innerware
+sub  websocket {
+    [&websocket_in, &websocket_out];
+
 }
 
+sub websocket_in {
+  sub {
+    my ($next, $index, %options)=@_;
+    say "site is: ".$options{site};
+    say "mode is: ".$options{site}->mode;
+    my $out;
+    if($options{site}->mode){
+      # This is a client site. 
+      Log::OK::TRACE and log_trace __PACKAGE__. " websocket innerware will be for client";
+      sleep 1;
+      $out=&{websocket_client_in()};
+    }
+    else {
+      # Server site
+      Log::OK::TRACE and log_trace __PACKAGE__. " websocket innerware will be for server";
+      $out=&{websocket_server_in()};
+    }
+    $out;
+  }
+  
+}
 
 sub websocket_out {
+  
+  sub {
+    my (undef, undef, %options)=@_;
+    my $out;
+    if($options{site}->mode){
+      Log::OK::TRACE and log_trace __PACKAGE__. " websocket outerware will be for client";
+      # This is a client site. 
+      $out=&{websocket_client_out()};
+    }
+    else {
+      Log::OK::TRACE and log_trace __PACKAGE__. " websocket outerware will be for server";
+      # Server site
+      $out=&{websocket_server_out()}
+    }
+    $out;
+  }
+
+}
+
+# Maker for outerware
+sub websocket_server {
+  #call with same options/arguments
+  [&websocket_server_in, &websocket_server_out]
+}
+
+sub websocket_server_out {
 
   sub {
-    my $next=shift; #returns the  next item in the chain
+    my $next=$_[0]; #returns the  next item in the chain
                     #Technically this shoul not be called 
                     #as the websocket will take over
   }
@@ -184,9 +234,9 @@ sub websocket_out {
 }
 
 
-sub websocket_in {
+sub websocket_server_in {
   sub {
-    my $next=shift; 
+    my $next=$_[0]; 
 
     sub {
       Log::OK::TRACE and log_trace "Testing for websocket";
