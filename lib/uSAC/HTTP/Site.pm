@@ -130,7 +130,6 @@ method _add_route {
   local $,=" ";
   say caller;
   #my $self=shift;
-  my $end;
   my $method_matcher=shift;
   my $path_matcher=shift;
 
@@ -165,6 +164,7 @@ method _add_route {
 
 
   my $root=$self->find_root;
+  my $end;
   # TODO: fix this for client support.
   # Server has the rex_write hook at the start of outerware
   # Client will need to hook at end of outerware?
@@ -192,19 +192,10 @@ method _add_route {
         #No there isn't
         say STDERR __PACKAGE__." NO CALLBACK, expecting no more data from parser";
 
-        # Put the still connected session back into the pool for the table
-        #Push the session into the idle queue?
-        use Data::Dumper;
-        say join ", ", $_[ROUTE][1]->@*;
-        #$_[ROUTE][1][4][ACTIVE_COUNT]--;
-        #$_[ROUTE][1][ROUTE_CTX_TABLE][ACTIVE_COUNT]--;
-        #push $_[ROUTE][1][ROUTE_CTX_TABLE][IDLE_POOL]->@*, $_[REX][uSAC::HTTP::Rex::session_];
-
         my $timer;
         my ($entry, $session)= ($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
         # TODO: Remove explicit event loop timer
         $timer=AE::timer 0,0, sub {
-        #$self->_request($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
           $self->_request($entry, $session);
           $timer=undef;
         }
@@ -256,9 +247,6 @@ method _add_route {
   }
 
 
-
-
-
   my @hosts;
 
   @hosts=$self->build_hosts;	#List of hosts (as urls) 
@@ -294,14 +282,15 @@ method _add_route {
 
     }
 
-    my ($matcher, $type)=$self->__add_route($host, $method_matcher, $path_matcher);
+    my ($matcher, $type)=$self->__adjust_matcher($host, $method_matcher, $path_matcher);
     $_server->add_host_end_point($host, $matcher, [$self, $inner_head, $outer_head,0], $type);
     last unless defined $matcher;
 
   }
 }
 
-method __add_route {
+# Returns a matcher and a type suitable for using in a hustle::table
+method __adjust_matcher {
   my ($host, $method_matcher, $path_matcher)=@_;
   my $matcher;
   my $type;
@@ -475,7 +464,7 @@ method set_built_prefix {
 }
 
 method build_hosts {
-	my $parent=$_[0];
+	my $parent=$self;#$_[0];
 	my @hosts;
 	while($parent) {
 		push @hosts, $parent->host->@*;	
@@ -487,7 +476,7 @@ method build_hosts {
 
 #find the root and unshift middlewares along the way
 method construct_innerware {
-	my $parent=$_[0];
+	my $parent=$self;#$_[0];
 	my @middleware;
 	while($parent){
 		Log::OK::TRACE and log_trace "Middleware from $parent";
@@ -499,7 +488,7 @@ method construct_innerware {
 }
 
 method construct_outerware {
-	my $parent=$_[0];
+	my $parent=$self;#$_[0];
 	my @outerware;
 	while($parent){
 		unshift @outerware, @{$parent->outerware//[]};
@@ -510,19 +499,19 @@ method construct_outerware {
 
 method built_label {
 	my $parent_label;
-	if($_[0]->parent_site){
-		$parent_label=$_[0]->parent_site->built_label;
+	if($self->parent_site){
+		$parent_label=$self->parent_site->built_label;
 	}
 	else {
 		$parent_label="";
 
 	}
-	$_built_label//($_[0]->set_built_prefix($parent_label.$_[0]->build_label));
+	$_built_label//($self->set_built_prefix($parent_label.$self->build_label));
 }
 
 #Resolves the ext to mime table the hierarchy. Checks self first, then parent
-sub resolve_mime_lookup {
-	my $parent=$_[0];
+method resolve_mime_lookup {
+	my $parent=$self;
 	my $db;;
 	while($parent) {
 		$db=$parent->mime_db;
@@ -534,8 +523,8 @@ sub resolve_mime_lookup {
 }
 
 #Resolves the default mime in the hierarchy. Checks self first, then parent
-sub resolve_mime_default {
-	my $parent=$_[0];
+method resolve_mime_default {
+	my $parent=$self;
 	my $default;
 	while($parent) {
 		$default=$parent->mime_default;
@@ -546,6 +535,13 @@ sub resolve_mime_default {
 	$default?$default:"applcation/octet-stream";
 }
 
+method add_site ($site){
+  $site->parent=$self; 
+  my $root=$self->find_root;
+  $site->mode=$root->mode ;
+  $site->server=$root;
+  $site;# chaining of calls
+}
 
 sub usac_site :prototype(&) {
 	#my $server=$_->find_root;
@@ -657,6 +653,8 @@ method add_route {
 		# method, url and middleware specified
 		$self->_add_route(@_);
 	}
+
+  $self;    #Chaining
 }
 
 sub usac_controller {

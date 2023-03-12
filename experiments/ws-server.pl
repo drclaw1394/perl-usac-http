@@ -39,7 +39,6 @@ $server->add_route(GET=>"/ws"=> websocket()=>sub{
 		my ($matcher, $rex, $code, $headers, $ws)=@_;
 		say " IN usac websocket  callback: ",join ", ", @_;
 		my $timer;
-		#$ws->ping_interval(0);
     $ws->on_open=sub {
       $clients{$_[0]}=$_[0];
       $timer=AE::timer 0, 1, sub {

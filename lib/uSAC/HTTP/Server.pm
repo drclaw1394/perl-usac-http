@@ -49,7 +49,6 @@ use Hustle::Table;		#dispatching of endpoints
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
 
-#use AnyEvent;
 use Scalar::Util 'refaddr', 'weaken';
 use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY SO_LINGER
 inet_pton);
@@ -136,7 +135,7 @@ field $_www_roots;
 field $_mime;
 field $_workers;
 field $_cv;
-field $_options;
+field $_options :reader;
 field $_application_parser;
 field $_total_requests;
 field $_mime_db;
@@ -150,7 +149,6 @@ BUILD {
 	$_mime_default="application/octet-stream";
 
 	$_host_tables={};
-  #$_cb=$options{cb}//sub { (200,"Change me")};
   $_zombies=[];
 	$_zombie_limit//=100;
 	$_static_headers=[];#STATIC_HEADERS;
@@ -1008,7 +1006,7 @@ method application_parser :lvalue {
 
 method parse_cli_options {
   #my $self=shift;
-  my @options=@_;
+  my @options=@_||@ARGV;
 
   #Attempt to parse the CLI options
   require Getopt::Long;

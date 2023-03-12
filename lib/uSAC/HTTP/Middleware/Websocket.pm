@@ -184,7 +184,6 @@ sub websocket_in {
     if($options{site}->mode){
       # This is a client site. 
       Log::OK::TRACE and log_trace __PACKAGE__. " websocket innerware will be for client";
-      sleep 1;
       $out=&{websocket_client_in()};
     }
     else {
