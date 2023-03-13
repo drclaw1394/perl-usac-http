@@ -60,7 +60,7 @@ use File::Basename qw<dirname>;
 class uSAC::HTTP::Site;
 
 no warnings "experimental";
-field $_server      :mutator :param=undef;
+#field $_server      :mutator :param=undef;
 field $_parent      :mutator :param=undef;
 field $_prefix      :reader :param =undef;
 field $_host        :reader :param =[];
@@ -104,7 +104,7 @@ my $id=0;
 
 
 BUILD{
-  $_server//=$self;
+  #$_server//=$self;
   $_id//=$id++;
   $_prefix//="";
 
@@ -151,6 +151,7 @@ method _add_route {
   say "OUTER WARE: ".join ", ", @outer;
 
 
+
   # Innerware run form parent to child to route in
   # the order of listing
   #
@@ -163,12 +164,11 @@ method _add_route {
   unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($_built_prefix);
 
 
-  my $root=$self->find_root;
   my $end;
   # TODO: fix this for client support.
   # Server has the rex_write hook at the start of outerware
   # Client will need to hook at end of outerware?
-  if($root->mode==0){
+  if($self->find_root->mode==0){
     Log::OK::TRACE and log_trace __PACKAGE__. " end is server ".join ", ", caller;
     use Error::Show;
     my @frames;
@@ -212,12 +212,11 @@ method _add_route {
 
 
   #my $server= $self->[server_];
-  my $static_headers=$_server->static_headers;
+  my $static_headers=$self->find_root->static_headers;
 
   #TODO: Need to rework this for other HTTP versions
-  #my $root=$self->find_root;
 
-  my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$root->mode, static_headers=>$static_headers;
+  my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$static_headers;
 
   my $outer_head;
   if(@outer){
@@ -283,7 +282,7 @@ method _add_route {
     }
 
     my ($matcher, $type)=$self->__adjust_matcher($host, $method_matcher, $path_matcher);
-    $_server->add_host_end_point($host, $matcher, [$self, $inner_head, $outer_head,0], $type);
+    $self->find_root->add_host_end_point($host, $matcher, [$self, $inner_head, $outer_head,0], $type);
     last unless defined $matcher;
 
   }
@@ -537,14 +536,10 @@ method resolve_mime_default {
 
 method add_site ($site){
   $site->parent=$self; 
-  my $root=$self->find_root;
-  $site->mode=$root->mode ;
-  $site->server=$root;
-  $site;# chaining of calls
+  $site;
 }
 
 sub usac_site :prototype(&) {
-	#my $server=$_->find_root;
 	my $server=$uSAC::HTTP::Site->find_root;
 	my $sub=pop;
   my %options=@_;

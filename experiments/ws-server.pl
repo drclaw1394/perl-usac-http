@@ -24,6 +24,7 @@ $server->add_listeners( "127.0.0.1:9090");
 $server->set_mime_default;
 $server->add_middleware(log_simple);
 
+
 $server->add_route('GET'=>"/\$"=>sub {
 	local $/=undef; state $data; $data=<DATA> unless $data;	
 

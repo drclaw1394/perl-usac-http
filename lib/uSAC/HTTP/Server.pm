@@ -108,7 +108,7 @@ sub _default_handler {
 class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 
 no warnings "experimental";
-field $_sites;
+#field $_sites;
 field $_host_tables;
 field $_cb;
 field $_listen;
@@ -155,7 +155,7 @@ BUILD {
 
   $self->mode//=0; #Only set to server mode if it hasn't been defined.
 
-	my $default=$self->register_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", server=>$self, mode=>$self->mode));
+	my $default=$self->add_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", mode=>$self->mode));
 	$default->add_route([$Any_Method], undef, _default_handler);
 
 	$_backlog=4096;
@@ -472,29 +472,32 @@ method add_host_end_point{
 
 #registers a site object with the server
 #returns the object
-method register_site {
-  #my $self=shift;
-	my $site=shift;
-	#$site->[uSAC::HTTP::server_]=$self;
-	$site->server=$self;
-	my $name=$site->id;#$site->[uSAC::HTTP::id_];
-	$_sites->{$name}=$site;
-	$site;
-}
-#returns the default site
-method default_site {
-  #my $self=shift;
-	$_sites->{default};
-}
+################################
+# method register_site {       #
+#         my $site=shift;      #
+#         $site->server=$self; #
+#   #my $name=$site->id;       #
+#   #$_sites->{$name}=$site;   #
+#         $site;               #
+# }                            #
+################################
 
-#returns the site registered with the specified name
-#Returns default if not specififed
-method site {
-  #my $self=shift;
-	my $name=shift;
-	$_sites->{$name//"default"}
-}
-
+########################################################
+# #returns the default site                            #
+# method default_site {                                #
+#   #my $self=shift;                                   #
+#         $_sites->{default};                          #
+# }                                                    #
+#                                                      #
+# #returns the site registered with the specified name #
+# #Returns default if not specififed                   #
+# method site {                                        #
+#   #my $self=shift;                                   #
+#         my $name=shift;                              #
+#         $_sites->{$name//"default"}                  #
+# }                                                    #
+#                                                      #
+########################################################
 
 method rebuild_dispatch {
   #my $self=shift;
@@ -516,7 +519,7 @@ method rebuild_dispatch {
       Log::OK::TRACE and log_trace(__PACKAGE__. " host table special default. detected. Adding special site");
       my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self, mode=>$self->mode);
       $site->parent_site=$self;
-      $self->register_site($site);
+      $self->add_site($site);
       Log::OK::DEBUG and log_debug "Adding default handler to $host";
 
       $site->add_route([$Any_Method], undef, _default_handler);
@@ -754,6 +757,7 @@ method routes {
   }
   @routes;
 }
+
 method dump_routes {
   #my ($self)=@_;
   use re qw(is_regexp regexp_pattern);
@@ -817,9 +821,6 @@ method dump_routes {
 
 }
 
-sub list_routes {
-	#dump all routes	
-}
 
 sub usac_server :prototype(&) {
 	#my $sub=shift;
@@ -1006,7 +1007,7 @@ method application_parser :lvalue {
 
 method parse_cli_options {
   #my $self=shift;
-  my @options=@_||@ARGV;
+  my @options=@_?@_:@ARGV;
 
   #Attempt to parse the CLI options
   require Getopt::Long;
