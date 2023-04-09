@@ -36,6 +36,7 @@ sub log_simple {
 }
 
 sub log_simple_in {
+
   require Data::Dumper;
 	my %options=@_;
 
@@ -43,6 +44,7 @@ sub log_simple_in {
 
   my $dump_capture=$options{dump_captures};
   my $sort_headers=$options{sort};
+
 	#Header processing sub
 	sub {
 		my $inner_next=shift;	#This is the next mw in the chain
@@ -54,16 +56,16 @@ sub log_simple_in {
       package uSAC::HTTP::Rex {
           say STDERR "\n<<<---";
           say STDERR "Arraval initial time:		$time";
-          say STDERR "Host: 			$_[1][host_]";
-          say STDERR "Method:       $_[1][method_]";
-          say STDERR "Original matched URI: 	$_[1][uri_raw_]";
-          say STDERR "Site relative URI:	$_[1][uri_stripped_]";
-          say STDERR "Matched for site:	".($_[0][1][0]->id//"n/a");
-          say STDERR "Hit counter:		$_[0][1][4]";
+          say STDERR "Host: 			$_[REX][host_]";
+          say STDERR "Method:       $_[REX][method_]";
+          say STDERR "Original matched URI: 	$_[REX][uri_raw_]";
+          say STDERR "Site relative URI:	$_[REX][uri_stripped_]";
+          say STDERR "Matched for site:	".($_[ROUTE][1][0]->id//"n/a");
+          say STDERR "Hit counter:		$_[ROUTE][1][3]";
           say STDERR "Captures:\n".join "\n",$_[1][captures_]->@* if $dump_capture;
           if($dump_headers){
             say STDERR "Headers:\n" if $dump_headers;
-            my $headers=$_[1]->headers;
+            my $headers=$_[REX]->headers;
             my $out="";
             for my($k, $v)(%$headers){
               $out.="$k: $v\n"; 
@@ -75,10 +77,6 @@ sub log_simple_in {
 			&$inner_next;		#alway call next. this is just logging
 		}
 	};
-	
-	#Body processing sub
-	
-	#Return as a array [$header, $body]
 }
 
 sub log_simple_out {

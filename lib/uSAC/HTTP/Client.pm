@@ -7,6 +7,7 @@ use feature "say";
 
 
 field $_host_pool_limit :param=undef;
+field $_cookie_jar_path :param=undef;
 
 
 BUILD {
@@ -35,4 +36,28 @@ method run {
   }
 	Log::OK::TRACE and log_trace(__PACKAGE__. " starting client...");
 }
+
+
+# Like clicking the link
+# Uses the current url page as referer if enabled
+# Treats request as httpOnly (non script)
+#
+method follow_link {
+
+}
+
+# Typing the address or clicking a shortcut. No referer
+# of current page
+#
+method go {
+
+}
+
+# As per fetch api?
+#
+method fetch ($resource, $options){
+
+}
+
+
 1;

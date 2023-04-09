@@ -21,6 +21,14 @@ BEGIN {
 		Secure
 		HTTPOnly
 		SameSite
+    
+    Creation-Time
+    Last-Access-Time
+    Persistent
+    Host-Only
+    Expiry-Time
+    Key
+
 	>;
 	our @values= 0 .. @names-1;
 
@@ -49,23 +57,35 @@ our %EXPORT_TAGS=(
 my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
 
+my %fields=map {($_,$_)} 
+  COOKIE_NAME,    COOKIE_VALUE,   COOKIE_HTTPONLY,
+  COOKIE_EXPIRES, COOKIE_PATH,    COOKIE_MAX_AGE,
+  COOKIE_DOMAIN,  COOKIE_SECURE;
+
+@fields{qw<name value http_only expires path maxage domain secure same_site>}=
+  ( 
+  COOKIE_NAME,    COOKIE_VALUE,   COOKIE_HTTPONLY,
+  COOKIE_EXPIRES, COOKIE_PATH,    COOKIE_MAX_AGE,
+  COOKIE_DOMAIN,  COOKIE_SECURE,  COOKIE_SAMESITE
+  );
+
+  
+    
 #cookie 
 sub new {
 	my $package=shift//__PACKAGE__;
 	my $self=bless [], $package;
-	$self->[COOKIE_HTTPONLY]=undef;	#allocate storage
 
 	$self->[COOKIE_NAME]=shift;
 	$self->[COOKIE_VALUE]=shift;
 
 	#remainder of values are key value pairs
-	my $i=0;
-	for(0..@_/2-1){
-		$self->[$_[$i]]=$_[$i+1]; $i+=2;
+  for my ($k, $v)(@_){
+		$self->[$k]=$v;
 	}
-
 	$self;
 }
+
 
 #Create a new cookie without package
 #First 2 arguements are name=>value
@@ -110,6 +130,7 @@ sub expire_cookies {
 sub serialize_set_cookie{
 	Log::OK::DEBUG and log_debug "Serializing set cookie";	
 	my $self=shift;
+
 	my $cookie= "$self->[COOKIE_NAME]=$self->[COOKIE_VALUE]";			#Do value
 	for my $index (COOKIE_MAX_AGE, COOKIE_DOMAIN, COOKIE_PATH, COOKIE_SAMESITE){	#Do Attributes
 		for($self->[$index]){
@@ -123,11 +144,17 @@ sub serialize_set_cookie{
 			$cookie.="; Expires=$days[$wday], $mday $months[$mon] ".($year+1900) ." $hour:$min:$sec GMT";
 		}
 	}
+
 	$cookie.="; Secure" if defined $self->[COOKIE_SECURE];				#Do flag attributes
 	$cookie.="; HTTPOnly" if defined $self->[COOKIE_HTTPONLY];
 
 	Log::OK::DEBUG and log_debug "$cookie";
 	$cookie;
+}
+
+sub serialize_cookie {
+  my $self=shift;
+  #my $cookie= "$self->[COOKIE_NAME]=$self->[COOKIE_VALUE]";
 }
 
 #Parse cookie string from client into key value pairs.
@@ -147,26 +174,31 @@ sub parse_cookie {
 #Parse the key value and attributes from a servers set-cookie header
 #Used client side on incoming response
 sub parse_set_cookie {
+  my ($host, $path)=@_;   # This is the host the cookie was requested from
 	my $key;
 	my $value;
 	my @values;
 	my $first=1;
 
 	for(split ";", $_[0]=~ tr/ //dr){
-		($key,$value)=split "=";
+		($key, $value)=split "=";
 		if($first){
 			$first=0;
-			($values[1],$values[2])= split "=";
+      # The 0 index is for undefined keys. See top of file
+			($values[1], $values[2])= split "=";
 		}
 		else {
-			($key,$value)= split "=";
-			#say "key $key, value $value";
+      #($key, $value)= split "=";
+      # Look up the valie key value pair
 			$values[$reverse{$key}]=$value//1;
 		}
 
 	}
+
 	bless \@values, __PACKAGE__;
 }
+
+
 
 
 
@@ -180,5 +212,9 @@ sub  expires :lvalue{ $_[0][COOKIE_EXPIRES] }
 sub  max_age :lvalue{ $_[0][COOKIE_MAX_AGE] }
 sub  path :lvalue{ $_[0][COOKIE_PATH] }
 sub  secure :lvalue{ $_[0][COOKIE_SECURE] }
+sub  same_site :lvalue{ $_[0][COOKIE_SAMESITE] }
+sub  session_only {
+    not ($_[0][COOKIE_MAX_AGE] or $_[0][COOKIE_EXPIRES]);
+}
 
 1;

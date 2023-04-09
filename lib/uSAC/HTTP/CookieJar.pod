@@ -1,0 +1,104 @@
+=head1 NAME
+
+uSAC::HTTP::CookieJar - Fast Public Suffix cookie jar
+
+
+=head1 SYNOPSIS
+
+  use uSAC::HTTP::CookieJar;
+
+  my $jar=uSAC::HTTP::CookieJar->new;
+
+  
+  $jar->set_cookies(
+
+
+=head1 DESCRIPTION
+
+This module combines the functionally of a cookie jar and a general public
+suffix query tool. It has a simple API to parse/serialize cookie values and
+manipulate the cookie database. 
+
+It also provides an API to query the public suffix list (from mozilla), using
+alternative and (faster **) algorighm, for repeated lookups.
+
+TODO:
+  up to date cookie processing 
+    name prefix __Host ...
+    public suffix
+    same site
+      as per chrome
+      refernce RFCs...
+    action
+    referer uri
+
+=head1 API
+
+=head2 Cookie Marshalling
+
+=head3 decode_set_cookie
+
+  decode_set_cookie $string
+
+Takes the string value of a Set-Cookie header, decodes it, returning a cookie
+structure.  If the cookie jar has a converter set, it is passed through the
+converter subroutine first.
+
+This means the return value actually whatever the converter function returns.
+
+Note this does little checking of the validity of the cookie. It is basically a
+parser.
+
+=head3 decode cookie
+
+  decode_cookie $string;
+
+Similar to decode_set_cookie.  Takes the string value from a Cookie header,
+decodes it, returns a list of key value pairs.
+
+
+=head3 encode_set_cookie
+  
+  encode_set_cookie $cookie
+
+Takes a cookie structure and serialises it into a Set-Cookie header string value.
+
+
+=head2 Cookie Jar
+
+
+=head3 encode_cookie
+
+  $jar->encode_cookie($request_uri, [$referer_uri, $action])
+
+Finds all non expired cookies which are applicable to the C<$request_url> (ie
+path, domain, scheme, etc), applying same site rules considerng C<$referer_uri>
+and C<$action> if supplied.  The list of cookies found are encoded in to a
+Cookie header value string, ready for inclusion in a http request.
+
+Any cookies which are determined to be expired are purge during locating
+applicable cookies.
+
+TODO: same site Strict Lax None , Default values
+    action (api, navitation , resource);
+
+
+=head3 get_cookies
+
+  jar->get_cookies($name, $requst_uri, $referer_uri, $action);
+
+This method is used internally by C<$encode_cookie>. Here C<$name> is an
+optional name filter only match cookies with an explicit name. If it is an
+empty string, cookies of all names for the applicable domain etc are returned.
+
+This method allows external serialisation/encoding of cookies, but still
+provides the expiration and attribuate processing
+
+
+=head3 set_cookies
+
+  $jar->set_cookies($cookies, $request_uri, $converter)
+
+
+Takes
+
