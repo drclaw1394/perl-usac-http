@@ -122,14 +122,13 @@ method make_suffix{
     # Returns the cached value if a cache is supplied; 
     return $_suffix_cache->{$_domain} if $_suffix_cache and exists $_suffix_cache->{$_domain};
 
-    my @a=split /\./, $domain;
     my @b;
     
     # Do a right duplicate search. exact string or sub string will always be
     # earlier in the list
     #
-    $index=psl_search_string_right $domain, \@_exception_psl;
-    $index--;
+    $index=psl_search_string_right($domain, \@_exception_psl)-1;
+    #$index--;
 
     if($index>=0 and $index < @_exception_psl ){ 
       DEBUG and say "INDEX: $index, value $_exception_psl[$index]";
@@ -137,12 +136,19 @@ method make_suffix{
     }
 
     if($found){
-      @b=split /\./, $_exception_psl[$index];
+      ###########################################################################
+      # @b=split /\./, $_exception_psl[$index];                                 #
+      #                                                                         #
+      # pop @b;                                                                 #
+      # # Domain is an exception so is not a suffix                             #
+      # DEBUG and say "Found exception in suffix test: ", reverse join ".", @b; #
+      # $suffix=reverse join ".", @b;                                           #
+      ###########################################################################
 
-      pop @b;
-      # Domain is an exception so is not a suffix
-      DEBUG and say "Found exception in suffix test: ", reverse join ".", @b;
-      $suffix=reverse join ".", @b;
+
+      $suffix=scalar reverse substr $_exception_psl[$index], 0, rindex $_exception_psl[$index], ".";
+      
+
     }
 
     else{
@@ -153,14 +159,15 @@ method make_suffix{
       # entry in the psl, then the cookie is actually set to a 'top level
       # domain', which is prohibited.
       #
-      $index=psl_search_string_right $domain, \@_psl;
-      $index--;
+      $index=psl_search_string_right($domain, \@_psl)-1;
+      #$index--;
 
       if($index>=0 and $index < @_psl){
+
         DEBUG and say "Found index: $index, value $_psl[$index]";
+        my @a=split /\./, $domain;
         @b=split /\./, $_psl[$index];
-        #$found= 0==index $domain, $_psl[$index];
-        #
+
         DEBUG and say join "+>", @b;
         my $ok=1;
         my @suffix;#="";
@@ -187,6 +194,7 @@ method make_suffix{
         $suffix=scalar reverse join ".", @suffix;
 
       }
+
       else {
         # not in this db..
         DEBUG and say "NO SUFFIX AVAILABLE";
