@@ -130,12 +130,20 @@ method make_suffix{
     $index=psl_search_string_right($domain, \@_exception_psl)-1;
     #$index--;
 
+    #say "FOUND BEFORE: $found";
     if($index>=0 and $index < @_exception_psl ){ 
+
       DEBUG and say "INDEX: $index, value $_exception_psl[$index]";
-      $found =  (0==index $domain, $_exception_psl[$index]);
+
+      for($_exception_psl[$index]){
+        $found=((0==index($domain, $_)) and
+          ((substr($domain, length($_), 1 )//".") eq "."));
+      }
+      
     }
 
     if($found){
+      DEBUG and say "exception";
       ###########################################################################
       # @b=split /\./, $_exception_psl[$index];                                 #
       #                                                                         #
@@ -161,38 +169,49 @@ method make_suffix{
       #
       $index=psl_search_string_right($domain, \@_psl)-1;
       #$index--;
+      DEBUG and say "INDEX: $index, value $_psl[$index]";
 
       if($index>=0 and $index < @_psl){
 
-        DEBUG and say "Found index: $index, value $_psl[$index]";
-        my @a=split /\./, $domain;
-        @b=split /\./, $_psl[$index];
+        #my $run=1;
+        my $i;
+        my $j;
+        my $io=0;
+        my $jo=0;
+        my $match=$_psl[$index];
+        while(){ 
+          $i=index $domain, ".", $io;
+          $j=index $match, ".", $jo; 
 
-        DEBUG and say join "+>", @b;
-        my $ok=1;
-        my @suffix;#="";
-        for(0..$#b){
-          DEBUG and say "index: $_ value: $b[$_]";
-          if($b[$_] eq "*"){
-            DEBUG and say "wild push $a[$_]";
-            push @suffix, $a[$_];
-            last;
+          $i=length($domain) if $i==-1;
+          $j=length($match) if $j==-1;
 
-          }
-          if($ok &&= $a[$_] eq $b[$_]){
-            DEBUG and say "normal push $a[$_]";
-            push @suffix, $a[$_];
+          DEBUG and say "i: $i, j: $j";
+          DEBUG and say substr $domain, $io, $i-$io;
+          if(substr($domain, $io, $i-$io) eq substr($match, $jo, $j-$jo)){
+            #Labels match
+            $io=$i+1;
+            $jo=$j+1;
           }
           else{
-            
-            DEBUG and say "Nothing to push: $suffix";
-            last;
+            #miss match, check for  wild card
+            if(substr($match, $jo, $j-$jo) eq "*"){
+              #actually a match. and last
+              DEBUG and say "wild found";
+              $io=$i+1;
+              $jo=$j+1;
+              last;#$run=undef;
+            }
+            else {
+              last;
+            }
+
           }
         }
-        DEBUG and say "Suffix found: ", scalar reverse join ".", @suffix;
-        DEBUG and say join "\n", @_psl[$index-5...$index+5];
-        $suffix=scalar reverse join ".", @suffix;
-
+        
+        #
+        $io--;
+        $suffix=scalar reverse substr $domain, 0, $io;# $rindex $_exception_psl[$index], ".";
       }
 
       else {
