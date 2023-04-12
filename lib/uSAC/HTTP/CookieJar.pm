@@ -1,9 +1,21 @@
 package uSAC::HTTP::CookieJar;
 
+# Debug
+#
+use feature "say";
+use Data::Dumper;
+
 my @names;
 my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+my $i=0;
+my %months= map {$_,$i++} @months;
+
+my $i=0;
 my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
+my %days= map {$_,$i++} @days;
 my %const_names;
+
+my @values;
 
 BEGIN {
 	@names=qw<
@@ -27,9 +39,10 @@ BEGIN {
     Suffix_Valid
 
 	>;
-	my @values= 0 .. @names-1;
+	@values= 0 .. @names-1;
 
 	my @same_site=qw<Lax Strict None>;
+
 	my @pairs=
 		(map { (("COOKIE_".uc $names[$_])=~tr/-'/_/r, $values[$_]) } 0..@names-1),	#elements
 		(map {("SAME_SITE_".uc, $_)} @same_site)						#same site vals
@@ -42,55 +55,61 @@ BEGIN {
 use constant \%const_names;
 
 use constant DEBUG=>undef;
-my %reverse; @reverse{@names}=@values;
+my %reverse; @reverse{map lc, @names}=@values;
 $reverse{undef}=0;			#catching
 
-# Object system
+# Object system. Will use feature class asap
+#
 use Object::Pad;
 
 # Fast Binary Search subroutines
+#
 use List::Insertion {type=>"string", duplicate=>"left", accessor=>"->[".COOKIE_KEY."]"};
-use List::Insertion {prefix=>"psl_search", type=>"string", duplicate=>["left", "right"], acceessor=>""};
 
-#use Domain::PublixSuffix;
+# Public suffix list list
+#
+use Mozilla::PublicSuffix qw<public_suffix>;
+
+# Date 
+use DateTime;
+use Time::Local qw<timegm_modern>;
+
+my $tz_offset;
+{
+  our $LocalTZ = DateTime::TimeZone->new( name => 'local' );
+  say $LocalTZ;
+  my $d1=DateTime->from_epoch(epoch=>0, time_zone=>"GMT");
+  my $d2=DateTime->from_epoch(epoch=>0, time_zone=>$LocalTZ);
+  say $d1->offset;
+  say $d2->offset;
+  $tz_offset=($d2->offset-$d1->offset);
+}
+
 
 # Logging
+#
 use Log::ger; 
 use Log::OK;
 
-# Debug
-use feature "say";
-use Data::Dumper;
 
 
 class uSAC::HTTP::CookieJar;
 
 field @_cookies; # An array of cookie 'structs', sorted by the COOKIE_KEY field
 
-field @_psl;              # Positive match and wildcard. strings reversed and sorted
-field @_exception_psl;    # Execptions rules are put in here. strings reversed and  sorted.
-field $_suffix_sub;       # Main sub to calculate a public suffix
 field $_suffix_cache :param=undef; #Hash ref used as cache
 
 
-field $_psl_path :param={}; #Path to PSL file;
-
-BUILD{
-  #@_psl=sort map {scalar reverse $_} qw<example.com example2.com>; # Test/debug
-
-  $self->_build_psl;
-  $_suffix_sub=$self->make_suffix;
-}
-
-
-
+field $_psl_path :param=undef; #Path to PSL file;
 
 
 method highest_cookie_domain {
     #search for  prefix 
     my $domain=lc $_[0];
     my $highest;
-    my $suffix=&$_suffix_sub;
+    my $suffix=$_suffix_cache
+      ? $_suffix_cache->{$domain}//=&public_suffix
+      : &public_suffix;
     if($suffix){
       substr($domain, -(length($suffix)+1))="";
 
@@ -105,173 +124,12 @@ method highest_cookie_domain {
 
 
 method suffix{
-  &$_suffix_sub;
+  $_suffix_cache
+    ? $_suffix_cache->{lc $_[0]}//=&public_suffix
+    : &public_suffix;
 }
 
-method make_suffix{
-  $_suffix_sub//sub ($domain){
-    DEBUG and say "testing suffix for $domain";
-    #Returns true if the domain is a suffix
-    my $found;
-    my $suffix;
-    my $index;
 
-    
-    my $_domain=lc $domain;
-    $domain=scalar reverse $_domain;
-    # Returns the cached value if a cache is supplied; 
-    return $_suffix_cache->{$_domain} if $_suffix_cache and exists $_suffix_cache->{$_domain};
-
-    my @b;
-    
-    # Do a right duplicate search. exact string or sub string will always be
-    # earlier in the list
-    #
-    $index=psl_search_string_right($domain, \@_exception_psl)-1;
-    #$index--;
-
-    #say "FOUND BEFORE: $found";
-    if($index>=0 and $index < @_exception_psl ){ 
-
-      DEBUG and say "INDEX: $index, value $_exception_psl[$index]";
-
-      for($_exception_psl[$index]){
-        $found=((0==index($domain, $_)) and
-          ((substr($domain, length($_), 1 )//".") eq "."));
-      }
-      
-    }
-
-    if($found){
-      DEBUG and say "exception";
-      ###########################################################################
-      # @b=split /\./, $_exception_psl[$index];                                 #
-      #                                                                         #
-      # pop @b;                                                                 #
-      # # Domain is an exception so is not a suffix                             #
-      # DEBUG and say "Found exception in suffix test: ", reverse join ".", @b; #
-      # $suffix=reverse join ".", @b;                                           #
-      ###########################################################################
-
-
-      $suffix=scalar reverse substr $_exception_psl[$index], 0, rindex $_exception_psl[$index], ".";
-      
-
-    }
-
-    else{
-
-      # If exception rule was not found we need to continue testing
-
-      # Do a public suffix search here. If the DOMAIN field is a prefix of an
-      # entry in the psl, then the cookie is actually set to a 'top level
-      # domain', which is prohibited.
-      #
-      $index=psl_search_string_right($domain, \@_psl)-1;
-      #$index--;
-      DEBUG and say "INDEX: $index, value $_psl[$index]";
-
-      if($index>=0 and $index < @_psl){
-
-        #my $run=1;
-        my $i;
-        my $j;
-        my $io=0;
-        my $jo=0;
-        my $match=$_psl[$index];
-        while(){ 
-          $i=index $domain, ".", $io;
-          $j=index $match, ".", $jo; 
-
-          $i=length($domain) if $i==-1;
-          $j=length($match) if $j==-1;
-
-          DEBUG and say "i: $i, j: $j";
-          DEBUG and say substr $domain, $io, $i-$io;
-          if(substr($domain, $io, $i-$io) eq substr($match, $jo, $j-$jo)){
-            #Labels match
-            $io=$i+1;
-            $jo=$j+1;
-          }
-          else{
-            #miss match, check for  wild card
-            if(substr($match, $jo, $j-$jo) eq "*"){
-              #actually a match. and last
-              DEBUG and say "wild found";
-              $io=$i+1;
-              $jo=$j+1;
-              last;#$run=undef;
-            }
-            else {
-              last;
-            }
-
-          }
-        }
-        
-        #
-        $io--;
-        $suffix=scalar reverse substr $domain, 0, $io;# $rindex $_exception_psl[$index], ".";
-      }
-
-      else {
-        # not in this db..
-        DEBUG and say "NO SUFFIX AVAILABLE";
-        return undef;
-      }
-    }
-    $_suffix_cache->{$_domain}=$suffix if $_suffix_cache;
-    $suffix;
-  }
-}
-
-# Build the psl in the required format
-#
-method _build_psl{
-  my $pos;
-  #read the file line by line to save on memory
-  my $fh; 
-
-  eval {
-    open $fh, "<:encoding(UTF-8)", $_psl_path or die " Could not open psl file";
-  };
-
-  if($@){
-    say STDERR "COULD NOT OPEN PSL FILE FOR READING";
-  }
-  return unless $fh;
-
-  my $key;
-
-  my $ex=\@_exception_psl;
-  my $normal=\@_psl;
-
-  my $ref;
-  while(<$fh>){ 
-    # Strip out blank lines, comment lines and lines consisting of white space
-    next if /^$/ or m|^//| or m/^\s+/;
-    chomp;
-    
-    
-    # Select the list to add the rules too.
-    # Normal (positive) or exception (negative)
-    $ref=s/^!//
-      ? $ex
-      : $normal
-      ;
-
-    $key=scalar reverse $_;
-
-    # Build up a sorted list using binary search
-    if(@$ref){
-      $pos=psl_search_string_left $key, $ref;
-      splice @$ref, $pos, 0, $key;
-    }
-    else {
-      push @$ref, $key;
-    }
-  }
-}
 
 
 # Create a cookie structure. This is suitable for encode_set_cookie, or set_cookies
@@ -298,7 +156,7 @@ sub create_cookie {
 # Set cookies returned from server responding to $request_uri.
 # The request is needed to configure any defaults as per RFC 6525
 #
-method set_cookies($cookies, $request_uri, $converter=undef){
+method set_cookies($request_uri, @cookies){
 
   Log::OK::TRACE and log_trace __PACKAGE__. " set_cookies";
 
@@ -323,13 +181,14 @@ method set_cookies($cookies, $request_uri, $converter=undef){
 
 
 
-  # Iterate over the cookies supplied
-  for my $c_ (@$cookies){
-    if($converter){
-      #Convert cookies from
-    }
-    my $c=[@$c_]; # Copy  
+  my $time=time-$tz_offset; #Cache time. Make referced to GMT
 
+  # Iterate over the cookies supplied
+  for my $c_ (@cookies){
+    say "";
+    my $c=$self->decode_set_cookie($c_);
+    say Dumper $c;
+    sleep 1;
 
     # Reject the cookie if secure and scheme is not secure
     #
@@ -360,7 +219,7 @@ method set_cookies($cookies, $request_uri, $converter=undef){
           $c->[COOKIE_EXPIRES]=0; # set to min time
         }
         else{
-          $c->[COOKIE_EXPIRES]=time+$c->[COOKIE_MAX_AGE]; 
+          $c->[COOKIE_EXPIRES]=$time+$c->[COOKIE_MAX_AGE]; 
           $c->[COOKIE_PERSISTENT]=1;
         }
       }
@@ -376,7 +235,7 @@ method set_cookies($cookies, $request_uri, $converter=undef){
     }
     else{
       $c->[COOKIE_PERSISTENT]=undef;
-      $c->[COOKIE_EXPIRES]=time+400*24*3600; #Mimic chrome for maximum date
+      $c->[COOKIE_EXPIRES]=$time+400*24*3600; #Mimic chrome for maximum date
     }
 
     Log::OK::TRACE and log_trace "Expiry set to: $c->[COOKIE_EXPIRES]";
@@ -386,21 +245,39 @@ method set_cookies($cookies, $request_uri, $converter=undef){
     #
     my $expired=
       not($current_session_only)
-      && ($c->[COOKIE_EXPIRES]<=time);
+      && ($c->[COOKIE_EXPIRES]<=$time);
 
 
     # Use the host as domain if none specified
 
     # Process the domain of the cookie. set to default if no explicitly set
-    if($c->[COOKIE_DOMAIN]){
-      # Domain is stored in reverse for better matching performance
-      $c->[COOKIE_DOMAIN]=scalar reverse $c->[COOKIE_DOMAIN];
-      if($c->[COOKIE_DOMAIN] eq scalar reverse $host){ # matches server domain
-        $c->[COOKIE_HOST_ONLY]=undef;
+    say $c->[COOKIE_DOMAIN];
+    say scalar reverse $host;
+    my $rhost=scalar reverse $host;
 
+    if($c->[COOKIE_DOMAIN]){
+      # DO a public suffix check on cookies. Need to ensure the domain for the cookie is NOT a suffix
+      my $ps=$self->suffix(scalar reverse $c->[COOKIE_DOMAIN]);#scalar reverse $c->[COOKIE_DOMAIN]);
+      my $hi=$self->highest_cookie_domain(scalar reverse $c->[COOKIE_DOMAIN]);
+
+      say "SUFFIX: $ps";
+      say "highest: $hi";
+
+      # need to ensure the cookie domain is a sub string of highest possible
+      unless(0==index scalar reverse($hi), $c->[COOKIE_DOMAIN]){ 
+        Log::OK::TRACE and log_trace "Domain is public suffix. reject";
+        next 
+      }
+
+      # Domain is stored in reverse for better matching performance
+      #$c->[COOKIE_DOMAIN]=scalar reverse $c->[COOKIE_DOMAIN];
+
+      if(0==index $rhost, $c->[COOKIE_DOMAIN]){ 
+        # Domain must be at least substring (parent domain).
+        $c->[COOKIE_HOST_ONLY]=undef;
       }
       else{
-        # Ignore cookie
+        # Ignore cookie. Attempting to set a cookie for a sub domain
         Log::OK::TRACE and log_trace __PACKAGE__."::set_cookie domain invalid";
       }
     }
@@ -408,13 +285,16 @@ method set_cookies($cookies, $request_uri, $converter=undef){
       # Cookie is only accesssable from the same host
       # Set domain to the request host
       $c->[COOKIE_HOST_ONLY]=1;
-      $c->[COOKIE_DOMAIN]=scalar reverse $host
+      $c->[COOKIE_DOMAIN]=$rhost
     }
 
     # Process path. default is request url if not provided
     # set default path  as per 5.1.4
     #
     $c->[COOKIE_PATH]//="";
+    say Dumper $c;
+    Log::OK::TRACE and log_trace "Set cookie path is ".  Dumper $c;
+    sleep 1;
     if( length($c->[COOKIE_PATH])==0 or  substr($c->[COOKIE_PATH], 0, 1) ne "/"){
       # Calculate default
       if(length($path)==0 or substr($path, 0, 1 ) ne "/"){
@@ -435,45 +315,12 @@ method set_cookies($cookies, $request_uri, $converter=undef){
     my $index;
     my $found;
 
-    # Check the negative psl list. This list is execptions to the wildcard.
-    # For cookies, if we match in the negative list, we can set cookies
-    # 
-    
-    $index=psl_search_string_left $c->[COOKIE_DOMAIN], \@_exception_psl;
-    $found=$index < @_exception_psl && ($_exception_psl[$index] eq $c->[COOKIE_DOMAIN]);
-    
-    unless($found){
-
-      # If exception rule was not found we need to continue testing
-      
-      # Do a public suffix search here. If the DOMAIN field is a prefix of an
-      # entry in the psl, then the cookie is actually set to a 'top level
-      # domain', which is prohibited.
-      #
-      $index=psl_search_string_left $c->[COOKIE_DOMAIN], \@_psl;
-      $found=$index < @_psl && ($_psl[$index] eq $c->[COOKIE_DOMAIN]);
-      next if $found;
-
-
-      # Wildcard match. Replace the left most label of the cookie domain with a *
-      # and do another search
-      #
-      my $d=$c->[COOKIE_DOMAIN]=~s/[^.]+$/*/r;
-
-      $index=psl_search_string_left $d, \@_psl;
-
-      $found=$index<@_psl && ($_psl[$index] eq $d);
-      next if $found;
-    }
-
-
-
 
 
     # Cookie is validated at this point. Set the creation time
 
     # Set Creation time
-    $c->[COOKIE_CREATION_TIME]=time;
+    $c->[COOKIE_CREATION_TIME]=$time;
     Log::OK::TRACE and log_trace __PACKAGE__."::set_cookie creation time: $c->[COOKIE_CREATION_TIME]";
 
     # Perform a binary search on the domain property of the cookie to find insert position
@@ -489,7 +336,7 @@ method set_cookies($cookies, $request_uri, $converter=undef){
 
     # Process the Set cookie
     #
-    if($found and $c->[COOKIE_EXPIRES]<time){
+    if($found and $c->[COOKIE_EXPIRES]<$time){
       # Found but expired. Delete the cookie
       Log::OK::TRACE and log_trace __PACKAGE__. " found cookie and expired";
       splice @_cookies, $index, 1;
@@ -503,7 +350,7 @@ method set_cookies($cookies, $request_uri, $converter=undef){
       $c->[COOKIE_CREATION_TIME]=$_cookies[$index][COOKIE_CREATION_TIME];
       $_cookies[$index]=$c;
     }
-    elsif($c->[COOKIE_EXPIRES]<time){
+    elsif($c->[COOKIE_EXPIRES]<$time){
       #Cookie not found and expired
 
       Log::OK::TRACE and log_trace __PACKAGE__. " no existing cookie, but new expired. Do nothing";
@@ -543,6 +390,7 @@ method get_cookies($name, $request_uri, $referer_uri, $action=""){
   my ($user, $password, $host, $port)=$authority =~  m|(?:([^:]+)(?::([^@]+))@){0,1}([^:]+)(?::(\d+)){0,1}|x;
 
   $port//=80;
+  my $sld=scalar reverse $self->highest_cookie_domain($host);
   $host=scalar reverse $host;
 
   # Parse the uri
@@ -553,6 +401,12 @@ method get_cookies($name, $request_uri, $referer_uri, $action=""){
 
   $rhost=scalar reverse $rhost;
   
+  #Start search at the second level domain, ?
+  
+  ####
+  # Search the list from the highest domain down.
+  # Start of each of matching with search of sorted domain names
+  # iterates over the following items until the domain key, substring no longer matches
 
   # SAME SITE TESTING
   my $same_host=($rscheme eq $scheme) && ($rauthority eq $authority);
@@ -562,11 +416,11 @@ method get_cookies($name, $request_uri, $referer_uri, $action=""){
   # the host name (also reversed) can be used as a prefix which allows a simple 
   # stirng le comparison in the binary search
   #
-  my $index=search_string_left $host, \@_cookies;
+  my $index=search_string_left $sld, \@_cookies;
 
   Log::OK::TRACE and log_trace __PACKAGE__. " index is: $index"; 
   Log::OK::TRACE and log_trace Dumper \@_cookies;
-  Log::OK::TRACE and log_trace  "looking for host: $host";
+  Log::OK::TRACE and log_trace  "looking for host: $sld";
 
   # Iterate through all cookies until the domain no longer matches
   #
@@ -589,22 +443,24 @@ method get_cookies($name, $request_uri, $referer_uri, $action=""){
 
     # Domains are stored 'reversed'. That means prefixes will always come first.
     # When a  domain no longer matches as a prefix then we know the search can stop
-    last if index $host, $_->[COOKIE_DOMAIN];
+    last if index $sld, $_->[COOKIE_DOMAIN];
 
 
     # Need an exact match, not a domain match
-    ++$index and next if $host ne $_->[COOKIE_DOMAIN]  and $_->[COOKIE_HOST_ONLY];
+    ++$index and next if $sld ne $_->[COOKIE_DOMAIN]  and $_->[COOKIE_HOST_ONLY];
+    Log::OK::TRACE and log_trace "Hostonly and host eq domain passed";
 
 
     # Secure cookie  and secure channel.
     #
     ++$index and next if $_->[COOKIE_SECURE] and $scheme ne "https";
+    Log::OK::TRACE and log_trace "secure and scheme eq https passed";
 
     # Skip this cookies if the action is classed as api and not as a 
     # browing http request
     #
     ++$index and next if $_->[COOKIE_HTTPONLY] and $action eq "api";
-
+    Log::OK::TRACE and log_trace "action passed";
 
 
     # Name match Lets see if the cookie name is a match. If so process the
@@ -670,6 +526,7 @@ method get_cookies($name, $request_uri, $referer_uri, $action=""){
       
       # Process path matching as per section 5.1.4 in RFC 6265
       #
+      $path||="/";    #TODO find a reference to a standard or rfc for this
       Log::OK::TRACE and log_trace "PATH: $path";
       Log::OK::TRACE and log_trace "Cookie PATH: $_->[COOKIE_PATH]";
       if($path eq $_->[COOKIE_PATH]){
@@ -693,12 +550,14 @@ method get_cookies($name, $request_uri, $referer_uri, $action=""){
         
       #Update last access time
       $_->[COOKIE_LAST_ACCESS_TIME]=$time_now;
+      Log::OK::TRACE and log_trace "Pushing cookie";
       push @output, $_;
 
     }
     $index++;
   }
    
+  say "OUTPUT COOKIE: ", Dumper \@output;
   # Sort the output as recommended by RFC 6525
   #  The user agent SHOULD sort the cookie-list in the following
   #     order:
@@ -768,29 +627,65 @@ method encode_set_cookie ($cookie){
 
 #Returns a newly created cookie struct from a Set-Cookie string
 #
-sub decode_set_cookie{
-
+method decode_set_cookie{
+ say "INPUT: ". join ", ", @_;
   # $string, converter
 	my $key;
 	my $value;
 	my @values;
 	my $first=1;
 
-	for(split ";", $_[0]=~ tr/ //dr){
-		($key, $value)=split "=";
-		if($first){
-			$first=0;
-      # The 0 index is for undefined keys. See top of file
-      #
-      # name        value
-			($values[1], $values[2])= split "=";
-		}
-		else {
-      # Look up the valie key value pair
-      # attribute_name          attribute_value
-			$values[$reverse{$key}]=$value//1;
-		}
+  my @fields=split /;\s*/, $_[0];
+  #Value needs to be the first field 
+	($values[1], $values[2])=split "=", shift(@fields), 2;
+
+	for(@fields){
+		($key, $value)=split "=", $_, 2;
+    $key=lc $key;
+    say "key: $key value: ".$value//"";
+
+    # Look up the value key value pair
+    # unkown values are stored in the undef => 0 position
+    $values[$reverse{$key}]=$value//1;
 	}
+
+  # nuke unkown value
+  $values[0]=undef;
+
+  # Fix the date. Date is stored in seconds internally
+  #
+  #say $values[COOKIE_EXPIRES];
+  my ($wday_key, $mday, $mon_key, $year, $hour, $min, $sec, $tz)=
+        $values[COOKIE_EXPIRES]=~/([^,]+), (\d+)\-([^-]{3})\-(\d{4}) (\d+):(\d+):(\d+) (\w+)/;
+
+  if(70<=$year<=99){
+    $year+=1900;
+  }
+  elsif(0<=$year<=69){
+      $year+=2000;
+  }
+  else{
+    #year as is
+  }
+
+  $values[COOKIE_DOMAIN]=~s/\.$//;
+  $values[COOKIE_DOMAIN]=~s/^\.//;
+  $values[COOKIE_DOMAIN]=scalar reverse $values[COOKIE_DOMAIN];
+
+   #TODO other date checking...
+
+  ###############################
+  # say "wday-key : $wday_key"; #
+  # say "mday : $mday";         #
+  # say "mon_key: $mon_key";    #
+  # say "year: $year";          #
+  # say "hour: $hour ";         #
+  # say "min:$min";             #
+  # say "sec:$sec";             #
+  # say "tz: $tz";              #
+  ###############################
+
+  $values[COOKIE_EXPIRES]=timegm_modern($sec, $min, $hour, $mday, $months{$mon_key}, $year);
   \@values;
 }
 
@@ -805,6 +700,10 @@ sub decode_cookie{
     push @values,$key,$value;
 	}
 	\@values;
+}
+
+method dump_cookies{
+  \@_cookies;
 }
 
 

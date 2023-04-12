@@ -100,5 +100,58 @@ provides the expiration and attribuate processing
   $jar->set_cookies($cookies, $request_uri, $converter)
 
 
-Takes
+=head2 HTTP::CookieJar Compatibility API
+
+Useful for integration with HTTP::Tiny
+
+=head3 add
+
+  $jar->add($url, $set_cookie_string);
+
+TODO: As per  HTTP::CookieJar
+
+=head3 clear
+
+  $jar->clear
+  
+
+TODO: As per  HTTP::CookieJar
+
+=head3 cookies_for
+
+  $jar->cookies_for($url);
+
+TODO: as per HTTP::CookieJar
+Return hashes (copies) of cookies
+
+=head3 cookie_header
+
+  $jar->cookie_header($url)
+  $jar->cookie_header($url, $referer, $action)
+
+Returns a cookie header string value for transmition
+TODO: Limitations re same site
+
+
+=head3 dump_cookies
+
+TODO: referer to HTTP::CookieJar
+
+
+=head3 load_cookies
+
+
+=head2 Using with LWP UA
+
+=head3 add_cookie_header($request)
+
+  $jar->add_cookie_header($request)
+
+Using the request object url, adds the relavant cookies to the request
+
+=head3 extract_cookies($response)
+
+  $jar->extract_cookies($response)
+
+Extracts set cookies from response object. Calls C<set_cookies> internally
 
