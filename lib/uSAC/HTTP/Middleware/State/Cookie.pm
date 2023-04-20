@@ -22,7 +22,6 @@ use uSAC::HTTP::Cookie;
 use MIME::Base64 qw<encode_base64url decode_base64url>;
 
 
-
 our @EXPORT_OK=qw<state_cookie state_cookie_in state_cookie_out>;
 our @EXPORT=();
 our %EXPORT_TAGS=(
@@ -39,6 +38,7 @@ sub state_cookie {
 	[state_cookie_in(%options), state_cookie_out(%options)];
 }
 
+#Server side
 sub state_cookie_in {
 	my %options=@_;
 	my $state_decode=$options{decode};

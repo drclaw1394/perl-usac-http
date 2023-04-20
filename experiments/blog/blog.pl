@@ -56,7 +56,7 @@ my $server; $server=usac_server {
 
 		#usac_error_page 404 => "/error/404";
 	usac_sub_product "blog";
-  usac_middleware log_simple dump_headers=>1;
+  #usac_middleware log_simple dump_headers=>1;
 	
   #usac_middleware log_simple dump_headers=>1;
 	usac_site {

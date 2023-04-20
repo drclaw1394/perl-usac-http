@@ -128,8 +128,8 @@ sub make_reader{
 
       #while ( $len=length $buf) {
       while ($buf) {
-        say "_____ Parser : $state";
-        say "____HTTP PARSER_LOOP:". join ", ", @_;
+        #say "_____ Parser : $state";
+        #say "____HTTP PARSER_LOOP:". join ", ", @_;
         #Dual mode variables:
         #	server:
         #	$method => method

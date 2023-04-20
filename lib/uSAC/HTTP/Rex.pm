@@ -16,7 +16,9 @@ use Carp qw<carp>;
 use File::Spec::Functions qw<catfile>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
-use uSAC::HTTP::Cookie qw<:all>;
+#use uSAC::HTTP::Cookie qw<:all>;
+use HTTP::State qw<:constants :encode :decode>;
+
 use uSAC::HTTP::Constants;
 use IO::FD;
 use Fcntl qw<O_CREAT O_RDWR>;
@@ -457,7 +459,7 @@ sub rex_captures {
 #otherwise uses pre parsed values
 #Read only
 sub cookies :lvalue {
-	$_[0][cookies_]//($_[0][cookies_]=parse_cookie $_[0][headers_]{COOKIE});
+	$_[0][cookies_]//($_[0][cookies_]=decode_cookies $_[0][headers_]{COOKIE});
 }
 
 #RW accessor

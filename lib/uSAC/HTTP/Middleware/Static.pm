@@ -617,7 +617,6 @@ sub usac_file_under {
       # Stack reset
       return &$next unless($_[CODE]);
 
-    
 
       if($_[HEADER]){
 
