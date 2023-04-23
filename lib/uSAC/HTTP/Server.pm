@@ -151,7 +151,7 @@ BUILD {
 	$_host_tables={};
   $_zombies=[];
 	$_zombie_limit//=100;
-	$_static_headers=[];#STATIC_HEADERS;
+	$_static_headers={};#STATIC_HEADERS;
 
   $self->mode//=0; #Only set to server mode if it hasn't been defined.
 
@@ -975,8 +975,8 @@ sub usac_sub_product {
 	my $sub_product=pop;	#Content is the last item
 	my %options=@_;
 	my $server=($options{parent}//$uSAC::HTTP::Site)->find_root;
-	$server->static_headers=[
-	  HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )];
+	$server->static_headers={
+	  HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )};
 }
 
 sub usac_read_size {

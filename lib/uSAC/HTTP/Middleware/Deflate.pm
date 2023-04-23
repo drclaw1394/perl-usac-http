@@ -24,7 +24,7 @@ use Log::OK;
 
 
 
-our @EXPORT_OK=qw< deflate >;
+our @EXPORT_OK=qw< umw_deflate >;
 
 our @EXPORT=();
 our %EXPORT_TAGS=(
@@ -33,7 +33,7 @@ our %EXPORT_TAGS=(
 
 
 
-sub deflate {
+sub umw_deflate {
   my $in=sub {
     my $next=shift;
     $next;
@@ -66,13 +66,16 @@ sub deflate {
                 $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} =~ /deflate/;
 
             Log::OK::TRACE and log_debug "Deflate: in header processing";
-            \my @headers=$_[HEADER]; #Alias for easy of use and performance
+            #\my @headers=$_[HEADER]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "deflate: looking for accept";
 
             $exe=1;
-            for my ($k,$v)(@headers){
-                return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
-            }
+            ########################################################################
+            # for my ($k,$v)(@headers){                                            #
+            #     return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default #
+            # }                                                                    #
+            ########################################################################
+            return &$next if exists$_[HEADER]{HTTP_CONTENT_ENCODING()};
 
             Log::OK::TRACE  and log_trace "exe ". $exe; 
             Log::OK::TRACE  and log_trace "Single shot: ". !$_[CB];
@@ -83,18 +86,23 @@ sub deflate {
 
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
-            $index=@headers;
+            ######################################################################################
+            # $index=@headers;                                                                   #
+            #                                                                                    #
+            # my $i=0;                                                                           #
+            #                                                                                    #
+            # for my ($k, $v)(@headers){                                                         #
+            #   $index=$i if $k eq HTTP_CONTENT_LENGTH;                                          #
+            #   $i+=2;                                                                           #
+            # }                                                                                  #
+            #                                                                                    #
+            # Log::OK::TRACE and log_debug "Content length index: $index";                       #
+            # splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "deflate");# if defined $index; #
+            ######################################################################################
 
-            my $i=0;
+            delete $_[HEADER]{HTTP_CONTENT_LENGTH()};
+            $_[HEADER]{HTTP_CONTENT_ENCODING()}="deflate";
 
-            for my ($k, $v)(@headers){
-              $index=$i if $k eq HTTP_CONTENT_LENGTH;
-              $i+=2;
-            }
-
-            Log::OK::TRACE and log_debug "Content length index: $index";
-
-            splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "deflate");# if defined $index;
             unless($_[CB]){
               $ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 

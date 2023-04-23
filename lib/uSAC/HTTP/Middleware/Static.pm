@@ -24,7 +24,11 @@ use uSAC::HTTP::Constants;
 
 use Errno qw<EAGAIN EINTR EBUSY>;
 use Exporter 'import';
-our @EXPORT_OK =qw<usac_file_under usac_static_under>;
+our @EXPORT_OK =(
+  "umw_static_root",     
+  "umw_static_file", # Preload (cache) a file in memory
+  "umw_static_content", # d
+);
 our @EXPORT=@EXPORT_OK;
 
 #my $path_ext=	qr{\.([^.]*)$}ao;
@@ -210,18 +214,30 @@ sub send_file_uri_norange {
   #Add no compress (ie identity) if encoding is not set
   #and if no_encodingflag is set
   #
-
-  push @$out_headers, 
+  #############################################
+  #                                           #
+  # push @$out_headers,                       #
+  #   $entry->[File::Meta::Cache::user_]->@*, #
+  #   HTTP_VARY, "Accept",                    #
+  #   HTTP_ACCEPT_RANGES,"bytes";             #
+  #############################################
+  for my($k, $v)(
     $entry->[File::Meta::Cache::user_]->@*, 
     HTTP_VARY, "Accept",
-    HTTP_ACCEPT_RANGES,"bytes";
+    HTTP_ACCEPT_RANGES,"bytes"
+  ){
+    $out_headers->{$k},$v;
+  }
 
   if(!$as_error and $headers->{RANGE}){
     Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{RANGE}";
     @ranges=_check_ranges $rex, $content_length;
     unless(@ranges){
       $code=HTTP_RANGE_NOT_SATISFIABLE;
-      push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
+
+      #push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
+      $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
+
       $next->( $matcher,$rex,$code,$out_headers,"");
       return;
     }
@@ -229,10 +245,16 @@ sub send_file_uri_norange {
       $code=HTTP_PARTIAL_CONTENT;
       my $total_length=0;
       $total_length+=($_->[1]-$_->[0]+1) for @ranges;
-      push @$out_headers,
-      HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
-      HTTP_CONTENT_LENGTH, $total_length;
-
+      ############################################################################
+      # push @$out_headers,                                                      #
+      # HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length", #
+      # HTTP_CONTENT_LENGTH, $total_length;                                      #
+      ############################################################################
+      
+      for my($k, $v)(HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
+      HTTP_CONTENT_LENGTH, $total_length){
+        $out_headers->{$k}=$v;
+      }
       $content_length=$total_length;
       $offset= $ranges[0][0];
       shift @ranges;
@@ -242,11 +264,12 @@ sub send_file_uri_norange {
     }
   }
   else {
-    push @$out_headers, HTTP_CONTENT_LENGTH, $content_length;
+    #push @$out_headers, HTTP_CONTENT_LENGTH, $content_length;
+    $out_headers->{ HTTP_CONTENT_LENGTH()}= $content_length;
 
   }
 
-  Log::OK::TRACE and log_trace join ", ", @$out_headers;
+  Log::OK::TRACE and log_trace join ", ", %$out_headers;
 
 
   $next->($matcher, $rex, $code, $out_headers, "" ) and return
@@ -449,7 +472,7 @@ sub _json_dir_list {
 
 }
 
-sub make_list_dir {
+sub _make_list_dir {
 	my $self=shift;
 
 	\my $html_root=\$self->[html_root_];
@@ -533,7 +556,7 @@ sub make_list_dir {
 
 #Specifies the url prefix (and or regex) to match
 #The prefix is removed and
-sub usac_file_under {
+sub umw_static_root {
   #create a new static file object
   #my $parent=$_;
   my $html_root=pop;
@@ -605,7 +628,7 @@ sub usac_file_under {
   my $closer=$fmc->closer;
   state $timer=AE::timer 0, 10, $fmc->sweeper;
   $html_root=$static->[html_root_];
-  my $list_dir=$static->make_list_dir(%options);
+  my $list_dir=$static->_make_list_dir(%options);
 
   croak "Can not access dir $html_root to serve static files" unless -d $html_root;
   #check for mime type in parent 
@@ -642,12 +665,16 @@ sub usac_file_under {
         if($filter and $path !~ /$filter/o){
           $_[PAYLOAD]="";
           $_[CODE]=HTTP_NOT_FOUND;
-          push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
+          #push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
+          $_[HEADER]->{HTTP_CONTENT_LENGTH()}=0;
           return &$next;
         }
 
         #Push any user static headers
-        push $_[HEADER]->@*, @$headers;
+        #push $_[HEADER]->@*, @$headers;
+        for my ($k, $v)(@$headers){
+          $_[HEADER]{$k}=$v;
+        }
 
         Log::OK::TRACE and log_trace "static: html_root: $html_root";
 
@@ -706,7 +733,8 @@ sub usac_file_under {
             Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
             $_[PAYLOAD]="";
             $_[CODE]=HTTP_NOT_FOUND;
-            push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
+            #push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
+            $_[HEADER]{HTTP_CONTENT_LENGTH()}=0;
             return &$next;
           }
         }
@@ -744,7 +772,8 @@ sub usac_file_under {
             #
             $_[PAYLOAD]="";
             $_[CODE]=HTTP_NOT_FOUND;
-            push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
+            #push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
+            $_[HEADER]{HTTP_CONTENT_LENGTH()}=0;
             return &$next;
           }
         }
@@ -762,7 +791,9 @@ sub usac_file_under {
 
         # Finally push the content encoding encountered along the way
         #
-        push @{$_[HEADER]}, HTTP_CONTENT_ENCODING, $enc if $enc;
+        #push @{$_[HEADER]}, HTTP_CONTENT_ENCODING, $enc if $enc;
+
+        $_[HEADER]{HTTP_CONTENT_ENCODING()}=$enc if $enc;
 
         send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, $closer);
 
@@ -780,6 +811,111 @@ sub usac_file_under {
 
   [$inner, $outer];
 }
-*usac_static_under=\*usac_file_under;
+#*usac_static_under=\*usac_file_under;
+
+
+sub umw_static_file {
+	my $path=pop;
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+
+#######################################################################
+#         $self->add_cached_file(%options, $path);                    #
+# }                                                                   #
+#                                                                     #
+# method add_cached_file {                                            #
+# #my $self=shift;                                                    #
+#         my $path=pop;                                               #
+#         my %options=@_;                                             #
+#         #resolve the file relative path or                          #
+#         #$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|; #
+#######################################################################
+
+	my $mime=$options{mime};
+	my $type;
+	if($mime){
+		#manually specified mime type
+		$type=$mime;
+	}
+	else{
+		my $ext=substr $path, rindex($path, ".")+1;
+		Log::OK::TRACE and log_trace "Extension: $ext";
+		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
+		Log::OK::TRACE and log_trace "type: $type";
+		$options{mime}=$type;
+	}
+
+	if( stat $path and -r _ and !-d _){
+		my $entry;
+		open my $fh, "<", $path;
+		local $/;
+		$entry->[0]=<$fh>;
+		$entry->[1]=[HTTP_CONTENT_TYPE, $type];
+		$entry->[2]=(stat _)[7];
+		$entry->[3]=(stat _)[9];
+		close $fh;
+
+		#Create a static content endpoint
+		umw_static_content(%options, $entry->[0]);
+	}
+	else {
+		log_error "Could not add hot path: $path";
+	}
+}
+
+sub umw_static_content {
+	my $static=pop;	#Content is the last item
+	my %options=@_;
+	my $self=$options{parent}//$uSAC::HTTP::Site;
+
+#########################################################
+#         $self->add_static_content(%options, $static); #
+# }                                                     #
+#                                                       #
+# method add_static_content {                           #
+#   #my $self=shift;                                    #
+#         my $static=pop; #Content is the last item     #
+#         my %options=@_;                               #
+#########################################################
+
+	my $mime=$options{mime}//$self->resolve_mime_default;
+  #my $headers=$options{headers}//[];
+	my $headers=$options{headers}//{};
+	#my $type=[HTTP_CONTENT_TYPE, $mime];
+  [
+	sub {
+      my $next=shift;
+      sub {
+        if($_[HEADER]){
+          #########################################
+          # push $_[HEADER]->@*,                  #
+          # HTTP_CONTENT_TYPE, $mime,             #
+          # HTTP_CONTENT_LENGTH, length($static), #
+          # @$headers;                            #
+          #########################################
+          
+          for my  ($k, $v)(
+            HTTP_CONTENT_TYPE, $mime,
+            HTTP_CONTENT_LENGTH,
+            length($static),
+            %$headers
+          )
+          { 
+            $_[HEADER]{$k}=$v;
+          }
+        }
+        $_[PAYLOAD]=$static if $_[CODE];
+        &$next;
+      }
+	}
+  , sub {
+      my $next=shift;
+  
+    }
+  ]
+
+}
+
+
 
 1;

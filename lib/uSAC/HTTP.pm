@@ -53,7 +53,7 @@ sub import {
     for(keys %uSAC::HTTP::){
       #print $_."\n";
       no strict "refs";
-      if( /^usac_/ or /^rex_/ or  /^HTTP_/){
+      if( /^usac_/ or /^rex_/ or  /^HTTP_/ or /^umw_/){
         *{$caller."::".$_}=\*{"uSAC::HTTP::".$_};
       }
       elsif(/Dir_Path/ or /File_Path/ or /Comp/ ){

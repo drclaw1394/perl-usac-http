@@ -1,6 +1,11 @@
 package uSAC::HTTP::Site;
 use warnings;
 use strict;
+
+use Log::ger;
+use Log::OK;
+
+
 use version; our $VERSION=version->declare("v0.0.1");
 use feature ":all";
 no warnings "experimental";
@@ -11,8 +16,6 @@ use enum qw<ROUTE_CTX_SITE ROUTE_CTX_INNER_HEAD ROUTE_CTX_OUTER_HEAD ROUTE_CTX_C
 use enum ("HOST_TABLE=0", qw<HOST_TABLE_CACHE HOST_TABLE_DISPATCH ADDR REQ_QUEUE IDLE_POOL ACTIVE_COUNT>);
 
 
-use Log::ger;
-use Log::OK;
 use Cwd qw<abs_path>;
 use File::Spec::Functions;
 use Exporter "import";
@@ -38,8 +41,9 @@ my @errors=qw<
 	usac_error_route
 >;	
 	
-our @EXPORT_OK=(qw(LF site_route usac_route usac_site usac_prefix usac_id usac_controller usac_host usac_middleware usac_innerware usac_outerware usac_static_content usac_cached_file usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
-	), @errors,@redirects);
+our @EXPORT_OK=(qw(usac_route usac_site usac_prefix usac_id usac_controller usac_host usac_middleware usac_innerware usac_outerware usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
+	), @errors,
+  @redirects);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -91,11 +95,13 @@ our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS)/;
 our $Method=		qr{^([^ ]+)};
 
 #NOTE Path matching tests for a preceeding /
+#
 our $Path=		qr{(?:<=[/])([^?]*)};		#Remainder of path components  in request line
 our $File_Path=		qr{(?:<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
 our $Dir_Path=		qr{(?:<=[/])([^?]*+)(?<=[/])};
 
 #NOTE Comp matching only matches between slashes
+#
 our $Comp=		qr{(?:[^/?]+)};		#Path component
 our $Decimal=   qr{(?:\d+)};    #Decimal Integer
 our $Word=      qr{(?:\w+)};    #Word
@@ -104,7 +110,6 @@ my $id=0;
 
 
 BUILD{
-  #$_server//=$self;
   $_id//=$id++;
   $_prefix//="";
 
@@ -129,7 +134,6 @@ BUILD{
 method _add_route {
   local $,=" ";
   say caller;
-  #my $self=shift;
   my $method_matcher=shift;
   my $path_matcher=shift;
 
@@ -137,8 +141,8 @@ method _add_route {
   # Test we have a valid method matcher against supported methods
   #
   $method_matcher=$self->_method_match_check($method_matcher);
-  say "METHOD MATCHER: ", $method_matcher;
-  die "Method specification invalid for route" unless $method_matcher;
+
+  return unless $method_matcher;
 
 
 
@@ -161,7 +165,7 @@ method _add_route {
   unshift @outer, $self->construct_outerware;
   @outer=reverse @outer;
 
-  unshift @inner , uSAC::HTTP::Rex->mw_dead_horse_stripper($_built_prefix);
+  unshift @inner , uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
 
 
   my $end;
@@ -170,11 +174,13 @@ method _add_route {
   # Client will need to hook at end of outerware?
   if($self->find_root->mode==0){
     Log::OK::TRACE and log_trace __PACKAGE__. " end is server ".join ", ", caller;
-    use Error::Show;
-    my @frames;
-    my $i=0;
-    push @frames, [caller $i++] while caller $i;;
-    say Error::Show::context reverse=>1, frames=>\@frames;
+    ##########################################################
+    # use Error::Show;                                       #
+    # my @frames;                                            #
+    # my $i=0;                                               #
+    # push @frames, [caller $i++] while caller $i;;          #
+    # say Error::Show::context reverse=>1, frames=>\@frames; #
+    ##########################################################
     $end= \&rex_write;
   }
   else{
@@ -286,6 +292,7 @@ method _add_route {
     last unless defined $matcher;
 
   }
+  return 1;
 }
 
 # Returns a matcher and a type suitable for using in a hustle::table
@@ -401,23 +408,16 @@ method wrap_middleware {
       # and unshift the result to be processed
       # TODO: need a iteration limit here...
       my $a;
-      try {
         die Exception::Class::Base->throw("No controller set for site. Cannot call method by name")unless $_controller;
         
-        my $string="require $_controller";
-        eval $string;
-        die Exception::Class::Base->throw("Could not require $_controller: $@") if $@;
-        $@=undef;
+      my $string="require $_controller";
+      eval $string;
+      die Exception::Class::Base->throw("Could not require $_controller: $@") if $@;
+      $@=undef;
 
-        $string="$_controller->".$_;
-        $a=eval $string;
-        die Exception::Class::Base->throw("Could not run $_controller with method $_. $@") if $@;
-      }
-      catch($e){
-        say $e;
-        log_error Error::Show::context message=>$e, frames=>[$e->trace->frames];
-        exit -1;
-      }
+      $string="$_controller->".$_;
+      $a=eval $string;
+      die Exception::Class::Base->throw("Could not run $_controller with method $_. $@") if $@;
       unshift @_, $a;
     }
     else {
@@ -425,6 +425,7 @@ method wrap_middleware {
       #TODO: check of PSGI middleware and wrap
     }
   }
+
   # Return references
   (\@inner, \@outer, \@names);
 
@@ -549,7 +550,14 @@ sub usac_site :prototype(&) {
 	$self->set_prefix(%options,$options{prefix}//'');
 	
 	local  $uSAC::HTTP::Site=$self;
-	$sub->($self);
+  try {
+	  $sub->($self);
+  }
+  catch($e){
+    log_fatal  "$self->id";
+    log_fatal Error::Show::context message=>$e, frames=>[$e->trace->frames];
+    $e->throw;
+  }
 	$self;
 }
 
@@ -568,6 +576,7 @@ sub supported_methods {
 }
 
 method default_method {
+
   "GET";
 }
 
@@ -585,70 +594,81 @@ method _method_match_check{
     my $result;
     my ($matcher)=@_;
     $result =$matcher if grep $_ =~ /$matcher/, $self->supported_methods;
-    die "Invalid method matcher. Does not match any methods" unless $result;
-    $matcher;
-
+    $result;
 }
 
 method add_route {
   #my $self=shift;
-  die "route needs at least two parameters" unless @_>=2;
+  my $result; 
   say "\nAdding route: in site";
-  say join ", ",@_;
-  
-  if(!defined($_[0])){
-    # 
-    # Sets the default for the host
-    #
-    shift; unshift @_, $self->any_method, undef;
-		$self->_add_route(@_);
+  say join ", ", @_;
+
+  try {
+    die Exception::Class::Base->throw("Route Addition: a route needs at least two
+      parameters (path, middleware, ...) or (method, path, middleware ...")
+    unless @_>=2;
+
+    if(!defined($_[0])){
+      # 
+      # Sets the default for the host
+      #
+      shift; unshift @_, $self->any_method, undef;
+      $result=$self->_add_route(@_);
+    }
+
+
+    elsif(ref($_[0]) eq "ARRAY"){
+      #
+      # Methods specified as an array ref, which will get
+      # converted to a regexp
+      # Also means the path matcher must also be changed
+      #
+      my $a=shift;
+      #unshift @_, "(?:".join("|", @$a).")";
+      $a= "(?:".join("|", @$a).")";
+
+      #Test the methods actually match somthing
+
+
+      $a=qr{$a};
+      my $b=shift;
+      $b=qr{$b} if defined $b;
+      unshift @_, $a, $b;
+
+      $result=$self->_add_route(@_);
+    }
+
+
+    elsif(ref($_[0]) eq "Regexp"){
+      if(@_>=3){
+        #method matcher specified
+        $result=$self->_add_route(@_);
+      }
+      else {
+        #Path matcher is a regex
+        unshift @_, "GET";
+        $result=$self->_add_route(@_);
+      }
+    }
+    elsif($_[0]=~m|^/|){
+      #starting with a slash, short cut for GET and head
+      Log::OK::WARN and log_warn "No method supplied.  Assuming ".$self->default_method;
+      unshift @_, $self->default_method;
+      $result=$self->_add_route(@_);
+    }
+    else{
+      # method, url and middleware specified
+      $result=$self->_add_route(@_);
+    }
+
+    die Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
+
   }
-
-
-	elsif(ref($_[0]) eq "ARRAY"){
-    #
-		# Methods specified as an array ref, which will get
-    # converted to a regexp
-    # Also means the path matcher must also be changed
-    #
-		my $a=shift;
-    #unshift @_, "(?:".join("|", @$a).")";
-    $a= "(?:".join("|", @$a).")";
-    
-    #Test the methods actually match somthing
-
-
-    $a=qr{$a};
-    my $b=shift;
-    $b=qr{$b} if defined $b;
-    unshift @_, $a, $b;
-
-		$self->_add_route(@_);
-	}
-
-
-	elsif(ref($_[0]) eq "Regexp"){
-		if(@_>=3){
-			#method matcher specified
-			$self->_add_route(@_);
-		}
-		else {
-      #Path matcher is a regex
-			unshift @_, "GET";
-			$self->_add_route(@_);
-		}
-	}
-	elsif($_[0]=~m|^/|){
-		#starting with a slash, short cut for GET and head
-    Log::OK::WARN and log_warn "No method supplied.  Assuming ".$self->default_method;
-		unshift @_, $self->default_method;
-		$self->_add_route(@_);
-	}
-	else{
-		# method, url and middleware specified
-		$self->_add_route(@_);
-	}
-
+  catch($e){
+    my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
+    log_fatal Error::Show::context message=>"", frames=>[$trace->frames];
+    $e->throw;
+  }
   $self;    #Chaining
 }
 
@@ -778,95 +798,6 @@ method set_error_page {
 
 method error_uris {
   $_error_uris;
-}
-
-#########
-
-#returns a sub which always renders the same content.
-#http code is always
-sub usac_static_content {
-	my $static=pop;	#Content is the last item
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-
-	$self->add_static_content(%options, $static);
-}
-
-method add_static_content {
-  #my $self=shift;
-	my $static=pop;	#Content is the last item
-	my %options=@_;
-	my $mime=$options{mime}//$self->resolve_mime_default;
-	my $headers=$options{headers}//[];
-	#my $type=[HTTP_CONTENT_TYPE, $mime];
-  [
-	sub {
-      my $next=shift;
-      sub {
-        if($_[HEADER]){
-          push $_[HEADER]->@*, 
-          HTTP_CONTENT_TYPE, $mime,
-          HTTP_CONTENT_LENGTH, length($static),
-          @$headers;
-        }
-        $_[PAYLOAD]=$static if $_[CODE];
-        #&rex_write;
-        &$next;
-      }
-	}
-  , sub {
-      my $next=shift;
-  
-    }
-  ]
-
-}
-
-sub usac_cached_file {
-	my $path=pop;
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-
-	$self->add_cached_file(%options, $path);
-}
-
-method add_cached_file {
-#my $self=shift;
-	my $path=pop;
-	my %options=@_;
-	#resolve the file relative path or 
-	#$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|;
-
-	my $mime=$options{mime};
-	my $type;
-	if($mime){
-		#manually specified mime type
-		$type=$mime;
-	}
-	else{
-		my $ext=substr $path, rindex($path, ".")+1;
-		Log::OK::TRACE and log_trace "Extension: $ext";
-		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
-		Log::OK::TRACE and log_trace "type: $type";
-		$options{mime}=$type;
-	}
-
-	if( stat $path and -r _ and !-d _){
-		my $entry;
-		open my $fh, "<", $path;
-		local $/;
-		$entry->[0]=<$fh>;
-		$entry->[1]=[HTTP_CONTENT_TYPE, $type];
-		$entry->[2]=(stat _)[7];
-		$entry->[3]=(stat _)[9];
-		close $fh;
-
-		#Create a static content endpoint
-		usac_static_content(%options, $entry->[0]);
-	}
-	else {
-		log_error "Could not add hot path: $path";
-	}
 }
 
 #set the default mime for this level

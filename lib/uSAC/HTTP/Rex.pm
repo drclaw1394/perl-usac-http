@@ -315,7 +315,6 @@ sub rex_error {
         $_[PAYLOAD]=my $a=$_;
         return &rex_redirect_internal
       }
-
     }
     #return rex_redirect_internal @_, $uri if $uri;
 
@@ -371,7 +370,7 @@ sub rex_redirect_internal {
   # programmer?
   #
   my $code=$_[CODE];
-  my $header=$_[HEADER]?[$_[HEADER]->@*]:[];
+  my $header=$_[HEADER]?{$_[HEADER]->%*}:{};
 
   #$_[CODE]=0;
   
@@ -606,7 +605,7 @@ sub parse_query_params_old {
 # First innerware. Strips site prefix and also monitors if the REX has been marked activly in
 # progress
 #
-sub mw_dead_horse_stripper {
+sub umw_dead_horse_stripper {
   my ($package, $prefix)=@_;
 	my $len=length $prefix;
 	sub {

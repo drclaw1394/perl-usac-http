@@ -105,7 +105,8 @@ sub make_reader{
     my $form_headers={};
     my $multi_state=0;
     my $first=1;
-    my $out_header=[];
+    #my $out_header=[];
+    my $out_header={};
     my $dummy_cb=sub {};
 
 
@@ -324,7 +325,8 @@ sub make_reader{
             $state=$start_state;
             $payload="";
             $route and $route->[1][1]($route, $rex, $code, $out_header, $payload, my $cb=undef);
-            $out_header=[];
+            #$out_header=[];
+            $out_header={};
           }
           else{
             $body_type = $h{CONTENT_TYPE};
@@ -387,7 +389,8 @@ sub make_reader{
             $_[PAYLOAD]="";#substr $buf, 0, $new, "";
             $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], my $cb=undef);
             $form_headers={}; #Create new part header
-            $out_header=[];   #Create new out header
+            #$out_header=[];   #Create new out header
+            $out_header={};
             $processed=0;
           }
           else {
@@ -438,7 +441,8 @@ sub make_reader{
                   $state=$start_state;
                   my $data=substr($buf, 0, $len);
                   $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], my $cb=undef);
-                  $out_header=[];
+                  #$out_header=[];
+                  $out_header={};
 
                   $buf=substr $buf, $offset+4;
                 }
@@ -583,7 +587,7 @@ sub make_serialize{
   #
   # Pre render static headers
   #
-  for my ($k, $v)($options{static_headers}->@*){
+  for my ($k, $v)($options{static_headers}->%*){
     $static_headers.="$k: $v".CRLF;
   }
 
@@ -611,6 +615,7 @@ sub make_serialize{
 
     # Getting this far in the middleware indicates we really are in progress
     # Force this setting to make sure.
+
     $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
 
 
@@ -631,46 +636,62 @@ sub make_serialize{
 
 
     if($_[HEADER]){
+
       # Header with a potential body attached.
       #
-      \my @headers=$_[HEADER];
+      ###########################################################
+      # \my @headers=$_[HEADER];                                #
+      #                                                         #
+      # $index=undef;                                           #
+      # for my ($k, $v)(@headers){                              #
+      #   $index=1 and last if($k eq HTTP_CONTENT_LENGTH);      #
+      # }                                                       #
+      #                                                         #
+      #                                                         #
+      # # Do chunked if we don't find a content length          #
+      # # update appropriate headers                            #
+      # unless($index){                                         #
+      #   $ctx=1;                                               #
+      #   $index=undef;                                         #
+      #   $i=1;                                                 #
+      #   for my ($k,$v)(@headers){                             #
+      #     $i+=2;                                              #
+      #     $index=$i and last if $k eq HTTP_TRANSFER_ENCODING; #
+      #   }                                                     #
+      #                                                         #
+      #   unless($index){                                       #
+      #     push @headers, HTTP_TRANSFER_ENCODING, "chunked";   #
+      #                                                         #
+      #   }                                                     #
+      #   else{                                                 #
+      #     $headers[$index].=",chunked";                       #
+      #                                                         #
+      #   }                                                     #
+      #                                                         #
+      #   # save context if multishot                           #
+      #   # no need to save is single shot                      #
+      #   $out_ctx{$_[REX]}=$ctx if $_[CB];                     #
+      # }                                                       #
+      ###########################################################
 
-      $index=undef;
-      for my ($k, $v)(@headers){
-        $index=1 and last if($k eq HTTP_CONTENT_LENGTH);
-      }
+      unless(exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
+        $ctx=1;
 
-      # Do chunked if we don't find a content length
-      # update appropriate headers
-      unless($index){
-        $ctx=1; 
-        $index=undef;
-        $i=1;
-        for my ($k,$v)(@headers){
-          $i+=2;
-          $index=$i and last if $k eq HTTP_TRANSFER_ENCODING;
+        for($_[HEADER]{HTTP_TRANSFER_ENCODING()}){
+          if($_){
+            $_=", chunked";
+          }
+          else{
+            $_="chunked";
+          }
         }
-
-        unless($index){	
-          push @headers, HTTP_TRANSFER_ENCODING, "chunked";
-
-        }
-        else{
-          $headers[$index].=",chunked";
-
-        }
-
-        # save context if multishot
-        # no need to save is single shot
-        $out_ctx{$_[REX]}=$ctx if $_[CB]; 
+        $out_ctx{$_[REX]}=$ctx if $_[CB];
       }
 
       # If no valid code is set then set default 200
       #
       $_[CODE]=HTTP_OK if $_[CODE]<0;
 
-
-      #my $reply="HTTP/1.1 ".$_[CODE]." ". $uSAC::HTTP::Code::code_to_name[$_[CODE]]. CRLF;
 
       my $reply="";
       if($mode == MODE_SERVER){
@@ -685,7 +706,13 @@ sub make_serialize{
 
       # Render headers
       #
-      foreach my ($k,$v)(@{$_[HEADER]}){
+      ######################################
+      # foreach my ($k,$v)(@{$_[HEADER]}){ #
+      #   $reply.= $k.": ".$v.CRLF         #
+      # }                                  #
+      ######################################
+      
+      foreach my ($k,$v)(%{$_[HEADER]}){
         $reply.= $k.": ".$v.CRLF 
       }
 

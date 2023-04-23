@@ -27,7 +27,7 @@ use constant KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
 use constant KEY_COUNT=> end_-entries_+1;
 
-our @EXPORT_OK=qw<psgi>;
+our @EXPORT_OK=qw<umw_psgi>;
 our @EXPORT=@EXPORT_OK;
 
 #This is to mimic a filehandle?
@@ -72,7 +72,7 @@ no warnings "experimental";
 no warnings "experimental";
 #Driver to interface with PSGI based applications
 #this acts as either middleware or an end point
-sub psgi {
+sub umw_psgi {
 
   #PSGI application 
   my $app=pop;
@@ -133,8 +133,9 @@ sub psgi {
 
         \my %h=$_[REX]->headers;
         my %env=map(("HTTP_".$_, $h{$_}), keys %h);
-        $env{CONTENT_TYPE}=delete $env{HTTP_CONTENT_TYPE};
-        $env{CONTENT_LENGTH}=delete $env{HTTP_CONTENT_LENGTH};
+
+        $env{CONTENT_TYPE}//=delete $env{HTTP_CONTENT_TYPE};
+        $env{CONTENT_LENGTH}//=delete $env{HTTP_CONTENT_LENGTH};
 
         $env=\%env;
 
@@ -263,22 +264,10 @@ sub psgi {
       
 
         #Execute the PSGI application
-        
-        #############################################
-        # my $res;                                  #
-        # $res=eval{$app->($env)};                  #
-        #                                           #
-        # if(!defined($res) and $@){                #
-        #   my $context=Error::Show::context;       #
-        #   delete $ctx{$_[REX]};                   #
-        #   $_[HEADER]=[];                          #
-        #   $_[PAYLOAD]=$context;                   #
-        #   return &rex_error_internal_server_error #
-        # }                                         #
-        #############################################
-
         my $res=$app->($env);
 
+        #Convert array of headers to hash
+        $res->[1]={$res->[1]->@*};
 
         if(ref($res) eq  "CODE"){
           #DELAYED RESPONSE
@@ -350,11 +339,13 @@ sub do_glob {
 	#setup headers
 
 
-	unless(first {/Content-Length/i} @$psgi_headers)	{
+  unless(exists $psgi_headers->{HTTP_CONTENT_LENGTH()}){
+    #unless(first {/Content-Length/i} @$psgi_headers)	{
 		#calculate the file size from stating it
     if(ref($psgi_body) eq "GLOB" or $psgi_body isa IO::Handle){
       my $size=(stat $psgi_body)[7];
-      push @$psgi_headers, HTTP_CONTENT_LENGTH, $size;
+      $psgi_headers->{HTTP_CONTENT_LENGTH()}=$size;
+      #push @$psgi_headers, HTTP_CONTENT_LENGTH, $size;
     }
 	}
 

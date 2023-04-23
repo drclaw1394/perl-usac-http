@@ -7,7 +7,7 @@ use Data::Dumper;
 use uSAC::HTTP::Site;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Static;
-use uSAC::HTTP::Middleware qw<log_simple>;
+use uSAC::HTTP::Middleware::Log qw<log_simple>;
 use Template::Plexsite::URLTable;
 
 use Socket qw<getnameinfo NI_NUMERICHOST>;# ":all";

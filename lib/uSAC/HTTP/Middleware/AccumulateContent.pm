@@ -53,7 +53,8 @@ sub urlencoded_slurp {
           if(defined $upload_limit  and ($_[REX]->headers->{CONTENT_LENGTH}//0) > $upload_limit){
             #@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
             $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-            $_[HEADER]=[];
+            #$_[HEADER]=[];
+            $_[HEADER]={};
             $_[PAYLOAD]="Slurp Limit:  $upload_limit";
             return &rex_error;
           }
@@ -74,7 +75,8 @@ sub urlencoded_slurp {
         ##only needed for chunks?
         if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
           $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-          $_[HEADER]=[];
+          #$_[HEADER]=[];
+            $_[HEADER]={};
           $_[PAYLOAD]="Slurp Limit:  $upload_limit";
           return &rex_error;
         }
@@ -127,7 +129,8 @@ sub urlencoded_file {
           if(defined $upload_limit  and $_[REX]->headers->{CONTENT_LENGTH} > $upload_limit){
             #@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
             $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-            $_[HEADER]=[];
+            #$_[HEADER]=[];
+            $_[HEADER]={};
             $_[PAYLOAD]="Limit:  $upload_limit";
             return &rex_error;
           }
@@ -178,7 +181,8 @@ sub urlencoded_file {
         #Check file size is within limits
         if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
           $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-          $_[HEADER]=[];
+          #$_[HEADER]=[];
+          $_[HEADER]={};
           $_[PAYLOAD]="Limit:  $upload_limit";
           return &rex_error;
         }

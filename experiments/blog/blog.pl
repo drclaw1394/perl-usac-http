@@ -10,9 +10,9 @@ use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
 
-use uSAC::HTTP::Middleware qw<log_simple>;
-use uSAC::HTTP::Middleware::Deflate qw<deflate>;
-use uSAC::HTTP::Middleware::Gzip qw<gzip>;
+use uSAC::HTTP::Middleware::Log qw<log_simple>;
+use uSAC::HTTP::Middleware::Deflate qw<umw_deflate>;
+use uSAC::HTTP::Middleware::Gzip qw<umw_gzip>;
 use uSAC::HTTP::Middleware::AccumulateContent qw<
 urlencoded_slurp urlencoded_file multipart_slurp multipart_file>;
 
@@ -72,30 +72,40 @@ my $server; $server=usac_server {
 		
 		#error route forces a get method to the resource
   
-    usac_route "/getme/($Comp)"=>sub {
-      return unless $_[CODE];
-      $_[PAYLOAD]=join ", ", &rex_captures->@*;
-    };
+    usac_route "/getme/($Comp)"
+      =>sub {
+        return unless $_[CODE];
+        $_[PAYLOAD]=join ", ", &rex_captures->@*;
+      };
 
-		usac_route '/static/hot.txt' =>	
-    gzip()=>deflate()=>
-    usac_cached_file headers=>[unkown=>"A"], usac_path root=>usac_dirname, "static/hot.txt";
+		usac_route '/static/hot.txt'
+      => umw_gzip()
+      => umw_deflate()
+      => umw_static_file headers=>{unkown=>"A"}, usac_path root=>usac_dirname, "static/hot.txt";
 
-    usac_route "/die"=> sub {
-      return unless $_[CODE];
-      say "a;lskjas;ldkjfa;lskjdf;lasjdf;lakjsdf;lakjsdf;lkajsdf;lkjasdfasf";
-      my $a=10/0;
-      use Exception::Class::Base;
-      Exception::Class::Base->throw("Did not want to live");
-    };  
+    usac_route "/die"
+      => sub {
+        return unless $_[CODE];
+        say "a;lskjas;ldkjfa;lskjdf;lasjdf;lakjsdf;lakjsdf;lkajsdf;lkjasdfasf";
+        my $a=10/0;
+        use Exception::Class::Base;
+        Exception::Class::Base->throw("Did not want to live");
+      };  
 
-    usac_route "/no_write"=>gzip()=>deflate()=>sub {
-      $_[PAYLOAD]="no write indeed";
-    };
+    usac_route "/no_write"
+      => umw_gzip()
+      => umw_deflate()
+      => sub {
+        $_[PAYLOAD]="no write indeed";
+      };
 
-    usac_route "/loopback"=>sub {$_[PAYLOAD]="OK"};
+    usac_route "/loopback"
+      => sub {
+        $_[PAYLOAD]="OK"
+      };
 
-    usac_route '/statictest$'=> usac_static_content "This is some data";
+    usac_route '/statictest$'
+      => umw_static_content "This is some data";
 
                 ##################################################################################################################
                 # usac_route "/test/$Comp/$Comp" => sub {                                                                        #
@@ -118,8 +128,8 @@ my $server; $server=usac_server {
                 # # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; # #
                 # #                                                                                                            # #
                 usac_route "/static"=>
-                gzip()=>deflate()=>
-                usac_static_under (
+                umw_gzip()=>umw_deflate()=>
+                umw_static_root (
                         #filter=>'txt$',
                         read_size=>4096*16,
                         pre_encoded=>{gzip=>".gz"},
@@ -143,36 +153,47 @@ my $server; $server=usac_server {
                 # );                                         #
                 ##############################################
 
-    usac_route POST=>"/stream_url_upload\$"=>sub {
+    usac_route POST
+      => "/stream_url_upload\$"
+      => sub {
         say "Expecting, content, chunged, multipart or similar";
         #say "Payload: $_[PAYLOAD]";
         $_[PAYLOAD]=Dumper $_[PAYLOAD];
         &rex_write;
-    };
+      };
 
-    usac_route "GET"=>"/stream_url_upload\$"=> sub {
-      &rex_error_unsupported_media_type;
-    };
+    usac_route "GET"
+      => "/stream_url_upload\$"
+      => sub {
+        &rex_error_unsupported_media_type;
+      };
 
-    usac_route POST=>"/slurp_url_upload"=>urlencoded_slurp()=>sub {
+    usac_route POST
+      => "/slurp_url_upload"
+      => urlencoded_slurp()
+      => sub {
         return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
         &rex_write;
-    };
+      };
 
-    usac_route POST=>"/file_url_upload"=>
-      urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))=>
-      sub {
+    usac_route POST
+      => "/file_url_upload"
+      => urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
+      => sub {
         return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
         &rex_write;
-    };
+      };
 
-    usac_route POST=>"/slurp_multi_upload"=>multipart_slurp()=>sub {
+    usac_route POST
+      => "/slurp_multi_upload"
+      => multipart_slurp()
+      => sub {
         return &rex_write unless $_[CODE];
         
         #Payload here depends on the configuration of the middleware
@@ -183,20 +204,24 @@ my $server; $server=usac_server {
         #say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
         &rex_write;
-    };
-    usac_route POST=>"/file_multi_upload"=>
-      multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))=>
-      sub {
+      };
+
+    usac_route POST
+      => "/file_multi_upload"
+      => multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
+      => sub {
         return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
         &rex_write;
-    };
+      };
     
 
     my %ctx;
-    usac_route POST=>"/stream_multi_upload\$"=>sub {
+    usac_route POST
+      => "/stream_multi_upload\$"
+      => sub {
         return &rex_write unless $_[CODE];
         say "============";
         say "Expecting multipart";
@@ -209,19 +234,25 @@ my $server; $server=usac_server {
         say $ctx;
         delete $ctx{$_[REX]} unless($_[CB]);
         &rex_write;
-    };
+      };
 		
 
     #usac_route POST=>"/data_slurp" => MyApp::data_slurp;
 
     #usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => MyApp::url_slurp;
-    usac_error_route "/error" => sub {
-      $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[CODE];
-      &rex_write;
-		};
 
-		usac_error_page 404 => "/error";
-		usac_error_page 415 => "/error";
+    usac_error_route "/error" 
+      => sub {
+        $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[CODE];
+        &rex_write;
+		  };
+
+		usac_error_page 404 
+      => "/error";
+
+		usac_error_page 415 
+      => "/error";
+
 		usac_catch_route usac_error_not_found;
 	};
 

@@ -2,6 +2,9 @@ package uSAC::HTTP::Middleware::Gzip;
 use strict;
 use warnings;
 
+use Log::ger;
+use Log::OK;
+
 use Exporter 'import';
 
 use feature qw<refaliasing say state>;
@@ -19,14 +22,7 @@ use IO::Compress::Gzip::Constants;
 use Compress::Raw::Zlib;
 
 
-use Log::ger;
-use Log::OK;
-
-
-
-
-
-our @EXPORT_OK=qw< gzip	>;
+our @EXPORT_OK=qw< umw_gzip	>;
 
 our @EXPORT=();
 our %EXPORT_TAGS=(
@@ -34,11 +30,9 @@ our %EXPORT_TAGS=(
 );
 
 
-
-
 use constant FLAG_APPEND             => 1 ;
 use constant FLAG_CRC                => 2 ;
-sub gzip{
+sub umw_gzip{
   my $in=sub {
     my $next=shift;
     $next;
@@ -50,7 +44,7 @@ sub gzip{
   my $out=sub {
     my $next=shift;
     my $status;
-    my $index;
+    #my $index;
     (sub {
         if($_[CODE]){
           Log::OK::TRACE and log_debug "Input data length: ".length  $_[PAYLOAD];
@@ -73,17 +67,17 @@ sub gzip{
               $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} =~ /gzip/;
 
             Log::OK::TRACE and log_debug "gzipin header processing";
-            \my @headers=$_[HEADER]; #Alias for easy of use and performance
+            \my %headers=$_[HEADER]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "gzip: looking for accept encoding";
 
-            #($_[REX]->headers->{ACCEPT_ENCODING}//"") !~ /gzip/iaa and return &$next;
 
             #Also disable if we are already encoded
             $exe=1;
-            #my $bypass;
-            for my ($k,$v)(@headers){
-                return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
-            }
+
+            #for my ($k,$v)(@headers){
+            #return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
+              #}
+            return &$next if  exists $_[HEADER]{HTTP_CONTENT_ENCODING()};
 
 
             Log::OK::TRACE  and log_trace "exe ". $exe; 
@@ -95,18 +89,11 @@ sub gzip{
 
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
-            $index=@headers;
 
-            my $i=0;
-            for my ($k, $v)(@headers){
-              $index=$i if $k eq HTTP_CONTENT_LENGTH;
-              $i+=2;
-            }
+            delete $_[HEADER]{HTTP_CONTENT_LENGTH()};   # remove content length header
+            $_[HEADER]{HTTP_CONTENT_ENCODING()}="gzip"; # add encoding header
 
-            Log::OK::TRACE and log_debug join ", ", @headers;	
-            Log::OK::TRACE and log_debug "Content length index: $index";
 
-            splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "gzip");# if defined $index;
             $ctx=pop(@deflate_pool)//Compress::Raw::Zlib::_deflateInit(FLAG_APPEND|FLAG_CRC,
               Z_BEST_COMPRESSION,
               Z_DEFLATED,
@@ -120,18 +107,16 @@ sub gzip{
 
               Log::OK::TRACE and log_trace "single shot";
               my $scratch=IO::FD::SV(4096*4);
-              #$scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER;
-              #my $scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER;
+
               my $status=$ctx->deflate($buf, $scratch);
               $status == Z_OK or log_error "Error creating deflate context";
               $status=$ctx->flush($scratch);
 
-              #$scratch.=pack("V V", $ctx->crc32(), $ctx->total_in());
 
               $ctx->deflateReset;
               Log::OK::TRACE and log_debug "about to push for single shot";
               push @deflate_pool, $ctx;
-              #$next->(@_[0,1,2,3], $scratch, @_[5,6]);
+
               $_[PAYLOAD]=$scratch;
               &$next;
               return;
@@ -141,8 +126,6 @@ sub gzip{
               #multiple calls required so setup context
               Log::OK::TRACE and log_trace "Multicalls required $_[REX]";
               $out_ctx{$_[REX]}=$ctx;
-
-
             }
           }
 
@@ -161,7 +144,6 @@ sub gzip{
           #
           my $scratch=""; 	#new scratch each call
 
-          #$scratch=IO::Compress::Gzip::Constants::GZIP_MINIMUM_HEADER if $_[3];
 
           $status=$ctx->deflate($buf, $scratch);
           $status == Z_OK or log_error "Error creating deflate context";
@@ -212,7 +194,7 @@ sub gzip{
       },
     )
   };
-  [$in, $out];
+  [$in, $out, uSAC::HTTP::Middleware::bypass];
 }
 
 1;
