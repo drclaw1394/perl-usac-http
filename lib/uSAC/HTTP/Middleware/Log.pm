@@ -32,7 +32,7 @@ our %EXPORT_TAGS=(
 # Log Simple - Log basic stats to STDERR
 #
 sub log_simple {
-	[&log_simple_in, &log_simple_out]
+	[&log_simple_in, &log_simple_out, uSAC::HTTP::Middleware::bypass]
 }
 
 sub log_simple_in {

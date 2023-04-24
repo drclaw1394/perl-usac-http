@@ -15,11 +15,11 @@ use URL::Encode::XS;
 use URL::Encode qw<url_decode_utf8>;
 use uSAC::HTTP::Constants;
 our @EXPORT_OK=qw<
-		make_reader
 		parse_form
 		MODE_SERVER
 		MODE_CLIENT
 		>;
+    #make_parser
 
 our @EXPORT=@EXPORT_OK;
 
@@ -59,15 +59,22 @@ use enum (qw<STATE_REQUEST STATE_RESPONSE STATE_HEADERS STATE_BODY_CONTENT STATE
 
 
 #make a reader which is bound to a session
-sub make_reader{
+sub make_parser{
   # Session, MODE, route_callback;
   # session and alias the variables to lexicals
   # mode is server or  client
   # route_callback is the interace to call to return a route/capture for the url and host
   #
-  my $r=shift;
-  my $mode=shift; #Client or server
-  my $cb=shift;
+  #my $r=shift;    
+  #my $mode=shift; #Client or server
+  #my $cb=shift;
+
+  my %options=@_;
+
+  my $r=$options{session};    # 'Session' linking io to middlewares
+  my $mode=$options{mode};    # Client or server mode
+  my $cb=$options{callback};  # Callback for new rex  processing and route location
+
   #default is server mode to handle client requests
   my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
 
@@ -99,15 +106,15 @@ sub make_reader{
   my $code=-1;
   my $payload="";
 
-    my $captures;
-    my $body_len=0;
-    my $body_type;
-    my $form_headers={};
-    my $multi_state=0;
-    my $first=1;
-    #my $out_header=[];
-    my $out_header={};
-    my $dummy_cb=sub {};
+  my $captures;
+  my $body_len=0;
+  my $body_type;
+  my $form_headers={};
+  my $multi_state=0;
+  my $first=1;
+  #my $out_header=[];
+  my $out_header={};
+  my $dummy_cb=sub {};
 
 
   sub {
@@ -121,7 +128,12 @@ sub make_reader{
     try {
       unless(@_){
         Log::OK::TRACE and log_trace "PASSING ON ERROR IN HTTP parser";
-        $route and $route->[1][1]($route, $rex);#, $code, $out_header, undef, undef);
+        # 0=> site
+        # 1=> inner_head
+        # 2=> outer_head
+        # 3=> error_head/ reset
+        #
+        $route and $route->[1][3]($route, $rex);#, $code, $out_header, undef, undef);
         $processed=0;
         return;
       }
@@ -560,10 +572,10 @@ sub make_reader{
       Log::OK::ERROR and log_error  $context;
 
       if(Log::OK::DEBUG){
-        uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b=[HTTP_CONTENT_LENGTH, length $context] ,my $c=$context, my $d=undef);
+        uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
       }
       else {
-        uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b=[HTTP_CONTENT_LENGTH, 0],my $c="", my $d=undef);
+        uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>0},my $c="", my $d=undef);
       }
     }
 
@@ -573,9 +585,11 @@ sub make_reader{
   };
 }
 
-#my @index=map {$_*2} 0..99;
+my %out_ctx;
 
+# Serializer acts as last outerware. 
 sub make_serialize{
+
   my %options=@_;
   my $protocol=$options{protocol}//"HTTP/1.1";
   my $mode=$options{mode}//MODE_SERVER;
@@ -595,15 +609,16 @@ sub make_serialize{
   my $i=1;
   my $ctx;
 
-  my %out_ctx;
 
   sub {
     #continue stack reset on error condition. The IO layer resets
     #on a write call with no arguemts;
-    unless($_[CODE]){
-      delete $out_ctx{$_[REX]};
-      return $_[REX][uSAC::HTTP::Rex::write_]() 
-    }
+    ###############################################
+    # unless($_[CODE]){                           #
+    #   delete $out_ctx{$_[REX]};                 #
+    #   return $_[REX][uSAC::HTTP::Rex::write_]() #
+    # }                                           #
+    ###############################################
     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
     Log::OK::TRACE and log_trace join ", ", @_;
     #use Data::Dumper;
@@ -758,6 +773,18 @@ sub make_serialize{
   }
 };
 
+
+# Dispatch for end of errorware chain. Deletes the context and calls
+# reset on the write streamer
+sub make_error {
+
+  # Call the error/reset for the rout
+  #
+  sub {
+    delete $out_ctx{$_[REX]};
+    return $_[REX][uSAC::HTTP::Rex::write_]() 
+  }
+}
 
 
 1;

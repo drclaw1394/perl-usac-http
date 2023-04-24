@@ -46,7 +46,7 @@ sub umw_gzip{
     my $status;
     #my $index;
     (sub {
-        if($_[CODE]){
+      #if($_[CODE]){
           Log::OK::TRACE and log_debug "Input data length: ".length  $_[PAYLOAD];
           # 0	1 	2   3	    4     5
           # usac, rex, code, headers, data, cb
@@ -63,8 +63,9 @@ sub umw_gzip{
           if($_[HEADER]){
             no warnings "uninitialized";
             # Do next unless header is defined and contains gzip
-            return &$next unless 
-              $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} =~ /gzip/;
+            return &$next if 
+              $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} !~ /gzip/
+              or $_[HEADER]{HTTP_CONTENT_ENCODING()};
 
             Log::OK::TRACE and log_debug "gzipin header processing";
             \my %headers=$_[HEADER]; #Alias for easy of use and performance
@@ -77,7 +78,7 @@ sub umw_gzip{
             #for my ($k,$v)(@headers){
             #return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
               #}
-            return &$next if  exists $_[HEADER]{HTTP_CONTENT_ENCODING()};
+              #return &$next if  exists $_[HEADER]{HTTP_CONTENT_ENCODING()};
 
 
             Log::OK::TRACE  and log_trace "exe ". $exe; 
@@ -185,16 +186,26 @@ sub umw_gzip{
 
             }
           }
-        }
-        else {
-          delete $out_ctx{$_[REX]};
-          &$next;
-
-        }
+          #}
+        ###############################
+        # else {                      #
+        #   delete $out_ctx{$_[REX]}; #
+        #   &$next;                   #
+        #                             #
+        # }                           #
+        ###############################
       },
     )
   };
-  [$in, $out, uSAC::HTTP::Middleware::bypass];
+  my $error=sub {
+      my $next=shift;
+      sub {
+        delete $out_ctx{$_[REX]};
+        &$next;
+      }
+  };
+
+  [$in, $out, $error];
 }
 
 1;

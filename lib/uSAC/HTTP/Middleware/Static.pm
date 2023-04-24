@@ -539,11 +539,11 @@ sub _make_list_dir {
 		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
 		$ren->($data, $labels, \@results);	#Render to output
 		if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
-			$next->($line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , "",my $cb=undef);
+			$next->($line, $rex, HTTP_OK,{HTTP_CONTENT_LENGTH, length $data, @type} , "",my $cb=undef);
 
 		}
 		else{
-			$next->($line, $rex, HTTP_OK,[HTTP_CONTENT_LENGTH, length $data, @type] , $data, my $cb=undef);
+			$next->($line, $rex, HTTP_OK,{HTTP_CONTENT_LENGTH, length $data, @type} , $data, my $cb=undef);
 		}
 	}
 }
@@ -638,7 +638,7 @@ sub umw_static_root {
     my $p;	#tmp variable
     sub {
       # Stack reset
-      return &$next unless($_[CODE]);
+      #return &$next unless($_[CODE]);
 
 
       if($_[HEADER]){
@@ -666,7 +666,7 @@ sub umw_static_root {
           $_[PAYLOAD]="";
           $_[CODE]=HTTP_NOT_FOUND;
           #push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
-          $_[HEADER]->{HTTP_CONTENT_LENGTH()}=0;
+          $_[HEADER]{HTTP_CONTENT_LENGTH()}=0;
           return &$next;
         }
 

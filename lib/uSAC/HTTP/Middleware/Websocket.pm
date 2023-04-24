@@ -104,8 +104,9 @@ sub websocket_client_out {
         #
         
         #Set the correct headers
-        \my @header=$_[HEADER];
-        push @header, 
+        #\my @header=$_[HEADER];
+        #push @header, 
+        for my ($k, $v)(
           HTTP_UPGRADE, "websocket",
           HTTP_CONNECTION, "Upgrade",
           HTTP_SEC_WEBSOCKET_KEY, $key,
@@ -114,7 +115,9 @@ sub websocket_client_out {
           #HTTP_SEC_WEBSOCKET_EXTENSIONS, "per message deflate",
           HTTP_SEC_WEBSOCKET_ORIGIN, $origin,
           HTTP_CONTENT_LENGTH, 0
-        ;
+        ){
+          $_[HEADER]{$k}=$v;
+        }
         &$next;
     }
    }
@@ -162,7 +165,6 @@ sub websocket_client_in {
           # Handshake failed
           Log::OK::TRACE and log_trace __PACKAGE__. " Handshake failed to websocket server";
         }
-
         &$next;
     }
   }

@@ -57,7 +57,6 @@ field $_read_size;
 our $Date;		#Date string for http
 our $Time;		#seconds from epoch
 
-sub _make_reader;
 sub drop;
 
 
@@ -74,10 +73,12 @@ method init {
     $_read_stack[-1]();
     $_closeme=1; $_dropper->(1)
   };
+
   my $s2=sub {
     $_sr->buffer="";
     $_read_stack[-1](); $_closeme=1; $_dropper->(1)
   };
+
   $_sr=uSAC::IO::SReader->create(
     fh=>$_fh,
     max_read_size=>$_read_size//MAX_READ_SIZE,
@@ -256,7 +257,6 @@ method pop_writer {
 	pop @_write_stack;			#remove the previous
 	my $name=$_write_stack[@_write_stack-1];
 	#$self->[read_]=$self->[writer_cache_]{$name};
-	#//=$make_reader_reg{$name}($self,@args));
 	#$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
 }
 

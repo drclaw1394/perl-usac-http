@@ -74,7 +74,7 @@ my $server; $server=usac_server {
   
     usac_route "/getme/($Comp)"
       =>sub {
-        return unless $_[CODE];
+      #return unless $_[CODE];
         $_[PAYLOAD]=join ", ", &rex_captures->@*;
       };
 
@@ -85,7 +85,7 @@ my $server; $server=usac_server {
 
     usac_route "/die"
       => sub {
-        return unless $_[CODE];
+      #return unless $_[CODE];
         say "a;lskjas;ldkjfa;lskjdf;lasjdf;lakjsdf;lakjsdf;lkajsdf;lkjasdfasf";
         my $a=10/0;
         use Exception::Class::Base;
@@ -172,7 +172,7 @@ my $server; $server=usac_server {
       => "/slurp_url_upload"
       => urlencoded_slurp()
       => sub {
-        return &rex_write unless $_[CODE];
+      #return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
@@ -183,7 +183,7 @@ my $server; $server=usac_server {
       => "/file_url_upload"
       => urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
       => sub {
-        return &rex_write unless $_[CODE];
+      #return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
@@ -194,7 +194,7 @@ my $server; $server=usac_server {
       => "/slurp_multi_upload"
       => multipart_slurp()
       => sub {
-        return &rex_write unless $_[CODE];
+      #return &rex_write unless $_[CODE];
         
         #Payload here depends on the configuration of the middleware
         #It is an array of arrays. The  top level is the list of parts
@@ -210,7 +210,7 @@ my $server; $server=usac_server {
       => "/file_multi_upload"
       => multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
       => sub {
-        return &rex_write unless $_[CODE];
+      #return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
@@ -222,7 +222,7 @@ my $server; $server=usac_server {
     usac_route POST
       => "/stream_multi_upload\$"
       => sub {
-        return &rex_write unless $_[CODE];
+      #return &rex_write unless $_[CODE];
         say "============";
         say "Expecting multipart";
 

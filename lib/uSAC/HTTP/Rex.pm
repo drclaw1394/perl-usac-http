@@ -117,10 +117,12 @@ sub rex_write{
 
 		#Tell the other end the connection will be closed
     #
-		push $_[HEADER]->@*, HTTP_CONNECTION, "close" if($_[REX][closeme_]->$*);
+    #push $_[HEADER]->@*, HTTP_CONNECTION, "close" if($_[REX][closeme_]->$*);
+		$_[HEADER]{HTTP_CONNECTION()}="close" if($_[REX][closeme_]->$*);
 
 		#Hack to get HTTP/1.0 With keepalive working
-		push $_[HEADER]->@*, HTTP_CONNECTION, "Keep-Alive" if($_[REX][version_] eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
+    #push $_[HEADER]->@*, HTTP_CONNECTION, "Keep-Alive" if($_[REX][version_] eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
+		$_[HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[REX][version_] eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
 	}
 
 
@@ -235,7 +237,10 @@ sub rex_redirect_moved{
   if($_[CODE]){
     my $url=$_[PAYLOAD];
     $_[CODE]=HTTP_MOVED_PERMANENTLY;
-    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    #push $_[HEADER]->@*, 
+    for my ($k,$v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+      $_[HEADER]{$k}=$v;
+    }
     $_[PAYLOAD]="";
   }
 	&rex_write;
@@ -245,7 +250,10 @@ sub rex_redirect_see_other{
   if($_[CODE]){
     my $url=$_[PAYLOAD];
     $_[CODE]=HTTP_SEE_OTHER;
-    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    #push $_[HEADER]->@*, 
+    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+      $_[HEADER]{$k}=$v;
+    }
     $_[PAYLOAD]="";
   }
 	&rex_write;
@@ -256,7 +264,10 @@ sub rex_redirect_found {
   if($_[CODE]){
     my $url=$_[PAYLOAD];
     $_[CODE]=HTTP_FOUND;
-    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    #push $_[HEADER]->@*,
+    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+      $_[HEADER]{$k}=$v;
+    }
     $_[PAYLOAD]="";
   }
 	&rex_write;
@@ -267,7 +278,10 @@ sub rex_redirect_temporary {
   if($_[CODE]){
     my $url=$_[PAYLOAD];
     $_[CODE]=HTTP_TEMPORARY_REDIRECT;
-    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    #push $_[HEADER]->@*
+    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+      $_[HEADER]{$k}=$v;
+    }
 
     $_[PAYLOAD]="";
   }
@@ -279,7 +293,10 @@ sub rex_redirect_permanent {
   if($_[CODE]){
     my $url=$_[PAYLOAD];
     $_[CODE]=HTTP_PERMANENT_REDIRECT;
-    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    #push $_[HEADER]->@*,
+    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+      $_[HEADER]{$k}=$v;
+    }
     $_[PAYLOAD]="";
   }
 	&rex_write;
@@ -290,7 +307,10 @@ sub rex_redirect_not_modified {
   if($_[CODE]){
     my $url=$_[PAYLOAD];
     $_[CODE]=HTTP_NOT_MODIFIED;
-    push $_[HEADER]->@*, HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0;
+    #push $_[HEADER]->@*, 
+    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+      $_[HEADER]{$k}=$v;
+    }
     $_[PAYLOAD]="";
   }
 	&rex_write;
@@ -381,7 +401,7 @@ sub rex_redirect_internal {
 		$rex->[recursion_count_]=0;
 		#carp "Redirections loop detected for $uri";
 		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
-		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, [HTTP_CONTENT_LENGTH, 0],"",undef);
+		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, {HTTP_CONTENT_LENGTH, 0},"",undef);
 		return;
 	}
   my $t; #$t=AE::timer 0,0,sub {
@@ -416,9 +436,12 @@ sub rex_reply_json {
 
   $_[PAYLOAD]=encode_json $_[PAYLOAD] if(ref($_[PAYLOAD]));
 
-  push $_[HEADER]->@*,
+  #push $_[HEADER]->@*,
+  for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/json",
-		HTTP_CONTENT_LENGTH, length $_[PAYLOAD];
+		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
+    $_[HEADER]{$k}=$v;
+  }
 
 	&rex_write;
 }
@@ -426,24 +449,33 @@ sub rex_reply_json {
 #Assume payload has content
 sub rex_reply_html {
 
-  push $_[HEADER]->@*,
+#push $_[HEADER]->@*,
+  for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/html",
-		HTTP_CONTENT_LENGTH, length $_[PAYLOAD];
+		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
+    $_[HEADER]{$k}=$v;
+  }
 
 	&rex_write;
 }
 sub rex_reply_javascript {
-  push $_[HEADER]->@*,
+#push $_[HEADER]->@*,
+  for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/javascript",
-		HTTP_CONTENT_LENGTH, length $_[PAYLOAD];
+		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
+    $_[HEADER]{$k}=$v;
+  }
 
 	&rex_write;
 }
 
 sub rex_reply_text {
-  push $_[HEADER]->@*,
+#push $_[HEADER]->@*,
+  for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/plain",
-		HTTP_CONTENT_LENGTH, length $_[PAYLOAD];
+		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
+    $_[HEADER]{$k}=$v;
+  }
 
 	&rex_write;
 }
@@ -527,7 +559,7 @@ sub usac_multipart_stream {
 				$rex->[closeme_]->$*=1;
 
 
-				rex_write $line, $rex, HTTP_UNSUPPORTED_MEDIA_TYPE,[] ,"multipart/formdata required";
+				rex_write $line, $rex, HTTP_UNSUPPORTED_MEDIA_TYPE,{} ,"multipart/formdata required";
 				return;
 			}
 			#uSAC::HTTP::Session::push_reader

@@ -7,7 +7,7 @@ use EV;
 use AnyEvent;
 
 use uSAC::HTTP;
-use uSAC::HTTP::Middleware qw<log_simple>;
+use uSAC::HTTP::Middleware::Log qw<log_simple>;
 use uSAC::HTTP::Middleware::Websocket qw<websocket>;
 
 use Log::ger::Output "Screen";

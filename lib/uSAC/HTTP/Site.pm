@@ -71,6 +71,7 @@ field $_host        :reader :param =[];
 field $_id          :mutator :param=undef;
 field $_innerware   :mutator :param=[];
 field $_outerware   :mutator :param=[];
+field $_errorware   :mutator :param=[];
 field $_error_uris  :param={};
 field $_controller  :mutator :param=undef;
 
@@ -148,11 +149,12 @@ method _add_route {
 
   # Fix up and break out middleware
   #
-  \my (@inner, @outer, @names)=$self->wrap_middleware(@_);
+  \my (@inner, @outer, @error)=$self->wrap_middleware(@_);
   
   use Data::Dumper;
   say "INNER WARE: ".join ", ", @inner;
   say "OUTER WARE: ".join ", ", @outer;
+  say "ERROR WARE: ".join ", ", @error;
 
 
 
@@ -168,19 +170,15 @@ method _add_route {
   unshift @inner , uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
 
 
+  unshift @error, $self->construct_errorware;
+
+
   my $end;
   # TODO: fix this for client support.
   # Server has the rex_write hook at the start of outerware
   # Client will need to hook at end of outerware?
   if($self->find_root->mode==0){
     Log::OK::TRACE and log_trace __PACKAGE__. " end is server ".join ", ", caller;
-    ##########################################################
-    # use Error::Show;                                       #
-    # my @frames;                                            #
-    # my $i=0;                                               #
-    # push @frames, [caller $i++] while caller $i;;          #
-    # say Error::Show::context reverse=>1, frames=>\@frames; #
-    ##########################################################
     $end= \&rex_write;
   }
   else{
@@ -251,6 +249,18 @@ method _add_route {
     $inner_head=$end;
   }
 
+  my $err=uSAC::HTTP::v1_1_Reader::make_error;
+  my $error_head;
+  if(@error){
+    my $middler=Sub::Middler->new();
+    for(@error){
+      $middler->register($_);
+    }
+    $error_head=$middler->link($err, site=>$self);
+  }
+  else{
+    $error_head=$err;
+  }
 
   my @hosts;
 
@@ -288,7 +298,7 @@ method _add_route {
     }
 
     my ($matcher, $type)=$self->__adjust_matcher($host, $method_matcher, $path_matcher);
-    $self->find_root->add_host_end_point($host, $matcher, [$self, $inner_head, $outer_head,0], $type);
+    $self->find_root->add_host_end_point($host, $matcher, [$self, $inner_head, $outer_head, $error_head, 0], $type);
     last unless defined $matcher;
 
   }
@@ -347,12 +357,14 @@ method wrap_middleware {
 #my $self=shift;
   my @inner;
   my @outer;
-  my @names;
+  my @error;
 
   while(@_){
     #$end=$_;
     local $_=shift;
+
     # If the element is a code ref it is innerware ONLY
+    #
     if(ref eq "CODE"){
       Log::OK::TRACE and log_trace __PACKAGE__. " Plain singlar CODE ref. Wrapping as Innerware";
       # A straight code reference does not have any calls to 'next'.
@@ -372,7 +384,7 @@ method wrap_middleware {
     }
 
     # If its an array ref, then it might contain both inner
-    # and outerware and possible a name
+    # and outerware and possible an error handler
     elsif(ref eq "ARRAY"){
       Log::OK::TRACE and log_trace __PACKAGE__. " ARRAY ref. Unwrap as inner and outerware";
       #check at least for one code ref
@@ -385,19 +397,22 @@ method wrap_middleware {
         Log::OK::WARN and log_warn __PACKAGE__." Outerware tuple did not have a code ref. Bypassing";
         $_->[1]=sub { state $next=shift};  #Force short circuit
       }
-
-
-      if(!defined($_->[2])){
-        $_->[2]="Middleware";
+      if(ref($_->[2]) ne "CODE"){
+        Log::OK::WARN and log_warn __PACKAGE__." Error tuple did not have a code ref. Bypassing";
+        $_->[2]=sub { state $next=shift};  #Force short circuit
       }
 
-      say "CODE: ".$_->[0];
 
-      say "CODE: ".$_->[1];
+      ###########################
+      # if(!defined($_->[2])){  #
+      #   $_->[2]="Middleware"; #
+      # }                       #
+      ###########################
+
 
       push @inner, $_->[0];
       push @outer, $_->[1];
-      push @names, $_->[2];
+      push @error, $_->[2];
 
     }
     elsif(!defined){
@@ -427,7 +442,7 @@ method wrap_middleware {
   }
 
   # Return references
-  (\@inner, \@outer, \@names);
+  (\@inner, \@outer, \@error);
 
 }
 
@@ -495,6 +510,16 @@ method construct_outerware {
 		$parent=$parent->parent_site;
 	}
 	@outerware;
+}
+
+method construct_errorware {
+	my $parent=$self;
+	my @errorware;
+	while($parent){
+		unshift @errorware, @{$parent->errorware//[]};
+		$parent=$parent->parent_site;
+	}
+	@errorware;
 }
 
 method built_label {

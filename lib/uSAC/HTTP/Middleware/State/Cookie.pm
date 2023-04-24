@@ -101,17 +101,25 @@ sub state_cookie_out {
 					$_//return &$outer_next;# Undefined do nothing
 					if($_){
 						if(my $encoded=encode_base64url $state_encode->($_)){
-							push $_[3]->@*,
+              #push $_[HEADER]->@*,
+              for my($k,$v)(
 							HTTP_SET_COOKIE,
 								new_cookie($state_name=>$encoded, COOKIE_PATH, $state_path)
 								->serialize_set_cookie
+              ){
+                $_[HEADER]{$k}=$v;
+              }
 							;
 						}
 					}
 					elsif($_ eq ""){
-						push $_[3]->@*,
+            #push $_[HEADER]->@*,
 						#expire the cookie
-						map((HTTP_SET_COOKIE, $_->serialize_set_cookie), expire_cookies $state_name);
+            for my ($k, $v)(
+						map((HTTP_SET_COOKIE, $_->serialize_set_cookie), expire_cookies $state_name)){
+            $_[HEADER]{$k}=$v;
+          }
+
 
 					}
 				}

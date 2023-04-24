@@ -393,7 +393,7 @@ method make_basic_client{
   my $session;
   unless($_application_parser){
     require uSAC::HTTP::v1_1_Reader;
-    $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_reader;
+    $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
   }
   
   my $parser=$_application_parser; 
@@ -419,7 +419,7 @@ method make_basic_client{
       else {
         $session=uSAC::HTTP::Session->new;
         $session->init($session_id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
-        $session->push_reader($parser->($session, 0, $self->current_cb));
+        $session->push_reader($parser->(session=>$session, mode=>0, callback=>$self->current_cb));
         
       }
 
@@ -576,7 +576,7 @@ method rebuild_dispatch {
       (my $route, my $captures)=$any_host->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("");
       $_cb=sub {
         #Always return the default out of the any_host table
-        $route->[1][3]++;	
+        $route->[1][4]++;	
         ($route, $captures);
       };
       Log::OK::WARN and log_warn "Single end point enabled";
@@ -620,7 +620,7 @@ method rebuild_dispatch {
     #
     # Increment the counter on the route
     #
-    $route->[1][3]++;	
+    $route->[1][4]++;	
 
     #
     # NOTE: MAIN ENTRY TO  PROCESSING CHAIN / MIDDLEWARE
@@ -1135,10 +1135,10 @@ method request {
 
         unless($_application_parser){
           require uSAC::HTTP::v1_1_Reader;
-          $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_reader;
+          $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
         }
         say "APPLICATION PARSER: ".$_application_parser;
-        $session->push_reader($_application_parser->($session, 1, sub {say "DUMMY PARSER CALLBACK====="}));
+        $session->push_reader($_application_parser->(session=>$session, mode=>1, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
       $_sessions->{ $session_id } = $session;
 
       $session_id++;
@@ -1161,63 +1161,6 @@ method request {
     Log::OK::TRACE and log_trace __PACKAGE__. " request queued but waiting for in flight to finish";
   }
 
-  #############################################################################################################
-  # unless($entry->[uSAC::HTTP::Site::IDLE_POOL] and $entry->[uSAC::HTTP::Site::IDLE_POOL]->@*){              #
-  #   Log::OK::TRACE and log_trace __PACKAGE__." Client Idle pool is empty. ";                                #
-  #   $self->do_stream_connect($__host, $port, sub {                                                          #
-  #                                                                                                           #
-  #       my ($socket, $addr)=@_;                                                                             #
-  #       $entry->[uSAC::HTTP::Site::ADDR]=$addr;                                                             #
-  #       # Create a session here                                                                             #
-  #       #                                                                                                   #
-  #       my $scheme="http";                                                                                  #
-  #       Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";                                   #
-  #       my $session=uSAC::HTTP::Session->new;                                                               #
-  #       $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);    #
-  #                                                                                                           #
-  #       unless($_application_parser){                                                                       #
-  #         require uSAC::HTTP::v1_1_Reader;                                                                  #
-  #         $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_reader;                                      #
-  #       }                                                                                                   #
-  #       say "APPLICATION PARSER: ".$_application_parser;                                                    #
-  #       $session->push_reader($_application_parser->($session, 1, sub {say "DUMMY PARSER CALLBACK====="})); #
-  #       $_sessions->{ $session_id } = $session;                                                             #
-  #                                                                                                           #
-  #       $session_id++;                                                                                      #
-  #       push $entry->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;                                           #
-  #                                                                                                           #
-  #                                                                                                           #
-  #       #trigger the que processing if requried                                                             #
-  #       Log::OK::TRACE and log_trace __PACKAGE__." do stream connect callback=======";                      #
-  #       my $details=[$host, $method, $uri, $header, $payload, $cb];                                         #
-  #       if($entry->[uSAC::HTTP::Site::ACTIVE_COUNT]==0){                                                    #
-  #         Log::OK::TRACE and log_trace __PACKAGE__."  NO ACTIVE sessions";                                  #
-  #         $self->_request($entry, $details);                                                                #
-  #       }                                                                                                   #
-  #       else {                                                                                              #
-  #         Log::OK::TRACE and log_trace __PACKAGE__."  ACTIVE sessions";                                     #
-  #         push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;                                         #
-  #       }                                                                                                   #
-  #                                                                                                           #
-  #     },                                                                                                    #
-  #     sub {                                                                                                 #
-  #       say "error callback for stream connect";                                                            #
-  #     }                                                                                                     #
-  #   );                                                                                                      #
-  # }                                                                                                         #
-  # else {                                                                                                    #
-  #   Log::OK::TRACE and log_trace __PACKAGE__." Client Idle pool is empty.";                                 #
-  #   my $details=[$host, $method, $uri, $header, $payload, $cb];                                             #
-  #   if($entry->[uSAC::HTTP::Site::ACTIVE_COUNT]==0){                                                        #
-  #     Log::OK::TRACE and log_trace __PACKAGE__."  NO ACTIVE sessions";                                      #
-  #     $self->_request($entry, $details);                                                                    #
-  #   }                                                                                                       #
-  #   else {                                                                                                  #
-  #     Log::OK::TRACE and log_trace __PACKAGE__."  ACTIVE sessions";                                         #
-  #     push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;                                             #
-  #   }                                                                                                       #
-  # }                                                                                                         #
-  #############################################################################################################
 }
 
 method _request {

@@ -47,7 +47,7 @@ sub umw_deflate {
     my $status;
     my $index;
     (sub {
-        if($_[CODE]){
+      #if($_[CODE]){
           Log::OK::TRACE and log_debug "Input data length: ".length  $_[PAYLOAD];
           # 0	1 	2   3	    4     5
           # usac, rex, code, headers, data, cb
@@ -62,8 +62,9 @@ sub umw_deflate {
           if($_[HEADER]){
             no warnings "uninitialized";
               # Do next unless header is defined and contains gzip
-              return &$next unless 
-                $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} =~ /deflate/;
+              return &$next if  
+                $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} !~ /deflate/
+                or $_[HEADER]{HTTP_CONTENT_ENCODING()};
 
             Log::OK::TRACE and log_debug "Deflate: in header processing";
             #\my @headers=$_[HEADER]; #Alias for easy of use and performance
@@ -75,7 +76,7 @@ sub umw_deflate {
             #     return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default #
             # }                                                                    #
             ########################################################################
-            return &$next if exists$_[HEADER]{HTTP_CONTENT_ENCODING()};
+            #return &$next if exists$_[HEADER]{HTTP_CONTENT_ENCODING()};
 
             Log::OK::TRACE  and log_trace "exe ". $exe; 
             Log::OK::TRACE  and log_trace "Single shot: ". !$_[CB];
@@ -183,16 +184,25 @@ sub umw_deflate {
               $_[CB]->($_[6]);	#execute callback to force feed
             }
           }
-        }
-        else{
-          delete $out_ctx{$_[REX]};
-          &$next;
-
-        }
+          #}
+        ###############################
+        # else{                       #
+        #   delete $out_ctx{$_[REX]}; #
+        #   &$next;                   #
+        #                             #
+        # }                           #
+        ###############################
       },
     )
   };
-  [$in, $out];
+  my $error=sub {
+      my $next=shift;
+      sub {
+        delete $out_ctx{$_[REX]};
+        &$next;
+      }
+  };
+  [$in, $out, $error];
 }
 
 1;
