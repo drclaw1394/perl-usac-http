@@ -5,8 +5,10 @@ use feature "try";
 use Object::Pad;
 use Log::ger;
 use Log::OK;
+
 use Socket;
 use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
+
 use IO::FD;
 use uSAC::IO;
 use uSAC::IO::Acceptor;
@@ -38,12 +40,7 @@ no warnings "experimental";
 
 
 use uSAC::HTTP::Site;
-
-
-use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Constants;
-
-
 use Hustle::Table;		#dispatching of endpoints
 
 
@@ -51,8 +48,22 @@ use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
 
 use Scalar::Util 'refaddr', 'weaken';
-use Socket qw(AF_INET AF_UNIX SOCK_STREAM SOCK_DGRAM SOL_SOCKET SO_REUSEADDR SO_REUSEPORT TCP_NODELAY IPPROTO_TCP TCP_NOPUSH TCP_NODELAY SO_LINGER
-inet_pton);
+
+use Socket qw(
+  AF_INET
+  AF_UNIX
+  SOCK_STREAM
+  SOCK_DGRAM
+  SOL_SOCKET
+  SO_REUSEADDR
+  SO_REUSEPORT
+  TCP_NODELAY
+  IPPROTO_TCP
+  TCP_NOPUSH 
+  TCP_NODELAY
+  SO_LINGER
+  inet_pton
+);
 
 use Carp 'croak';
 
@@ -63,9 +74,22 @@ use uSAC::HTTP::Session;
 #use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Rex;
 use uSAC::MIME;
+
 use Exporter 'import';
 
-our @EXPORT_OK=qw<usac_server usac_run usac_load usac_include usac_listen usac_listen2 usac_mime_map usac_mime_default usac_sub_product usac_workers>;
+our @EXPORT_OK=qw<
+  usac_server
+  usac_run
+  usac_load
+  usac_include
+  usac_listen
+  usac_listen2
+  usac_mime_map
+  usac_mime_default
+  usac_sub_product
+  usac_workers
+>;
+
 our @EXPORT=@EXPORT_OK;
 
 
@@ -556,7 +580,7 @@ method rebuild_dispatch {
     for(values $_host_tables->%*){
       Log::OK::TRACE and log_trace __PACKAGE__." processing table entry for rebuild";
       $_->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]=$_->[uSAC::HTTP::Site::HOST_TABLE]->prepare_dispatcher(cache=>$_->[uSAC::HTTP::Site::HOST_TABLE_CACHE]);
-      say join ", ", @$_;
+      #say join ", ", @$_;
     } 
 
 

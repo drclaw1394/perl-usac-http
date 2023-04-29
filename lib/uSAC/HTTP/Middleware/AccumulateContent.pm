@@ -10,7 +10,6 @@ use Log::ger;
 use Log::OK;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
-use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::Constants;
 use IO::FD;
 use Fcntl qw<O_CREAT O_RDWR>;

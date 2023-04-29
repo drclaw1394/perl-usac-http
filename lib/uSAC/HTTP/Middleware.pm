@@ -25,10 +25,6 @@ our %EXPORT_TAGS=(
 );
 
 
-sub import {
-  # Here we want to load the modules as if they where used
-  # use uSAC::HTTP::Middleware qw< Log Gzip
-}
 
 sub bypass {
   sub {

@@ -6,7 +6,7 @@ use uSAC::HTTP;
 use Data::Dumper;
 use uSAC::HTTP::Site;
 use uSAC::HTTP::Server;
-use uSAC::HTTP::Static;
+use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware::Log;
 use Template::Plexsite::URLTable;
 
@@ -34,7 +34,7 @@ my $server; $server=usac_server {
 		#usac_innerware log_simple;
 		#
 		#error route forces a get method to the resource
-		usac_route "/static"   => usac_file_under usac_dirname;
+		usac_route "/static"   => uhm_static_root usac_dirname;
 
 		my $vars={fields=>[], peer=>undef};
 

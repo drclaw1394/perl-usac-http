@@ -3,6 +3,9 @@ use strict;
 use warnings;
 
 
+
+
+
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
 #use uSAC::HTTP::FileMetaCache;
@@ -202,7 +205,7 @@ sub send_file_uri_norange {
     }
 
     #TODO: needs testing
-    for(my $time=$headers->{"IF-MODIFIED-SINCE"}){
+    for my $time ($headers->{"IF-MODIFIED-SINCE"}){
       #attempt to parse
       $code=HTTP_OK and last unless $time;
       my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
@@ -224,9 +227,9 @@ sub send_file_uri_norange {
   for my($k, $v)(
     $entry->[File::Meta::Cache::user_]->@*, 
     HTTP_VARY, "Accept",
-    HTTP_ACCEPT_RANGES,"bytes"
+    HTTP_ACCEPT_RANGES, "bytes"
   ){
-    $out_headers->{$k},$v;
+    $out_headers->{$k}=$v;
   }
 
   if(!$as_error and $headers->{RANGE}){
@@ -234,11 +237,10 @@ sub send_file_uri_norange {
     @ranges=_check_ranges $rex, $content_length;
     unless(@ranges){
       $code=HTTP_RANGE_NOT_SATISFIABLE;
-
       #push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
       $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
 
-      $next->( $matcher,$rex,$code,$out_headers,"");
+      $next->($matcher, $rex, $code, $out_headers, "");
       return;
     }
     elsif(@ranges==1){
@@ -251,10 +253,13 @@ sub send_file_uri_norange {
       # HTTP_CONTENT_LENGTH, $total_length;                                      #
       ############################################################################
       
-      for my($k, $v)(HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
-      HTTP_CONTENT_LENGTH, $total_length){
+      for my($k, $v)(
+        HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
+        HTTP_CONTENT_LENGTH, $total_length
+      ){
         $out_headers->{$k}=$v;
       }
+
       $content_length=$total_length;
       $offset= $ranges[0][0];
       shift @ranges;
@@ -265,7 +270,7 @@ sub send_file_uri_norange {
   }
   else {
     #push @$out_headers, HTTP_CONTENT_LENGTH, $content_length;
-    $out_headers->{ HTTP_CONTENT_LENGTH()}= $content_length;
+    $out_headers->{HTTP_CONTENT_LENGTH()}= $content_length;
 
   }
 

@@ -11,13 +11,13 @@ use Log::ger::Output 'Screen';
 use uSAC::HTTP;
 
 use uSAC::HTTP::Middleware::Static;
-use uSAC::HTTP::Middleware::Log;# qw<log_simple>;
+use uSAC::HTTP::Middleware::Log;
 use uSAC::HTTP::Middleware::Deflate;
 use uSAC::HTTP::Middleware::Gzip;
 use uSAC::HTTP::Middleware::AccumulateContent;
 
-use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
-use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
+#use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
+#use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
 
 
 use Socket;

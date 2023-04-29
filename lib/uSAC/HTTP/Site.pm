@@ -54,7 +54,6 @@ use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Constants;
 
 use uSAC::HTTP::Rex;
-use uSAC::HTTP::Cookie qw<:all>;
 use uSAC::HTTP::v1_1_Reader;      #TODO: this will be dynamically linked in
 use Sub::Middler;
 
@@ -135,7 +134,6 @@ BUILD{
 #
 method _add_route {
   local $,=" ";
-  say caller;
   my $method_matcher=shift;
   my $path_matcher=shift;
 
@@ -152,9 +150,6 @@ method _add_route {
   #
   \my (@inner, @outer, @error)=$self->wrap_middleware(@_);
   
-  say "INNER WARE: ".join ", ", @inner;
-  say "OUTER WARE: ".join ", ", @outer;
-  say "ERROR WARE: ".join ", ", @error;
 
 
 
@@ -393,25 +388,17 @@ method wrap_middleware {
       Log::OK::TRACE and log_trace __PACKAGE__. " ARRAY ref. Unwrap as inner and outerware";
       #check at least for one code ref
       if(ref($_->[0]) ne "CODE"){
-        Log::OK::WARN and log_warn __PACKAGE__." Innerware tuple did not have a code ref. Bypassing";
         $_->[0]=sub { state $next=shift};  #Force short circuit
       }
 
       if(ref($_->[1]) ne "CODE"){
-        Log::OK::WARN and log_warn __PACKAGE__." Outerware tuple did not have a code ref. Bypassing";
         $_->[1]=sub { state $next=shift};  #Force short circuit
       }
       if(ref($_->[2]) ne "CODE"){
-        Log::OK::WARN and log_warn __PACKAGE__." Error tuple did not have a code ref. Bypassing";
         $_->[2]=sub { state $next=shift};  #Force short circuit
       }
 
 
-      ###########################
-      # if(!defined($_->[2])){  #
-      #   $_->[2]="Middleware"; #
-      # }                       #
-      ###########################
 
 
       push @inner, $_->[0];
@@ -629,8 +616,6 @@ method _method_match_check{
 method add_route {
   #my $self=shift;
   my $result; 
-  say "\nAdding route: in site";
-  say join ", ", @_;
 
   try {
     die Exception::Class::Base->throw("Route Addition: a route needs at least two

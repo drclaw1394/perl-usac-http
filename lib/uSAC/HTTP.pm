@@ -71,7 +71,9 @@ sub import {
       no strict "refs";
       my $name=$caller."::".$_;
       my $a=$i;
-      #*{$name}=sub {$a};#\${'uSAC::HTTP::'.$_};
+      # Export only if it doesn't existin name space.
+      # stops warnings
+      next if exists ${$caller."::"}{$_};
       *{$name}=\&{$_};
       $i++;
     }

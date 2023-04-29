@@ -18,7 +18,7 @@ use Time::HiRes qw<time>;
 use Log::ger;
 use Log::OK;
 
-our @EXPORT_OK=qw< uhm_log >;
+our @EXPORT_OK=qw<uhm_log>;
 
 our @EXPORT=@EXPORT_OK;
 our %EXPORT_TAGS=();
