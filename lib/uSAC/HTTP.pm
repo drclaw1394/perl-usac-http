@@ -24,11 +24,11 @@ use uSAC::HTTP::Constants;  # Constants for the message structure of middleware
 use uSAC::HTTP::Rex;        # Request and Response
 use uSAC::HTTP::Site;       # Route grouping and base class
 use uSAC::HTTP::Server;     # Main class to store routes and listen
-use uSAC::HTTP::Client;     # subclass for clients
+#use uSAC::HTTP::Client;     # subclass for clients
 
 # Common middleware
 #
-use uSAC::HTTP::Middleware::Static;
+#use uSAC::HTTP::Middleware::Static;
 
 
 # Contextual variables used in DSL
@@ -53,7 +53,7 @@ sub import {
     for(keys %uSAC::HTTP::){
       #print $_."\n";
       no strict "refs";
-      if( /^usac_/ or /^rex_/ or  /^HTTP_/ or /^umw_/){
+      if( /^usac_/ or /^rex_/ or  /^HTTP_/ or /^uhm_/){
         *{$caller."::".$_}=\*{"uSAC::HTTP::".$_};
       }
       elsif(/Dir_Path/ or /File_Path/ or /Comp/ ){

@@ -17,22 +17,21 @@ use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Constants;
 
-use IO::Compress::Gzip;
-use IO::Compress::Gzip::Constants;
+#use IO::Compress::Gzip;
+#use IO::Compress::Gzip::Constants;
 use Compress::Raw::Zlib;
 
 
-our @EXPORT_OK=qw< umw_gzip	>;
+our @EXPORT_OK=qw<uhm_gzip>;
 
-our @EXPORT=();
+our @EXPORT=@EXPORT_OK;
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
 );
 
-
 use constant FLAG_APPEND             => 1 ;
 use constant FLAG_CRC                => 2 ;
-sub umw_gzip{
+sub uhm_gzip{
   my $in=sub {
     my $next=shift;
     $next;
@@ -44,13 +43,10 @@ sub umw_gzip{
   my $out=sub {
     my $next=shift;
     my $status;
-    #my $index;
     (sub {
-      #if($_[CODE]){
           Log::OK::TRACE and log_debug "Input data length: ".length  $_[PAYLOAD];
           # 0	1 	2   3	    4     5
           # usac, rex, code, headers, data, cb
-          \my $buf=\$_[PAYLOAD];
 
           Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
           Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
@@ -75,18 +71,11 @@ sub umw_gzip{
             #Also disable if we are already encoded
             $exe=1;
 
-            #for my ($k,$v)(@headers){
-            #return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default
-              #}
-              #return &$next if  exists $_[HEADER]{HTTP_CONTENT_ENCODING()};
-
-
             Log::OK::TRACE  and log_trace "exe ". $exe; 
             Log::OK::TRACE  and log_trace "Single shot: ". !$_[CB];
 
             $ctx=$exe;
 
-            #return &$next unless $exe; #bypass is default
 
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
@@ -109,7 +98,7 @@ sub umw_gzip{
               Log::OK::TRACE and log_trace "single shot";
               my $scratch=IO::FD::SV(4096*4);
 
-              my $status=$ctx->deflate($buf, $scratch);
+              my $status=$ctx->deflate($_[PAYLOAD], $scratch);
               $status == Z_OK or log_error "Error creating deflate context";
               $status=$ctx->flush($scratch);
 
@@ -146,7 +135,7 @@ sub umw_gzip{
           my $scratch=""; 	#new scratch each call
 
 
-          $status=$ctx->deflate($buf, $scratch);
+          $status=$ctx->deflate($_[PAYLOAD], $scratch);
           $status == Z_OK or log_error "Error creating deflate context";
 
 
@@ -186,17 +175,10 @@ sub umw_gzip{
 
             }
           }
-          #}
-        ###############################
-        # else {                      #
-        #   delete $out_ctx{$_[REX]}; #
-        #   &$next;                   #
-        #                             #
-        # }                           #
-        ###############################
       },
     )
   };
+
   my $error=sub {
       my $next=shift;
       sub {

@@ -13,7 +13,7 @@ use Log::OK;
 #use Try::Catch;
 use Carp qw<carp>;
 #use File::Basename qw<basename dirname>;
-use File::Spec::Functions qw<catfile>;
+#use File::Spec::Functions qw<catfile>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 #use uSAC::HTTP::Cookie qw<:all>;
@@ -21,7 +21,7 @@ use HTTP::State qw<:constants :encode :decode>;
 
 use uSAC::HTTP::Constants;
 use IO::FD;
-use Fcntl qw<O_CREAT O_RDWR>;
+#use Fcntl qw<O_CREAT O_RDWR>;
 
 use Exporter 'import';
 
@@ -539,6 +539,7 @@ sub new {
   $self->[captures_]=$_[8];
   $self->[in_progress_]=undef;
   $self->[mw_ctx_]=[];
+  $self->[id_]=$id++;
   #$self->[uri_decoded_]=url_decode_utf8 $self->[uri_raw_];
 	$self;
 }
@@ -677,21 +678,6 @@ sub umw_dead_horse_stripper {
 	}
 
 }
-
-##############################################################################################################################
-# sub DESTROY {                                                                                                              #
-#         Log::OK::DEBUG and log_debug "+++++++Destroy rex: $_[0][id_],  session $_[0][session_][uSAC::HTTP::Session::id_]"; #
-# }                                                                                                                          #
-##############################################################################################################################
-#binary data.
-# might have contetn-encoding apply however ie base64, gzip
-
-#content type text/plain with optional charset spec
-#also setup need to decode any Content-Encoding (ie gzip)
-
-
-
-	 
 
 *rex_parse_form_params=*parse_form_params;
 

@@ -8,6 +8,7 @@ use Log::OK;
 use Socket;
 use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
 use IO::FD;
+use uSAC::IO;
 use uSAC::IO::Acceptor;
 use Error::Show;
 
@@ -319,24 +320,26 @@ method prepare {
 	#Timeout timer
 	#
   #$SIG{ALRM}=
-  $_stream_timer=AE::timer 0, $interval,
-  sub {
-		#iterate through all connections and check the difference between the last update
-		$_server_clock+=$interval;
-		#and the current tick
-		my $session;
-		for(keys $_sessions->%*){
-			$session=$_sessions->{$_};
+  #$_stream_timer=AE::timer 0, $interval,
+  $_stream_timer=uSAC::IO::timer 0, $interval,
+  
+    sub {
+      #iterate through all connections and check the difference between the last update
+      $_server_clock+=$interval;
+      #and the current tick
+      my $session;
+      for(keys $_sessions->%*){
+        $session=$_sessions->{$_};
 
-			if(($_server_clock-$session->time)> $timeout){
-				Log::OK::DEBUG and log_debug "DROPPING ID: $_";
-				$session->closeme=1;
-				$session->drop;
-			}
-		}
-		
-    #alarm	 $interval;# if $self->[sessions_]->%*; #only start interval if something to watch?
-	};
+        if(($_server_clock-$session->time)> $timeout){
+          Log::OK::DEBUG and log_debug "DROPPING ID: $_";
+          $session->closeme=1;
+          $session->drop;
+        }
+      }
+      
+      #alarm	 $interval;# if $self->[sessions_]->%*; #only start interval if something to watch?
+    };
   
   #alarm $interval;
   Log::OK::INFO and log_info "Accepting connections on PID: $$";
@@ -1054,37 +1057,43 @@ method do_stream_connect {
   my ($host, $port, $on_connect, $on_error)=@_;
   # Inititiate connection to server. This makes a new connection and adds to the pool
 
-  # DNS resolution
   my $entry; 
 
 
   my $id;
   my $socket;
-  $socket=uSAC::IO->socket(AF_INET, SOCK_STREAM, 0);
-  die $! unless defined $socket;
+
+  $socket=uSAC::IO::socket(AF_INET, SOCK_STREAM, 0);
+
   if( $entry=$_host_tables->{$host} and $entry->[uSAC::HTTP::Site::ADDR]){
 
     # Don't do a name resolve as we already have it.
     # 
     #Create the socket 
-
-    die "$!" unless defined $socket;
-    $id=uSAC::IO->connect_addr($socket, $entry->[uSAC::HTTP::Site::ADDR], $on_connect, $on_error);
+    $id=uSAC::IO::connect_addr($socket, $entry->[uSAC::HTTP::Site::ADDR], $on_connect, $on_error);
     
   }
   else {
-    $id=uSAC::IO->connect($socket, $host, $port, $on_connect, $on_error);
+    $id=uSAC::IO::connect($socket, $host, $port, $on_connect, $on_error);
   }
   $id;
 }
 
 use uSAC::IO;
+sub usac_request {
+
+}
+
+method fetch ($resouce, @options) {
+
+}
+
 method request {
   Log::OK::TRACE and log_trace __PACKAGE__." request";
   # Queue a request in host pool and trigger if queue is inactive
   #
   my($host, $method, $uri, $header, $payload, $cb)=@_;
-  $header//=[];
+  $header//={};
   $payload//="";
   my $version;
   my $ex;
@@ -1100,6 +1109,7 @@ method request {
 
   # Attempt to connect to host if we have no connections  in the pool
   state $any_host=$_host_tables->{"*.*"};
+
   my $entry=$_host_tables->{$host}//$any_host;
   
   # We will always have a host table here, event if it is the default one
@@ -1122,6 +1132,7 @@ method request {
     ){
 
     $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+
     #Create another connection so long as it is doesn't exceed the limit
     $self->do_stream_connect($__host, $port, sub {
         my ($socket, $addr)=@_;
@@ -1148,11 +1159,17 @@ method request {
         #}
 
     },
+
     sub {
       # connection error
       #
       $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-      say "error callback for stream connect";
+      say "error callback for stream connect: $_[1]";
+      IO::FD::close $_[0]; # Close the socket
+      
+      #say $_[1];
+      #say Error::Show::context frames=>Devel::StackTrace->new();
+
     }
     )
   }
@@ -1165,9 +1182,9 @@ method request {
 
 method _request {
   Log::OK::TRACE and log_trace __PACKAGE__." _request";
-  #Takes are host, method, url, headers, payload, cb
-  #finds a route in the tables
-  #  This returns middleware chains to execute
+  # From the given host table and sesssion attmempt to execute the request stored in $details
+  # or of extract from the host queue
+  # Schedules the request for the next loop of the event system
   my ($table, $session, $details)=@_;
 
   #my($host, $port, $method, $uri, $header, $payload, $cb)=@_;
@@ -1181,10 +1198,10 @@ method _request {
   my $i;
   
 
-  $details//=shift $table->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
+  $details//=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
   unless($details){
     # No more work to do so add the session to the idle pool
-    warn "No request to process";
+    Log::OK::INFO and log_info "No futher requests to process. Return to idle pool";
     push $table->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
     $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
     return;
@@ -1227,14 +1244,17 @@ method _request {
 
 
   # Set the current rex and route for the session.
-  # This is need for the parser in client mode to reuse the this
+  # This is needed for the parser in client mode. It makes the route known
+  # ahead of time.
   $ex->[3]->$*=$rex;
   $ex->[7]->$*=$route;
 
 
   #Call the head of the outerware function
   #
-  $route->[1][2]($route, $rex, my $code=-1, $header, $payload, $cb);
+  uSAC::IO::asap {
+    $route->[1][2]($route, $rex, my $code=-1, $header, $payload, $cb);
+  };
 }
 
 1; 

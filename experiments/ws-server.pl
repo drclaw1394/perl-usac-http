@@ -7,8 +7,8 @@ use EV;
 use AnyEvent;
 
 use uSAC::HTTP;
-use uSAC::HTTP::Middleware::Log qw<log_simple>;
-use uSAC::HTTP::Middleware::Websocket qw<websocket>;
+use uSAC::HTTP::Middleware::Log;
+use uSAC::HTTP::Middleware::Websocket;
 
 use Log::ger::Output "Screen";
 
@@ -22,21 +22,26 @@ my $server=uSAC::HTTP::Server->new(mode=>0);
 $server->add_listeners( "127.0.0.1:9090");
 #$server->add_host("localhost:9090");
 $server->set_mime_default;
-$server->add_middleware(log_simple);
+$server->add_middleware(uhm_log);
 
 
-$server->add_route('GET'=>"/\$"=>sub {
-	local $/=undef; state $data; $data=<DATA> unless $data;	
+$server->add_route('GET'
+  =>"/\$"
+  =>sub {
+    local $/=undef; state $data; $data=<DATA> unless $data;	
+    #TODO: bug. <> operator not working with state
+    $_[PAYLOAD]=$data;	
+    &rex_write;
+  }
+);
 
-	#TODO: bug. <> operator not working with state
-  $_[PAYLOAD]=$data;	
-	&rex_write;
-});
 
 
 
-
-$server->add_route(GET=>"/ws"=> websocket()=>sub{
+$server->add_route(GET
+  =>"/ws"
+  => uhm_websocket()
+  =>sub{
 		my ($matcher, $rex, $code, $headers, $ws)=@_;
 		say " IN usac websocket  callback: ",join ", ", @_;
 		my $timer;
@@ -67,46 +72,53 @@ $server->add_route(GET=>"/ws"=> websocket()=>sub{
 				say "GOT close";
 				undef $timer;
 			};
-
       undef;
 	}
 );
 
-$server->add_route("GET"=>"/large"=>()=>sub {
-	state $data= "x"x(4096*4096);
-  $_[PAYLOAD]=$data;
-	&rex_write;
-});
+$server->add_route("GET"
+  =>"/large"
+  =>()
+  =>sub {
+    state $data= "x"x(4096*4096);
+    $_[PAYLOAD]=$data;
+    &rex_write;
+  }
+);
 
-$server->add_route("GET"=>"/chunks"=>()=>sub {
-	state $data= "x" x (4096*4096);
-	my $size=4096*1;
-	my $offset=0;#-$size;;
-	my @g=@_;
+$server->add_route("GET"
+  =>"/chunks"
+  =>()
+  =>sub {
+    state $data= "x" x (4096*4096);
+    my $size=4096*1;
+    my $offset=0;#-$size;;
+    my @g=@_;
 
-  my @args=@_;
-	my $sub;
-  $sub=sub {
-		my $d=substr($data, $offset, $size);	#Data to send
+    my @args=@_;
+    my $sub;
+    $sub=sub {
+      my $d=substr($data, $offset, $size);	#Data to send
 
-		$offset+=$size;				#update offset
-    #rex_write @g, $data, $offset<length($data)?__SUB__:undef;
-		
-    if($offset<length($data)){
-        $args[PAYLOAD]= substr $data, $offset, $size;
-        $args[CB]=__SUB__;
-    }
-    else {
-      $args[PAYLOAD]= "";
-      $args[CB]=undef;
-      $sub=undef;
-    }
+      $offset+=$size;				#update offset
+      #rex_write @g, $data, $offset<length($data)?__SUB__:undef;
+      
+      if($offset<length($data)){
+          $args[PAYLOAD]= substr $data, $offset, $size;
+          $args[CB]=__SUB__;
+      }
+      else {
+        $args[PAYLOAD]= "";
+        $args[CB]=undef;
+        $sub=undef;
+      }
 
-    rex_write @args;
-	};
+      rex_write @args;
+    };
 
-	$sub->();
-});
+    $sub->();
+  }
+);
 
 $server->parse_cli_options(@ARGV);
 $server->run;

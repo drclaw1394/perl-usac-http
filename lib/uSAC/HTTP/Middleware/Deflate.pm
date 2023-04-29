@@ -24,16 +24,17 @@ use Log::OK;
 
 
 
-our @EXPORT_OK=qw< umw_deflate >;
+our @EXPORT_OK=qw<uhm_deflate>;
 
-our @EXPORT=();
+our @EXPORT=@EXPORT_OK;
+
 our %EXPORT_TAGS=(
 	"all"=>[@EXPORT_OK]
 );
 
 
 
-sub umw_deflate {
+sub uhm_deflate {
   my $in=sub {
     my $next=shift;
     $next;
@@ -47,11 +48,10 @@ sub umw_deflate {
     my $status;
     my $index;
     (sub {
-      #if($_[CODE]){
           Log::OK::TRACE and log_debug "Input data length: ".length  $_[PAYLOAD];
           # 0	1 	2   3	    4     5
           # usac, rex, code, headers, data, cb
-          \my $buf=\$_[PAYLOAD];
+          #\my $buf=\$_[PAYLOAD];
           #Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1)
           Log::OK::TRACE and log_debug "Context count: ".scalar keys %out_ctx;
           Log::OK::TRACE and log_debug "Compressor pool: ".scalar @deflate_pool;
@@ -67,39 +67,17 @@ sub umw_deflate {
                 or $_[HEADER]{HTTP_CONTENT_ENCODING()};
 
             Log::OK::TRACE and log_debug "Deflate: in header processing";
-            #\my @headers=$_[HEADER]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "deflate: looking for accept";
 
             $exe=1;
-            ########################################################################
-            # for my ($k,$v)(@headers){                                            #
-            #     return &$next if $k eq HTTP_CONTENT_ENCODING; #bypass is default #
-            # }                                                                    #
-            ########################################################################
-            #return &$next if exists$_[HEADER]{HTTP_CONTENT_ENCODING()};
 
             Log::OK::TRACE  and log_trace "exe ". $exe; 
             Log::OK::TRACE  and log_trace "Single shot: ". !$_[CB];
 
             $ctx=$exe;
 
-            #return &$next unless $exe; #bypass is default
-
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
-            ######################################################################################
-            # $index=@headers;                                                                   #
-            #                                                                                    #
-            # my $i=0;                                                                           #
-            #                                                                                    #
-            # for my ($k, $v)(@headers){                                                         #
-            #   $index=$i if $k eq HTTP_CONTENT_LENGTH;                                          #
-            #   $i+=2;                                                                           #
-            # }                                                                                  #
-            #                                                                                    #
-            # Log::OK::TRACE and log_debug "Content length index: $index";                       #
-            # splice(@headers, $index, 2, HTTP_CONTENT_ENCODING, "deflate");# if defined $index; #
-            ######################################################################################
 
             delete $_[HEADER]{HTTP_CONTENT_LENGTH()};
             $_[HEADER]{HTTP_CONTENT_ENCODING()}="deflate";
@@ -109,7 +87,7 @@ sub umw_deflate {
 
               Log::OK::TRACE and log_trace "single shot";
               my $scratch=""; 	#new scratch each call
-              my $status=$ctx->deflate($buf, $scratch);
+              my $status=$ctx->deflate($_[PAYLOAD], $scratch);
               $status == Z_OK or log_error "Error creating deflate context";
               $status=$ctx->flush($scratch);
               $ctx->deflateReset;
@@ -146,7 +124,7 @@ sub umw_deflate {
           # Append comppressed data to the scratch when its ready
           #
           my $scratch=""; 	#new scratch each call
-          $status=$ctx->deflate($buf, $scratch);
+          $status=$ctx->deflate($_[PAYLOAD], $scratch);
           $status == Z_OK or log_error "Error creating deflate context";
 
 
@@ -184,17 +162,11 @@ sub umw_deflate {
               $_[CB]->($_[6]);	#execute callback to force feed
             }
           }
-          #}
-        ###############################
-        # else{                       #
-        #   delete $out_ctx{$_[REX]}; #
-        #   &$next;                   #
-        #                             #
-        # }                           #
-        ###############################
       },
     )
   };
+
+
   my $error=sub {
       my $next=shift;
       sub {
@@ -202,6 +174,7 @@ sub umw_deflate {
         &$next;
       }
   };
+
   [$in, $out, $error];
 }
 

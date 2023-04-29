@@ -12,7 +12,7 @@ no warnings "experimental";
 
 use Object::Pad;
 
-use enum qw<ROUTE_CTX_SITE ROUTE_CTX_INNER_HEAD ROUTE_CTX_OUTER_HEAD ROUTE_CTX_COUNTER ROUTE_CTX_TABLE>;
+use enum qw<ROUTE_CTX_SITE ROUTE_CTX_INNER_HEAD ROUTE_CTX_OUTER_HEAD ROUTE_CTX_ERROR_HEAD ROUTE_CTX_COUNTER ROUTE_CTX_TABLE>;
 use enum ("HOST_TABLE=0", qw<HOST_TABLE_CACHE HOST_TABLE_DISPATCH ADDR REQ_QUEUE IDLE_POOL ACTIVE_COUNT>);
 
 
@@ -20,6 +20,7 @@ use Cwd qw<abs_path>;
 use File::Spec::Functions;
 use Exporter "import";
 use uSAC::HTTP::Constants;
+use uSAC::IO;
 
 use Error::Show;
 use Exception::Class::Base;
@@ -151,7 +152,6 @@ method _add_route {
   #
   \my (@inner, @outer, @error)=$self->wrap_middleware(@_);
   
-  use Data::Dumper;
   say "INNER WARE: ".join ", ", @inner;
   say "OUTER WARE: ".join ", ", @outer;
   say "ERROR WARE: ".join ", ", @error;
@@ -174,15 +174,20 @@ method _add_route {
 
 
   my $end;
-  # TODO: fix this for client support.
-  # Server has the rex_write hook at the start of outerware
-  # Client will need to hook at end of outerware?
+
+
   if($self->find_root->mode==0){
+    # 0 server
+    # Server mode uses rex_write as the end/dispatch for inner ware chain
+    # This gives an opertunity to to set some important values particular to server side
+    #
     Log::OK::TRACE and log_trace __PACKAGE__. " end is server ".join ", ", caller;
     $end= \&rex_write;
   }
   else{
-    #1 client
+    # 1 client
+    # On the client this special innerware end/dispatch triggers the request
+    # queue for more request processing
     #
     Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
     $end=sub {
@@ -194,19 +199,18 @@ method _add_route {
       }
       else {
         #No there isn't
-        say STDERR __PACKAGE__." NO CALLBACK, expecting no more data from parser";
+        #
+        say STDERR __PACKAGE__." NO CALLBACK, no more data from parser expected. Return to pool";
 
-        my $timer;
+        
+        # The route used is always associated with a host table. Use this table
+        # and attempt get the next item in the requst queue for the host
+        #
         my ($entry, $session)= ($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
-        # TODO: Remove explicit event loop timer
-        $timer=AE::timer 0,0, sub {
-          $self->_request($entry, $session);
-          $timer=undef;
-        }
+        $self->_request($entry, $session); 
+
+        #Call back to user agent?
       }
-      #
-      # The route used is always associated with a host table. Use this table
-      # and attempt to the next item in the requst queue for the host
 
     };
   }

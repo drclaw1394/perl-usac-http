@@ -22,14 +22,16 @@ use URL::Encode qw<url_decode_utf8>;
 use Cpanel::JSON::XS qw<encode_json decode_json>;
 
 our @EXPORT_OK=qw<
-urlencoded_slurp
-urlencoded_file
-multipart_slurp
-multipart_file
+  uhm_urlencoded_slurp
+  uhm_urlencoded_file
+  uhm_multipart_slurp
+  uhm_multipart_file
 >;
 
+our @EXPORT=@EXPORT_OK;
+
 #Innerware which aggrigates the streaming url encoded body content
-sub urlencoded_slurp {
+sub uhm_urlencoded_slurp {
 
   my %options=@_;
 	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
@@ -105,7 +107,7 @@ sub urlencoded_slurp {
   [$inner, $outer];
 
 }
-sub urlencoded_file {
+sub uhm_urlencoded_file {
 
   my %options=@_;
   #my $upload_dir=$options{upload_dir};
@@ -227,7 +229,7 @@ sub urlencoded_file {
 
 
 
-sub multipart_slurp {
+sub uhm_multipart_slurp {
 
   my %options=@_;
   #if a upload directory is specified, then we write the parts to file instead of memory
@@ -278,7 +280,7 @@ sub multipart_slurp {
 
   [$inner,$outer];
 }
-sub multipart_file {
+sub uhm_multipart_file {
 
   my %options=@_;
   #my $upload_dir=$options{upload_dir};

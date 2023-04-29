@@ -27,7 +27,7 @@ use constant KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
 use constant KEY_COUNT=> end_-entries_+1;
 
-our @EXPORT_OK=qw<umw_psgi>;
+our @EXPORT_OK=qw<uhm_psgi>;
 our @EXPORT=@EXPORT_OK;
 
 #This is to mimic a filehandle?
@@ -72,7 +72,7 @@ no warnings "experimental";
 no warnings "experimental";
 #Driver to interface with PSGI based applications
 #this acts as either middleware or an end point
-sub umw_psgi {
+sub uhm_psgi {
 
   #PSGI application 
   my $app=pop;

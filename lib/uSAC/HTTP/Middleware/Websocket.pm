@@ -16,7 +16,7 @@ use Encode qw<decode encode>;
 
 use Compress::Raw::Zlib;
 
-our @EXPORT_OK=qw<websocket>;
+our @EXPORT_OK=qw<uhm_websocket>;
 our @EXPORT=@EXPORT_OK;
 
 use AnyEvent;
@@ -172,7 +172,7 @@ sub websocket_client_in {
 
 
 # Maker for innerware
-sub  websocket {
+sub  uhm_websocket {
     [&websocket_in, &websocket_out];
 
 }

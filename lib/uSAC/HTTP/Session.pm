@@ -79,7 +79,7 @@ method init {
     $_read_stack[-1](); $_closeme=1; $_dropper->(1)
   };
 
-  $_sr=uSAC::IO::SReader->create(
+  $_sr=uSAC::IO::SReader::create(
     fh=>$_fh,
     max_read_size=>$_read_size//MAX_READ_SIZE,
     on_eof =>$s,
@@ -163,20 +163,13 @@ method init {
 
   };
 
-  $_sw=uSAC::IO::SWriter->create(
+  $_sw=uSAC::IO::SWriter::create(
     fh=>$_fh,
     on_error=>$_dropper,
     time=>\$_time,
     clock=>\$Time,
     syswrite=>\&IO::FD::syswrite
   );
-  #$_sw->timing(\$_time, \$Time);
-
-  ##############################################
-  # $_sw=uSAC::IO::SWriter->create( fh=>$_fh); #
-  # $_sw->on_error=$_dropper;                  #
-  # $_sw->timing(\$_time, \$Time);             #
-  ##############################################
 
   $_write=$_sw->writer;
 

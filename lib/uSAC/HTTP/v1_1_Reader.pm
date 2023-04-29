@@ -302,7 +302,6 @@ sub make_parser{
 
 
 
-          #$tmp=$h{CONNECTION}//"";
           $version eq "HTTP/1.0"
           ? ($closeme=($connection!~ /keep-alive/ai))
           : ($closeme=($connection and $connection=~ /close/ai));
@@ -312,17 +311,25 @@ sub make_parser{
           Log::OK::DEBUG and log_debug "URI/Code: $uri";
           Log::OK::DEBUG and log_debug "verison/description: $version";
 
-          #Find route
-          #unless($rex){
+          # Find route
+          
           unless($mode){
-            ($route, $captures)=$cb->($host, "$method $uri");
+
+            # In server mode, the route need needs to be matched for incomming
+            # processing and a rex needs to be created
             #
+            ($route, $captures)=$cb->($host, "$method $uri");
             $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex, $captures);
+
           }
           else {
+            # In client mode the route (and the rex) is already defined.
+            # However the headers from incomming request and the response code
+            # need updating. 
+            #
             $rex->[uSAC::HTTP::Rex::headers_]=\%h;
-            $code=$uri;
-            # Assume session has rex already defined (ie client side)
+            $code=$uri; # NOTE: variable is called $uri, but doubles as code in client mode
+
           }
 
           #Before calling the dispatch, setup the parser to process further data.

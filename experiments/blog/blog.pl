@@ -10,15 +10,32 @@ use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
 
-use uSAC::HTTP::Middleware::Log qw<log_simple>;
-use uSAC::HTTP::Middleware::Deflate qw<umw_deflate>;
-use uSAC::HTTP::Middleware::Gzip qw<umw_gzip>;
-use uSAC::HTTP::Middleware::AccumulateContent qw<
-urlencoded_slurp urlencoded_file multipart_slurp multipart_file>;
+use uSAC::HTTP::Middleware::Static;
+use uSAC::HTTP::Middleware::Log;# qw<log_simple>;
+use uSAC::HTTP::Middleware::Deflate;
+use uSAC::HTTP::Middleware::Gzip;
+use uSAC::HTTP::Middleware::AccumulateContent;
 
 use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
+
+
 use Socket;
+
+#############################################
+# use modules                               #
+#     Static=>undef,  #import with defaults #
+#     Static=>[],     #import nothing       #
+#     Static=>[qw< a b c>]                  #
+# );                                        #
+# use modules "uSAC::HTTP::Middleware" => [ #
+#     Static=>undef,  #import with defaults #
+#     Static=>[],     #import nothing       #
+#     Static=>[qw< a b c>]                  #
+# ]                                         #
+#                                           #
+# modules::require                          #
+#############################################
 
 use Net::ARP;
 
@@ -32,16 +49,16 @@ use Data::Dumper;
 
 my $server; $server=usac_server {
   usac_workers 4;
-        usac_listen {
-                        address=>"::",
-                        interface=>["en"],
-                        port=>[8084],
-                        family=>[AF_INET6],
-                        type=>SOCK_STREAM,
-                        data=> {
-                                hosts=>"dfs"
-                        }
-                };
+  usac_listen {
+    address=>"::",
+    interface=>["en"],
+    port=>[8084],
+    family=>[AF_INET6],
+    type=>SOCK_STREAM,
+    data=> {
+            hosts=>"dfs"
+    }
+  };
 
 
 	
@@ -79,22 +96,22 @@ my $server; $server=usac_server {
       };
 
 		usac_route '/static/hot.txt'
-      => umw_gzip()
-      => umw_deflate()
-      => umw_static_file headers=>{unkown=>"A"}, usac_path root=>usac_dirname, "static/hot.txt";
+      => uhm_gzip()
+      => uhm_deflate()
+      => uhm_static_file headers=>{unkown=>"A"}, usac_path root=>usac_dirname, "static/hot.txt";
 
     usac_route "/die"
       => sub {
       #return unless $_[CODE];
-        say "a;lskjas;ldkjfa;lskjdf;lasjdf;lakjsdf;lakjsdf;lkajsdf;lkjasdfasf";
+      #say "a;lskjas;ldkjfa;lskjdf;lasjdf;lakjsdf;lakjsdf;lkajsdf;lkjasdfasf";
         my $a=10/0;
         use Exception::Class::Base;
         Exception::Class::Base->throw("Did not want to live");
       };  
 
     usac_route "/no_write"
-      => umw_gzip()
-      => umw_deflate()
+      => uhm_gzip()
+      => uhm_deflate()
       => sub {
         $_[PAYLOAD]="no write indeed";
       };
@@ -105,7 +122,7 @@ my $server; $server=usac_server {
       };
 
     usac_route '/statictest$'
-      => umw_static_content "This is some data";
+      => uhm_static_content "This is some data";
 
                 ##################################################################################################################
                 # usac_route "/test/$Comp/$Comp" => sub {                                                                        #
@@ -127,9 +144,10 @@ my $server; $server=usac_server {
                 # #                                                                                                            # #
                 # # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; # #
                 # #                                                                                                            # #
-                usac_route "/static"=>
-                umw_gzip()=>umw_deflate()=>
-                umw_static_root (
+                usac_route "/static"
+                  => uhm_gzip()
+                  =>uhm_deflate()
+                  => uhm_static_root (
                         #filter=>'txt$',
                         read_size=>4096*16,
                         pre_encoded=>{gzip=>".gz"},
@@ -170,10 +188,10 @@ my $server; $server=usac_server {
 
     usac_route POST
       => "/slurp_url_upload"
-      => urlencoded_slurp()
+      => uhm_urlencoded_slurp()
       => sub {
-      #return &rex_write unless $_[CODE];
-      #NOTE: This is only called when all the data is uploaded
+        #return &rex_write unless $_[CODE];
+        #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
         &rex_write;
@@ -181,7 +199,7 @@ my $server; $server=usac_server {
 
     usac_route POST
       => "/file_url_upload"
-      => urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
+      => uhm_urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
       => sub {
       #return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
@@ -192,7 +210,7 @@ my $server; $server=usac_server {
 
     usac_route POST
       => "/slurp_multi_upload"
-      => multipart_slurp()
+      => uhm_multipart_slurp()
       => sub {
       #return &rex_write unless $_[CODE];
         
@@ -208,7 +226,7 @@ my $server; $server=usac_server {
 
     usac_route POST
       => "/file_multi_upload"
-      => multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
+      => uhm_multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
       => sub {
       #return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded

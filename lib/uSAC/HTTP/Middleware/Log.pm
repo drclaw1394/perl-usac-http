@@ -18,20 +18,15 @@ use Time::HiRes qw<time>;
 use Log::ger;
 use Log::OK;
 
-our @EXPORT_OK=qw<
-	log_simple
-	authenticate_simple
-	state_simple
->;
-our @EXPORT=();
-our %EXPORT_TAGS=(
-	"all"=>[@EXPORT_OK]
-);
+our @EXPORT_OK=qw< uhm_log >;
+
+our @EXPORT=@EXPORT_OK;
+our %EXPORT_TAGS=();
 
 # ===========
 # Log Simple - Log basic stats to STDERR
 #
-sub log_simple {
+sub uhm_log {
 	[&log_simple_in, &log_simple_out, uSAC::HTTP::Middleware::bypass]
 }
 

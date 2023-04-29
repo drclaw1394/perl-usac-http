@@ -12,8 +12,8 @@ use Log::ger;
 use Log::OK;
 use JSON;
 use File::Basename qw<basename dirname>;
-use AnyEvent;
 use IO::FD;
+use uSAC::IO;
 
 #use uSAC::HTTP ":constants";
 use uSAC::HTTP::Code qw<:constants>;
@@ -25,9 +25,9 @@ use uSAC::HTTP::Constants;
 use Errno qw<EAGAIN EINTR EBUSY>;
 use Exporter 'import';
 our @EXPORT_OK =(
-  "umw_static_root",     
-  "umw_static_file", # Preload (cache) a file in memory
-  "umw_static_content", # d
+  "uhm_static_root",     
+  "uhm_static_file", # Preload (cache) a file in memory
+  "uhm_static_content", # d
 );
 our @EXPORT=@EXPORT_OK;
 
@@ -556,7 +556,7 @@ sub _make_list_dir {
 
 #Specifies the url prefix (and or regex) to match
 #The prefix is removed and
-sub umw_static_root {
+sub uhm_static_root {
   #create a new static file object
   #my $parent=$_;
   my $html_root=pop;
@@ -626,7 +626,9 @@ sub umw_static_root {
 
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
-  state $timer=AE::timer 0, 10, $fmc->sweeper;
+  my $sweeper=$fmc->sweeper;
+  #state $timer=AE::timer 0, 10, $fmc->sweeper;
+  state $timer=uSAC::IO::timer 0, 10, $sweeper;
   $html_root=$static->[html_root_];
   my $list_dir=$static->_make_list_dir(%options);
 
@@ -814,7 +816,7 @@ sub umw_static_root {
 #*usac_static_under=\*usac_file_under;
 
 
-sub umw_static_file {
+sub uhm_static_file {
 	my $path=pop;
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
@@ -856,14 +858,14 @@ sub umw_static_file {
 		close $fh;
 
 		#Create a static content endpoint
-		umw_static_content(%options, $entry->[0]);
+		uhm_static_content(%options, $entry->[0]);
 	}
 	else {
 		log_error "Could not add hot path: $path";
 	}
 }
 
-sub umw_static_content {
+sub uhm_static_content {
 	my $static=pop;	#Content is the last item
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
