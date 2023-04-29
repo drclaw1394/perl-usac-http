@@ -555,10 +555,10 @@ sub make_parser{
 
         }
         elsif($state==STATE_ERROR){
-          say  "______ERROR STATE IN PARSER";
+          #say  "______ERROR STATE IN PARSER";
           $body_len=0;
-          $closeme=1;
-          $dropper->();
+          #$closeme=1;
+          #$dropper->();
           last;
         }
         else {

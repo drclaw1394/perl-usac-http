@@ -1039,7 +1039,8 @@ method parse_cli_options {
   #Attempt to parse the CLI options
   require Getopt::Long;
   my %options;
-  Getopt::Long::GetOptionsFromArray(\@options,\%options,
+
+  Getopt::Long::GetOptionsFromArray(\@options, \%options,
     "workers=i",
     "listener=s@",
     "show:s@",
@@ -1047,7 +1048,7 @@ method parse_cli_options {
     
   ) or die "Invalid arguments";
 
-  for my($key,$value)(%options){
+  for my($key, $value)(%options){
     if($key eq "workers"){
       $self->workers=$value<0?undef:$value;
     }
@@ -1098,7 +1099,9 @@ method do_stream_connect {
     
   }
   else {
+
     $id=uSAC::IO::connect($socket, $host, $port, $on_connect, $on_error);
+
   }
   $id;
 }
@@ -1121,7 +1124,7 @@ method request {
   $payload//="";
   my $version;
   my $ex;
-  my $id;
+  my $request_id;
   my $fh;
   my $scheme;
   my $peers;
@@ -1140,7 +1143,7 @@ method request {
   #
   
   # Push to queue
-  my $details=[$host, $method, $uri, $header, $payload, $cb];
+  my $details=[$host, $method, $uri, $header, $payload, $cb, $request_id];
 
   my $prev_queue_size=$entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
 
@@ -1149,52 +1152,52 @@ method request {
   # Check the number of items outstnding in the queue vs how many connections we have
   #
   say "CURRENT ACTIVE COUNT IS: $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]";
-  my $limit =1;
+  my $limit =10;
   if( 
     ($limit<=0 or $entry->[uSAC::HTTP::Site::ACTIVE_COUNT] < $limit)  # Check limit
 
     ){
 
-    $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+      $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
 
-    #Create another connection so long as it is doesn't exceed the limit
-    $self->do_stream_connect($__host, $port, sub {
-        my ($socket, $addr)=@_;
-        $entry->[uSAC::HTTP::Site::ADDR]=$addr;
-        # Create a session here
-        #
-        my $scheme="http";
-        Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";
-        my $session=uSAC::HTTP::Session->new;
-        $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);
+      #Create another connection so long as it is doesn't exceed the limit
+      $self->do_stream_connect($__host, $port, sub {
+          my ($socket, $addr)=@_;
+          $entry->[uSAC::HTTP::Site::ADDR]=$addr;
+          # Create a session here
+          #
+          my $scheme="http";
+          Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";
+          my $session=uSAC::HTTP::Session->new;
+          $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);
 
-        unless($_application_parser){
-          require uSAC::HTTP::v1_1_Reader;
-          $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
-        }
-        say "APPLICATION PARSER: ".$_application_parser;
-        $session->push_reader($_application_parser->(session=>$session, mode=>1, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
-      $_sessions->{ $session_id } = $session;
+          unless($_application_parser){
+            require uSAC::HTTP::v1_1_Reader;
+            $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
+          }
+          say "APPLICATION PARSER: ".$_application_parser;
+          $session->push_reader($_application_parser->(session=>$session, mode=>1, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
+        $_sessions->{ $session_id } = $session;
 
-      $session_id++;
-      #if($prev_queue_size == 0){
-        #we need to kick up the first request
+        $session_id++;
+        #if($prev_queue_size == 0){
+          #we need to kick up the first request
         $self->_request($entry, $session);
-        #}
+          #}
 
-    },
+      },
 
-    sub {
-      # connection error
-      #
-      $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-      say "error callback for stream connect: $_[1]";
-      IO::FD::close $_[0]; # Close the socket
-      
-      #say $_[1];
-      #say Error::Show::context frames=>Devel::StackTrace->new();
+      sub {
+        # connection error
+        #
+        $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+        say "error callback for stream connect: $_[1]";
+        IO::FD::close $_[0]; # Close the socket
+        
+        #say $_[1];
+        #say Error::Show::context frames=>Devel::StackTrace->new();
 
-    }
+      }
     )
   }
   else{
@@ -1221,62 +1224,61 @@ method _request {
   my $peers;
   my $i;
   
-
-  $details//=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
-  unless($details){
-    # No more work to do so add the session to the idle pool
-    Log::OK::INFO and log_info "No futher requests to process. Return to idle pool";
-    push $table->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
-    $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-    return;
-  }
-  else {
-    #TODO Adjust active count
-  }
-
-  my $host=$details->[0];
-  my $method=$details->[1];
-  my $uri=$details->[2];
-  my $header=$details->[3];
-  my $payload=$details->[4];
-  my $cb=$details->[5];
-
-  # At this point there should be at least one available session in the pool for the host
-
-  #say "Idle pool is: ".Dumper $table->[IDLE_POOL];
-  #my $session=pop $table->[uSAC::HTTP::Site::IDLE_POOL]->@*;
-  #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
-
-  # Do a route lookup
-  #
-  #say Dumper $details;
-  my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
-
-  die "No route found for $host" unless $route;
-
-
-  #  Obtain session or create new. Update with the filehandle
-  my %h=();#%$_static_headers;   #Copy static headers
-
-
-
-  # Create the REX object
-  #
-  $ex=$session->exports;
-  $version="HTTP/1.1"; # TODO: FIX
-  my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $uri, $ex, $captures);
-
-
-  # Set the current rex and route for the session.
-  # This is needed for the parser in client mode. It makes the route known
-  # ahead of time.
-  $ex->[3]->$*=$rex;
-  $ex->[7]->$*=$route;
-
-
-  #Call the head of the outerware function
-  #
   uSAC::IO::asap {
+    $details//=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
+    unless($details){
+      # No more work to do so add the session to the idle pool
+      Log::OK::INFO and log_info "No futher requests to process. Return to idle pool";
+      push $table->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
+      $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+      return;
+    }
+    else {
+      #TODO Adjust active count
+    }
+
+    my $host=$details->[0];
+    my $method=$details->[1];
+    my $uri=$details->[2];
+    my $header=$details->[3];
+    my $payload=$details->[4];
+    my $cb=$details->[5];
+
+    # At this point there should be at least one available session in the pool for the host
+
+    #say "Idle pool is: ".Dumper $table->[IDLE_POOL];
+    #my $session=pop $table->[uSAC::HTTP::Site::IDLE_POOL]->@*;
+    #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+
+    # Do a route lookup
+    #
+    #say Dumper $details;
+    my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
+
+    die "No route found for $host" unless $route;
+
+
+    #  Obtain session or create new. Update with the filehandle
+    my %h=();#%$_static_headers;   #Copy static headers
+
+
+
+    # Create the REX object
+    #
+    $ex=$session->exports;
+    $version="HTTP/1.1"; # TODO: FIX
+    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $uri, $ex, $captures);
+
+
+    # Set the current rex and route for the session.
+    # This is needed for the parser in client mode. It makes the route known
+    # ahead of time.
+    $ex->[3]->$*=$rex;
+    $ex->[7]->$*=$route;
+
+
+    # Call the head of the outerware function
+    #
     $route->[1][2]($route, $rex, my $code=-1, $header, $payload, $cb);
   };
 }

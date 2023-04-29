@@ -202,7 +202,7 @@ method _add_route {
         # and attempt get the next item in the requst queue for the host
         #
         my ($entry, $session)= ($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
-        $self->_request($entry, $session); 
+        $self->_request($entry, $session);
 
         #Call back to user agent?
       }
@@ -666,7 +666,6 @@ method add_route {
     }
     elsif($_[0]=~m|^/|){
       #starting with a slash, short cut for GET and head
-      Log::OK::WARN and log_warn "No method supplied.  Assuming ".$self->default_method;
       unshift @_, $self->default_method;
       $result=$self->_add_route(@_);
     }
