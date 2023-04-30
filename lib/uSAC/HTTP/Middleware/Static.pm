@@ -624,7 +624,6 @@ sub uhm_static_root {
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
   my $static=uSAC::HTTP::Middleware::Static->new(html_root=>$html_root, %options);
-  #my $fmc=uSAC::HTTP::FileMetaCache->new(mime_table=>$options{mime}, default_mime=>$options{default_mime});
 
   # We want to use pread from IO::FD. That means we don't need the filehandle
   my $fmc=File::Meta::Cache->new(no_fh=>1);
@@ -646,7 +645,7 @@ sub uhm_static_root {
     sub {
       # Stack reset
       #return &$next unless($_[CODE]);
-
+      say "IN STATIC, payload: $_[PAYLOAD]";;
 
       if($_[HEADER]){
 
@@ -816,7 +815,8 @@ sub uhm_static_root {
     my $next=shift;
   };
 
-  [$inner, $outer];
+  #[$inner, $outer];
+  [$outer, $inner];
 }
 #*usac_static_under=\*usac_file_under;
 

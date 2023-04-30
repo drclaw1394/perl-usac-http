@@ -17,6 +17,7 @@ use Carp qw<carp>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use HTTP::State qw<:constants :encode :decode>;
+use uSAC::HTTP::Route;
 
 use uSAC::HTTP::Constants;
 use IO::FD;
@@ -422,7 +423,7 @@ sub rex_redirect_internal {
       join(" ", $rex->@[method_, uri_raw_]),#New method and url
     );
     
-    $route->[1][1]($route, $rex, $code, $header,my $a="",my $b=undef);
+    $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $header,my $a="",my $b=undef);
   #};
 }
 
@@ -640,8 +641,12 @@ sub parse_query_params_old {
 sub umw_dead_horse_stripper {
   my ($package, $prefix)=@_;
 	my $len=length $prefix;
-	sub {
+	my $inner=sub {
 		my $inner_next=shift;
+    my $index=shift;
+    my %options=@_;
+    say join ", ", %options;
+    sleep 1;
 		sub {
       return &$inner_next unless $_[CODE];
 
@@ -674,7 +679,36 @@ sub umw_dead_horse_stripper {
       undef;
     },
 
-	}
+	};
+  my $outer=sub {
+    my ($next ,$index, %options)=@_;
+    sub {
+      say "OUTER DEAD HORSE";
+      sleep 1;
+      &$next;
+    }
+  };
+
+  my $error=sub {
+    my ($next ,$index, %options)=@_;
+    my $site=$options{site};
+    if($site->mode==0){
+      sub {
+        say "error DEAD HORSE";
+        sleep 1;
+        &$next;
+      }
+    }
+    else {
+      sub {
+        say "CLIENT error dead horse";
+        sleep 1;
+        &$next;
+      }
+    }
+  };
+
+  [$inner, $outer, $error];
 
 }
 

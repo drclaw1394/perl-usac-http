@@ -12,8 +12,38 @@ no warnings "experimental";
 
 use Object::Pad;
 
-use enum qw<ROUTE_CTX_SITE ROUTE_CTX_INNER_HEAD ROUTE_CTX_OUTER_HEAD ROUTE_CTX_ERROR_HEAD ROUTE_CTX_COUNTER ROUTE_CTX_TABLE>;
-use enum ("HOST_TABLE=0", qw<HOST_TABLE_CACHE HOST_TABLE_DISPATCH ADDR REQ_QUEUE IDLE_POOL ACTIVE_COUNT>);
+# Fields for a route structure
+# Site is the site object
+# inner/outer/error head are the middleware heads
+# counter is hit counter
+# table is the host table associated with the route
+#
+use uSAC::HTTP::Route;
+##########################
+# use enum qw<           #
+#   ROUTE_CTX_SITE       #
+#   ROUTE_CTX_INNER_HEAD #
+#   ROUTE_CTX_OUTER_HEAD #
+#   ROUTE_CTX_ERROR_HEAD #
+#   ROUTE_CTX_COUNTER    #
+#   ROUTE_CTX_TABLE      #
+#   >;                   #
+##########################
+
+# Fields for a host structure. contains the lookup table (hustle::Table), the cache for the table, the dispatcher for the table.
+#
+# Also  for client side has the serialised address, quest queue, idle pool and active count
+#
+use enum (
+  "HOST_TABLE=0",
+  qw<
+    HOST_TABLE_CACHE 
+    HOST_TABLE_DISPATCH 
+    ADDR
+    REQ_QUEUE 
+    IDLE_POOL
+    ACTIVE_COUNT
+  >);
 
 
 use Cwd qw<abs_path>;
@@ -146,6 +176,7 @@ method _add_route {
 
 
 
+  unshift @_, uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
   # Fix up and break out middleware
   #
   \my (@inner, @outer, @error)=$self->wrap_middleware(@_);
@@ -162,7 +193,7 @@ method _add_route {
   unshift @outer, $self->construct_outerware;
   @outer=reverse @outer;
 
-  unshift @inner , uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
+  #unshift @inner , uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
 
 
   unshift @error, $self->construct_errorware;
@@ -201,7 +232,7 @@ method _add_route {
         # The route used is always associated with a host table. Use this table
         # and attempt get the next item in the requst queue for the host
         #
-        my ($entry, $session)= ($_[ROUTE][1][ROUTE_CTX_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+        my ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
         $self->_request($entry, $session);
 
         #Call back to user agent?
@@ -224,7 +255,7 @@ method _add_route {
   my $outer_head;
   if(@outer){
     my $middler=Sub::Middler->new();
-    $middler->register($_) for(@outer);
+    say "outer: $_" and $middler->register($_) for(@outer);
 
     $outer_head=$middler->link($serialize, site=>$self); #TODO: Pass in the site or the route as a
                                             # Configuration option

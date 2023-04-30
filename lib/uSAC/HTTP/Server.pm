@@ -12,6 +12,7 @@ use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to
 use IO::FD;
 use uSAC::IO;
 use uSAC::IO::Acceptor;
+use uSAC::HTTP::Route;
 use Error::Show;
 
 use constant::more {
@@ -497,35 +498,6 @@ method add_host_end_point{
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
-#registers a site object with the server
-#returns the object
-################################
-# method register_site {       #
-#         my $site=shift;      #
-#         $site->server=$self; #
-#   #my $name=$site->id;       #
-#   #$_sites->{$name}=$site;   #
-#         $site;               #
-# }                            #
-################################
-
-########################################################
-# #returns the default site                            #
-# method default_site {                                #
-#   #my $self=shift;                                   #
-#         $_sites->{default};                          #
-# }                                                    #
-#                                                      #
-# #returns the site registered with the specified name #
-# #Returns default if not specififed                   #
-# method site {                                        #
-#   #my $self=shift;                                   #
-#         my $name=shift;                              #
-#         $_sites->{$name//"default"}                  #
-# }                                                    #
-#                                                      #
-########################################################
-
 method rebuild_dispatch {
   #my $self=shift;
 
@@ -563,18 +535,6 @@ method rebuild_dispatch {
     #exit;
   }
 
-  # Build the look up table of Hustle::Table and its associated caching hash 
-  #
-  ##########################################################################################################
-  # my %lookup=map {                                                                                       #
-  #     $_, [                                                                                              #
-  #     #table                                                                                             #
-  #     $_host_tables->{$_}[HOST_TABLE]->prepare_dispatcher(cache=>$_host_tables->{$_}[HOST_TABLE_CACHE]), #
-  #     #cache for table                                                                                   #
-  #     $_host_tables->{$_}[HOST_TABLE_CACHE]                                                              #
-  #     ]                                                                                                  #
-  #   } keys $_host_tables->%*;                                                                            #
-  ##########################################################################################################
 
     # prepare dispatcher 
     for(values $_host_tables->%*){
@@ -603,7 +563,7 @@ method rebuild_dispatch {
       (my $route, my $captures)=$any_host->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("");
       $_cb=sub {
         #Always return the default out of the any_host table
-        $route->[1][4]++;	
+        $route->[1][ROUTE_COUNTER]++;	
         ($route, $captures);
       };
       Log::OK::WARN and log_warn "Single end point enabled";
@@ -647,16 +607,8 @@ method rebuild_dispatch {
     #
     # Increment the counter on the route
     #
-    $route->[1][4]++;	
+    $route->[1][ROUTE_COUNTER]++;	
 
-    #
-    # NOTE: MAIN ENTRY TO  PROCESSING CHAIN / MIDDLEWARE
-    # The linked innerware, the route handler and outerware are
-    # triggered from here
-    # Default Result code is HTTP_OK and a new set of empty headers which
-    #
-    #$route->[1][1]($route, $rex, my $code=$rcode//HTTP_OK, $rheaders//[],$data//="",$cb);
-    #
 
     # TODO: Better Routing Cache management.
     # if the is_default flag is set, this is an unkown match.
@@ -1120,6 +1072,7 @@ method request {
   # Queue a request in host pool and trigger if queue is inactive
   #
   my($host, $method, $uri, $header, $payload, $cb)=@_;
+
   $header//={};
   $payload//="";
   my $version;
@@ -1143,7 +1096,7 @@ method request {
   #
   
   # Push to queue
-  my $details=[$host, $method, $uri, $header, $payload, $cb, $request_id];
+  my $details=[$host, $method, $uri, $header, $payload, $cb, $request_id++];
 
   my $prev_queue_size=$entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
 
@@ -1193,6 +1146,11 @@ method request {
         $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
         say "error callback for stream connect: $_[1]";
         IO::FD::close $_[0]; # Close the socket
+        my($route, $captures)=$entry->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
+
+        die "No route found for $host" unless $route;
+
+        $route->[1][ROUTE_ERROR_HEAD]->();
         
         #say $_[1];
         #say Error::Show::context frames=>Devel::StackTrace->new();
@@ -1205,7 +1163,10 @@ method request {
     Log::OK::TRACE and log_trace __PACKAGE__. " request queued but waiting for in flight to finish";
   }
 
+  $request_id;
+
 }
+
 
 method _request {
   Log::OK::TRACE and log_trace __PACKAGE__." _request";
@@ -1244,6 +1205,7 @@ method _request {
     my $payload=$details->[4];
     my $cb=$details->[5];
 
+    say "PAYLOAD FOR REQUEST: $payload";
     # At this point there should be at least one available session in the pool for the host
 
     #say "Idle pool is: ".Dumper $table->[IDLE_POOL];
@@ -1257,29 +1219,28 @@ method _request {
 
     die "No route found for $host" unless $route;
 
-
-    #  Obtain session or create new. Update with the filehandle
-    my %h=();#%$_static_headers;   #Copy static headers
-
+      #  Obtain session or create new. Update with the filehandle
+      my %h=();#%$_static_headers;   #Copy static headers
 
 
-    # Create the REX object
-    #
-    $ex=$session->exports;
-    $version="HTTP/1.1"; # TODO: FIX
-    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $uri, $ex, $captures);
+
+      # Create the REX object
+      #
+      $ex=$session->exports;
+      $version="HTTP/1.1"; # TODO: FIX
+      my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $uri, $ex, $captures);
 
 
-    # Set the current rex and route for the session.
-    # This is needed for the parser in client mode. It makes the route known
-    # ahead of time.
-    $ex->[3]->$*=$rex;
-    $ex->[7]->$*=$route;
+      # Set the current rex and route for the session.
+      # This is needed for the parser in client mode. It makes the route known
+      # ahead of time.
+      $ex->[3]->$*=$rex;
+      $ex->[7]->$*=$route;
 
 
-    # Call the head of the outerware function
-    #
-    $route->[1][2]($route, $rex, my $code=-1, $header, $payload, $cb);
+      # Call the head of the outerware function
+      #
+      $route->[1][ROUTE_OUTER_HEAD]($route, $rex, my $code=-1, $header, $payload, $cb);
   };
 }
 

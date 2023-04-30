@@ -13,7 +13,10 @@ use Exporter 'import';
 use Encode qw<find_encoding decode encode decode_utf8>;
 use URL::Encode::XS;
 use URL::Encode qw<url_decode_utf8>;
-use uSAC::HTTP::Constants;
+
+use uSAC::HTTP::Constants;# For message strucutre
+use uSAC::HTTP::Route;    # For routing structure
+
 our @EXPORT_OK=qw<
 		parse_form
 		MODE_SERVER
@@ -133,7 +136,7 @@ sub make_parser{
         # 2=> outer_head
         # 3=> error_head/ reset
         #
-        $route and $route->[1][3]($route, $rex);#, $code, $out_header, undef, undef);
+        $route and $route->[1][ROUTE_ERROR_HEAD]($route, $rex);#, $code, $out_header, undef, undef);
         $processed=0;
         return;
       }
@@ -343,7 +346,7 @@ sub make_parser{
             #No body
             $state=$start_state;
             $payload="";
-            $route and $route->[1][1]($route, $rex, $code, $out_header, $payload, my $cb=undef);
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, $payload, my $cb=undef);
             #$out_header=[];
             $out_header={};
           }
@@ -406,7 +409,7 @@ sub make_parser{
             $state=$start_state;
             $processed=0;
             $_[PAYLOAD]="";#substr $buf, 0, $new, "";
-            $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], my $cb=undef);
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $payload], my $cb=undef);
             $form_headers={}; #Create new part header
             #$out_header=[];   #Create new out header
             $out_header={};
@@ -416,7 +419,7 @@ sub make_parser{
             # 
             # Not last send
             #
-            $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $payload], $dummy_cb);
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $payload], $dummy_cb);
             $body_len-=$new;
 
             #First pass always sets the header to undef for subsequent middleware
@@ -459,7 +462,7 @@ sub make_parser{
                   $multi_state=0;
                   $state=$start_state;
                   my $data=substr($buf, 0, $len);
-                  $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], my $cb=undef);
+                  $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $data], my $cb=undef);
                   #$out_header=[];
                   $out_header={};
 
@@ -468,7 +471,7 @@ sub make_parser{
                 elsif(substr($buf, $offset, 2) eq CRLF){
                   #not last, regular part
                   my $data=substr($buf, 0, $len);
-                  $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb) unless $first;
+                  $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb) unless $first;
                   $first=0;
                   #move past data and boundary
                   $buf=substr $buf, $offset+2;
@@ -488,7 +491,7 @@ sub make_parser{
                 # Full boundary not found, send partial, upto boundary length
                 my $len=length($buf)-$b_len;		#don't send boundary
                 my $data=substr($buf, 0, $len);
-                $route and $route->[1][1]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb);
+                $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb);
                 $buf=substr $buf, $len;
                 #wait for next read now
                 return;
@@ -714,7 +717,7 @@ sub make_serialize{
       #
       $_[CODE]=HTTP_OK if $_[CODE]<0;
 
-
+      say "CODE: $_[CODE]";
       my $reply="";
       if($mode == MODE_SERVER){
         # serialize in server mode is a response
@@ -723,7 +726,8 @@ sub make_serialize{
       else {
         # serialize in client mode is a request
         $reply="$_[REX][uSAC::HTTP::Rex::method_] $_[REX][uSAC::HTTP::Rex::uri_raw_] $protocol".CRLF;
-        #$reply=$protocol." ".$_[CODE]." ". $code_to_name->[$_[CODE]]. CRLF;
+        # TODO: check CODE. If an error then don't serialize. call the error head
+        return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]};
       }
 
       # Render headers
@@ -788,8 +792,10 @@ sub make_error {
   # Call the error/reset for the rout
   #
   sub {
-    delete $out_ctx{$_[REX]};
-    return $_[REX][uSAC::HTTP::Rex::write_]() 
+    if(@_){
+      delete $out_ctx{$_[REX]};
+      return $_[REX][uSAC::HTTP::Rex::write_]() 
+    }
   }
 }
 
