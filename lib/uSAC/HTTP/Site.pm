@@ -279,7 +279,44 @@ method _add_route {
     $inner_head=$end;
   }
 
-  my $err=uSAC::HTTP::v1_1_Reader::make_error;
+  my $err;
+
+  if($self->find_root->mode==0){
+    # sub to reset write stack
+    #
+    $err=uSAC::HTTP::v1_1_Reader::make_error;
+  }
+  else {
+    
+    my $_err=uSAC::HTTP::v1_1_Reader::make_error;
+    $err=sub {
+
+            
+          say "ERROR DISPATCH";
+            # The route used is always associated with a host table. Use this table
+            # and attempt get the next item in the requst queue for the host
+            #
+
+          my $entry;
+          my $session;
+            # If no rex is present, this is connection error...
+            
+            unless($_[REX]){
+
+              $entry=$_[ROUTE][1][ROUTE_TABLE];
+              #$_[REX][uSAC::HTTP::Rex::session_]);
+              
+            }
+            else {
+              ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+            }
+            $_err->();
+            $self->_request($entry, $session);
+
+            #Call back to user agent?
+    }
+  }
+
   my $error_head;
   if(@error){
     my $middler=Sub::Middler->new();

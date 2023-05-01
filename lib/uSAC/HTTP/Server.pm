@@ -1098,7 +1098,6 @@ method request {
   # Push to queue
   my $details=[$host, $method, $uri, $header, $payload, $cb, $request_id++];
 
-  my $prev_queue_size=$entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
 
   push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;
 
@@ -1121,6 +1120,7 @@ method request {
           #
           my $scheme="http";
           Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";
+
           my $session=uSAC::HTTP::Session->new;
           $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);
 
@@ -1128,15 +1128,14 @@ method request {
             require uSAC::HTTP::v1_1_Reader;
             $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
           }
+
           say "APPLICATION PARSER: ".$_application_parser;
+
           $session->push_reader($_application_parser->(session=>$session, mode=>1, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
         $_sessions->{ $session_id } = $session;
 
         $session_id++;
-        #if($prev_queue_size == 0){
-          #we need to kick up the first request
         $self->_request($entry, $session);
-          #}
 
       },
 
@@ -1150,7 +1149,7 @@ method request {
 
         die "No route found for $host" unless $route;
 
-        $route->[1][ROUTE_ERROR_HEAD]->();
+        $route->[1][ROUTE_ERROR_HEAD]->($route);
         
         #say $_[1];
         #say Error::Show::context frames=>Devel::StackTrace->new();
@@ -1167,7 +1166,7 @@ method request {
 
 }
 
-
+# process the queue for a host table
 method _request {
   Log::OK::TRACE and log_trace __PACKAGE__." _request";
   # From the given host table and sesssion attmempt to execute the request stored in $details
@@ -1219,28 +1218,28 @@ method _request {
 
     die "No route found for $host" unless $route;
 
-      #  Obtain session or create new. Update with the filehandle
-      my %h=();#%$_static_headers;   #Copy static headers
+    #  Obtain session or create new. Update with the filehandle
+    my %h=();#%$_static_headers;   #Copy static headers
 
 
 
-      # Create the REX object
-      #
-      $ex=$session->exports;
-      $version="HTTP/1.1"; # TODO: FIX
-      my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $uri, $ex, $captures);
+    # Create the REX object
+    #
+    $ex=$session->exports;
+    $version="HTTP/1.1"; # TODO: FIX
+    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $uri, $ex, $captures);
 
 
-      # Set the current rex and route for the session.
-      # This is needed for the parser in client mode. It makes the route known
-      # ahead of time.
-      $ex->[3]->$*=$rex;
-      $ex->[7]->$*=$route;
+    # Set the current rex and route for the session.
+    # This is needed for the parser in client mode. It makes the route known
+    # ahead of time.
+    $ex->[3]->$*=$rex;
+    $ex->[7]->$*=$route;
 
 
-      # Call the head of the outerware function
-      #
-      $route->[1][ROUTE_OUTER_HEAD]($route, $rex, my $code=-1, $header, $payload, $cb);
+    # Call the head of the outerware function
+    #
+    $route->[1][ROUTE_OUTER_HEAD]($route, $rex, my $code=-1, $header, $payload, $cb);
   };
 }
 
