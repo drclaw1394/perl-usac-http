@@ -717,17 +717,19 @@ sub make_serialize{
       #
       $_[CODE]=HTTP_OK if $_[CODE]<0;
 
-      say "CODE: $_[CODE]";
       my $reply="";
       if($mode == MODE_SERVER){
+        say "SERVER CODE: $_[CODE]";
         # serialize in server mode is a response
         $reply=$protocol." ".$_[CODE]." ". $code_to_name->[$_[CODE]]. CRLF;
       }
       else {
+        say "CLIENT CODE: $_[CODE]";
+        # TODO: check CODE. If an error then don't serialize. call the error head
+        return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $_[CODE];
+
         # serialize in client mode is a request
         $reply="$_[REX][uSAC::HTTP::Rex::method_] $_[REX][uSAC::HTTP::Rex::uri_raw_] $protocol".CRLF;
-        # TODO: check CODE. If an error then don't serialize. call the error head
-        return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]};
       }
 
       # Render headers

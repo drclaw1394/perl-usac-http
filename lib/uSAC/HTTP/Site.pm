@@ -297,6 +297,7 @@ method _add_route {
             # and attempt get the next item in the requst queue for the host
             #
 
+          say Error::Show::context indent=>"  ", frames=>Devel::StackTrace->new();
           my $entry;
           my $session;
             # If no rex is present, this is connection error...
@@ -310,6 +311,7 @@ method _add_route {
             else {
               ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
             }
+            $entry->[ACTIVE_COUNT]--;
             $_err->();
             $self->_request($entry, $session);
 

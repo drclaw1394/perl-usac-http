@@ -3,11 +3,14 @@ use Log::ger;
 use Object::Pad;
 
 class uSAC::HTTP::Client :isa(uSAC::HTTP::Server);
+
+
 use feature "say";
 
 
 field $_host_pool_limit :param=undef;
 field $_cookie_jar_path :param=undef;
+field $_cv;
 
 
 BUILD {
@@ -35,6 +38,15 @@ method run {
     #return;
   }
 	Log::OK::TRACE and log_trace(__PACKAGE__. " starting client...");
+  $self->running_flag=1;
+
+  #Trigger any queued requests
+  for my ($k,$v)($self->host_tables->%*){
+    $self->_request($_);
+  }
+  require AnyEvent;
+	$_cv=AE::cv;
+	$_cv->recv();
 }
 
 

@@ -135,7 +135,7 @@ class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 
 no warnings "experimental";
 #field $_sites;
-field $_host_tables;
+field $_host_tables :mutator;
 field $_cb;
 field $_listen;
 field $_listen2;
@@ -167,6 +167,7 @@ field $_total_requests;
 field $_mime_db;
 field $_mime_default;
 field $_static_headers :mutator;
+field $_running_flag  :mutator;
 #field $_mode           :mutator :param=undef;
 
 
@@ -1067,6 +1068,8 @@ method fetch ($resouce, @options) {
 
 }
 
+#  Push a request to the request queue
+#
 method request {
   Log::OK::TRACE and log_trace __PACKAGE__." request";
   # Queue a request in host pool and trigger if queue is inactive
@@ -1075,16 +1078,8 @@ method request {
 
   $header//={};
   $payload//="";
-  my $version;
-  my $ex;
-  my $request_id;
-  my $fh;
-  my $scheme;
-  my $peers;
-  my $i;
+  state $request_id=0;
 
-  my ($__host, $port)=split ":", $host;
-  $port//=80;
   my $options;
 
   # Attempt to connect to host if we have no connections  in the pool
@@ -1092,30 +1087,72 @@ method request {
 
   my $entry=$_host_tables->{$host}//$any_host;
   
-  # We will always have a host table here, event if it is the default one
-  #
-  
   # Push to queue
-  my $details=[$host, $method, $uri, $header, $payload, $cb, $request_id++];
 
 
-  push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $details;
+  push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*,
+    [$host, $method, $uri, $header, $payload, $cb, $request_id++, $entry];
 
-  # Check the number of items outstnding in the queue vs how many connections we have
+  # kick off queue processin if needed
   #
-  say "CURRENT ACTIVE COUNT IS: $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]";
+  $self->_request($entry) if $_running_flag;
+  $request_id;
+}
+
+# process the queue for a host table, given the session to reuse.
+# If no session is provided then create a new one, up to limit
+method _request {
+  Log::OK::TRACE and log_trace __PACKAGE__." _request";
+  die "_request must be made with a host table" unless @_ >=1;
+  # From the given host table and session attmempt to execute the request stored in $details
+  # or of extract from the host queue
+  # Schedules the request for the next loop of the event system
+  #
+  my ($table, $session)=@_;
+
+  #my($host, $port, $method, $uri, $header, $payload, $cb)=@_;
+
+
+  my $details=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
+
+
+  # If a session is supplied reuse it if possible
+  #
+  if($session){
+    $session->closeme=1;
+    $session->drop;
+    Log::OK::INFO and log_info "Session reuse attempted";
+      $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+
+      unless($details){
+        # No more work to do so add the session to the idle pool
+        #
+        Log::OK::INFO and log_info "No futher requests to process for this host table. Return to idle pool";
+        #push $table->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
+        return;
+      }
+      $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+      return $self->__request($table, $session, $details) 
+  }
+
+  return unless $details;
+  # parse the host and port from the table
+  my $host=$details->[0];#Host;
+  my ($__host, $port)=split ":", $host; 
+  $port//=80;
+
   my $limit =10;
   if( 
-    ($limit<=0 or $entry->[uSAC::HTTP::Site::ACTIVE_COUNT] < $limit)  # Check limit
+    ($limit<=0 or $table->[uSAC::HTTP::Site::ACTIVE_COUNT] < $limit)  # Check limit
 
     ){
 
-      $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+      $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
 
       #Create another connection so long as it is doesn't exceed the limit
       $self->do_stream_connect($__host, $port, sub {
           my ($socket, $addr)=@_;
-          $entry->[uSAC::HTTP::Site::ADDR]=$addr;
+          $table->[uSAC::HTTP::Site::ADDR]=$addr;
           # Create a session here
           #
           my $scheme="http";
@@ -1135,17 +1172,23 @@ method request {
         $_sessions->{ $session_id } = $session;
 
         $session_id++;
-        $self->_request($entry, $session);
+        $self->__request($table, $session, $details);
+
+
+
+
+
+
 
       },
 
       sub {
         # connection error
         #
-        $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+        $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
         say "error callback for stream connect: $_[1]";
         IO::FD::close $_[0]; # Close the socket
-        my($route, $captures)=$entry->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
+        my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($details->[1]." ".$details->[2]);
 
         die "No route found for $host" unless $route;
 
@@ -1161,20 +1204,12 @@ method request {
     # Sit tight.. a connection will become available soon.. hopefully!
     Log::OK::TRACE and log_trace __PACKAGE__. " request queued but waiting for in flight to finish";
   }
-
-  $request_id;
-
 }
 
-# process the queue for a host table
-method _request {
-  Log::OK::TRACE and log_trace __PACKAGE__." _request";
-  # From the given host table and sesssion attmempt to execute the request stored in $details
-  # or of extract from the host queue
-  # Schedules the request for the next loop of the event system
+method __request {
+
   my ($table, $session, $details)=@_;
 
-  #my($host, $port, $method, $uri, $header, $payload, $cb)=@_;
 
   my $version;
   my $ex;
@@ -1185,17 +1220,6 @@ method _request {
   my $i;
   
   uSAC::IO::asap {
-    $details//=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
-    unless($details){
-      # No more work to do so add the session to the idle pool
-      Log::OK::INFO and log_info "No futher requests to process. Return to idle pool";
-      push $table->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
-      $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-      return;
-    }
-    else {
-      #TODO Adjust active count
-    }
 
     my $host=$details->[0];
     my $method=$details->[1];
