@@ -1,11 +1,13 @@
 package uSAC::HTTP::Client;
-use feature "state";
+use feature qw<state isa>;
 use Log::ger;
 use Object::Pad;
 
+use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Route;
 use uSAC::HTTP::Session;
 class uSAC::HTTP::Client :isa(uSAC::HTTP::Server);
+no warnings "experimental";
 
 
 use feature "say";
@@ -30,14 +32,14 @@ BUILD {
 }
 
 method stop {
-
+	$_cv->send;
 }
 
 method run {
   #my $self=shift;
   my $sig; $sig=AE::signal(INT=>sub {
-          $self->stop;
-          $sig=undef;
+      $self->stop;
+      $sig=undef;
   });
 
 	$self->rebuild_dispatch;
@@ -47,25 +49,58 @@ method run {
     $self->dump_routes;
     #return;
   }
+
 	Log::OK::TRACE and log_trace(__PACKAGE__. " starting client...");
   $self->running_flag=1;
 
   #Trigger any queued requests
   for my ($k,$v)($self->host_tables->%*){
-    $self->_request($_);
+    $self->_request($v);
   }
+
   require AnyEvent;
 	$_cv=AE::cv;
 	$_cv->recv();
+  say "AFTER";
 }
 
 
 my $session_id=0;
+method request {
+  Log::OK::TRACE and log_trace __PACKAGE__." request";
+  # Queue a request in host pool and trigger if queue is inactive
+  #
+  my($host, $method, $path, $header, $payload, $cb)=@_;
+
+  $header//={};
+  $payload//="";
+  $path||="/";
+  state $request_id=0;
+
+  my $options;
+
+  # Attempt to connect to host if we have no connections  in the pool
+  state $any_host=$self->host_tables->{"*.*"};
+
+  my $entry=$self->host_tables->{$host}//$any_host;
+  
+  # Push to queue
+
+
+  push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*,
+    [$host, $method, $path, $header, $payload, $cb, $request_id++, $entry];
+
+  # kick off queue processin if needed
+  #
+  $self->_request($entry) if $self->running_flag;
+  $request_id;
+}
+
 # process the queue for a host table, given the session to reuse.
 # If no session is provided then create a new one, up to limit
 method _request {
   Log::OK::TRACE and log_trace __PACKAGE__." _request";
-  die "_request must be made with a host table" unless @_ >=1;
+  die "_request must be made with a host table" unless @_ >=1 and ref $_[0] eq "ARRAY";
   # From the given host table and session attmempt to execute the request stored in $details
   # or of extract from the host queue
   # Schedules the request for the next loop of the event system
@@ -96,8 +131,10 @@ method _request {
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
       return $self->__request($table, $session, $details) 
   }
-
+  
   return unless $details;
+
+  #NO session but details. request from user, not retrigger
   # parse the host and port from the table
   my $host=$details->[0];#Host;
   my ($__host, $port)=split ":", $host; 
@@ -169,34 +206,6 @@ method _request {
 }
 
 
-method request {
-  Log::OK::TRACE and log_trace __PACKAGE__." request";
-  # Queue a request in host pool and trigger if queue is inactive
-  #
-  my($host, $method, $uri, $header, $payload, $cb)=@_;
-
-  $header//={};
-  $payload//="";
-  state $request_id=0;
-
-  my $options;
-
-  # Attempt to connect to host if we have no connections  in the pool
-  state $any_host=$self->host_tables->{"*.*"};
-
-  my $entry=$self->host_tables->{$host}//$any_host;
-  
-  # Push to queue
-
-
-  push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*,
-    [$host, $method, $uri, $header, $payload, $cb, $request_id++, $entry];
-
-  # kick off queue processin if needed
-  #
-  $self->_request($entry) if $self->running_flag;
-  $request_id;
-}
 
 #  Push a request to the request queue
 #
@@ -217,7 +226,7 @@ method __request {
 
     my $host=$details->[0];
     my $method=$details->[1];
-    my $uri=$details->[2];
+    my $path=$details->[2];
     my $header=$details->[3];
     my $payload=$details->[4];
     my $cb=$details->[5];
@@ -232,7 +241,7 @@ method __request {
     # Do a route lookup
     #
     #say Dumper $details;
-    my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
+    my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $path");
 
     die "No route found for $host" unless $route;
 
@@ -245,7 +254,7 @@ method __request {
     #
     $ex=$session->exports;
     $version="HTTP/1.1"; # TODO: FIX
-    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $uri, $ex, $captures);
+    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $path, $ex, $captures);
 
 
     # Set the current rex and route for the session.
@@ -281,7 +290,30 @@ method go {
 
 # As per fetch api?
 #
-method fetch ($resource, $options){
+method fetch {
+  my ($uri, $options, $cb)=@_;
+  if(@_<=2){
+    # Two argument form is uri, callback
+    $cb=$options; 
+    $options={};
+  }
+  # parse the uri
+  unless($uri isa URI){
+    use URI;
+    $uri=URI->new($uri);
+  }
+
+  say $uri->host;
+  #set host header if not present
+  $options->{headers}{HTTP_HOST()}=$uri->host unless exists $options->{headers}{HTTP_HOST()};
+  $self->request(
+    $uri->host_port,    #Host
+    $options->{method}//"GET",     #Method
+    $uri->path||"/",               #Path
+    $options->{headers}//{},        #Headers
+    $options->{body},                           # payload
+    $cb
+  );
 
 }
 

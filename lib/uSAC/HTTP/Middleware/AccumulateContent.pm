@@ -3,7 +3,7 @@ use warnings;
 use strict;
 use feature qw<current_sub say refaliasing state>;
 no warnings "experimental";
-our $UPLOAD_LIMIT=1000;
+our $UPLOAD_LIMIT=1_000_000;
 our $PART_LIMIT=$UPLOAD_LIMIT;
 use Log::ger;
 
@@ -11,6 +11,7 @@ use Log::OK;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Constants;
+use uSAC::HTTP::Rex;
 use IO::FD;
 use Fcntl qw<O_CREAT O_RDWR>;
 
@@ -33,69 +34,60 @@ our @EXPORT=@EXPORT_OK;
 sub uhm_urlencoded_slurp {
 
   my %options=@_;
-	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
+	my $upload_limit=$UPLOAD_LIMIT;
+  $upload_limit = $options{byte_limit} if exists $options{byte_limit};
   my $content_type=$options{content_type}//"application/x-www-form-urlencoded";
    
+  my %ctx;
   my $inner=sub {
     my $next=shift;
-    my %ctx;
     sub {
-      #This sub is shared across all requests for  a route. 
-      if($_[CODE]){
-        my $c;
-        if($_[HEADER]){
-          #test incomming headers are correct
-          
-          unless(($_[REX]->headers->{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
-            $_[PAYLOAD]="adsfasdf";
-			      return &rex_error_unsupported_media_type 
-          }
-          #$content_length=$_[REX]->headers->{CONTENT_LENGTH};
-          if(defined $upload_limit  and ($_[REX]->headers->{CONTENT_LENGTH}//0) > $upload_limit){
-            #@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
-            $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-            #$_[HEADER]=[];
-            $_[HEADER]={};
-            $_[PAYLOAD]="Slurp Limit:  $upload_limit";
-            return &rex_error;
-          }
-
-          #first call
-          $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
-          $c=$ctx{$_[REX]}=$_[PAYLOAD];
-          $_[PAYLOAD][0]{_byte_count}=0;
-        }
-        else{
-          #subsequent calls
-          $c=$ctx{$_[REX]};
-          $c->[1].=$_[PAYLOAD][1];
-          $c->[0]{_byte_count}+=length $_[PAYLOAD][1];
+    #This sub is shared across all requests for  a route. 
+      my $c;
+      if($_[HEADER]){
+        #test incomming headers are correct
+        
+        unless(($_[REX]->headers->{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
+          $_[PAYLOAD]="";
+          return &rex_error_unsupported_media_type 
         }
 
-        #Check total incomming byte count is within limits
-        ##only needed for chunks?
-        if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
+        #$content_length=$_[REX]->headers->{CONTENT_LENGTH};
+        if(defined $upload_limit  and ($_[REX]->headers->{CONTENT_LENGTH}//0) > $upload_limit){
           $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-          #$_[HEADER]=[];
-            $_[HEADER]={};
-          $_[PAYLOAD]="Slurp Limit:  $upload_limit";
+          $_[HEADER]={};
+          $_[PAYLOAD]="";#"Slurp Limit:  $upload_limit";
           return &rex_error;
         }
 
-        #Accumulate until the last
-        if(!$_[CB]){
-          #Last set
-          $_[PAYLOAD]=[delete $ctx{$_[REX]}];
-          undef $c;
-          &$next;
-        }
-        
+        #first call
+        $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
+        $c=$ctx{$_[REX]}=$_[PAYLOAD]; #First call stores the payload
+        $_[PAYLOAD][0]{_byte_count}=0;
       }
-      else {
-        delete $ctx{$_[REX]};
-        &$next;
+      else{
+        #subsequent calls
+        $c=$ctx{$_[REX]};
+        $c->[1].=$_[PAYLOAD][1];
+        $c->[0]{_byte_count}+=length $_[PAYLOAD][1];
       }
 
+      #Check total incomming byte count is within limits
+      ##only needed for chunks?
+      if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
+        $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
+          $_[HEADER]={};
+        $_[PAYLOAD]="";#"Slurp Limit:  $upload_limit";
+        return &rex_error;
+      }
+
+      #Accumulate until the last
+      if(!$_[CB]){
+        #Last set
+        $_[PAYLOAD]=[delete $ctx{$_[REX]}];
+        undef $c;
+        &$next;
+      }
     }
   };
 
@@ -103,9 +95,17 @@ sub uhm_urlencoded_slurp {
     my $next=shift;
   };
 
-  [$inner, $outer];
+  my $error=sub {
+    my $next=shift;
+    sub {
+        delete $ctx{$_[REX]};
+        &$next;
+    }
+  };
 
+  [$inner, $outer, $error];
 }
+
 sub uhm_urlencoded_file {
 
   my %options=@_;
@@ -113,9 +113,9 @@ sub uhm_urlencoded_file {
   my $upload_dir=$options{upload_dir}; 
 	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
 
+  my %ctx;
   my $inner=sub {
     my $next=shift;
-    my %ctx;
     sub {
       #This sub is shared across all requests for  a route. 
       say STDERR "URL UPLOAD TO FILE";
@@ -220,8 +220,16 @@ sub uhm_urlencoded_file {
   my $outer=sub {
     my $next=shift;
   };
+  
+  my $error=sub {
+    my $next=shift;
+    sub {
+        delete $ctx{$_[REX]};
+        &$next;
+    }
+  };
 
-  [$inner, $outer];
+  [$inner, $outer, $error];
 
 }
 
@@ -285,13 +293,12 @@ sub uhm_multipart_file {
   #my $upload_dir=$options{upload_dir};
   my $upload_dir=$options{upload_dir}; 
 
+  my %ctx;
   my $inner=sub {
     my $next=shift;
-    my %ctx;
     my $last;
     sub {
       say STDERR " file multipart MIDDLEWARE";
-      if($_[CODE]){
         my $open;
         my $c=$ctx{$_[REX]};
         unless($c){
@@ -351,17 +358,20 @@ sub uhm_multipart_file {
           &$next;
         }
       }
-      else {
-        delete $ctx{$_[REX]};
-        &$next;
-      }
-    }
   };
 
   my $outer=sub {
     my $next=shift;
   };
+  
+  my $error=sub {
+    my $next=shift;
+    sub {
+        delete $ctx{$_[REX]};
+        &$next;
+    }
+  };
 
-  [$inner,$outer];
+  [$inner, $outer, $error];
 }
 

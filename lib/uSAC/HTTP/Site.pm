@@ -255,7 +255,7 @@ method _add_route {
   my $outer_head;
   if(@outer){
     my $middler=Sub::Middler->new();
-    say "outer: $_" and $middler->register($_) for(@outer);
+    $middler->register($_) for(@outer);
 
     $outer_head=$middler->link($serialize, site=>$self); #TODO: Pass in the site or the route as a
                                             # Configuration option

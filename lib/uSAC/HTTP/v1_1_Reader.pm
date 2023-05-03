@@ -699,9 +699,9 @@ sub make_serialize{
       # }                                                       #
       ###########################################################
 
-      unless(exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
-        $ctx=1;
+      if($_[PAYLOAD] and  not exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
 
+        $ctx=1;
         for($_[HEADER]{HTTP_TRANSFER_ENCODING()}){
           if($_){
             $_=", chunked";
@@ -710,6 +710,7 @@ sub make_serialize{
             $_="chunked";
           }
         }
+
         $out_ctx{$_[REX]}=$ctx if $_[CB];
       }
 

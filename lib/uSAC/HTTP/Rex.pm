@@ -53,6 +53,7 @@ rex_error_not_found
 rex_error_forbidden 
 rex_error_internal_server_error 
 rex_error_unsupported_media_type 
+rex_error
 
 rex_redirect_internal
 

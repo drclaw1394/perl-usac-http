@@ -1017,7 +1017,6 @@ method do_stream_connect {
     
   }
   else {
-
     $id=uSAC::IO::connect($socket, $host, $port, $on_connect, $on_error);
 
   }
