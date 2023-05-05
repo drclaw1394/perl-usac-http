@@ -32,11 +32,12 @@ sub uhm_log {
 
 sub log_simple_in {
 
-  require Data::Dumper;
 	my %options=@_;
 
   my $dump_headers=$options{dump_headers};
 
+
+  require Data::Dumper if $dump_headers;
   my $dump_capture=$options{dump_captures};
   my $sort_headers=$options{sort};
 
@@ -55,11 +56,11 @@ sub log_simple_in {
           say STDERR "Method:       $_[REX][method_]";
           say STDERR "Original matched URI: 	$_[REX][uri_raw_]";
           say STDERR "Site relative URI:	$_[REX][uri_stripped_]";
-          say STDERR "Matched for site:	".($_[ROUTE][1][0]->id//"n/a");
-          say STDERR "Hit counter:		$_[ROUTE][1][3]";
+          say STDERR "Matched for site:	".($_[ROUTE][1][ROUTE_SITE]->id//"n/a");
+          say STDERR "Hit counter:		$_[ROUTE][1][ROUTE_COUNTER]";
           say STDERR "Captures:\n".join "\n",$_[1][captures_]->@* if $dump_capture;
           if($dump_headers){
-            say STDERR "Headers:\n" if $dump_headers;
+            say STDERR "Incomming Headers:\n" if $dump_headers;
             my $headers=$_[REX]->headers;
             my $out="";
             for my($k, $v)(%$headers){
@@ -84,6 +85,11 @@ sub log_simple_out {
 
       say STDERR "\n--->>>";
       say STDERR "Depature time:		".time;
+      my $out="HEADERS: \n";
+      for my ($k, $v)($_[HEADER]->%*){
+        $out.="$k: $v\n"; 
+      }
+      say STDERR $out;
 
 			&$outer_next;
 		}

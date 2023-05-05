@@ -57,8 +57,20 @@ sub parse_form {
 #	-method could contain data => push a dedicated reader to the read stack
 #
 #
-use enum (qw<MODE_SERVER MODE_CLIENT>);
-use enum (qw<STATE_REQUEST STATE_RESPONSE STATE_HEADERS STATE_BODY_CONTENT STATE_BODY_CHUNKED STATE_BODY_MULTIPART STATE_ERROR>);
+use enum (qw<
+  MODE_SERVER
+  MODE_CLIENT
+>);
+
+use enum (qw<
+  STATE_REQUEST
+  STATE_RESPONSE 
+  STATE_HEADERS 
+  STATE_BODY_CONTENT 
+  STATE_BODY_CHUNKED 
+  STATE_BODY_MULTIPART 
+  STATE_ERROR
+>);
 
 
 #make a reader which is bound to a session
@@ -114,6 +126,7 @@ sub make_parser{
   my $body_type;
   my $form_headers={};
   my $multi_state=0;
+  my $chunked_state=0;
   my $first=1;
   #my $out_header=[];
   my $out_header={};
@@ -160,7 +173,7 @@ sub make_parser{
         if ($state == STATE_REQUEST or $state== STATE_RESPONSE) {
           $pos3=index $buf, CRLF, $ppos;
           $body_type=undef;	
-          $body_len=0;
+          $body_len=undef;
           #if($pos3>=0){
           if($pos3>=$ppos){
             #($method, $uri, $version)=split " ", substr($buf, $ppos, $pos3);
@@ -247,64 +260,6 @@ sub make_parser{
 
         
 
-          ##################################################################
-          # while () {                                                     #
-          #   $pos3=index $buf, CRLF, $ppos;                               #
-          #   #if($pos3>0){                                                #
-          #   if($pos3>$ppos){                                             #
-          #     #($k, $val)=split ":", substr($buf, 0, $pos3), 2;          #
-          #     ($k, $val)=split ":", substr($buf, $ppos, $pos3-$ppos), 2; #
-          #     $k=~tr/-/_/;                                               #
-          #     $k=uc $k;                                                  #
-          #                                                                #
-          #     $val=builtin::trim $val;  #perl 5.36 required              #
-          #                                                                #
-          #     \my $e=\$h{$k};                                            #
-          #     $e?($e.=",$val"):($e=$val);                                #
-          #                                                                #
-          #                                                                #
-          #     $ppos=$pos3+2;                                             #
-          #     if($k eq "HOST"){                                          #
-          #       $host=$val;                                              #
-          #     }                                                          #
-          #     elsif($k eq "CONTENT_LENGTH"){                             #
-          #       $body_len= int $val;                                     #
-          #     }                                                          #
-          #     elsif($k eq "CONNECTION"){                                 #
-          #       $connection=$val;                                        #
-          #     }                                                          #
-          #                                                                #
-          #     #TODO what about proxied requests with X-Forwarded-for?    #
-          #     #Shoult this set the host as well                          #
-          #     #                                                          #
-          #     #$buf=substr $buf, $pos3+2;                                #
-          #                                                                #
-          #     #redo;                                                     #
-          #   }                                                            #
-          #   #elsif($pos3 == 0){                                          #
-          #   elsif($pos3 == $ppos){                                       #
-          #     $ppos=0;                                                   #
-          #     $buf=substr($buf, $pos3+2);                                #
-          #     last;                                                      #
-          #   }   #empty line.                                             #
-          #                                                                #
-          #   else{                                                        #
-          #     #-1       Need more                                        #
-          #     if (length($buf) > MAX_READ_SIZE) {                        #
-          #                                                                #
-          #       $state=STATE_ERROR;                                      #
-          #       redo;                                                    #
-          #     }                                                          #
-          #     #warn "Need more";                                         #
-          #     return;                                                    #
-          #   }                                                            #
-          # }                                                              #
-          #                                                                #
-          ##################################################################
-          #Done with headers. 
-
-
-
           $version eq "HTTP/1.0"
           ? ($closeme=($connection!~ /keep-alive/ai))
           : ($closeme=($connection and $connection=~ /close/ai));
@@ -341,29 +296,32 @@ sub make_parser{
 
           #Push reader. 
           $processed=0; 
-          #$body_len = $h{CONTENT_LENGTH}//0; #number of bytes to read, or 0 if undefined
-          if($body_len==0){ 
-            #No body
+
+          if($body_len){
+            # Fixed body length. Single part
+              $state=STATE_BODY_CONTENT;
+          }
+          elsif($h{TRANSFER_ENCODING}//"" =~ /chunked/i){
+            # Ignore content length and treat as chunked
+              $state=STATE_BODY_CHUNKED;
+              $chunked_state=0;
+              #next;
+          }
+          elsif( $h{CONTENT_TYPE}//"" =~/multipart/i){
+            # Treat as multipart
+            #
+            $body_type = $h{CONTENT_TYPE};
+              $state=STATE_BODY_MULTIPART;
+              #next;
+          }
+          else{
+            # no body length specifed assumed no body
             $state=$start_state;
             $payload="";
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, $payload, my $cb=undef);
+
             #$out_header=[];
             $out_header={};
-          }
-          else{
-            $body_type = $h{CONTENT_TYPE};
-            if($body_type and $body_type =~/multipart/i){
-              $state=STATE_BODY_MULTIPART;
-              #next;
-            }
-            elsif($body_len){
-              $state=STATE_BODY_CONTENT;
-              #next;
-            }
-            elsif($h{TRANSFER_ENCODING}//"" =~ /chunked/i){
-              $state=STATE_BODY_CHUNKED;
-              #next;
-            }
           }
 
           #$state=$start_state;
@@ -554,7 +512,62 @@ sub make_parser{
           #CHUNKED
           #If transfer encoding is chunked, then we process as a series of chunks
           #Again, an undef callback indicats a final write
-          $state=$start_state;
+
+          #TODO Implement chunked parser
+          #say $buf;
+          
+          #my $lengh=
+          if($chunked_state == 0){
+            #Size line
+            my $index = index $buf, CRLF;
+            my $index2= index $buf, CRLF, $index+2;
+
+            my $size=unpack "S>", pack "H*", substr($buf, 0, $index);
+
+            if(($index2-$index)==2){
+              #Last one
+              say "Last chunk. 0size";
+              $state=$start_state;
+              my $payload="";
+              $buf=substr $buf, $index2+2;
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [undef, $payload], my $cb=undef);
+
+            }
+            elsif($index>=0) {
+              # Not the last one 
+              say "Not Last chunk: Size: $size";
+              $buf=substr $buf, $index+2;
+              $chunked_state=$size;
+            }
+            else {
+              #ERROR CRLF NOT FOUND
+              #$state=STATE_ERROR;
+              last;
+            }
+          }
+          else {
+            
+            say "CHUNKED BODY";
+            say length $buf;
+            say $chunked_state;
+            #sleep 1;
+            #$say $buf;
+            if(length($buf) >= ($chunked_state +2)){
+              #$buf=substr $buf, $chunked_state+2;
+              my $payload=substr $buf, 0, $chunked_state;
+              say "the payload length: ".length $payload;
+              $buf=substr $buf,  $chunked_state+2;
+              $chunked_state=0;
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [undef, $payload], $dummy_cb);
+              $out_header=undef;
+            }
+            else {
+              # need more data
+              last;
+            }
+            
+          }
+          #$state=$start_state;
 
         }
         elsif($state==STATE_ERROR){
@@ -631,10 +644,6 @@ sub make_serialize{
     ###############################################
     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
     Log::OK::TRACE and log_trace join ", ", @_;
-    #use Data::Dumper;
-    #say Dumper $_[PAYLOAD];
-    #use Data::Dumper;
-    #Log::OK::TRACE and log_trace Dumper $_[HEADER];
 
     $ctx=undef;
 
@@ -664,41 +673,10 @@ sub make_serialize{
 
       # Header with a potential body attached.
       #
-      ###########################################################
-      # \my @headers=$_[HEADER];                                #
-      #                                                         #
-      # $index=undef;                                           #
-      # for my ($k, $v)(@headers){                              #
-      #   $index=1 and last if($k eq HTTP_CONTENT_LENGTH);      #
-      # }                                                       #
-      #                                                         #
-      #                                                         #
-      # # Do chunked if we don't find a content length          #
-      # # update appropriate headers                            #
-      # unless($index){                                         #
-      #   $ctx=1;                                               #
-      #   $index=undef;                                         #
-      #   $i=1;                                                 #
-      #   for my ($k,$v)(@headers){                             #
-      #     $i+=2;                                              #
-      #     $index=$i and last if $k eq HTTP_TRANSFER_ENCODING; #
-      #   }                                                     #
-      #                                                         #
-      #   unless($index){                                       #
-      #     push @headers, HTTP_TRANSFER_ENCODING, "chunked";   #
-      #                                                         #
-      #   }                                                     #
-      #   else{                                                 #
-      #     $headers[$index].=",chunked";                       #
-      #                                                         #
-      #   }                                                     #
-      #                                                         #
-      #   # save context if multishot                           #
-      #   # no need to save is single shot                      #
-      #   $out_ctx{$_[REX]}=$ctx if $_[CB];                     #
-      # }                                                       #
-      ###########################################################
 
+      # TODO: fix with multipart uploads? what is the content length
+      #
+      #TODO: Fix when payload is an array ref. treat as  header, body pairs
       if($_[PAYLOAD] and  not exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
 
         $ctx=1;
@@ -710,7 +688,6 @@ sub make_serialize{
             $_="chunked";
           }
         }
-
         $out_ctx{$_[REX]}=$ctx if $_[CB];
       }
 

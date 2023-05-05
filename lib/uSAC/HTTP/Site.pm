@@ -19,16 +19,6 @@ use Object::Pad;
 # table is the host table associated with the route
 #
 use uSAC::HTTP::Route;
-##########################
-# use enum qw<           #
-#   ROUTE_CTX_SITE       #
-#   ROUTE_CTX_INNER_HEAD #
-#   ROUTE_CTX_OUTER_HEAD #
-#   ROUTE_CTX_ERROR_HEAD #
-#   ROUTE_CTX_COUNTER    #
-#   ROUTE_CTX_TABLE      #
-#   >;                   #
-##########################
 
 # Fields for a host structure. contains the lookup table (hustle::Table), the cache for the table, the dispatcher for the table.
 #

@@ -49,6 +49,7 @@ sub uhm_urlencoded_slurp {
         
         unless(($_[REX]->headers->{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
           $_[PAYLOAD]="";
+          say "accumuate UNSPPORTED";
           return &rex_error_unsupported_media_type 
         }
 
@@ -57,13 +58,14 @@ sub uhm_urlencoded_slurp {
           $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
           $_[HEADER]={};
           $_[PAYLOAD]="";#"Slurp Limit:  $upload_limit";
+          say "accumulate do big";
           return &rex_error;
         }
 
         #first call
         $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
         $c=$ctx{$_[REX]}=$_[PAYLOAD]; #First call stores the payload
-        $_[PAYLOAD][0]{_byte_count}=0;
+        $c->[0]{_byte_count}=0;
       }
       else{
         #subsequent calls
@@ -84,7 +86,7 @@ sub uhm_urlencoded_slurp {
       #Accumulate until the last
       if(!$_[CB]){
         #Last set
-        $_[PAYLOAD]=[delete $ctx{$_[REX]}];
+        $_[PAYLOAD]=delete $ctx{$_[REX]};
         undef $c;
         &$next;
       }
@@ -192,7 +194,7 @@ sub uhm_urlencoded_file {
         #Accumulate until the last
         if(!$_[CB]){
           #Last set
-          my $c=$_[PAYLOAD]=[delete $ctx{$_[REX]}];
+          my $c=$_[PAYLOAD]=delete $ctx{$_[REX]};
           if(defined IO::FD::close $c->[0][1]){
             
           }

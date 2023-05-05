@@ -70,7 +70,7 @@ method request {
   Log::OK::TRACE and log_trace __PACKAGE__." request";
   # Queue a request in host pool and trigger if queue is inactive
   #
-  my($host, $method, $path, $header, $payload, $cb)=@_;
+  my($host, $method, $path, $header, $payload)=@_;
 
   $header//={};
   $payload//="";
@@ -88,7 +88,7 @@ method request {
 
 
   push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*,
-    [$host, $method, $path, $header, $payload, $cb, $request_id++, $entry];
+    [$host, $method, $path, $header, $payload, undef, $request_id++, $entry];
 
   # kick off queue processin if needed
   #
@@ -107,11 +107,7 @@ method _request {
   #
   my ($table, $session)=@_;
 
-  #my($host, $port, $method, $uri, $header, $payload, $cb)=@_;
-
-
   my $details=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
-
 
   # If a session is supplied reuse it if possible
   #
@@ -145,40 +141,31 @@ method _request {
     ($limit<=0 or $table->[uSAC::HTTP::Site::ACTIVE_COUNT] < $limit)  # Check limit
 
     ){
-
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
 
       #Create another connection so long as it is doesn't exceed the limit
       $self->do_stream_connect($__host, $port, sub {
-          my ($socket, $addr)=@_;
-          $table->[uSAC::HTTP::Site::ADDR]=$addr;
-          # Create a session here
-          #
-          my $scheme="http";
-          Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";
+        my ($socket, $addr)=@_;
+        $table->[uSAC::HTTP::Site::ADDR]=$addr;
+        # Create a session here
+        #
+        my $scheme="http";
+        Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";
 
-          my $session=uSAC::HTTP::Session->new;
-          $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);
+        my $session=uSAC::HTTP::Session->new;
+        $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);
 
-          unless($_application_parser){
-            require uSAC::HTTP::v1_1_Reader;
-            $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
-          }
+        unless($_application_parser){
+          require uSAC::HTTP::v1_1_Reader;
+          $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
+        }
 
-          say "APPLICATION PARSER: ".$_application_parser;
-
-          $session->push_reader($_application_parser->(session=>$session, mode=>1, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
+        say "APPLICATION PARSER: ".$_application_parser;
+        $session->push_reader($_application_parser->(session=>$session, mode=>1, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
         $_sessions->{ $session_id } = $session;
 
         $session_id++;
         $self->__request($table, $session, $details);
-
-
-
-
-
-
-
       },
 
       sub {
@@ -192,10 +179,6 @@ method _request {
         die "No route found for $host" unless $route;
 
         $route->[1][ROUTE_ERROR_HEAD]->($route);
-        
-        #say $_[1];
-        #say Error::Show::context frames=>Devel::StackTrace->new();
-
       }
     )
   }
@@ -229,7 +212,7 @@ method __request {
     my $path=$details->[2];
     my $header=$details->[3];
     my $payload=$details->[4];
-    my $cb=$details->[5];
+    #my $cb=$details->[5];
 
     say "PAYLOAD FOR REQUEST: $payload";
     # At this point there should be at least one available session in the pool for the host
@@ -266,7 +249,7 @@ method __request {
 
     # Call the head of the outerware function
     #
-    $route->[1][ROUTE_OUTER_HEAD]($route, $rex, my $code=-1, $header, $payload, $cb);
+    $route->[1][ROUTE_OUTER_HEAD]($route, $rex, my $code=-1, $header, $payload, undef);
   };
 }
 
@@ -291,12 +274,8 @@ method go {
 # As per fetch api?
 #
 method fetch {
-  my ($uri, $options, $cb)=@_;
-  if(@_<=2){
-    # Two argument form is uri, callback
-    $cb=$options; 
-    $options={};
-  }
+  my ($uri, $options)=@_;
+  $options//={};
   # parse the uri
   unless($uri isa URI){
     use URI;
@@ -307,15 +286,13 @@ method fetch {
   #set host header if not present
   $options->{headers}{HTTP_HOST()}=$uri->host unless exists $options->{headers}{HTTP_HOST()};
   $self->request(
-    $uri->host_port,    #Host
+    $uri->host_port,               #Host
     $options->{method}//"GET",     #Method
     $uri->path||"/",               #Path
     $options->{headers}//{},        #Headers
     $options->{body},                           # payload
-    $cb
   );
 
 }
-
 
 1;
