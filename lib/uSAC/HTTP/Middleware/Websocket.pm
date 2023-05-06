@@ -28,7 +28,7 @@ use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Constants;
 
-use uSAC::HTTP::Middler;
+use Sub::Middler;
 
 
 
@@ -84,7 +84,6 @@ sub websocket_client_out {
         # ensure the request is a get
         # Check http version is ok
         #
-        &$next unless $_[CODE];
         my $key;
         # Generate new random key and base64 encode it
         if(HAS_QUAD){
@@ -134,7 +133,8 @@ sub websocket_client_in {
         my $session=$_[REX][uSAC::HTTP::Rex::session_];
 
         #Check repoonse code 
-        \my %headers=&rex_headers;
+        #\my %headers=&rex_headers;
+        \my %headers=$_[IN_HEADER];
 
         my $key=delete $ctx{$_[REX]}; #TODO this is context
 
@@ -142,10 +142,10 @@ sub websocket_client_in {
         my $expected_key=builtin::trim MIME::Base64::encode_base64
             Digest::SHA1::sha1($key."258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
         if(
-              $_[CODE]==HTTP_SWITCHING_PROTOCOLS
-          and $headers{CONNECTION} eq "Upgrade"    
-          and $headers{UPGRADE} eq "websocket"
-          and $headers{SEC_WEBSOCKET_ACCEPT} eq $expected_key
+              $_[OUT_HEADER]{":status"}==HTTP_SWITCHING_PROTOCOLS
+          and $headers{connection} eq "Upgrade"    
+          and $headers{upgrade} eq "websocket"
+          and $headers{"sec-websocket-accept"} eq $expected_key
         ){
           # Check for extensions supported
           #
@@ -245,20 +245,21 @@ sub websocket_server_in {
       my $session=$rex->[uSAC::HTTP::Rex::session_];
       #attempt to do the match
 
-      for ($rex->[uSAC::HTTP::Rex::headers_]){
+      #for ($rex->[uSAC::HTTP::Rex::headers_]){
+      for ($_[IN_HEADER]){
         if(
-          $_->{CONNECTION} =~ /upgrade/ai	#required
-            and  $_->{UPGRADE} =~ /websocket/ai	#required
-            and  $_->{SEC_WEBSOCKET_VERSION} ==13	#required
-            and  exists $_->{SEC_WEBSOCKET_KEY}	#required
-            and  $_->{SEC_WEBSOCKET_PROTOCOL} =~ /.*/  #sub proto
+          $_->{connection} =~ /upgrade/ai	#required
+            and  $_->{upgrade} =~ /websocket/ai	#required
+            and  $_->{"sec-websocket-version"} ==13	#required
+            and  exists $_->{"sec-websocket-key"}	#required
+            and  $_->{"sec-websocket-protocol"} =~ /.*/  #sub proto
         ){
 
-          my @subs=split ",", $_->{SEC_WEBSOCKET_PROTOCOL};
+          my @subs=split ",", $_->{"sec-websocket-protocol"};
           #TODO:  origin testing, externsions,
           # mangle the key
           my $key=MIME::Base64::encode_base64 
-            Digest::SHA1::sha1( $_->{SEC_WEBSOCKET_KEY}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
+            Digest::SHA1::sha1( $_->{"sec-websocket-key"}."258EAFA5-E914-47DA-95CA-C5AB0DC85B11"),
           "";
           #
           #reply
@@ -298,8 +299,8 @@ sub websocket_server_in {
 
                 $_[ROUTE]=$line;
                 $_[REX]=$rex;
-                $_[CODE]= HTTP_SWITCHING_PROTOCOLS;
-                $_[HEADER]=$headers;
+                $headers->{":status"}= HTTP_SWITCHING_PROTOCOLS;
+                $_[OUT_HEADER]=$headers;
                 $_[PAYLOAD]=$ws;
                 $_[CB]=undef;
 
@@ -585,7 +586,7 @@ sub _make_websocket_server_writer {
   };
 
 
-  my ($entry_point, $stack)=uSAC::HTTP::Middler->new($session)
+  my ($entry_point, $stack)=Sub::Middler->new($session)
   ->register($_websocket_writer)
   ->link($session->write);#rex->[uSAC::HTTP::Rex::write_]);
 

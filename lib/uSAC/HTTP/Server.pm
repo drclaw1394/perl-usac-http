@@ -103,10 +103,8 @@ sub _welcome {
   state $data=do{ local $/=undef; <DATA>}; #execute template
 
   state $sub=sub {
-    if($_[CODE]){
-      $_[PAYLOAD]=$data;
-      &rex_reply_html;
-    }
+    $_[PAYLOAD]=$data;
+    &rex_reply_html;
   }
 }
 
@@ -125,7 +123,8 @@ my $dummy_default=[];
 sub _default_handler {
 		state $sub=sub {
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
-			Log::OK::DEBUG and log_debug __PACKAGE__.join $_[REX]->headers->%*;
+      #Log::OK::DEBUG and log_debug __PACKAGE__.join $_[REX]->headers->%*;
+			Log::OK::DEBUG and log_debug __PACKAGE__.join ", ", $_[IN_HEADER]->%*;
 			$_[PAYLOAD]="NOT FOUND";
 			&rex_error_not_found;
 		};

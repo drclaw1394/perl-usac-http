@@ -40,7 +40,7 @@ sub run{
   # Set the default route in the default 'host table' to the PSGI application
   #
   say "ADDING ROUTE";
-  sleep 1;
+  #sleep 1;
   $server->add_route(undef, uSAC::HTTP::Middleware::PSGI::psgi($app));
 
 

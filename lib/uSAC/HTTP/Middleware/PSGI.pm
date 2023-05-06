@@ -47,7 +47,7 @@ no warnings "experimental";
     my $rex=$self->{rex};
 
     #call with generic sub as callback to continue the chunks
-    $self->{next}( $self->{matcher}, $self->{rex}, $self->{code},$self->{headers}, my $a=$_[0], sub {});
+    $self->{next}( $self->{matcher}, $self->{rex}, $self->{in_header},$self->{headers}, my $a=$_[0], sub {});
 
     $self->{headers}=undef;
 
@@ -59,7 +59,7 @@ no warnings "experimental";
     my $session=$rex->[uSAC::HTTP::Rex::session_];
     #call with no callback to mark the end of chunked stream
     #Also need to pass defined but empty data
-    rex_write( $self->{matcher}, $self->{rex}, $self->{code}, $self->{headers}, my $a="");
+    rex_write( $self->{matcher}, $self->{rex}, $self->{in_header}, $self->{headers}, my $a="");
 
     #$session->[uSAC::HTTP::Session::closeme_]=1;
     $session->closeme=1;
@@ -92,14 +92,6 @@ sub uhm_psgi {
       log_error "Could not load PSGI file $path: $app";
       die "Could not load PSGI file $path $!";	
     }
-    #######################################
-    # unless($app=do $app){               #
-    #                                     #
-    #   say STDERR "Could not load psgi"; #
-    #   say STDERR $!;                    #
-    #   say STDERR $@;                    #
-    # }                                   #
-    #######################################
   }
 
   #TODO: options inclue using keepalive or not.
@@ -109,30 +101,22 @@ sub uhm_psgi {
   my $inner=sub {
     my $next=shift;
     sub {
-      my ($usac, $rex)=@_;	
+      my ($usac, $rex, $in_header, $out_header)=@_;	
       
-      unless($_[CODE]){
-
-        #stack reset
-        delete $ctx{$_[REX]};
-        &$next;
-        return
-      }
       my $ctx;
       my $env;
       my $buffer;
       my $header;
+
       if($_[HEADER]){
         #buffer to become psgi.input
 
         my $session=$_[REX]->session;#$rex->[uSAC::HTTP::Rex::session_];
 
-
-
         state $psgi_version=[1,1];
 
-        \my %h=$_[REX]->headers;
-        my %env=map(("HTTP_".$_, $h{$_}), keys %h);
+        \my %h=$_[IN_HEADER];
+        my %env=map(("HTTP_".uc $_, $h{$_}), keys %h);
 
         $env{CONTENT_TYPE}//=delete $env{HTTP_CONTENT_TYPE};
         $env{CONTENT_LENGTH}//=delete $env{HTTP_CONTENT_LENGTH};
@@ -174,28 +158,9 @@ sub uhm_psgi {
         #utf8::encode $path;
         $env{PATH_INFO}=$path;
 
-        ####################################################
-        # my $count=split "/", $path;                      #
-        #                                                  #
-        # #Find the second slash, the first after the root #
-        # my $index=index $path, "/", 1;                   #
-        # #if($index>=0){                                  #
-        # if($count>2){                                    #
-        #                                                  #
-        #   #we have an 'application'                      #
-        #   $env{SCRIPT_NAME}=substr $path, 0, $index;     #
-        #   $env{PATH_INFO}=substr $path, $index;          #
-        # }                                                #
-        # else {                                           #
-        #   #No application                                #
-        #   #$index=0;                                     #
-        #   $env{SCRIPT_NAME}="";                          #
-        #   $env{PATH_INFO}=$path;#substr $_, $index+1;    #
-        # }                                                #
-        ####################################################
 
-        $env{REQUEST_METHOD}=	$_[REX]->[uSAC::HTTP::Rex::method_];
-        $env{REQUEST_URI}=		$_[REX]->[uSAC::HTTP::Rex::uri_raw_];
+        $env{REQUEST_METHOD}=	$_[IN_HEADER]{":method"};#$_[REX]->[uSAC::HTTP::Rex::method_];
+        $env{REQUEST_URI}=		$_[IN_HEADER]{":path"};#$_[REX]->[uSAC::HTTP::Rex::uri_raw_];
         
 
         $env{QUERY_STRING}=		$_[REX][uSAC::HTTP::Rex::query_string_];
@@ -249,7 +214,7 @@ sub uhm_psgi {
         $env=$ctx->[0];
         $buffer=$ctx->[1];
 
-          $buffer->print($_[PAYLOAD][1]);
+          $buffer->print($_[PAYLOAD]);
           unless($_[CB]){
             #last call, Actually call the application
             $env->{"psgi.input"}=$buffer->rewind; 
@@ -266,31 +231,36 @@ sub uhm_psgi {
         #Execute the PSGI application
         my $res=$app->($env);
 
-        #Convert array of headers to hash
-        $res->[1]={$res->[1]->@*};
 
         if(ref($res) eq  "CODE"){
           #DELAYED RESPONSE
           $res->(sub {
               my $res=shift;
+              #Convert array of headers to hash
+              $res->[1]={$res->[1]->@*};
+              $res->[1]{":status"}=$res->[0];
               if(@$res==3){
                 #DELAYED RESPONSE IS A 3 elemement response
-                $next->($usac, $rex, $res->[0], $res->[1], join "", $res->[2]->@*);
+                #$res->[1]{":status"}=$res->[0];
+                $next->($usac, $rex, $in_header, $res->[1], join "", $res->[2]->@*);
                 return;
               }
 
               #or it is streaming. return writer
               my ($code, $psgi_headers, $psgi_body)=@$res;
-              uSAC::HTTP::Middleware::PSGI::Writer->new(%options, code=>$code, headers=>$psgi_headers, rex=>$rex, matcher=>$usac, next=>$next);
+              uSAC::HTTP::Middleware::PSGI::Writer->new(%options,  in_header=>$in_header, headers=>$psgi_headers, rex=>$rex, matcher=>$usac, next=>$next);
             });
           return
         }
 
         for(ref($res->[2])){
+          #Convert array of headers to hash
+          $res->[1]={$res->[1]->@*};
           if($_ eq "ARRAY"){
             Log::OK::TRACE and log_trace "IN DO ARRAY";
             #do_array($usac, $rex, $res);
-            $next->($usac, $rex, $res->[0], $res->[1], join("", $res->[2]->@*),undef);
+            $res->[1]{":status"}=$res->[0];
+            $next->($usac, $rex, $in_header, $res->[1], join("", $res->[2]->@*),undef);
             #delete $ctx{$_[REX]} if $buffer;  #Immediate respose dispose of context if it was created
           }
           #elsif($_ eq "GLOB" or $res->[2] isa "IO::Handle"){
@@ -311,27 +281,23 @@ sub uhm_psgi {
     my $next=shift;
   };
 
+  my $error=sub {
+    my $next=shift;
+    sub {
+        delete $ctx{$_[REX]};
+        &$next;
+    }
+  };
+
   [$inner, $outer];
 }
 
-##########################################################
-# sub do_array {                                         #
-#         my ($usac,$rex, $res)=@_;                      #
-#         my $session=$rex->[uSAC::HTTP::Rex::session_]; #
-#                                                        #
-#         rex_write $usac,$rex,                          #
-#                 $res->[0],                             #
-#                 $res->[1],                             #
-#                 join "", $res->[2]->@*;                #
-#                                                        #
-# }                                                      #
-##########################################################
 
 sub do_glob {
   Log::OK::TRACE and log_trace "IN DO GLOB";
 	my ($usac, $rex, $res,$next)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
-	my $dropper=$session->dropper;#$rex->[uSAC::HTTP::Rex::session_]->dropper;#[uSAC::HTTP::Session::dropper_];
+	my $dropper=$session->dropper;
 
 	my ($code, $psgi_headers, $psgi_body)=@$res;
 

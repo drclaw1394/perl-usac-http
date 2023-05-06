@@ -96,8 +96,13 @@ my $server; $server=usac_server {
       };
 
 		usac_route '/static/hot.txt'
-      => uhm_gzip()
-      => uhm_deflate()
+      ##############################
+      # => sub {                   #
+      #   say Dumper $_[IN_HEADER] #
+      # }                          #
+      # => uhm_gzip()              #
+      # => uhm_deflate()           #
+      ##############################
       => uhm_static_file headers=>{unkown=>"A"}, usac_path root=>usac_dirname, "static/hot.txt";
 
     usac_route "/die"
@@ -261,7 +266,7 @@ my $server; $server=usac_server {
 
     usac_error_route "/error" 
       => sub {
-        $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[CODE];
+        $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[OUT_HEADER]{":status"};
         &rex_write;
 		  };
 

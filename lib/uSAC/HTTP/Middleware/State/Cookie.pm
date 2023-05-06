@@ -51,7 +51,7 @@ sub state_cookie_in {
 		#input sub
 		#Extract the cookie with the right key
 		sub {
-        return &$inner_next unless $_[CODE] and $_[HEADER];
+        return &$inner_next unless $_[OUT_HEADER];
 			#route, rex, 
 			my ($route, $rex)=@_;
 			my $state_value;
@@ -85,7 +85,7 @@ sub state_cookie_out {
 		my $outer_next=shift;
 
 			sub {
-        return &$outer_next unless $_[CODE] and $_[HEADER];
+        return &$outer_next unless $_[OUT_HEADER];
 				Log::OK::DEBUG and log_debug "StateCookie: top";
 				Log::OK::DEBUG and log_debug join " ",caller;
 				Log::OK::DEBUG and log_debug "StateCookie: processing";

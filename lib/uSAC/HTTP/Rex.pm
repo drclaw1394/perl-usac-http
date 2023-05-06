@@ -122,7 +122,6 @@ sub rex_write{
 		$_[HEADER]{HTTP_CONNECTION()}="close" if($_[REX][closeme_]->$*);
 
 		#Hack to get HTTP/1.0 With keepalive working
-    #push $_[HEADER]->@*, HTTP_CONNECTION, "Keep-Alive" if($_[REX][version_] eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
 		$_[HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[REX][version_] eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
 	}
 
@@ -235,85 +234,73 @@ sub rex_peer {
 #TODO: "Multiple Choice"=>300,
 
 sub rex_redirect_moved{
-  if($_[CODE]){
     my $url=$_[PAYLOAD];
-    $_[CODE]=HTTP_MOVED_PERMANENTLY;
+    $_[OUT_HEADER]{":status"}=HTTP_MOVED_PERMANENTLY;
     #push $_[HEADER]->@*, 
     for my ($k,$v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
-  }
 	&rex_write;
 }
 
 sub rex_redirect_see_other{
-  if($_[CODE]){
     my $url=$_[PAYLOAD];
-    $_[CODE]=HTTP_SEE_OTHER;
+    $_[OUT_HEADER]{":status"}=HTTP_SEE_OTHER;
     #push $_[HEADER]->@*, 
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
-  }
 	&rex_write;
 }
 
 sub rex_redirect_found {
 	#my $url=pop;
-  if($_[CODE]){
     my $url=$_[PAYLOAD];
-    $_[CODE]=HTTP_FOUND;
+    $_[OUT_HEADER]{":status"}=HTTP_FOUND;
     #push $_[HEADER]->@*,
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
-  }
 	&rex_write;
 	
 }
 
 sub rex_redirect_temporary {
-  if($_[CODE]){
     my $url=$_[PAYLOAD];
-    $_[CODE]=HTTP_TEMPORARY_REDIRECT;
+    $_[OUT_HEADER]{":status"}=HTTP_TEMPORARY_REDIRECT;
     #push $_[HEADER]->@*
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
 
     $_[PAYLOAD]="";
-  }
 	&rex_write;
 	
 }
 
 sub rex_redirect_permanent {
-  if($_[CODE]){
     my $url=$_[PAYLOAD];
-    $_[CODE]=HTTP_PERMANENT_REDIRECT;
+    $_[OUT_HEADER]{":status"}=HTTP_PERMANENT_REDIRECT;
     #push $_[HEADER]->@*,
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
-  }
 	&rex_write;
 	
 }
 
 sub rex_redirect_not_modified {
-  if($_[CODE]){
     my $url=$_[PAYLOAD];
-    $_[CODE]=HTTP_NOT_MODIFIED;
+    $_[OUT_HEADER]{":status"}=HTTP_NOT_MODIFIED;
     #push $_[HEADER]->@*, 
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
-  }
 	&rex_write;
 }
 
@@ -322,16 +309,14 @@ sub rex_redirect_internal;
 
 #General error call, Takes an additional argument of new status code
 sub rex_error {
-  if($_[CODE]){
     my $site=$_[ROUTE][1][0];
     $_[CB]=undef;
     $_[REX][method_]="GET";
     $_[REX][in_progress_]=1;
-    #$_[CODE]//=HTTP_NOT_FOUND;	#New return code is appened at end
 
     #Locate applicable site urls to handle the error
 
-    for($site->error_uris->{$_[CODE]}){
+    for($site->error_uris->{$_[OUT_HEADER]{":status"}}){
       if($_){
         $_[PAYLOAD]=my $a=$_;
         return &rex_redirect_internal
@@ -342,36 +327,27 @@ sub rex_error {
     #If one wasn't found, then make an ugly one
     #$_[PAYLOAD]||="Site: ".$site->id.': Error: '.$_[CODE];
     #$_[PAYLOAD]="";
-  }
 	&rex_write;
 }
 
 
 sub rex_error_not_found {
-  if($_[CODE]){
-    $_[CODE]=HTTP_NOT_FOUND;
-  }
+    $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
 	&rex_error;
 }
 
 sub rex_error_forbidden {
-  if($_[CODE]){
-    $_[CODE]= HTTP_FORBIDDEN;
-  }
+    $_[OUT_HEADER]{":status"}= HTTP_FORBIDDEN;
 	&rex_error;
 }
 
 sub rex_error_unsupported_media_type {
-  if($_[CODE]){
-    $_[CODE]= HTTP_UNSUPPORTED_MEDIA_TYPE;
-  }
+    $_[OUT_HEADER]{":status"}= HTTP_UNSUPPORTED_MEDIA_TYPE;
 	&rex_error;
 }
 
 sub rex_error_internal_server_error {
-  if($_[CODE]){
-    $_[CODE]=HTTP_INTERNAL_SERVER_ERROR;
-  }
+    $_[OUT_HEADER]{":status"}=HTTP_INTERNAL_SERVER_ERROR;
     &rex_error;
 }
 
@@ -390,8 +366,8 @@ sub rex_redirect_internal {
   # Should the code be force reset to -1 on internal redirect, or leave it to the
   # programmer?
   #
-  my $code=$_[CODE];
-  my $header=$_[HEADER]?{$_[HEADER]->%*}:{};
+  my $in_header=$_[IN_HEADER];
+  my $header=$_[OUT_HEADER]?{$_[OUT_HEADER]->%*}:{};
 
   #$_[CODE]=0;
   
@@ -413,7 +389,6 @@ sub rex_redirect_internal {
     $rex->[uri_stripped_]=$uri;
     #say "AFTER CALL TO RESET EXISTING CHAIN";
     #Here we reenter the main processing chain with a  new url, potential
-    #new headers and status code
     #undef $_[0];
     $t=undef;
     $rex->[recursion_count_]++;
@@ -424,7 +399,7 @@ sub rex_redirect_internal {
       join(" ", $rex->@[method_, uri_raw_]),#New method and url
     );
     
-    $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $header,my $a="",my $b=undef);
+    $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header,my $a="",my $b=undef);
   #};
 }
 
@@ -556,7 +531,8 @@ sub usac_multipart_stream {
 			#shift;		#remove place holder for mime
 			my $session=$rex->[uSAC::HTTP::Rex::session_];
 			#check if content type is correct first
-			unless (index($rex->[headers_]{CONTENT_TYPE},'multipart/form-data')>=0){
+      #unless (index($rex->[headers_]{CONTENT_TYPE},'multipart/form-data')>=0){
+			unless (index($_[IN_HEADER]{"content-type"},'multipart/form-data')>=0){
 				#$session->[uSAC::HTTP::Session::closeme_]=1;
 				$rex->[closeme_]->$*=1;
 
@@ -597,7 +573,8 @@ sub parse_form_params {
 	#5=>section header
 	#
 	#parse the fields	
-	for ($rex->[headers_]{CONTENT_TYPE}){
+  #for ($rex->[headers_]{CONTENT_TYPE}){
+	for ($_[IN_HEADER]{"content-type"}){
 		if(/multipart\/form-data/){
 			#parse content disposition (name, filename etc)
 			my $kv={};
@@ -647,8 +624,6 @@ sub umw_dead_horse_stripper {
     my $index=shift;
     my %options=@_;
 		sub {
-      return &$inner_next unless $_[CODE];
-
       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
       if($_[HEADER]){
         $_[REX][uri_stripped_]= 
@@ -679,17 +654,16 @@ sub umw_dead_horse_stripper {
     },
 
 	};
+
   my $outer=sub {
     my ($next ,$index, %options)=@_;
-    sub {
-      #say "OUTER DEAD HORSE";
-      &$next;
-    }
+    $next;
   };
 
   my $error=sub {
     my ($next ,$index, %options)=@_;
     my $site=$options{site};
+
     if($site->mode==0){
       sub {
       #say "error DEAD HORSE";

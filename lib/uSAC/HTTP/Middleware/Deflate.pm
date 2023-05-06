@@ -59,12 +59,13 @@ sub uhm_deflate {
 
           my $exe;
           my $ctx;
-          if($_[HEADER]){
+          if($_[OUT_HEADER]){
             no warnings "uninitialized";
               # Do next unless header is defined and contains gzip
               return &$next if  
-                $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} !~ /deflate/
-                or $_[HEADER]{HTTP_CONTENT_ENCODING()};
+              #$_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} !~ /deflate/
+                $_[IN_HEADER]{"accept-encoding"} !~ /deflate/
+                or $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()};
 
             Log::OK::TRACE and log_debug "Deflate: in header processing";
             Log::OK::TRACE and log_trace "deflate: looking for accept";
@@ -79,8 +80,8 @@ sub uhm_deflate {
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
 
-            delete $_[HEADER]{HTTP_CONTENT_LENGTH()};
-            $_[HEADER]{HTTP_CONTENT_ENCODING()}="deflate";
+            delete $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()};
+            $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()}="deflate";
 
             unless($_[CB]){
               $ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);

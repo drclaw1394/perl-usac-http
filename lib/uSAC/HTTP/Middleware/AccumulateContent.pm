@@ -44,19 +44,20 @@ sub uhm_urlencoded_slurp {
     sub {
     #This sub is shared across all requests for  a route. 
       my $c;
-      if($_[HEADER]){
+      if($_[OUT_HEADER]){
         #test incomming headers are correct
         
-        unless(($_[REX]->headers->{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
+        #unless(($_[REX]->headers->{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
+        unless(($_[IN_HEADER]{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
           $_[PAYLOAD]="";
           say "accumuate UNSPPORTED";
           return &rex_error_unsupported_media_type 
         }
 
         #$content_length=$_[REX]->headers->{CONTENT_LENGTH};
-        if(defined $upload_limit  and ($_[REX]->headers->{CONTENT_LENGTH}//0) > $upload_limit){
-          $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-          $_[HEADER]={};
+        #if(defined $upload_limit  and ($_[REX]->headers->{CONTENT_LENGTH}//0) > $upload_limit){
+        if(defined $upload_limit  and ($_[IN_HEADER]{CONTENT_LENGTH}//0) > $upload_limit){
+          $_[OUT_HEADER]{":status"}=HTTP_PAYLOAD_TOO_LARGE;
           $_[PAYLOAD]="";#"Slurp Limit:  $upload_limit";
           say "accumulate do big";
           return &rex_error;
@@ -64,21 +65,20 @@ sub uhm_urlencoded_slurp {
 
         #first call
         $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
-        $c=$ctx{$_[REX]}=$_[PAYLOAD][0]; #First call stores the payload
+        $c=$ctx{$_[REX]}=[{},$_[PAYLOAD]]; #First call stores the payload
         $c->[0]{_byte_count}=0;
       }
       else{
         #subsequent calls
         $c=$ctx{$_[REX]};
-        $c->[1].=$_[PAYLOAD][0][1];
-        $c->[0]{_byte_count}+=length $_[PAYLOAD][0][1];
+        $c->[1].=$_[PAYLOAD];
+        $c->[0]{_byte_count}+=length $_[PAYLOAD];
       }
 
       #Check total incomming byte count is within limits
       ##only needed for chunks?
       if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
-        $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-          $_[HEADER]={};
+        $_[OUT_HEADER]{":status"}=HTTP_PAYLOAD_TOO_LARGE;
         $_[PAYLOAD]="";#"Slurp Limit:  $upload_limit";
         return &rex_error;
       }
@@ -86,7 +86,7 @@ sub uhm_urlencoded_slurp {
       #Accumulate until the last
       if(!$_[CB]){
         #Last set
-        $_[PAYLOAD]=delete $ctx{$_[REX]};
+        $_[PAYLOAD]=(delete $ctx{$_[REX]})->[1];
         undef $c;
         &$next;
       }
@@ -121,96 +121,85 @@ sub uhm_urlencoded_file {
     sub {
       #This sub is shared across all requests for  a route. 
       say STDERR "URL UPLOAD TO FILE";
-      if($_[CODE]){
-        my $c;
-        if($_[HEADER]){
-          unless($_[REX]->headers->{CONTENT_TYPE} =~ m{application/x-www-form-urlencoded}){
-            $_[PAYLOAD]="";
-			      return &rex_error_unsupported_media_type 
-          }
-          if(defined $upload_limit  and $_[REX]->headers->{CONTENT_LENGTH} > $upload_limit){
-            $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-            $_[HEADER]={};
-            $_[PAYLOAD]="Limit:  $upload_limit";
-            return &rex_error;
-          }
-          say STDERR "URL UPLOAD TO FILE first call";
-          #first call. Open file a temp file
-          my $path=IO::FD::mktemp catfile $upload_dir, "X"x10;
-          say STDERR "URL UPLOAD TO FILE first call: path is $path";
-          my $error;
-
-          if(defined IO::FD::sysopen( my $fd, $path, O_CREAT|O_RDWR)){
-            #store the file descriptor in the body field of the payload     
-            my $bytes;
-            if(defined ($bytes=IO::FD::syswrite $fd, $_[PAYLOAD][1])){
-              $_[PAYLOAD][0]{_filename}=$path;
-              $_[PAYLOAD][0]{_byte_count}=$bytes;
-              $_[PAYLOAD][1]=$fd;
-            }
-            else {
-              say STDERR "ERROR writing FILE $!";
-              &rex_error_internal_server_error;
-              #Internal server error
-            }
-          }
-          else {
-              #Internal server error
-              say STDERR "ERROR OPENING FILE $!";
-              &rex_error_internal_server_error;
-          }
-
-          $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
-          $c=$ctx{$_[REX]}=$_[PAYLOAD];
+      my $c;
+      if($_[OUT_HEADER]){
+        #unless($_[REX]->headers->{CONTENT_TYPE} =~ m{application/x-www-form-urlencoded}){
+        unless($_[IN_HEADER]{CONTENT_TYPE} =~ m{application/x-www-form-urlencoded}){
+          $_[PAYLOAD]="";
+          return &rex_error_unsupported_media_type 
         }
-        else{
-          #subsequent calls
-          $c=$ctx{$_[REX]};
-          my $bytes;
-          if(defined($bytes=IO::FD::syswrite $c->[1], $_[PAYLOAD][0][1])){
-            $c->[0]{_byte_count}+=$bytes;
-
-          }
-          else {
-            #internal server error
-              &rex_error_internal_server_error;
-          }
-
-        }
-
-        #Check file size is within limits
-        if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
-          $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-          $_[HEADER]={};
+        #if(defined $upload_limit  and $_[REX]->headers->{CONTENT_LENGTH} > $upload_limit){
+        if(defined $upload_limit  and $_[IN_HEADER]{CONTENT_LENGTH} > $upload_limit){
+          $_[OUT_HEADER]{":status"}=HTTP_PAYLOAD_TOO_LARGE;
           $_[PAYLOAD]="Limit:  $upload_limit";
           return &rex_error;
         }
+        say STDERR "URL UPLOAD TO FILE first call";
+        #first call. Open file a temp file
+        my $path=IO::FD::mktemp catfile $upload_dir, "X"x10;
+        say STDERR "URL UPLOAD TO FILE first call: path is $path";
+        my $error;
 
-
-        #Accumulate until the last
-        if(!$_[CB]){
-          #Last set
-          my $c=$_[PAYLOAD][0]=delete $ctx{$_[REX]};
-          if(defined IO::FD::close $c->[1]){
-            
+        if(defined IO::FD::sysopen( my $fd, $path, O_CREAT|O_RDWR)){
+          #store the file descriptor in the body field of the payload     
+          my $bytes;
+          if(defined ($bytes=IO::FD::syswrite $fd, $_[PAYLOAD])){
+            $_[PAYLOAD][0]{_filename}=$path;
+            $_[PAYLOAD][0]{_byte_count}=$bytes;
+            $_[PAYLOAD][1]=$fd;
           }
           else {
+            say STDERR "ERROR writing FILE $!";
+            &rex_error_internal_server_error;
             #Internal server error
           }
-          $c->[1]=undef;
-          &$next;
         }
-        
+        else {
+            #Internal server error
+            say STDERR "ERROR OPENING FILE $!";
+            &rex_error_internal_server_error;
+        }
+
+        $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
+        $c=$ctx{$_[REX]}=[{},undef];#$_[PAYLOAD];
       }
-      else {
-        #At this point the connection should be closed
-        my $c=delete $ctx{$_[REX]};
-        if($c->[1]){
-          #Force close fds
-          IO::FD::close $c->[1];
+      else{
+        #subsequent calls
+        $c=$ctx{$_[REX]};
+        my $bytes;
+        if(defined($bytes=IO::FD::syswrite $c->[1], $_[PAYLOAD])){
+          $c->[0]{_byte_count}+=$bytes;
+
         }
+        else {
+          #internal server error
+            &rex_error_internal_server_error;
+        }
+
+      }
+
+      #Check file size is within limits
+      if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
+        $_[OUT_HEADER]{":status"}=HTTP_PAYLOAD_TOO_LARGE;
+        $_[PAYLOAD]="Limit:  $upload_limit";
+        return &rex_error;
+      }
+
+
+      #Accumulate until the last
+      if(!$_[CB]){
+        #Last set
+        my $c=$_[PAYLOAD]=delete $ctx{$_[REX]};
+        if(defined IO::FD::close $c->[1]){
+          
+        }
+        else {
+          #Internal server error
+        }
+        $c->[1]=undef;
         &$next;
       }
+        
 
     }
   };
@@ -239,13 +228,12 @@ sub uhm_multipart_slurp {
   my %options=@_;
   #if a upload directory is specified, then we write the parts to file instead of memory
   #
+  my %ctx;
   my $inner=sub {
     my $next=shift;
-    my %ctx;
     my $last;
     sub {
       say STDERR " slurp multipart MIDDLEWARE";
-      if($_[CODE]){
         my $c=$ctx{$_[REX]};
         unless($c){
           $c=$ctx{$_[REX]}=[$_[PAYLOAD]];
@@ -270,11 +258,6 @@ sub uhm_multipart_slurp {
           $_[PAYLOAD]=delete $ctx{$_[REX]};
           &$next;
         }
-      }
-      else {
-        delete $ctx{$_[REX]};
-        &$next;
-      }
     }
   };
 
@@ -282,7 +265,15 @@ sub uhm_multipart_slurp {
     my $next=shift;
   };
 
-  [$inner,$outer];
+  my $error=sub {
+    my $next=shift;
+    sub {
+        delete $ctx{$_[REX]};
+        &$next;
+    }
+  };
+
+  [$inner, $outer, $error];
 }
 
 sub uhm_multipart_file {

@@ -46,7 +46,7 @@ sub log_simple_in {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
 
-      return &$inner_next unless $_[CODE] and $_[HEADER];
+      return &$inner_next unless $_[OUT_HEADER];
 			my $time=time;
 
       package uSAC::HTTP::Rex {
@@ -61,13 +61,13 @@ sub log_simple_in {
           say STDERR "Captures:\n".join "\n",$_[1][captures_]->@* if $dump_capture;
           if($dump_headers){
             say STDERR "Incomming Headers:\n" if $dump_headers;
-            my $headers=$_[REX]->headers;
+            #my $headers=$_[REX]->headers;
+            my $headers=$_[IN_HEADER];
             my $out="";
             for my($k, $v)(%$headers){
               $out.="$k: $v\n"; 
             }
             say STDERR $out;
-            #say STDERR Data::Dumper::Dumper $_[1]->headers if $dump_headers;
           }
 			}
 			&$inner_next;		#alway call next. this is just logging
@@ -81,7 +81,7 @@ sub log_simple_out {
 		my $outer_next=shift;
 		sub {
 			#matcher, rex, code, header, body, cb, arg
-      return &$outer_next unless $_[CODE] and $_[HEADER];
+      return &$outer_next unless $_[OUT_HEADER];
 
       say STDERR "\n--->>>";
       say STDERR "Depature time:		".time;

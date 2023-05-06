@@ -67,7 +67,7 @@ sub import {
   if(@_==1 or grep /:constants/, @_){
     #Export contants
     my $i=0;
-    for(qw<ROUTE REX CODE HEADER PAYLOAD CB LF>){
+    for(qw<ROUTE REX IN_HEADER OUT_HEADER HEADER PAYLOAD CB LF>){
       no strict "refs";
       my $name=$caller."::".$_;
       my $a=$i;

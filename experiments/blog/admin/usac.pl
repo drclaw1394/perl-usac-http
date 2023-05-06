@@ -74,7 +74,7 @@ my $server; $server=usac_server {
 
 		usac_error_route "/error/404" => sub {
 			say "ERROR FOR BLOG admin";
-			$_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT admin: $_[CODE]";
+      #$_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT admin: $_[OUT_HEADER]{":status"}";
 			&rex_write;
 		};
 

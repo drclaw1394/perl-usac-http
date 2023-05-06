@@ -81,7 +81,7 @@ BEGIN {
 		Sec-WebSocket-Extensions
 		DataServiceVersion
 	);
-	%const_names=map {(("HTTP_".uc)=~s/-/_/gr, $_)} @names;
+	%const_names=map {(("HTTP_".uc)=~s/-/_/gr, lc $_)} @names;
 
 	my $i=0;
 	#our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $i++)} @names;

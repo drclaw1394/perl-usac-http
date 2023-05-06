@@ -60,11 +60,12 @@ sub uhm_gzip{
             no warnings "uninitialized";
             # Do next unless header is defined and contains gzip
             return &$next if 
-              $_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} !~ /gzip/
-              or $_[HEADER]{HTTP_CONTENT_ENCODING()};
+            #$_[REX][uSAC::HTTP::Rex::headers_]{ACCEPT_ENCODING} !~ /gzip/
+              $_[IN_HEADER]{"accept-encoding"} !~ /gzip/
+              or $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()};
 
             Log::OK::TRACE and log_debug "gzipin header processing";
-            \my %headers=$_[HEADER]; #Alias for easy of use and performance
+            \my %headers=$_[OUT_HEADER]; #Alias for easy of use and performance
             Log::OK::TRACE and log_trace "gzip: looking for accept encoding";
 
 

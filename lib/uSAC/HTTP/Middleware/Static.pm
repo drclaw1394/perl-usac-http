@@ -74,7 +74,8 @@ sub _check_ranges{
 	my ($rex, $length)=@_;
 	#check for ranges in the header
 	my @ranges;
-	for($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+  #for($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
+	for($_[IN_HEADER]{range}){
 		if(!defined){
 			#this should be and error
 			#no ranges specified but create default
@@ -82,7 +83,8 @@ sub _check_ranges{
 		}
 		else {
 			#check the If-Range
-			my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF-RANGE"};
+      #my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF-RANGE"};
+			my $ifr=$_[IN_HEADER]{"if-range"};
 
 			#check range is present
 			#response code is then 206 partial
@@ -170,7 +172,7 @@ sub send_file_uri_norange {
   #return a sub with cache an sysroot aliased
   #use  integer;
 
-  my ($matcher, $rex, $code, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $closer)=@_;
+  my ($matcher, $rex, $in_header, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $closer)=@_;
 
   Log::OK::TRACE and log_trace("send file no range");
 
@@ -182,8 +184,8 @@ sub send_file_uri_norange {
 
   $reply="";
   #process caching headers
-  my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
-  #my $code=HTTP_OK;
+  #my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
+  my $headers=$_[IN_HEADER];#$rex->headers;
   # my $etag="\"$mod_time-$content_length\"";
 
   my $offset=0;	#Current offset in file
@@ -194,23 +196,22 @@ sub send_file_uri_norange {
 
 
   #Ignore caching headers if we are processing as an error
-  my $as_error= HTTP_BAD_REQUEST<=$code;
+  my $as_error= HTTP_BAD_REQUEST<=$out_headers->{":status"};
   if(!$as_error){
     #TODO: needs testing
-    for my $t ($headers->{"IF-NONE-MATCH"}){#HTTP_IF_NONE_MATCH){
-      $code=HTTP_OK and last unless $t;
-      #$code=HTTP_OK and last if  $entry->[etag_] !~ /$t/;
-      $code=HTTP_NOT_MODIFIED and last;	#no body to be sent
-
+    for my $t ($headers->{"if-none-match"}){
+      #HTTP_IF_NONE_MATCH){
+      $out_headers->{":status"}=HTTP_OK and last unless $t;
+      $out_headers->{":status"}=HTTP_NOT_MODIFIED and last;	#no body to be sent
     }
 
     #TODO: needs testing
-    for my $time ($headers->{"IF-MODIFIED-SINCE"}){
+    for my $time ($headers->{"if-modified-since"}){
       #attempt to parse
-      $code=HTTP_OK and last unless $time;
+      $out_headers->{":status"}=HTTP_OK and last unless $time;
       my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
-      $code=HTTP_OK  and last if $mod_time>$tp->epoch;
-      $code=HTTP_NOT_MODIFIED;	#no body to be sent
+      $out_headers->{":status"}=HTTP_OK  and last if $mod_time>$tp->epoch;
+      $out_headers->{":status"}=HTTP_NOT_MODIFIED;	#no body to be sent
     }
   }
 
@@ -232,19 +233,19 @@ sub send_file_uri_norange {
     $out_headers->{$k}=$v;
   }
 
-  if(!$as_error and $headers->{RANGE}){
-    Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{RANGE}";
+  if(!$as_error and $headers->{range}){
+    Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{range}";
     @ranges=_check_ranges $rex, $content_length;
     unless(@ranges){
-      $code=HTTP_RANGE_NOT_SATISFIABLE;
+      $out_headers->{":status"}=HTTP_RANGE_NOT_SATISFIABLE;
       #push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
       $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
 
-      $next->($matcher, $rex, $code, $out_headers, "");
+      $next->($matcher, $rex, $in_header, $out_headers, "");
       return;
     }
     elsif(@ranges==1){
-      $code=HTTP_PARTIAL_CONTENT;
+      $out_headers->{":status"}=HTTP_PARTIAL_CONTENT;
       my $total_length=0;
       $total_length+=($_->[1]-$_->[0]+1) for @ranges;
       ############################################################################
@@ -277,9 +278,9 @@ sub send_file_uri_norange {
   Log::OK::TRACE and log_trace join ", ", %$out_headers;
 
 
-  $next->($matcher, $rex, $code, $out_headers, "" ) and return
+  $next->($matcher, $rex, $in_header, $out_headers, "" ) and return
   if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
-      or $code==HTTP_NOT_MODIFIED);
+      or $out_headers->{":status"}==HTTP_NOT_MODIFIED);
 
   # Send file
   # We only use send file if content length is larger than $sendfile
@@ -337,11 +338,10 @@ sub send_file_uri_norange {
     };
 
     Log::OK::TRACE  and log_trace "Writing sendfile header";
-    #return $next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
 
     # Use a 0 for the callback to indicate we don't want one
     # and not to execute the default
-    $next->($matcher, $rex, $code, $out_headers, "", $do_sendfile);
+    $next->($matcher, $rex, $in_header, $out_headers, "", $do_sendfile);
     #return $do_sendfile->();
   }
 
@@ -384,7 +384,7 @@ sub send_file_uri_norange {
         #When we have read the required amount of data
         if($total==$content_length){
           if(@ranges){
-            return $next->( $matcher, $rex, $code, $out_headers, $reply, sub {
+            return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {
                 unless(@_){
                   return $sub->();
                 }
@@ -403,13 +403,13 @@ sub send_file_uri_norange {
 
             $closer->($entry);
             #IO::FD::close $in_fh unless $entry->[cached_];
-            return $next->($matcher, $rex, $code, $out_headers, $reply, undef);
+            return $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
           }
         }
 
         #Data read by more to do
         $rc and	($rex
-          ?return $next->($matcher, $rex, $code, $out_headers, $reply, __SUB__)
+          ?return $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__)
           :return undef $sub);
 
         #if ($rc);
@@ -504,7 +504,7 @@ sub _make_list_dir {
 	}
 	
 	sub{
-		my ($line, $rex, $code, $headers, $uri, $next)=@_;
+		my ($line, $rex, $in_header, $headers, $uri, $next)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
 		my $abs_path=$html_root.$uri;
@@ -514,7 +514,7 @@ sub _make_list_dir {
 
       Log::OK::TRACE and "No dir here $abs_path";
       #rex_error_not_found $line, $rex;
-      $_[CODE]=HTTP_NOT_FOUND;
+      $_[OUT_HEADER]{":status"}= HTTP_NOT_FOUND;
       $_[PAYLOAD]="";
       $_[CB]=undef;
 			return &$next;
@@ -543,7 +543,8 @@ sub _make_list_dir {
 
 		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
 		$ren->($data, $labels, \@results);	#Render to output
-		if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
+    #if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
+		if($in_header->{":method"} eq "HEAD"){
 			$next->($line, $rex, HTTP_OK,{HTTP_CONTENT_LENGTH, length $data, @type} , "",my $cb=undef);
 
 		}
@@ -643,13 +644,13 @@ sub uhm_static_root {
     my $next=shift;
     my $p;	#tmp variable
     sub {
-      if($_[HEADER]){
+      if($_[OUT_HEADER]){
       
         #
         # Previous middleware did not find anything, or we don't have a
         # response just yet
         #
-        return &$next unless($_[CODE]<0 or $_[CODE]==HTTP_NOT_FOUND);
+        return &$next unless($_[OUT_HEADER]{":status"}<0 or $_[OUT_HEADER]{":status"}==HTTP_NOT_FOUND);
        
         # 
         # Path is either given with the rex object or passed in by the payload
@@ -664,8 +665,8 @@ sub uhm_static_root {
         # if the filter doesn't match (if a filter exists)
         #
         if($filter and $path !~ /$filter/o){
-          $_[CODE]=HTTP_NOT_FOUND;
-          $_[HEADER]{HTTP_CONTENT_LENGTH()}=0;
+          $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
+          $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
           return &$next;
         }
 
@@ -727,9 +728,8 @@ sub uhm_static_root {
             #
             Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
             $_[PAYLOAD]="";
-            $_[CODE]=HTTP_NOT_FOUND;
-            #push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
-            $_[HEADER]{HTTP_CONTENT_LENGTH()}=0;
+            $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
+            $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
             return &$next;
           }
         }
@@ -743,7 +743,8 @@ sub uhm_static_root {
           $content_type=$mime->{$ext}//$default_mime;
                 
 
-          if($pre_encoded and ($_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//"")=~/(gzip)/){
+          #if($pre_encoded and ($_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//"")=~/(gzip)/){
+          if($pre_encoded and ($_[IN_HEADER]{"accept_encoding"}//"")=~/(gzip)/){
             # Attempt to find a pre encoded file when the client asks and if its enabled
             #
             #say  $_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"};
@@ -766,9 +767,8 @@ sub uhm_static_root {
             # the next middleware
             #
             $_[PAYLOAD]="";
-            $_[CODE]=HTTP_NOT_FOUND;
-            #push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
-            $_[HEADER]{HTTP_CONTENT_LENGTH()}=0;
+            $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
+            $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
             return &$next;
           }
         }

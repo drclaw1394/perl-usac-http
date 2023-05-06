@@ -210,7 +210,7 @@ method __request {
     my $host=$details->[0];
     my $method=$details->[1];
     my $path=$details->[2];
-    my $header=$details->[3];
+    my $out_header=$details->[3];
     my $payload=$details->[4];
     #my $cb=$details->[5];
 
@@ -229,7 +229,13 @@ method __request {
     die "No route found for $host" unless $route;
 
     #  Obtain session or create new. Update with the filehandle
-    my %h=();#%$_static_headers;   #Copy static headers
+    my %in_header=();
+
+    #$in_header{":method"}=$method;
+    #$in_header{":path"}=$path;
+
+    $out_header->{":method"}=$method;
+    $out_header->{":path"}=$path;
 
 
 
@@ -237,7 +243,7 @@ method __request {
     #
     $ex=$session->exports;
     $version="HTTP/1.1"; # TODO: FIX
-    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%h, $host, $version, $method, $path, $ex, $captures);
+    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%in_header, $host, $version, $method, $path, $ex, $captures);
 
 
     # Set the current rex and route for the session.
@@ -249,7 +255,8 @@ method __request {
 
     # Call the head of the outerware function
     #
-    $route->[1][ROUTE_OUTER_HEAD]($route, $rex, my $code=-1, $header, $payload, undef);
+    $out_header->{":status"}=-1;
+    $route->[1][ROUTE_OUTER_HEAD]($route, $rex, \%in_header, $out_header, $payload, undef);
   };
 }
 

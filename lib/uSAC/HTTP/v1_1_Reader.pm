@@ -128,28 +128,21 @@ sub make_parser{
   my $multi_state=0;
   my $chunked_state=0;
   my $first=1;
-  #my $out_header=[];
-  my $out_header={};
+  my $out_header={":status"=> -1 };
   my $dummy_cb=sub {};
 
 
   sub {
-  #say "____HTTP _PARSER:". join ", ", @_;
     my $processed=0;
-
-    ##my %h;
 
     # Set default HTTP code
     $code=-1;
     try {
       unless(@_){
         Log::OK::TRACE and log_trace "PASSING ON ERROR IN HTTP parser";
-        # 0=> site
-        # 1=> inner_head
-        # 2=> outer_head
-        # 3=> error_head/ reset
+        # 0=> site 1=> inner_head 2=> outer_head 3=> error_head/ reset
         #
-        $route and $route->[1][ROUTE_ERROR_HEAD]($route, $rex);#, $code, $out_header, undef, undef);
+        $route and $route->[1][ROUTE_ERROR_HEAD]($route, $rex);
         $processed=0;
         return;
       }
@@ -231,25 +224,24 @@ sub make_parser{
             map split(":", $_, 2) ,
               split("\015\012", substr($buf, $ppos, $pos3-$ppos))
             ){
-              $k=~tr/-/_/;
-              $k=uc $k;
+              $k=lc $k;
 
-              #$val=builtin::trim $val;  #perl 5.36 required
-              $val=~s/\A\s+//;#uo;
-              $val=~s/\s+\z//;#uo;
+              $val=builtin::trim $val;  #perl 5.36 required
+              #$val=~s/\A\s+//;#uo;
+              #$val=~s/\s+\z//;#uo;
 
               \my $e=\$h{$k};
               $e?($e.=",$val"):($e=$val);
 
 
               #$ppos=$pos3+2;
-              if($k eq "HOST"){
+              if($k eq "host"){
                 $host=$val;
               }
-              elsif($k eq "CONTENT_LENGTH"){
+              elsif($k eq "content-length"){
                 $body_len= int $val;
               }
-              elsif($k eq "CONNECTION"){
+              elsif($k eq "connection"){
                 $connection=$val;
               }
 
@@ -273,6 +265,11 @@ sub make_parser{
           
           unless($mode){
 
+            $h{":method"}=$method;
+            $h{":scheme"}="http";
+            $h{":authority"}=$host;
+            $h{":path"}=$uri;
+
             # In server mode, the route need needs to be matched for incomming
             # processing and a rex needs to be created
             #
@@ -285,7 +282,7 @@ sub make_parser{
             # However the headers from incomming request and the response code
             # need updating. 
             #
-            $rex->[uSAC::HTTP::Rex::headers_]=\%h;
+            #$rex->[uSAC::HTTP::Rex::headers_]=\%h;
             $code=$uri; # NOTE: variable is called $uri, but doubles as code in client mode
 
           }
@@ -301,16 +298,16 @@ sub make_parser{
             # Fixed body length. Single part
               $state=STATE_BODY_CONTENT;
           }
-          elsif($h{TRANSFER_ENCODING}//"" =~ /chunked/i){
+          elsif($h{"transfer-encoding"}//"" =~ /chunked/i){
             # Ignore content length and treat as chunked
               $state=STATE_BODY_CHUNKED;
               $chunked_state=0;
               #next;
           }
-          elsif( $h{CONTENT_TYPE}//"" =~/multipart/i){
+          elsif( $h{"content-type"}//"" =~/multipart/i){
             # Treat as multipart
             #
-            $body_type = $h{CONTENT_TYPE};
+            $body_type = $h{"content-type"};
               $state=STATE_BODY_MULTIPART;
               #next;
           }
@@ -318,10 +315,9 @@ sub make_parser{
             # no body length specifed assumed no body
             $state=$start_state;
             $payload="";
-            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, $payload, my $cb=undef);
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
 
-            #$out_header=[];
-            $out_header={};
+            $out_header={":status"=> -1};
           }
 
           #$state=$start_state;
@@ -333,14 +329,16 @@ sub make_parser{
           #\my $buf=\$_[0];
 
           #\my %h=$rex->headers;
-          if($out_header){
-            #
-            # Single part. Only send the form header once when the out header is set
-            #
-            $form_headers->{CONTENT_LENGTH}=$body_len;		#copy header to part header
-
-            $form_headers->{CONTENT_TYPE}=$h{CONTENT_TYPE};
-          }
+          #####################################################################################
+          # if($out_header){                                                                  #
+          #   #                                                                               #
+          #   # Single part. Only send the form header once when the out header is set        #
+          #   #                                                                               #
+          #   $form_headers->{CONTENT_LENGTH}=$body_len;          #copy header to part header #
+          #                                                                                   #
+          #   $form_headers->{CONTENT_TYPE}=$h{CONTENT_TYPE};                                 #
+          # }                                                                                 #
+          #####################################################################################
 
           #here we need to process data untill the end of the body,
           #That could mean a chunked transfer, multipart or urlencoded type data
@@ -367,17 +365,16 @@ sub make_parser{
             $state=$start_state;
             $processed=0;
             $_[PAYLOAD]="";#substr $buf, 0, $new, "";
-            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $payload], my $cb=undef);
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
             $form_headers={}; #Create new part header
-            #$out_header=[];   #Create new out header
-            $out_header={};
+            $out_header={":status"=> -1};
             $processed=0;
           }
           else {
             # 
             # Not last send
             #
-            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $payload], $dummy_cb);
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, $dummy_cb);
             $body_len-=$new;
 
             #First pass always sets the header to undef for subsequent middleware
@@ -409,8 +406,6 @@ sub make_parser{
                 #send partial data to callback
                 my $len=($index-2);
 
-
-
                 #test if last
                 my $offset=$index+$b_len;
 
@@ -420,16 +415,15 @@ sub make_parser{
                   $multi_state=0;
                   $state=$start_state;
                   my $data=substr($buf, 0, $len);
-                  $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $data], my $cb=undef);
-                  #$out_header=[];
-                  $out_header={};
+                  $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, [$form_headers, $data], my $cb=undef);
+                  $out_header={":status"=> -1};
 
                   $buf=substr $buf, $offset+4;
                 }
                 elsif(substr($buf, $offset, 2) eq CRLF){
                   #not last, regular part
                   my $data=substr($buf, 0, $len);
-                  $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb) unless $first;
+                  $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, [$form_headers, $data], $dummy_cb) unless $first;
                   $first=0;
                   #move past data and boundary
                   $buf=substr $buf, $offset+2;
@@ -449,7 +443,7 @@ sub make_parser{
                 # Full boundary not found, send partial, upto boundary length
                 my $len=length($buf)-$b_len;		#don't send boundary
                 my $data=substr($buf, 0, $len);
-                $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [$form_headers, $data], $dummy_cb);
+                $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, [$form_headers, $data], $dummy_cb);
                 $buf=substr $buf, $len;
                 #wait for next read now
                 return;
@@ -530,7 +524,7 @@ sub make_parser{
               $state=$start_state;
               my $payload="";
               $buf=substr $buf, $index2+2;
-              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, $payload, my $cb=undef);
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
 
             }
             elsif($index>=0) {
@@ -558,7 +552,7 @@ sub make_parser{
               say "the payload length: ".length $payload;
               $buf=substr $buf,  $chunked_state+2;
               $chunked_state=0;
-              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, $payload, $dummy_cb);
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, $dummy_cb);
               $out_header=undef;
             }
             else {
@@ -670,7 +664,7 @@ sub make_serialize{
       # TODO: fix with multipart uploads? what is the content length
       #
       #TODO: Fix when payload is an array ref. treat as  header, body pairs
-      if($_[PAYLOAD] and  not exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
+      if($_[PAYLOAD] and not exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
 
         $ctx=1;
         for($_[HEADER]{HTTP_TRANSFER_ENCODING()}){
@@ -686,25 +680,26 @@ sub make_serialize{
 
       # If no valid code is set then set default 200
       #
-      $_[CODE]=HTTP_OK if $_[CODE]<0;
+      my $code=delete $_[OUT_HEADER]{":status"};
+      $code=HTTP_OK if $code<0;
 
       if($mode == MODE_SERVER){
-        #say "SERVER CODE: $_[CODE]";
         # serialize in server mode is a response
-        $reply=$protocol." ".$_[CODE]." ". $code_to_name->[$_[CODE]]. CRLF;
+        $reply=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
       }
       else {
-        say "CLIENT CODE: $_[CODE]";
+        #say "CLIENT CODE: $_[OUT_HEADER]{":status"}";
         # TODO: check CODE. If an error then don't serialize. call the error head
-        return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $_[CODE];
+        return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $code;
 
         # serialize in client mode is a request
-        $reply="$_[REX][uSAC::HTTP::Rex::method_] $_[REX][uSAC::HTTP::Rex::uri_raw_] $protocol".CRLF;
+        #$reply="$_[REX][uSAC::HTTP::Rex::method_] $_[REX][uSAC::HTTP::Rex::uri_raw_] $protocol".CRLF;
+        $reply="$_[OUT_HEADER]{':method'} $_[OUT_HEADER]{':path'} $protocol".CRLF;
       }
 
       # Render headers
       #
-      foreach my ($k,$v)(%{$_[HEADER]}){
+      foreach my ($k,$v)(%{$_[OUT_HEADER]}){
         $reply.= $k.": ".$v.CRLF 
       }
 
@@ -743,12 +738,10 @@ sub make_serialize{
         #$_[PAYLOAD]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
         unless($_[CB]){
           $reply.="00".CRLF.CRLF;
-          #$_[PAYLOAD].="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
       }
 
-      #$_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6])
       $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb)
     }
   }
