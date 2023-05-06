@@ -530,7 +530,7 @@ sub make_parser{
               $state=$start_state;
               my $payload="";
               $buf=substr $buf, $index2+2;
-              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [undef, $payload], my $cb=undef);
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, $payload, my $cb=undef);
 
             }
             elsif($index>=0) {
@@ -558,7 +558,7 @@ sub make_parser{
               say "the payload length: ".length $payload;
               $buf=substr $buf,  $chunked_state+2;
               $chunked_state=0;
-              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, [undef, $payload], $dummy_cb);
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $code, $out_header, $payload, $dummy_cb);
               $out_header=undef;
             }
             else {
@@ -634,14 +634,6 @@ sub make_serialize{
 
 
   sub {
-    #continue stack reset on error condition. The IO layer resets
-    #on a write call with no arguemts;
-    ###############################################
-    # unless($_[CODE]){                           #
-    #   delete $out_ctx{$_[REX]};                 #
-    #   return $_[REX][uSAC::HTTP::Rex::write_]() #
-    # }                                           #
-    ###############################################
     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
     Log::OK::TRACE and log_trace join ", ", @_;
 
@@ -669,6 +661,7 @@ sub make_serialize{
     my $cb=$_[CB];#//$_[REX][uSAC::HTTP::Rex::dropper_];
 
 
+    my $reply="";
     if($_[HEADER]){
 
       # Header with a potential body attached.
@@ -695,9 +688,8 @@ sub make_serialize{
       #
       $_[CODE]=HTTP_OK if $_[CODE]<0;
 
-      my $reply="";
       if($mode == MODE_SERVER){
-        say "SERVER CODE: $_[CODE]";
+        #say "SERVER CODE: $_[CODE]";
         # serialize in server mode is a response
         $reply=$protocol." ".$_[CODE]." ". $code_to_name->[$_[CODE]]. CRLF;
       }
@@ -712,12 +704,6 @@ sub make_serialize{
 
       # Render headers
       #
-      ######################################
-      # foreach my ($k,$v)(@{$_[HEADER]}){ #
-      #   $reply.= $k.": ".$v.CRLF         #
-      # }                                  #
-      ######################################
-      
       foreach my ($k,$v)(%{$_[HEADER]}){
         $reply.= $k.": ".$v.CRLF 
       }
@@ -742,6 +728,7 @@ sub make_serialize{
 
       }
       else {
+        #$reply.=$_->[1] for($_[PAYLOAD]->@*);
         $reply.=$_[PAYLOAD];
       }
 
@@ -751,15 +738,18 @@ sub make_serialize{
       # No header specified. Just a body
       #
       if($ctx//=$out_ctx{$_[REX]}){
+        $reply= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
 
-        $_[PAYLOAD]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+        #$_[PAYLOAD]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
         unless($_[CB]){
-          $_[PAYLOAD].="00".CRLF.CRLF;
+          $reply.="00".CRLF.CRLF;
+          #$_[PAYLOAD].="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
       }
 
-      $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6])
+      #$_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD],$cb,$_[6])
+      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb)
     }
   }
 };

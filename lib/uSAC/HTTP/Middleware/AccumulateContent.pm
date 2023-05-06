@@ -64,14 +64,14 @@ sub uhm_urlencoded_slurp {
 
         #first call
         $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
-        $c=$ctx{$_[REX]}=$_[PAYLOAD]; #First call stores the payload
+        $c=$ctx{$_[REX]}=$_[PAYLOAD][0]; #First call stores the payload
         $c->[0]{_byte_count}=0;
       }
       else{
         #subsequent calls
         $c=$ctx{$_[REX]};
-        $c->[1].=$_[PAYLOAD][1];
-        $c->[0]{_byte_count}+=length $_[PAYLOAD][1];
+        $c->[1].=$_[PAYLOAD][0][1];
+        $c->[0]{_byte_count}+=length $_[PAYLOAD][0][1];
       }
 
       #Check total incomming byte count is within limits
@@ -128,11 +128,8 @@ sub uhm_urlencoded_file {
             $_[PAYLOAD]="";
 			      return &rex_error_unsupported_media_type 
           }
-          #$content_length=$_[REX]->headers->{CONTENT_LENGTH};
           if(defined $upload_limit  and $_[REX]->headers->{CONTENT_LENGTH} > $upload_limit){
-            #@err_res=(HTTP_PAYLOAD_TOO_LARGE, [], "limit: $upload_limit");
             $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-            #$_[HEADER]=[];
             $_[HEADER]={};
             $_[PAYLOAD]="Limit:  $upload_limit";
             return &rex_error;
@@ -170,7 +167,7 @@ sub uhm_urlencoded_file {
           #subsequent calls
           $c=$ctx{$_[REX]};
           my $bytes;
-          if(defined($bytes=IO::FD::syswrite $c->[1], $_[PAYLOAD][1])){
+          if(defined($bytes=IO::FD::syswrite $c->[1], $_[PAYLOAD][0][1])){
             $c->[0]{_byte_count}+=$bytes;
 
           }
@@ -184,7 +181,6 @@ sub uhm_urlencoded_file {
         #Check file size is within limits
         if(defined $upload_limit  and $c->[0]{_byte_count} > $upload_limit){
           $_[CODE]=HTTP_PAYLOAD_TOO_LARGE;
-          #$_[HEADER]=[];
           $_[HEADER]={};
           $_[PAYLOAD]="Limit:  $upload_limit";
           return &rex_error;
@@ -194,14 +190,14 @@ sub uhm_urlencoded_file {
         #Accumulate until the last
         if(!$_[CB]){
           #Last set
-          my $c=$_[PAYLOAD]=delete $ctx{$_[REX]};
-          if(defined IO::FD::close $c->[0][1]){
+          my $c=$_[PAYLOAD][0]=delete $ctx{$_[REX]};
+          if(defined IO::FD::close $c->[1]){
             
           }
           else {
             #Internal server error
           }
-          $c->[0][1]=undef;
+          $c->[1]=undef;
           &$next;
         }
         
@@ -257,15 +253,14 @@ sub uhm_multipart_slurp {
         }
         else {
           #For each part (or partial part) we need to append to the right section
-          #$c=$ctx{$_[REX]};
           $last=@$c-1;
-          if($_[PAYLOAD][0] == $c->[$last][0]){
+          if($_[PAYLOAD][0][0] == $c->[$last][0]){
             #Header information is the same. Append data
-            $c->[$last][1].=$_[PAYLOAD][1];
+            $c->[$last][1].=$_[PAYLOAD][0][1];
           }
           else {
             #New part
-            push @$c, $_[PAYLOAD];
+            push @$c, $_[PAYLOAD][0];
           }
         }
 
@@ -289,8 +284,8 @@ sub uhm_multipart_slurp {
 
   [$inner,$outer];
 }
-sub uhm_multipart_file {
 
+sub uhm_multipart_file {
   my %options=@_;
   #my $upload_dir=$options{upload_dir};
   my $upload_dir=$options{upload_dir}; 
@@ -312,7 +307,7 @@ sub uhm_multipart_file {
           #For each part (or partial part) we need to append to the right section
           #$c=$ctx{$_[REX]};
           $last=@$c-1;
-          if(@$c and $_[PAYLOAD][0] == $c->[$last][0]){
+          if(@$c and $_[PAYLOAD][0][0] == $c->[$last][0]){
             #Header information is the same. Append data
             my $fd=$c->[$last][1];
             if(defined IO::FD::syswrite $fd, $_[PAYLOAD][1]){
@@ -335,7 +330,7 @@ sub uhm_multipart_file {
               if(defined IO::FD::syswrite $fd, $_[PAYLOAD][1]){
                 $_[PAYLOAD][0]{_filename}=$path;
                 $_[PAYLOAD][1]=$fd;
-                push @$c, $_[PAYLOAD];
+                push @$c, $_[PAYLOAD][0];
               }
               else {
                 say STDERR "ERROR writing FILE $!";

@@ -96,8 +96,8 @@ my $server; $server=usac_server {
       };
 
 		usac_route '/static/hot.txt'
-    #=> uhm_gzip()
-    #=> uhm_deflate()
+      => uhm_gzip()
+      => uhm_deflate()
       => uhm_static_file headers=>{unkown=>"A"}, usac_path root=>usac_dirname, "static/hot.txt";
 
     usac_route "/die"

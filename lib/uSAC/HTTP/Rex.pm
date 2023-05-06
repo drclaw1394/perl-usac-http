@@ -682,7 +682,7 @@ sub umw_dead_horse_stripper {
   my $outer=sub {
     my ($next ,$index, %options)=@_;
     sub {
-      say "OUTER DEAD HORSE";
+      #say "OUTER DEAD HORSE";
       &$next;
     }
   };
@@ -692,13 +692,13 @@ sub umw_dead_horse_stripper {
     my $site=$options{site};
     if($site->mode==0){
       sub {
-        say "error DEAD HORSE";
+      #say "error DEAD HORSE";
         &$next;
       }
     }
     else {
       sub {
-        say "CLIENT error dead horse";
+      #say "CLIENT error dead horse";
         #say $_[ROUTE][1][ROUTE_TABLE][uSAC::HTTP::Site::ACTIVE_COUNT]--;
         #my($route, $captures)=$entry->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
 

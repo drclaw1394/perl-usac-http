@@ -643,12 +643,7 @@ sub uhm_static_root {
     my $next=shift;
     my $p;	#tmp variable
     sub {
-      # Stack reset
-      #return &$next unless($_[CODE]);
-      say "IN STATIC, payload: $_[PAYLOAD]";;
-
       if($_[HEADER]){
-
       
         #
         # Previous middleware did not find anything, or we don't have a
@@ -669,23 +664,17 @@ sub uhm_static_root {
         # if the filter doesn't match (if a filter exists)
         #
         if($filter and $path !~ /$filter/o){
-          $_[PAYLOAD]="";
           $_[CODE]=HTTP_NOT_FOUND;
-          #push $_[HEADER]->@*, HTTP_CONTENT_LENGTH, 0;
           $_[HEADER]{HTTP_CONTENT_LENGTH()}=0;
           return &$next;
         }
 
         #Push any user static headers
-        #push $_[HEADER]->@*, @$headers;
         for my ($k, $v)(@$headers){
           $_[HEADER]{$k}=$v;
         }
 
         Log::OK::TRACE and log_trace "static: html_root: $html_root";
-
-
-
 
 
         # File and Directory serving 
@@ -826,18 +815,6 @@ sub uhm_static_file {
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 
-#######################################################################
-#         $self->add_cached_file(%options, $path);                    #
-# }                                                                   #
-#                                                                     #
-# method add_cached_file {                                            #
-# #my $self=shift;                                                    #
-#         my $path=pop;                                               #
-#         my %options=@_;                                             #
-#         #resolve the file relative path or                          #
-#         #$path=dirname((caller)[1])."/".$path if $path =~ m|^[^/]|; #
-#######################################################################
-
 	my $mime=$options{mime};
 	my $type;
 	if($mime){
@@ -875,43 +852,26 @@ sub uhm_static_content {
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 
-#########################################################
-#         $self->add_static_content(%options, $static); #
-# }                                                     #
-#                                                       #
-# method add_static_content {                           #
-#   #my $self=shift;                                    #
-#         my $static=pop; #Content is the last item     #
-#         my %options=@_;                               #
-#########################################################
 
 	my $mime=$options{mime}//$self->resolve_mime_default;
-  #my $headers=$options{headers}//[];
 	my $headers=$options{headers}//{};
-	#my $type=[HTTP_CONTENT_TYPE, $mime];
+  my $length=length $static;
   [
 	sub {
       my $next=shift;
       sub {
         if($_[HEADER]){
-          #########################################
-          # push $_[HEADER]->@*,                  #
-          # HTTP_CONTENT_TYPE, $mime,             #
-          # HTTP_CONTENT_LENGTH, length($static), #
-          # @$headers;                            #
-          #########################################
           
           for my  ($k, $v)(
             HTTP_CONTENT_TYPE, $mime,
-            HTTP_CONTENT_LENGTH,
-            length($static),
+            HTTP_CONTENT_LENGTH, $length,
             %$headers
           )
           { 
             $_[HEADER]{$k}=$v;
           }
         }
-        $_[PAYLOAD]=$static if $_[CODE];
+        $_[PAYLOAD]=$static;
         &$next;
       }
 	}
