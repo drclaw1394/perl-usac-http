@@ -100,9 +100,8 @@ my $server; $server=usac_server {
       # => sub {                   #
       #   say Dumper $_[IN_HEADER] #
       # }                          #
-      # => uhm_gzip()              #
-      # => uhm_deflate()           #
-      ##############################
+      #=> uhm_gzip()
+      #=> uhm_deflate()
       => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, usac_path root=>usac_dirname, "static/hot.txt";
 
     usac_route "/die"

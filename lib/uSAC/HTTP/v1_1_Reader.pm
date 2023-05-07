@@ -331,29 +331,6 @@ sub make_parser{
         }
         elsif($state==STATE_BODY_CONTENT){
           #Process the body until the content length was found or last chunk found.
-          #\my $buf=\$_[0];
-
-          #\my %h=$rex->headers;
-          #####################################################################################
-          # if($out_header){                                                                  #
-          #   #                                                                               #
-          #   # Single part. Only send the form header once when the out header is set        #
-          #   #                                                                               #
-          #   $form_headers->{CONTENT_LENGTH}=$body_len;          #copy header to part header #
-          #                                                                                   #
-          #   $form_headers->{CONTENT_TYPE}=$h{CONTENT_TYPE};                                 #
-          # }                                                                                 #
-          #####################################################################################
-
-          #here we need to process data untill the end of the body,
-          #That could mean a chunked transfer, multipart or urlencoded type data
-          #
-          #FIXED CONTENT LENGTH
-          #if content length is available, then we process until the number of bytes
-          #are completed. An undef or callback indicates final write.
-          #
-          #
-
 
           my $new=length($buf)-$processed;	#length of read buffer
 
@@ -629,7 +606,7 @@ sub make_serialize{
 
   sub {
     Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
-    Log::OK::TRACE and log_trace join ", ", @_;
+    #Log::OK::TRACE and log_trace join ", ", @_;
 
     $ctx=undef;
 
@@ -652,29 +629,19 @@ sub make_serialize{
     # for HTTP/1.0 dropper is called on close anyhow.
     # saves call
     #
-    my $cb=$_[CB];#//$_[REX][uSAC::HTTP::Rex::dropper_];
+    my $cb=$_[CB];
 
 
     my $reply="";
-    if($_[HEADER]){
-
-      # Header with a potential body attached.
-      #
+    if($_[OUT_HEADER]){
 
       # TODO: fix with multipart uploads? what is the content length
       #
-      #TODO: Fix when payload is an array ref. treat as  header, body pairs
       if($_[PAYLOAD] and not exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
-
         $ctx=1;
-        for($_[HEADER]{HTTP_TRANSFER_ENCODING()}){
-          if($_){
-            $_=", chunked";
-          }
-          else{
-            $_="chunked";
-          }
-        }
+
+        $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
+
         $out_ctx{$_[REX]}=$ctx if $_[CB];
       }
 
@@ -699,7 +666,7 @@ sub make_serialize{
 
       # Render headers
       #
-      foreach my ($k,$v)(%{$_[OUT_HEADER]}){
+      foreach my ($k, $v)(%{$_[OUT_HEADER]}){
         $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
       }
 
@@ -712,7 +679,7 @@ sub make_serialize{
 
       # mark headers as done
       #
-      $_[HEADER]=undef;	
+      $_[OUT_HEADER]=undef;	
 
 
       if($ctx){
@@ -723,11 +690,10 @@ sub make_serialize{
 
       }
       else {
-        #$reply.=$_->[1] for($_[PAYLOAD]->@*);
         $reply.=$_[PAYLOAD];
       }
 
-      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb, $_[6]);
+      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);#, $_[6]);
     }
     else{
       # No header specified. Just a body
@@ -735,7 +701,6 @@ sub make_serialize{
       if($ctx//=$out_ctx{$_[REX]}){
         $reply= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
 
-        #$_[PAYLOAD]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
         unless($_[CB]){
           $reply.="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};

@@ -58,7 +58,7 @@ sub log_simple_in {
           say STDERR "Site relative URI:	$_[REX][uri_stripped_]";
           say STDERR "Matched for site:	".($_[ROUTE][1][ROUTE_SITE]->id//"n/a");
           say STDERR "Hit counter:		$_[ROUTE][1][ROUTE_COUNTER]";
-          say STDERR "Captures:\n".join "\n",$_[1][captures_]->@* if $dump_capture;
+          say STDERR "Captures:\n".join "\n",($_[REX][captures_]//[])->@* if $dump_capture;
           if($dump_headers){
             say STDERR "Incomming Headers:\n" if $dump_headers;
             #my $headers=$_[REX]->headers;

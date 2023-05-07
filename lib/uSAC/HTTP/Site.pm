@@ -62,7 +62,7 @@ my @errors=qw<
 	usac_error_route
 >;	
 	
-our @EXPORT_OK=(qw(usac_route usac_site usac_prefix usac_id usac_controller usac_host usac_middleware usac_innerware usac_outerware usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
+our @EXPORT_OK=(qw(usac_route usac_site usac_prefix usac_id usac_delegate usac_host usac_middleware usac_innerware usac_outerware usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
 	), @errors,
   @redirects);
 
@@ -93,7 +93,7 @@ field $_innerware   :mutator :param=[];
 field $_outerware   :mutator :param=[];
 field $_errorware   :mutator :param=[];
 field $_error_uris  :param={};
-field $_controller  :mutator :param=undef;
+field $_delegate  :mutator :param=undef;
 
 field $_mime_default:mutator;
 field $_mime_db     :mutator;
@@ -337,7 +337,7 @@ method __adjust_matcher {
 }
 
 # Fix middle described only as a sub
-# Resolve controller-by-name middleware specs
+# Resolve delegate-by-name middleware specs
 #
 method wrap_middleware {
   Log::OK::TRACE and log_trace __PACKAGE__. " wrap_middleware";
@@ -395,20 +395,25 @@ method wrap_middleware {
       die Exception::Class::Base->throw("Undefined Middleware attempted");
     }
     elsif (ref eq "" ){
-      # Scalar used as a method name. Call method on controller
+      # Scalar used as a method name. Call method on delegate
       # and unshift the result to be processed
       # TODO: need a iteration limit here...
       my $a;
-        die Exception::Class::Base->throw("No controller set for site. Cannot call method by name")unless $_controller;
+        die Exception::Class::Base->throw("No delegate set for site. Cannot call method by name")unless $_delegate;
         
-      my $string="require $_controller";
-      eval $string;
-      die Exception::Class::Base->throw("Could not require $_controller: $@") if $@;
-      $@=undef;
 
-      $string="$_controller->".$_;
+      no strict "refs";
+      my $string="require $_delegate";
+
+      unless(%{$_delegate."::"}){
+        eval $string;
+        die Exception::Class::Base->throw("Could not require $_delegate: $@") if $@;
+        $@=undef;
+      }
+
+      $string="$_delegate->".$_;
       $a=eval $string;
-      die Exception::Class::Base->throw("Could not run $_controller with method $_. $@") if $@;
+      die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
       unshift @_, $a;
     }
     else {
@@ -578,7 +583,6 @@ sub supported_methods {
 }
 
 method default_method {
-
   "GET";
 }
 
@@ -671,16 +675,15 @@ method add_route {
   $self;    #Chaining
 }
 
-sub usac_controller {
-      my $controller=pop;
-      unless($controller){
-        # If controller is called with no arguments then make it the same package as the caller?
-        my ($controller,undef,undef)=caller;
+sub usac_delegate {
+      my $delegate=pop;
+      unless($delegate){
+        # If delegate is called with no arguments then make it the same package as the caller?
+        my ($delegate,undef,undef)=caller;
       }
       my %options=@_;
       my $self=$options{parent}//$uSAC::HTTP::Site;
-      #$self->controller(%options, $controller);
-      $self->controller=$controller;
+      $self->delegate=$delegate;
 }
 
 
@@ -688,7 +691,6 @@ sub usac_id {
         my $id=pop;
         my %options=@_;
         my $self=$options{parent}//$uSAC::HTTP::Site;
-        #$self->set_id(%options, $id);
         $self->id=$id;
 }
 
@@ -700,18 +702,15 @@ sub usac_prefix {
 }
 
 method set_prefix {
-  #my $self=shift;
   my $prefix=pop;
 	my %options=@_;
   return unless $prefix;
 	unless($prefix=~m|^/|){
-
-		#Log::OK::TRACE and 
 		log_info "Prefix '$prefix' needs to start with a '/'. Fixing it...";
 		$prefix="/".$prefix;
 	}
-	#$self->[prefix_]=$_;
-	$_prefix=$prefix;#$uSAC::HTTP::Site;
+
+	$_prefix=$prefix;
 	$_built_prefix=undef;	#force rebuilding
 	$self->built_prefix;		#build abs prefix
 }

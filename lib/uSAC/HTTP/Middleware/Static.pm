@@ -544,12 +544,18 @@ sub _make_list_dir {
 		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
 		$ren->($data, $labels, \@results);	#Render to output
     #if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
+    $_[OUT_HEADER]{":status"}=HTTP_OK; 
+    $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $data;
+    for my ($k,$v)(@type){
+      $_[OUT_HEADER]{$k}=$v;
+    }
 		if($in_header->{":method"} eq "HEAD"){
-			$next->($line, $rex, HTTP_OK,{HTTP_CONTENT_LENGTH, length $data, @type} , "",my $cb=undef);
+			$next->($line, $rex, $in_header,$headers , "",my $cb=undef);
 
 		}
 		else{
-			$next->($line, $rex, HTTP_OK,{HTTP_CONTENT_LENGTH, length $data, @type} , $data, my $cb=undef);
+			$next->($line, $rex, $in_header,$headers , $data,my $cb=undef);
+      #$next->($line, $rex, HTTP_OK,{HTTP_CONTENT_LENGTH, length $data, @type} , $data, my $cb=undef);
 		}
 	}
 }
@@ -744,7 +750,7 @@ sub uhm_static_root {
                 
 
           #if($pre_encoded and ($_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//"")=~/(gzip)/){
-          if($pre_encoded and ($_[IN_HEADER]{"accept_encoding"}//"")=~/(gzip)/){
+          if($pre_encoded and ($_[IN_HEADER]{"accept-encoding"}//"")=~/(gzip)/){
             # Attempt to find a pre encoded file when the client asks and if its enabled
             #
             #say  $_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"};

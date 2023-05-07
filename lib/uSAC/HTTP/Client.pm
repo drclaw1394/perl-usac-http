@@ -9,12 +9,19 @@ use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Route;
 use uSAC::HTTP::Session;
+use URI;
+
 class uSAC::HTTP::Client :isa(uSAC::HTTP::Server);
 no warnings "experimental";
 
 
 use feature "say";
 
+#TODO
+# cookie jar
+# timeout   =>session/reader/writer
+# proxy
+# max redirects
 
 field $_host_pool_limit :param=undef;
 field $_cookie_jar_path :param=undef;
@@ -43,16 +50,16 @@ BUILD {
 method _inner_dispatch :override {
     Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
     sub {
-      say STDERR __PACKAGE__.": END OF CLIENT INNNERWARE CHAIN";
+      #say STDERR __PACKAGE__.": END OF CLIENT INNNERWARE CHAIN";
       if($_[CB]){
         #More data to come
-        say STDERR __PACKAGE__." CALLBACK, expecting more data from parser";
+        #say STDERR __PACKAGE__." CALLBACK, expecting more data from parser";
         #
       }
       else {
         #No there isn't
         #
-        say STDERR __PACKAGE__." NO CALLBACK, no more data from parser expected. Return to pool";
+        #say STDERR __PACKAGE__." NO CALLBACK, no more data from parser expected. Return to pool";
 
         #TODO: Check status code
         for($_[IN_HEADER]{":status"}){
@@ -61,8 +68,7 @@ method _inner_dispatch :override {
             }
             elsif(300<=$_<400){
               #Redirect. don't deque  just yet
-              say STDERR __PACKAGE__." redirect $_";
-              say STDERR "location: $_[IN_HEADER]{location}";
+              say STDERR __PACKAGE__." redirect $_  location: $_[IN_HEADER]{location}";
               $self->_redirect_external(@_);
             }
             elsif(400 <= $_< 500){
@@ -153,14 +159,12 @@ method run {
   require AnyEvent;
 	$_cv=AE::cv;
 	$_cv->recv();
-  say "AFTER";
 }
 
 
 my $session_id=0;
 method request {
   Log::OK::TRACE and log_trace __PACKAGE__." request";
-  say join ", ", @_;
   # Queue a request in host pool and trigger if queue is inactive
   #
   my($host, $method, $path, $header, $payload, $important)=@_;
@@ -263,7 +267,6 @@ method _request {
           $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
         }
 
-        say "APPLICATION PARSER: ".$_application_parser;
         $session->push_reader($_application_parser->(session=>$session, mode=>1, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
         $_sessions->{ $session_id } = $session;
 
@@ -318,13 +321,11 @@ method __request {
     my $payload=$details->[4];
     #my $cb=$details->[5];
 
-    say "PAYLOAD FOR REQUEST: $payload";
     # At this point there should be at least one available session in the pool for the host
 
 
     # Do a route lookup
     #
-    #say Dumper $details;
     my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $path");
 
     die "No route found for $host" unless $route;
@@ -390,28 +391,28 @@ method fetch {
     $uri=URI->new($uri);
   }
 
-  say $uri->host;
   #set host header if not present
   $options->{headers}{HTTP_HOST()}=$uri->host unless exists $options->{headers}{HTTP_HOST()};
   $self->request(
-    $uri->host_port,               #Host
-    $options->{method}//"GET",     #Method
-    $uri->path||"/",               #Path
-    $options->{headers}//{},        #Headers
-    $options->{body},                           # payload
+    $uri->host_port,               # Host
+    $options->{method}//"GET",     # Method
+    $uri->path||"/",               # Path
+    $options->{headers}//{},       # Headers
+    $options->{body},              # payload
   );
+}
 
+method get {
+  my ($url, $headers, $cb)=@_;
+}
+
+method post {
+  my ($url, $headers, $body)=@_;
 }
 
 # expects IN_HEADER to contain a location header
 method _redirect_external {
-    use URI;
-    use Data::Dumper;
-    say Dumper $_[IN_HEADER];
-    say Dumper $_[OUT_HEADER];
     my $url=URI->new($_[IN_HEADER]{location});
-
-    say "URI is $url";
     my $hp=($url->host_port)//$_[OUT_HEADER]{":authority"};
     $self->request($hp, $_[OUT_HEADER]{":method"}, $url->path, {}, "", 1);
 }
