@@ -587,8 +587,9 @@ method rebuild_dispatch {
 
 
 method stop {
-  #my $self=shift;
-	$_cv->send;
+  uSAC::IO::asap {
+    $_cv->send;
+  }
 }
 
 method run {

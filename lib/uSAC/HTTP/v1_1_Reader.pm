@@ -508,14 +508,10 @@ sub make_parser{
           #$state=$start_state;
         }
         elsif($state==STATE_BODY_CHUNKED){
-          say "STATE BODY CHUNKED";
-          say $buf;
           #CHUNKED
           #If transfer encoding is chunked, then we process as a series of chunks
           #Again, an undef callback indicats a final write
 
-          #TODO Implement chunked parser
-          #say $buf;
           
           #my $lengh=
           if($chunked_state == 0){
@@ -528,12 +524,10 @@ sub make_parser{
             my $val=substr($buf,0, $index);
             my $pad=8-length($val);
             $val="0"x$pad.$val if $pad>0;
-            #say "VAL : $val";
             my $size=unpack "I>*", pack "H*", $val;#substr($buf, 0, $index);
 
             if(($index2-$index)==2){
               #Last one
-              say "Last chunk. 0size";
               $state=$start_state;
               my $payload="";
               $buf=substr $buf, $index2+2;
@@ -542,7 +536,6 @@ sub make_parser{
             }
             elsif($index>=0) {
               # Not the last one 
-              say "Not Last chunk: Size: $size";
               $buf=substr $buf, $index+2;
               $chunked_state=$size;
             }
@@ -554,15 +547,9 @@ sub make_parser{
           }
           else {
             
-            say "CHUNKED BODY";
-            say length $buf;
-            say $chunked_state;
-            #sleep 1;
-            #$say $buf;
             if(length($buf) >= ($chunked_state +2)){
               #$buf=substr $buf, $chunked_state+2;
               my $payload=substr $buf, 0, $chunked_state;
-              say "the payload length: ".length $payload;
               $buf=substr $buf,  $chunked_state+2;
               $chunked_state=0;
               $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, $dummy_cb);

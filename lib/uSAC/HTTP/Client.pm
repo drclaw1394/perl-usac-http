@@ -116,7 +116,9 @@ method _error_dispatch :override {
 }
 
 method stop {
-	$_cv->send;
+  uSAC::IO::asap {
+    $_cv->send;
+  }
 }
 
 method run {
