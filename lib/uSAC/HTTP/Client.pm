@@ -26,12 +26,15 @@ field $_read_size;
 field $_zombies;
 field $_zombie_limit;
 field $_application_parser;
+field $_total_request_count;
+
+field $_on_error :param=undef;
+field $_on_response :param=undef;
 
 BUILD {
   $self->mode=1;          # Set mode to client.
   $_host_pool_limit//=5;  # limit to 5 concurrent connections by default
   $_zombies=[];
-
 }
 
 
@@ -107,7 +110,10 @@ method _error_dispatch :override {
               ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
             }
             $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+            $_total_request_count--;
             $_err->();
+            $_on_error and $_on_error->();
+
             $self->_request($entry, $session);
 
             #Call back to user agent?
@@ -209,6 +215,8 @@ method _request {
     $session->drop;
     Log::OK::INFO and log_info "Session reuse attempted";
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+      $_total_request_count--;
+      $_on_response and $_on_response->();
 
       unless($details){
         # No more work to do so add the session to the idle pool
@@ -218,6 +226,7 @@ method _request {
         return;
       }
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+      $_total_request_count++;
       return $self->__request($table, $session, $details) 
   }
   
@@ -235,6 +244,7 @@ method _request {
 
     ){
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+      $_total_request_count++;
 
       #Create another connection so long as it is doesn't exceed the limit
       $self->do_stream_connect($__host, $port, sub {
@@ -265,6 +275,7 @@ method _request {
         # connection error
         #
         $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+        $_total_request_count--;
         say "error callback for stream connect: $_[1]";
         IO::FD::close $_[0]; # Close the socket
         my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($details->[1]." ".$details->[2]);
@@ -310,9 +321,6 @@ method __request {
     say "PAYLOAD FOR REQUEST: $payload";
     # At this point there should be at least one available session in the pool for the host
 
-    #say "Idle pool is: ".Dumper $table->[IDLE_POOL];
-    #my $session=pop $table->[uSAC::HTTP::Site::IDLE_POOL]->@*;
-    #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
 
     # Do a route lookup
     #
