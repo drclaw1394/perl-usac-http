@@ -3,7 +3,10 @@ use feature qw<state isa>;
 use Log::ger;
 use Object::Pad;
 
+use uSAC::HTTP::Constants;
 use uSAC::HTTP::Header ":constants";
+use uSAC::HTTP::Code ":constants";
+use uSAC::HTTP::Rex;
 use uSAC::HTTP::Route;
 use uSAC::HTTP::Session;
 class uSAC::HTTP::Client :isa(uSAC::HTTP::Server);
@@ -28,6 +31,87 @@ BUILD {
   $self->mode=1;          # Set mode to client.
   $_host_pool_limit//=5;  # limit to 5 concurrent connections by default
   $_zombies=[];
+
+}
+
+
+
+# Innerware chain dispatcher. Triggers redirects and executes queued requests
+method _inner_dispatch :override {
+    Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
+    sub {
+      say STDERR __PACKAGE__.": END OF CLIENT INNNERWARE CHAIN";
+      if($_[CB]){
+        #More data to come
+        say STDERR __PACKAGE__." CALLBACK, expecting more data from parser";
+        #
+      }
+      else {
+        #No there isn't
+        #
+        say STDERR __PACKAGE__." NO CALLBACK, no more data from parser expected. Return to pool";
+
+        #TODO: Check status code
+        for($_[IN_HEADER]{":status"}){
+            if($_==HTTP_OK){
+              #  issue new queued request
+            }
+            elsif(300<=$_<400){
+              #Redirect. don't deque  just yet
+              say STDERR __PACKAGE__." redirect $_";
+              say STDERR "location: $_[IN_HEADER]{location}";
+              $self->_redirect_external(@_);
+            }
+            elsif(400 <= $_< 500){
+              # error
+            }
+            else {
+            }
+        }
+        
+        # The route used is always associated with a host table. Use this table
+        # and attempt get the next item in the requst queue for the host
+        #
+        my ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+        $self->_request($entry, $session);
+
+        # User agent should already know about this response
+      }
+
+    };
+
+}
+
+method _error_dispatch :override {
+    my $_err=uSAC::HTTP::v1_1_Reader::make_error;
+    sub {
+
+            
+          say "ERROR DISPATCH";
+            # The route used is always associated with a host table. Use this table
+            # and attempt get the next item in the requst queue for the host
+            #
+
+          say Error::Show::context indent=>"  ", frames=>Devel::StackTrace->new();
+          my $entry;
+          my $session;
+            # If no rex is present, this is connection error...
+            
+            unless($_[REX]){
+
+              $entry=$_[ROUTE][1][ROUTE_TABLE];
+              #$_[REX][uSAC::HTTP::Rex::session_]);
+              
+            }
+            else {
+              ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+            }
+            $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+            $_err->();
+            $self->_request($entry, $session);
+
+            #Call back to user agent?
+    }
 
 }
 
@@ -68,9 +152,10 @@ method run {
 my $session_id=0;
 method request {
   Log::OK::TRACE and log_trace __PACKAGE__." request";
+  say join ", ", @_;
   # Queue a request in host pool and trigger if queue is inactive
   #
-  my($host, $method, $path, $header, $payload)=@_;
+  my($host, $method, $path, $header, $payload, $important)=@_;
 
   $header//={};
   $payload//="";
@@ -87,8 +172,14 @@ method request {
   # Push to queue
 
 
-  push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*,
-    [$host, $method, $path, $header, $payload, undef, $request_id++, $entry];
+  #push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*,
+
+  my $e=[$host, $method, $path, $header, $payload, undef, $request_id++, $entry];
+  $important
+    ? unshift $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $e
+    : push $entry->[uSAC::HTTP::Site::REQ_QUEUE]->@*, $e
+    ;
+
 
   # kick off queue processin if needed
   #
@@ -243,7 +334,7 @@ method __request {
     #
     $ex=$session->exports;
     $version="HTTP/1.1"; # TODO: FIX
-    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%in_header, $host, $version, $method, $path, $ex, $captures);
+    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%in_header, $host, $version, $method, $path, $ex, $captures, $out_header);
 
 
     # Set the current rex and route for the session.
@@ -300,6 +391,19 @@ method fetch {
     $options->{body},                           # payload
   );
 
+}
+
+# expects IN_HEADER to contain a location header
+method _redirect_external {
+    use URI;
+    use Data::Dumper;
+    say Dumper $_[IN_HEADER];
+    say Dumper $_[OUT_HEADER];
+    my $url=URI->new($_[IN_HEADER]{location});
+
+    say "URI is $url";
+    my $hp=($url->host_port)//$_[OUT_HEADER]{":authority"};
+    $self->request($hp, $_[OUT_HEADER]{":method"}, $url->path, {}, "", 1);
 }
 
 1;

@@ -128,7 +128,7 @@ sub make_parser{
   my $multi_state=0;
   my $chunked_state=0;
   my $first=1;
-  my $out_header={":status"=> -1 };
+  my $out_header;#={":status"=> -1 };
   my $dummy_cb=sub {};
 
 
@@ -265,6 +265,7 @@ sub make_parser{
           
           unless($mode){
 
+            $out_header={":status" => -1};
             $h{":method"}=$method;
             $h{":scheme"}="http";
             $h{":authority"}=$host;
@@ -274,7 +275,7 @@ sub make_parser{
             # processing and a rex needs to be created
             #
             ($route, $captures)=$cb->($host, "$method $uri");
-            $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex, $captures);
+            $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex, $captures,$out_header);
 
           }
           else {
@@ -285,6 +286,10 @@ sub make_parser{
             #$rex->[uSAC::HTTP::Rex::headers_]=\%h;
             $code=$uri; # NOTE: variable is called $uri, but doubles as code in client mode
 
+            # Set the status in the innerware
+            $h{":status"}=$code;
+
+            $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
           }
 
           #Before calling the dispatch, setup the parser to process further data.
@@ -317,7 +322,7 @@ sub make_parser{
             $payload="";
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
 
-            $out_header={":status"=> -1};
+            #$out_header={":status"=> -1};
           }
 
           #$state=$start_state;
@@ -367,7 +372,7 @@ sub make_parser{
             $_[PAYLOAD]="";#substr $buf, 0, $new, "";
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
             $form_headers={}; #Create new part header
-            $out_header={":status"=> -1};
+            #$out_header={":status"=> -1};
             $processed=0;
           }
           else {
@@ -416,7 +421,7 @@ sub make_parser{
                   $state=$start_state;
                   my $data=substr($buf, 0, $len);
                   $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, [$form_headers, $data], my $cb=undef);
-                  $out_header={":status"=> -1};
+                  #$out_header={":status"=> -1};
 
                   $buf=substr $buf, $offset+4;
                 }
@@ -503,6 +508,8 @@ sub make_parser{
           #$state=$start_state;
         }
         elsif($state==STATE_BODY_CHUNKED){
+          say "STATE BODY CHUNKED";
+          say $buf;
           #CHUNKED
           #If transfer encoding is chunked, then we process as a series of chunks
           #Again, an undef callback indicats a final write
@@ -516,7 +523,13 @@ sub make_parser{
             my $index = index $buf, CRLF;
             my $index2= index $buf, CRLF, $index+2;
 
-            my $size=unpack "S>", pack "H*", substr($buf, 0, $index);
+            #TODO Look into actual limitaiton of chunk size
+            #
+            my $val=substr($buf,0, $index);
+            my $pad=8-length($val);
+            $val="0"x$pad.$val if $pad>0;
+            #say "VAL : $val";
+            my $size=unpack "I>*", pack "H*", $val;#substr($buf, 0, $index);
 
             if(($index2-$index)==2){
               #Last one
@@ -700,7 +713,7 @@ sub make_serialize{
       # Render headers
       #
       foreach my ($k,$v)(%{$_[OUT_HEADER]}){
-        $reply.= $k.": ".$v.CRLF 
+        $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
       }
 
       $reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;

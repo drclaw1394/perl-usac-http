@@ -48,7 +48,7 @@ sub uhm_urlencoded_slurp {
         #test incomming headers are correct
         
         #unless(($_[REX]->headers->{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
-        unless(($_[IN_HEADER]{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
+        unless(($_[IN_HEADER]{"content-type"}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
           $_[PAYLOAD]="";
           say "accumuate UNSPPORTED";
           return &rex_error_unsupported_media_type 
@@ -56,7 +56,7 @@ sub uhm_urlencoded_slurp {
 
         #$content_length=$_[REX]->headers->{CONTENT_LENGTH};
         #if(defined $upload_limit  and ($_[REX]->headers->{CONTENT_LENGTH}//0) > $upload_limit){
-        if(defined $upload_limit  and ($_[IN_HEADER]{CONTENT_LENGTH}//0) > $upload_limit){
+        if(defined $upload_limit  and ($_[IN_HEADER]{"content-length"}//0) > $upload_limit){
           $_[OUT_HEADER]{":status"}=HTTP_PAYLOAD_TOO_LARGE;
           $_[PAYLOAD]="";#"Slurp Limit:  $upload_limit";
           say "accumulate do big";
@@ -86,7 +86,8 @@ sub uhm_urlencoded_slurp {
       #Accumulate until the last
       if(!$_[CB]){
         #Last set
-        $_[PAYLOAD]=(delete $ctx{$_[REX]})->[1];
+        $_[PAYLOAD]=$c->[1];
+        delete $ctx{$_[REX]};
         undef $c;
         &$next;
       }

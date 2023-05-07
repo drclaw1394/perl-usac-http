@@ -90,7 +90,7 @@ use enum (
 	recursion_count_
 	peer_
   uri_decoded_
-  mw_ctx_
+  out_headers_
 	end_
 	>
 );
@@ -381,7 +381,7 @@ sub rex_redirect_internal {
 		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, {HTTP_CONTENT_LENGTH, 0},"",undef);
 		return;
 	}
-  my $t; #$t=AE::timer 0,0,sub {
+  my $t; 
     say $matcher->[1][1];
     $matcher->[1][1]($matcher, $rex); #force a reset of the current chain, starting at innerware
     $rex->[in_progress_]=undef;
@@ -402,6 +402,7 @@ sub rex_redirect_internal {
     $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header,my $a="",my $b=undef);
   #};
 }
+
 
 sub rex_headers {
 	return $_[REX]->[headers_];
@@ -489,9 +490,10 @@ sub peer {
 
 my $id=0;	#Instead of using state
 my $_i;
+
 sub new {
-	#my ($package, $session, $headers, $host, $version, $method, $uri, $ex, $captures)=@_;
-	#	0	1	  2	    3		4	5	6   7 8
+	#my ($package, $session, $headers, $host, $version, $method, $uri, $ex, $captures, $out_headers)=@_;
+	#	0	1	  2	    3		4	5	6   7 8 9
 
 	#state $id=0;
 	my $query_string="";
@@ -513,8 +515,8 @@ sub new {
 	($self->[closeme_], $self->[dropper_], $self->[server_], undef, undef, $self->[write_], $self->[peer_])= $_[7]->@*;#$_[1]->exports->@*;
 	$self->[recursion_count_]=0;
   $self->[captures_]=$_[8];
+  $self->[out_headers_]=$_[9];
   $self->[in_progress_]=undef;
-  $self->[mw_ctx_]=[];
   $self->[id_]=$id++;
   #$self->[uri_decoded_]=url_decode_utf8 $self->[uri_raw_];
 	$self;

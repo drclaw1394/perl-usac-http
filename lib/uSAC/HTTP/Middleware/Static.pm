@@ -855,7 +855,12 @@ sub uhm_static_content {
 
 	my $mime=$options{mime}//$self->resolve_mime_default;
 	my $headers=$options{headers}//{};
-  my $length=length $static;
+
+  $headers->{HTTP_CONTENT_TYPE()}||=$mime;
+
+  $headers->{HTTP_CONTENT_LENGTH()}=length $static
+    unless $headers->{HTTP_TRANSFER_ENCODING()};
+
   [
 	sub {
       my $next=shift;
@@ -863,8 +868,6 @@ sub uhm_static_content {
         if($_[HEADER]){
           
           for my  ($k, $v)(
-            HTTP_CONTENT_TYPE, $mime,
-            HTTP_CONTENT_LENGTH, $length,
             %$headers
           )
           { 

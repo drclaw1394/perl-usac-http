@@ -103,7 +103,7 @@ my $server; $server=usac_server {
       # => uhm_gzip()              #
       # => uhm_deflate()           #
       ##############################
-      => uhm_static_file headers=>{unkown=>"A"}, usac_path root=>usac_dirname, "static/hot.txt";
+      => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, usac_path root=>usac_dirname, "static/hot.txt";
 
     usac_route "/die"
       => sub {

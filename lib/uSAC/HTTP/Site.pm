@@ -142,6 +142,18 @@ BUILD{
   }
 }
 
+method _inner_dispatch {
+    # 0 server
+    # Server mode uses rex_write as the end/dispatch for inner ware chain
+    # This gives an opertunity to to set some important values particular to server side
+    #
+    Log::OK::TRACE and log_trace __PACKAGE__. " end is server ".join ", ", caller;
+    \&rex_write;
+}
+
+method _error_dispatch {
+  uSAC::HTTP::v1_1_Reader::make_error;
+}
 
 #Adds routes to a servers dispatch table
 #A handler is added for a successful match of method type
@@ -188,54 +200,8 @@ method _add_route {
 
   unshift @error, $self->construct_errorware;
 
+  my $end=$self->_inner_dispatch;
 
-  my $end;
-
-
-  if($self->find_root->mode==0){
-    # 0 server
-    # Server mode uses rex_write as the end/dispatch for inner ware chain
-    # This gives an opertunity to to set some important values particular to server side
-    #
-    Log::OK::TRACE and log_trace __PACKAGE__. " end is server ".join ", ", caller;
-    $end= \&rex_write;
-  }
-  else{
-    # 1 client
-    # On the client this special innerware end/dispatch triggers the request
-    # queue for more request processing
-    #
-    Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
-    $end=sub {
-      say STDERR __PACKAGE__.": END OF CLIENT INNNERWARE CHAIN";
-      if($_[CB]){
-        #More data to come
-        say STDERR __PACKAGE__." CALLBACK, expecting more data from parser";
-        #
-      }
-      else {
-        #No there isn't
-        #
-        say STDERR __PACKAGE__." NO CALLBACK, no more data from parser expected. Return to pool";
-
-        
-        # The route used is always associated with a host table. Use this table
-        # and attempt get the next item in the requst queue for the host
-        #
-        my ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
-        $self->_request($entry, $session);
-
-        #Call back to user agent?
-      }
-
-    };
-  }
-
-
-
-
-
-  #my $server= $self->[server_];
   my $static_headers=$self->find_root->static_headers;
 
   #TODO: Need to rework this for other HTTP versions
@@ -269,45 +235,7 @@ method _add_route {
     $inner_head=$end;
   }
 
-  my $err;
-
-  if($self->find_root->mode==0){
-    # sub to reset write stack
-    #
-    $err=uSAC::HTTP::v1_1_Reader::make_error;
-  }
-  else {
-    
-    my $_err=uSAC::HTTP::v1_1_Reader::make_error;
-    $err=sub {
-
-            
-          say "ERROR DISPATCH";
-            # The route used is always associated with a host table. Use this table
-            # and attempt get the next item in the requst queue for the host
-            #
-
-          say Error::Show::context indent=>"  ", frames=>Devel::StackTrace->new();
-          my $entry;
-          my $session;
-            # If no rex is present, this is connection error...
-            
-            unless($_[REX]){
-
-              $entry=$_[ROUTE][1][ROUTE_TABLE];
-              #$_[REX][uSAC::HTTP::Rex::session_]);
-              
-            }
-            else {
-              ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
-            }
-            $entry->[ACTIVE_COUNT]--;
-            $_err->();
-            $self->_request($entry, $session);
-
-            #Call back to user agent?
-    }
-  }
+  my $err=$self->_error_dispatch;
 
   my $error_head;
   if(@error){
@@ -457,9 +385,6 @@ method wrap_middleware {
       if(ref($_->[2]) ne "CODE"){
         $_->[2]=sub { state $next=shift};  #Force short circuit
       }
-
-
-
 
       push @inner, $_->[0];
       push @outer, $_->[1];
@@ -647,6 +572,7 @@ method find_root {
 	}
 	$parent;
 }
+
 sub supported_methods {
   @supported_methods;
 }
