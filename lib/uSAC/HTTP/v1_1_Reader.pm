@@ -605,7 +605,7 @@ sub make_serialize{
 
 
   sub {
-    Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
+  #Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
     #Log::OK::TRACE and log_trace join ", ", @_;
 
     $ctx=undef;
@@ -631,18 +631,17 @@ sub make_serialize{
     #
     my $cb=$_[CB];
 
-
     my $reply="";
     if($_[OUT_HEADER]){
 
       # TODO: fix with multipart uploads? what is the content length
       #
       if($_[PAYLOAD] and not exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
-        $ctx=1;
 
         $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
 
-        $out_ctx{$_[REX]}=$ctx if $_[CB];
+        $ctx=1; #Mark as needing chunked
+        $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
       }
 
       # If no valid code is set then set default 200
@@ -660,7 +659,7 @@ sub make_serialize{
         return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $code;
 
         # serialize in client mode is a request
-        #$reply="$_[REX][uSAC::HTTP::Rex::method_] $_[REX][uSAC::HTTP::Rex::uri_raw_] $protocol".CRLF;
+        #
         $reply="$_[OUT_HEADER]{':method'} $_[OUT_HEADER]{':path'} $protocol".CRLF;
       }
 
@@ -705,9 +704,12 @@ sub make_serialize{
           $reply.="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      }
+      else{
+        $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD], $cb);
       }
 
-      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb)
     }
   }
 };

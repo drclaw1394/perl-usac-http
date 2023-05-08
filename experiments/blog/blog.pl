@@ -149,8 +149,8 @@ my $server; $server=usac_server {
                 # # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; # #
                 # #                                                                                                            # #
                 usac_route "/static"
-                  => uhm_gzip()
-                  =>uhm_deflate()
+                #=> uhm_gzip()
+                  #=>uhm_deflate()
                   => uhm_static_root (
                         #filter=>'txt$',
                         read_size=>4096*16,
@@ -158,7 +158,7 @@ my $server; $server=usac_server {
                         #no_compress=>qr/txt$/,
                         do_dir=>1,
                         indexes=>["index.html"],
-                        sendfile=>4096*32,
+                        sendfile=>0,#4096*32,
                         usac_dirname #  "static"
                 );
 

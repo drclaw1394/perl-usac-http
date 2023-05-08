@@ -273,7 +273,7 @@ sub websocket_server_in {
 
           #support the permessage deflate
           my $deflate_flag;
-          for($_->{SEC_WEBSOCKET_EXTENSIONS}){
+          for($_->{"sec-websocket-extensions"}){
             if(/permessage-deflate/){
               $reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".CRLF;
               Log::OK::DEBUG and log_debug(  __PACKAGE__." DEFLATE SUPPORTED");
@@ -366,7 +366,6 @@ sub  _make_websocket_server_reader {
 		state $do_deflate=0;
 		#do the frame parsing here
 		while($buf){
-      Log::OK::TRACE and log_trace __PACKAGE__."\n$buf";
 			if($state==STATE_HEADER){
         Log::OK::TRACE and log_trace __PACKAGE__." STATE HEADER ";
 				#header
