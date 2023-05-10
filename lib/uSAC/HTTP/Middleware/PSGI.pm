@@ -88,7 +88,7 @@ sub uhm_psgi {
     Log::OK::INFO and log_info "Attempting to load psgi: $path";
 		$app=eval "require '$path'";
 
-    if(my $context=Error::Show::context){
+    if(my $context=context){
       log_error "Could not load PSGI file $path: $app";
       die "Could not load PSGI file $path $!";	
     }

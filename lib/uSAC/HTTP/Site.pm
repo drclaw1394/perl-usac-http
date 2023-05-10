@@ -561,7 +561,7 @@ sub usac_site :prototype(&) {
   }
   catch($e){
     log_fatal  "$self->id";
-    log_fatal Error::Show::context message=>$e, frames=>[$e->trace->frames];
+    log_fatal context message=>$e, frames=>[$e->trace->frames];
     $e->throw;
   }
 	$self;
@@ -669,7 +669,7 @@ method add_route {
   }
   catch($e){
     my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
-    log_fatal Error::Show::context message=>"", frames=>[$trace->frames];
+    log_fatal context message=>"", frames=>[$trace->frames];
     $e->throw;
   }
   $self;    #Chaining

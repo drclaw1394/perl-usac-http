@@ -17,13 +17,13 @@ WriteMakefile(
 		"Hustle::Table" => "0.5.5",	#Bug fix for updating default matcher
 		"uSAC::IO"	=> 0,
 		"IO::FD"	=> "0.2.0",
-    "Error::Show"=>0,
-		"Socket::More"	=> 0,
+    "Error::Show"=>"0.3.0",     # 0.3.0 for default import of 'context'
+		"Socket::More"	=> "0.3.0",
 		"uSAC::MIME"	=> 0,
     "Sub::Middler"=>0,
     "File::Meta::Cache"=>0,
 		
-
+    "Object::Pad"=> "0.78",
 		"Crypt::JWT"	=> 0,
 		"Log::ger"	=> 0,
 		"Log::ger::Output::Screen" => 0,

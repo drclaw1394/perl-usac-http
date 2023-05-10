@@ -10,6 +10,7 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Route;
 use uSAC::HTTP::Session;
 use URI;
+use Error::Show;
 
 class uSAC::HTTP::Client :isa(uSAC::HTTP::Server);
 no warnings "experimental";
@@ -101,7 +102,7 @@ method _error_dispatch :override {
             # and attempt get the next item in the requst queue for the host
             #
 
-          say Error::Show::context indent=>"  ", frames=>Devel::StackTrace->new();
+          say context indent=>"  ", frames=>Devel::StackTrace->new();
           my $entry;
           my $session;
             # If no rex is present, this is connection error...

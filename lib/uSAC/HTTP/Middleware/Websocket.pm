@@ -442,7 +442,6 @@ sub  _make_websocket_server_reader {
 					$mode=TEXT;
 					#masked and fin
 					_xor_mask_inplace(substr($buf, 0, $len), $mask) if $mask;
-          say substr $buf, 0, $len;
 					if($do_deflate){
 						my $data;
 						#TODO: setup inflate

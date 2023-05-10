@@ -558,10 +558,10 @@ sub make_parser{
 
       my $context;
       if(ref($e)){
-        $context=Error::Show::context message=>$e, frames=>[reverse $e->trace->frames];
+        $context=context message=>$e, frames=>[reverse $e->trace->frames];
       }
       else {
-        $context=Error::Show::context $e;
+        $context=context $e;
       }
       Log::OK::ERROR and log_error  $context;
 

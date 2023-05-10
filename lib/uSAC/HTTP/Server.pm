@@ -823,7 +823,7 @@ sub usac_load {
     eval "require '$path'";
 
     if($@){
-      my $context=Error::Show::context;
+      my $context=context;
       log_error "Could not include file: $context";
       die "Could not include file $path";	
     }
