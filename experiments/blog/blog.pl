@@ -15,6 +15,7 @@ use uSAC::HTTP::Middleware::Log;
 use uSAC::HTTP::Middleware::Deflate;
 use uSAC::HTTP::Middleware::Gzip;
 use uSAC::HTTP::Middleware::AccumulateContent;
+use uSAC::HTTP::Middleware::Multipart;
 
 #use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 #use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
@@ -174,6 +175,20 @@ my $server; $server=usac_server {
                 #         usac_path root =>usac_dirname, "." #
                 # );                                         #
                 ##############################################
+    usac_route POST
+      =>"/multipart"
+      =>uhm_multipart()
+      =>sub {
+        use Data::Dumper;
+        if(ref $_[PAYLOAD]){
+          $_[PAYLOAD]=$_[PAYLOAD][1];
+        }
+        say "GOT PAYLOAD: ", $_[PAYLOAD];
+        say Dumper $_[CB];
+        #else {
+        $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/plain" if $_[OUT_HEADER];
+        1;
+      };
 
     usac_route POST
       => "/stream_url_upload\$"

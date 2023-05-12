@@ -107,11 +107,11 @@ require uSAC::HTTP::Middleware;
 # Should only be called if you want to jump remaining innerware and go the start
 # of outerware
 #
-#Arguments are matcher, rex, code, header, data, cb
+#Arguments are matcher, rex, in_header, out_header, data, cb
 #		0     ,	 1 ,	2,	3,    4,  5
 sub rex_write{
   #my $session=$_[1]->[session_];
-	if($_[HEADER]){
+	if($_[OUT_HEADER]){
 		#If headers are supplied, then  process headers
 		Log::OK::TRACE and log_trace "REX: Doing rex write====";
 		$_[REX][in_progress_]=1;
@@ -119,7 +119,7 @@ sub rex_write{
 		#Tell the other end the connection will be closed
     #
     #push $_[HEADER]->@*, HTTP_CONNECTION, "close" if($_[REX][closeme_]->$*);
-		$_[HEADER]{HTTP_CONNECTION()}="close" if($_[REX][closeme_]->$*);
+		$_[OUT_HEADER]{HTTP_CONNECTION()}="close" if($_[REX][closeme_]->$*);
 
 		#Hack to get HTTP/1.0 With keepalive working
 		$_[HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[REX][version_] eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
@@ -130,7 +130,7 @@ sub rex_write{
 	#
 	
 
-	return &{$_[ROUTE][1][2]};	#Execute the outerware for this site/location
+	return &{$_[ROUTE][1][ROUTE_OUTER_HEAD]};	#Execute the outerware for this site/location
   Log::OK::TRACE and log_trace "Rex: End of rex write. after outerware";
 
 }
@@ -382,8 +382,8 @@ sub rex_redirect_internal {
 		return;
 	}
   my $t; 
-    say $matcher->[1][1];
-    $matcher->[1][1]($matcher, $rex); #force a reset of the current chain, starting at innerware
+  #say $matcher->[1][1];
+  #$matcher->[1][ROUTE_ERROR_HEAD]($matcher, $rex); #force a reset of the current chain, starting at innerware
     $rex->[in_progress_]=undef;
     $rex->[uri_raw_]=$uri;
     $rex->[uri_stripped_]=$uri;
@@ -627,7 +627,10 @@ sub umw_dead_horse_stripper {
     my %options=@_;
 		sub {
       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
-      if($_[HEADER]){
+      #use Error::Show;
+      #say Error::Show::context undef;
+      #sleep 5;
+      if($_[OUT_HEADER]){
         $_[REX][uri_stripped_]= 
         $len
         ?substr($_[REX][uri_raw_], $len)
@@ -639,7 +642,7 @@ sub umw_dead_horse_stripper {
       #   ?substr($_[REX][uri_raw_], $len) #
       #   : $_[REX][uri_raw_];             #
       ######################################
-
+      
       &$inner_next; #call the next
 
       #Check the inprogress flag

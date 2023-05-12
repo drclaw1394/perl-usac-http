@@ -124,7 +124,6 @@ sub make_parser{
   my $captures;
   my $body_len=0;
   my $body_type;
-  my $form_headers={};
   my $multi_state=0;
   my $chunked_state=0;
   my $first=1;
@@ -150,7 +149,7 @@ sub make_parser{
 
       #while ( $len=length $buf) {
       while ($buf) {
-        #say "_____ Parser : $state";
+        say "_____ Parser : $state";
         #say "____HTTP PARSER_LOOP:". join ", ", @_;
         #Dual mode variables:
         #	server:
@@ -309,13 +308,6 @@ sub make_parser{
               $chunked_state=0;
               #next;
           }
-          elsif( $h{"content-type"}//"" =~/multipart/i){
-            # Treat as multipart
-            #
-            $body_type = $h{"content-type"};
-              $state=STATE_BODY_MULTIPART;
-              #next;
-          }
           else{
             # no body length specifed assumed no body
             $state=$start_state;
@@ -339,7 +331,7 @@ sub make_parser{
 
           my $payload=substr $buf, 0, $new, "";
 
-          #say STDERR "PROCESSED: $processed, body len: $body_len";
+          say STDERR "PROCESSED: $processed, body len: $body_len";
           if($processed==$body_len){
             #
             # Last send
@@ -347,9 +339,8 @@ sub make_parser{
             $state=$start_state;
             $processed=0;
             $_[PAYLOAD]="";#substr $buf, 0, $new, "";
+            say STDERR "LAST READ";
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
-            $form_headers={}; #Create new part header
-            #$out_header={":status"=> -1};
             $processed=0;
           }
           else {
@@ -365,125 +356,6 @@ sub make_parser{
 
         }
 
-        elsif($state==STATE_BODY_MULTIPART){
-
-          #START MULTIPART
-          #################
-          #For multipart, the OUT headers are updated on each new part, with the header info
-          #is filled with the part informaion.
-          #New parts are detected with new header references.
-          #The complete end of the request is marked with undef callback
-
-
-          #TODO: check for content-disposition and filename if only a single part.
-          my $boundary="--".(split("=", $body_type))[1];
-          my $b_len=length $boundary;
-          while(length $buf){
-
-            if($multi_state==0){
-              my $index=index($buf, $boundary);
-              if($index>=0){
-
-
-                #send partial data to callback
-                my $len=($index-2);
-
-                #test if last
-                my $offset=$index+$b_len;
-
-                if(substr($buf, $offset, 4) eq "--".CRLF){
-                  #Last part
-                  $first=1;	#reset first;
-                  $multi_state=0;
-                  $state=$start_state;
-                  my $data=substr($buf, 0, $len);
-                  $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, [$form_headers, $data], my $cb=undef);
-                  #$out_header={":status"=> -1};
-
-                  $buf=substr $buf, $offset+4;
-                }
-                elsif(substr($buf, $offset, 2) eq CRLF){
-                  #not last, regular part
-                  my $data=substr($buf, 0, $len);
-                  $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, [$form_headers, $data], $dummy_cb) unless $first;
-                  $first=0;
-                  #move past data and boundary
-                  $buf=substr $buf, $offset+2;
-                  $multi_state=1;
-                  $form_headers={};
-                  redo;
-
-                }
-                else{
-                  #need more
-                  #return
-                }
-
-              }
-
-              else {
-                # Full boundary not found, send partial, upto boundary length
-                my $len=length($buf)-$b_len;		#don't send boundary
-                my $data=substr($buf, 0, $len);
-                $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, [$form_headers, $data], $dummy_cb);
-                $buf=substr $buf, $len;
-                #wait for next read now
-                return;
-              }
-
-              #attempt to match extra hyphons
-              #next line after boundary is content disposition
-
-            }
-            elsif($multi_state==1){
-              #read any headers
-              pos($buf)=0;#$processed;
-
-              while (){
-                if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
-                  \my $e=\$form_headers->{uc $1=~tr/-/_/r};
-                  $e = defined $e ? $e.','.$2: $2;
-
-                  #need to split to isolate name and filename
-                  redo;
-                }
-                elsif ($buf =~ /\G\015\012/sxogca) {
-                  $processed=pos($buf);
-
-                  #readjust the buffer no
-                  $buf=substr $buf,$processed;
-                  $processed=0;
-
-                  #headers done. setup
-
-                  #go back to state 0 and look for boundary
-                  $multi_state=0;
-                  last;
-                }
-                else {
-
-                }
-              }
-
-              #update the offset
-
-            }
-            else{
-
-            }
-            #say "End of while";
-          }
-          #say "End of form reader";
-
-
-
-          #END Multipart
-          ######################
-
-
-
-          #$state=$start_state;
-        }
         elsif($state==STATE_BODY_CHUNKED){
           #CHUNKED
           #If transfer encoding is chunked, then we process as a series of chunks
