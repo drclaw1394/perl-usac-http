@@ -63,7 +63,6 @@ sub uhm_multipart {
           #
           my $index=index($buf, $ctx->[boundary_]);
           if($index>=0){
-            #say "full boundary";
             # Found full boundary.  end of part
             my $len=($index-2);
 
@@ -71,7 +70,6 @@ sub uhm_multipart {
             my $offset=$index+$ctx->[b_len_];
 
             if(substr($buf, $offset, 4) eq "--".CRLF){
-              #say "last part";
               # Last part
               #
               $ctx->[first_]=1;	#reset first.. maybe not needed as destroyed
@@ -87,7 +85,6 @@ sub uhm_multipart {
               $buf=substr $buf, $offset+4;
             }
             elsif(substr($buf, $offset, 2) eq CRLF){
-              ##say "not last part";
               #not last, regular part
               my $data=substr($buf, 0, $len);
 
@@ -103,8 +100,12 @@ sub uhm_multipart {
               #move past data and boundary
               #say "buffer after part ", $buf;
               $buf=substr $buf, $offset+2;
-              $ctx->[state_]=PROCESS_HEADER;
+
+              # Allocate new part header here as we are about 
+              # process headers. Each part has a new hash ref for header
+              #
               $form_headers={};
+              $ctx->[state_]=PROCESS_HEADER;
               redo;
 
             }
@@ -117,7 +118,6 @@ sub uhm_multipart {
           }
 
           else {
-            #say "no full boundary";
             # Full boundary not found, send partial, upto boundary length
             my $len=length($buf)-$ctx->[b_len_];		#don't send boundary
             my $data=substr($buf, 0, $len);
@@ -138,9 +138,7 @@ sub uhm_multipart {
           pos($buf)=0;#$processed;
 
           while (){
-            ##say "process header";
-            #say "pos buf: ". pos $buf;
-            #say $buf;
+            #TODO:  Clean this up
 
             if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 

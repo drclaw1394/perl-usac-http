@@ -180,10 +180,12 @@ my $server; $server=usac_server {
       =>uhm_multipart()
       =>sub {
         use Data::Dumper;
+        say Dumper $_[PAYLOAD];
+        say $_[PAYLOAD][0];
+        say "GOT PAYLOAD: ", $_[PAYLOAD];
         if(ref $_[PAYLOAD]){
           $_[PAYLOAD]=$_[PAYLOAD][1];
         }
-        say "GOT PAYLOAD: ", $_[PAYLOAD];
         say Dumper $_[CB];
         #else {
         $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/plain" if $_[OUT_HEADER];

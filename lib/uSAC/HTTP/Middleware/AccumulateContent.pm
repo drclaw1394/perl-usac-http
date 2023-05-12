@@ -236,6 +236,7 @@ sub uhm_multipart_slurp {
     sub {
       say STDERR " slurp multipart MIDDLEWARE";
         my $c=$ctx{$_[REX]};
+
         unless($c){
           $c=$ctx{$_[REX]}=[$_[PAYLOAD]];
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
