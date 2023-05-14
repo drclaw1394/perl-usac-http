@@ -627,9 +627,6 @@ sub umw_dead_horse_stripper {
     my %options=@_;
 		sub {
       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
-      #use Error::Show;
-      #say Error::Show::context undef;
-      #sleep 5;
       if($_[OUT_HEADER]){
         $_[REX][uri_stripped_]= 
         $len

@@ -12,8 +12,10 @@ use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Constants;
 use uSAC::HTTP::Rex;
+use uSAC::HTTP::Route;
 use IO::FD;
 use Fcntl qw<O_CREAT O_RDWR>;
+use File::Spec::Functions qw<catfile>;
 
 use Exporter 'import';
 
@@ -26,6 +28,7 @@ our @EXPORT_OK=qw<
   uhm_urlencoded_file
   uhm_multipart_slurp
   uhm_multipart_file
+  uhm_slurp
 >;
 
 our @EXPORT=@EXPORT_OK;
@@ -48,7 +51,7 @@ sub uhm_urlencoded_slurp {
         #test incomming headers are correct
         
         #unless(($_[REX]->headers->{CONTENT_TYPE}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
-        unless(($_[IN_HEADER]{"content-type"}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
+        unless(($_[IN_HEADER]{HTTP_CONTENT_TYPE()}//"") =~ /$content_type/){ #m{application/x-www-form-urlencoded}){
           $_[PAYLOAD]="";
           say "accumuate UNSPPORTED";
           return &rex_error_unsupported_media_type 
@@ -56,7 +59,7 @@ sub uhm_urlencoded_slurp {
 
         #$content_length=$_[REX]->headers->{CONTENT_LENGTH};
         #if(defined $upload_limit  and ($_[REX]->headers->{CONTENT_LENGTH}//0) > $upload_limit){
-        if(defined $upload_limit  and ($_[IN_HEADER]{"content-length"}//0) > $upload_limit){
+        if(defined $upload_limit  and ($_[IN_HEADER]{HTTP_CONTENT_LENGTH()}//0) > $upload_limit){
           $_[OUT_HEADER]{":status"}=HTTP_PAYLOAD_TOO_LARGE;
           $_[PAYLOAD]="";#"Slurp Limit:  $upload_limit";
           say "accumulate do big";
@@ -125,12 +128,12 @@ sub uhm_urlencoded_file {
       my $c;
       if($_[OUT_HEADER]){
         #unless($_[REX]->headers->{CONTENT_TYPE} =~ m{application/x-www-form-urlencoded}){
-        unless($_[IN_HEADER]{CONTENT_TYPE} =~ m{application/x-www-form-urlencoded}){
+        unless($_[IN_HEADER]{HTTP_CONTENT_TYPE()} =~ m{application/x-www-form-urlencoded}){
           $_[PAYLOAD]="";
           return &rex_error_unsupported_media_type 
         }
         #if(defined $upload_limit  and $_[REX]->headers->{CONTENT_LENGTH} > $upload_limit){
-        if(defined $upload_limit  and $_[IN_HEADER]{CONTENT_LENGTH} > $upload_limit){
+        if(defined $upload_limit  and $_[IN_HEADER]{HTTP_CONTENT_LENGTH()} > $upload_limit){
           $_[OUT_HEADER]{":status"}=HTTP_PAYLOAD_TOO_LARGE;
           $_[PAYLOAD]="Limit:  $upload_limit";
           return &rex_error;
@@ -162,7 +165,7 @@ sub uhm_urlencoded_file {
         }
 
         $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
-        $c=$ctx{$_[REX]}=[{},undef];#$_[PAYLOAD];
+        $c=$ctx{$_[REX]}=[{},undef];
       }
       else{
         #subsequent calls
@@ -223,7 +226,7 @@ sub uhm_urlencoded_file {
 
 
 
-
+# Slurp multipart and emit a single payload on completion
 sub uhm_multipart_slurp {
 
   my %options=@_;
@@ -244,13 +247,14 @@ sub uhm_multipart_slurp {
         else {
           #For each part (or partial part) we need to append to the right section
           $last=@$c-1;
-          if($_[PAYLOAD][0][0] == $c->[$last][0]){
+          # Compare header hashes by reference
+          if($_[PAYLOAD][0] == $c->[$last][0]){
             #Header information is the same. Append data
-            $c->[$last][1].=$_[PAYLOAD][0][1];
+            $c->[$last][1].=$_[PAYLOAD][1];
           }
           else {
             #New part
-            push @$c, $_[PAYLOAD][0];
+            push @$c, $_[PAYLOAD];
           }
         }
 
@@ -278,6 +282,7 @@ sub uhm_multipart_slurp {
   [$inner, $outer, $error];
 }
 
+# Have a filter of field names which are to be stored to disk?
 sub uhm_multipart_file {
   my %options=@_;
   #my $upload_dir=$options{upload_dir};
@@ -293,14 +298,14 @@ sub uhm_multipart_file {
         my $c=$ctx{$_[REX]};
         unless($c){
           #first call
-          $c=$ctx{$_[REX]}=[];#$_[PAYLOAD]];
+          $c=$ctx{$_[REX]}=[];
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
 
         }
           #For each part (or partial part) we need to append to the right section
           #$c=$ctx{$_[REX]};
           $last=@$c-1;
-          if(@$c and $_[PAYLOAD][0][0] == $c->[$last][0]){
+          if(@$c and $_[PAYLOAD][0] == $c->[$last][0]){
             #Header information is the same. Append data
             my $fd=$c->[$last][1];
             if(defined IO::FD::syswrite $fd, $_[PAYLOAD][1]){
@@ -358,6 +363,148 @@ sub uhm_multipart_file {
     my $next=shift;
     sub {
         delete $ctx{$_[REX]};
+        &$next;
+    }
+  };
+
+  [$inner, $outer, $error];
+}
+
+
+
+
+# Converts partial incomming data into a stream of completed items
+sub uhm_slurp {
+  my %options=@_;
+  
+  my $upload_dir=$options{upload_dir}//"uploads";
+	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
+  my $close_on_complete=$options{close_on_complete};
+
+
+  my $fields_to_file=$options{fields_to_file}//[];   #list of field names to store to disk
+
+  my %ctx;
+  my $inner=sub {
+    my $next=shift;
+    my $last;
+    sub {
+    #say STDERR " slurp multipart MIDDLEWARE";
+      #use Data::Dumper;
+      #say STDERR Dumper $_[PAYLOAD];
+        my $open;
+        my $c=$ctx{$_[REX]};
+        unless($c){
+          #first call, create a new context
+          $c=$ctx{$_[REX]}=[];
+          $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
+
+        }
+
+
+        my $payload=$_[PAYLOAD];
+        my $cb=$_[CB];
+        $_[PAYLOAD]="";
+        # Check for Expect header and respond if needed to
+        if($_[IN_HEADER]{HTTP_EXPECT()}){
+          # Bypass and write a 100 reponse 
+          my $header=$_[OUT_HEADER];
+          $_[OUT_HEADER]{":status"}=HTTP_CONTINUE;
+          $_[CB]=sub {say "callback dummy for slurp";};
+          $_[ROUTE][1][ROUTE_OUTER_HEAD]->&*;
+          return unless $payload;
+          #&rex_write;
+        }
+        # Restore callback after CONTINUE
+        #
+        $_[CB]=$cb;
+        # Wrap payload if need be 
+        unless(ref $payload){
+          $payload=[{}, $payload];
+        }
+          #For each part (or partial part) we need to append to the right section
+          #$c=$ctx{$_[REX]};
+          $last=@$c-1;
+          if(@$c and $payload->[0] == $c->[$last][0]){
+            #Header information is the same. Append data
+            if($c->[$last][0]{_filename}){
+              my $fd=$c->[$last][1];
+              if(defined IO::FD::syswrite $fd, $payload->[1]){
+                #not used
+              }
+            }
+            else {
+              $c->[$last][1].=$payload->[1];
+            }
+          }
+
+          else {
+            #New part
+
+            #close old one
+            IO::FD::close $c->[$last][1] if @$c and $c->[$last][0]{_filename} and $close_on_complete;
+
+            #open new one
+            my $h=$payload->[0];
+
+            if($h->{_filename}){
+              my $path=IO::FD::mktemp catfile $upload_dir, "X" x 10;
+              my $error;
+
+              if(defined IO::FD::sysopen(my $fd, $path, O_CREAT|O_RDWR)){
+                #store the file descriptor in the body field of the payload     
+
+                if(defined IO::FD::syswrite $fd, $payload->[1]){
+                  $payload->[0]{_path}=$path;
+                  $payload->[1]=$close_on_complete?undef:$fd;
+                  push @$c, $payload;
+                }
+                else {
+                  say STDERR "ERROR writing FILE $!";
+                  &rex_error_internal_server_error;
+                  #Internal server error
+                }
+              }
+              else {
+                #Internal server error
+                say STDERR "ERROR OPENING FILE $!";
+                &rex_error_internal_server_error;
+              }
+            }
+            else {
+              # Append into memory
+              push @$c, $payload;
+            }
+             
+
+          }
+
+
+        #Call next only when accumulation is done
+        #Pass the list to the next
+        unless($_[CB]){
+            #close old one
+            IO::FD::close $c->[$last][1] if @$c and $c->[$last][0]{_filename} and $close_on_complete;
+          $_[PAYLOAD]=delete $ctx{$_[REX]};
+          &$next;
+        }
+      }
+  };
+
+  my $outer=sub {
+    my $next=shift;
+  };
+  
+  my $error=sub {
+    my $next=shift;
+    sub {
+        my $c=delete $ctx{$_[REX]};
+        for (@$c){
+          #Force close any file descriptors
+          #
+          IO::FD::close $_->[1] if $_->[0]{_filename};
+        }
+        
         &$next;
     }
   };

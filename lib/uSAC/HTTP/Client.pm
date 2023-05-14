@@ -358,7 +358,7 @@ method __request {
 
     # Call the head of the outerware function
     #
-    $out_header->{":status"}=-1;
+    ##$out_header->{":status"}=-1;
     $route->[1][ROUTE_OUTER_HEAD]($route, $rex, \%in_header, $out_header, $payload, undef);
   };
 }

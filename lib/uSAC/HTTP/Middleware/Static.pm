@@ -196,7 +196,7 @@ sub send_file_uri_norange {
 
 
   #Ignore caching headers if we are processing as an error
-  my $as_error= HTTP_BAD_REQUEST<=$out_headers->{":status"};
+  my $as_error= HTTP_BAD_REQUEST<=($out_headers->{":status"}//HTTP_OK);
   if(!$as_error){
     #TODO: needs testing
     for my $t ($headers->{"if-none-match"}){
@@ -656,7 +656,7 @@ sub uhm_static_root {
         # Previous middleware did not find anything, or we don't have a
         # response just yet
         #
-        return &$next unless($_[OUT_HEADER]{":status"}<0 or $_[OUT_HEADER]{":status"}==HTTP_NOT_FOUND);
+        return &$next unless($_[OUT_HEADER]{":status"}//HTTP_NOT_FOUND)==HTTP_NOT_FOUND;
        
         # 
         # Path is either given with the rex object or passed in by the payload
@@ -871,16 +871,19 @@ sub uhm_static_content {
 	sub {
       my $next=shift;
       sub {
-        if($_[HEADER]){
+        if($_[OUT_HEADER]){
           
           for my  ($k, $v)(
             %$headers
           )
           { 
-            $_[HEADER]{$k}=$v;
+            $_[OUT_HEADER]{$k}=$v;
           }
+
+          # Only set the payload when the out header is present (single shot)
+          $_[PAYLOAD]=$static;
         }
-        $_[PAYLOAD]=$static;
+
         &$next;
       }
 	}

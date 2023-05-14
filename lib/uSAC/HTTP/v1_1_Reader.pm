@@ -149,7 +149,6 @@ sub make_parser{
 
       #while ( $len=length $buf) {
       while ($buf) {
-        say "_____ Parser : $state";
         #say "____HTTP PARSER_LOOP:". join ", ", @_;
         #Dual mode variables:
         #	server:
@@ -264,7 +263,8 @@ sub make_parser{
           
           unless($mode){
 
-            $out_header={":status" => -1};
+            ##$out_header={":status" => -1};
+            $out_header={};
             $h{":method"}=$method;
             $h{":scheme"}="http";
             $h{":authority"}=$host;
@@ -331,17 +331,14 @@ sub make_parser{
 
           my $payload=substr $buf, 0, $new, "";
 
-          say STDERR "PROCESSED: $processed, body len: $body_len";
           if($processed==$body_len){
             #
             # Last send
             #
             $state=$start_state;
             $processed=0;
-            $_[PAYLOAD]="";#substr $buf, 0, $new, "";
-            say STDERR "LAST READ";
+            #$_[PAYLOAD]="";#substr $buf, 0, $new, "";
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
-            $processed=0;
           }
           else {
             # 
@@ -518,8 +515,8 @@ sub make_serialize{
 
       # If no valid code is set then set default 200
       #
-      my $code=delete $_[OUT_HEADER]{":status"};
-      $code=HTTP_OK if $code<0;
+      my $code=(delete $_[OUT_HEADER]{":status"})//HTTP_OK;
+      #$code=HTTP_OK if !defined($code) or $code<0;
 
       if($mode == MODE_SERVER){
         # serialize in server mode is a response
@@ -541,16 +538,16 @@ sub make_serialize{
         $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
       }
 
-      $reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
-      $reply.=$static_headers;
+      #$reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
+      #$reply.=$static_headers;
       $reply.=CRLF;
 
       Log::OK::DEBUG and log_debug "->Serialize: headers:";
       Log::OK::DEBUG and log_debug $reply;
 
-      # mark headers as done
+      # mark headers as done, if not informational
       #
-      $_[OUT_HEADER]=undef;	
+      $_[OUT_HEADER]=undef if  $code>=HTTP_OK;
 
 
       if($ctx){

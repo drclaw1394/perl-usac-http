@@ -14,7 +14,7 @@ use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware::Log;
 use uSAC::HTTP::Middleware::Deflate;
 use uSAC::HTTP::Middleware::Gzip;
-use uSAC::HTTP::Middleware::AccumulateContent;
+use uSAC::HTTP::Middleware::Slurp;#AccumulateContent;
 use uSAC::HTTP::Middleware::Multipart;
 
 #use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
@@ -178,15 +178,20 @@ my $server; $server=usac_server {
     usac_route POST
       =>"/multipart"
       =>uhm_multipart()
+      =>uhm_slurp(
+        close_on_complete=>1,
+        upload_dir=>"uploads" 
+        
+      )
       =>sub {
         use Data::Dumper;
-        say Dumper $_[PAYLOAD];
-        say $_[PAYLOAD][0];
-        say "GOT PAYLOAD: ", $_[PAYLOAD];
+        #say Dumper $_[PAYLOAD];
+        #say $_[PAYLOAD][0];
+        say "GOT PAYLOAD: ", Dumper $_[PAYLOAD];
         if(ref $_[PAYLOAD]){
-          $_[PAYLOAD]=$_[PAYLOAD][1];
+          $_[PAYLOAD]=$_[PAYLOAD][0][1];
         }
-        say Dumper $_[CB];
+        #say Dumper $_[CB];
         #else {
         $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/plain" if $_[OUT_HEADER];
         1;
@@ -196,9 +201,8 @@ my $server; $server=usac_server {
       => "/stream_url_upload\$"
       => sub {
         say "Expecting, content, chunged, multipart or similar";
-        #say "Payload: $_[PAYLOAD]";
         $_[PAYLOAD]=Dumper $_[PAYLOAD];
-        &rex_write;
+        1;
       };
 
     usac_route "GET"
@@ -209,51 +213,41 @@ my $server; $server=usac_server {
 
     usac_route POST
       => "/slurp_url_upload"
-      => uhm_urlencoded_slurp()
+      =>uhm_slurp()
       => sub {
-        #return &rex_write unless $_[CODE];
-        #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
-        &rex_write;
+        1;
       };
 
     usac_route POST
       => "/file_url_upload"
-      => uhm_urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
+      #=> uhm_urlencoded_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
+      =>uhm_slurp()
       => sub {
       #return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
-        &rex_write;
+        1;
       };
 
     usac_route POST
       => "/slurp_multi_upload"
-      => uhm_multipart_slurp()
+      =>uhm_slurp()
       => sub {
-      #return &rex_write unless $_[CODE];
-        
-        #Payload here depends on the configuration of the middleware
-        #It is an array of arrays. The  top level is the list of parts
-        #The second level represents a part (header and body)
-        #The body might be empty, if the data was saved to disk
-        #
-        #say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
-        &rex_write;
+        1;
       };
 
     usac_route POST
       => "/file_multi_upload"
-      => uhm_multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
+      #=> uhm_multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
+      =>uhm_slurp()
       => sub {
-      #return &rex_write unless $_[CODE];
-      #NOTE: This is only called when all the data is uploaded
         say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
-        &rex_write;
+        1;
       };
     
 
@@ -272,7 +266,6 @@ my $server; $server=usac_server {
         $_[PAYLOAD]="DONE: $ctx";#. Dumper $_[PAYLOAD][0];
         say $ctx;
         delete $ctx{$_[REX]} unless($_[CB]);
-        &rex_write;
       };
 		
 

@@ -26,8 +26,6 @@ sub uhm_multipart {
     sub {
       my $ctx;
       #\my $buf=\$_[PAYLOAD];
-      use Data::Dumper;
-      say STDERR "cb in multipart: ". Dumper $_[CB];
       if($_[OUT_HEADER]){
 
         # skip if not multipart
@@ -142,9 +140,26 @@ sub uhm_multipart {
 
             if( $buf =~ /\G ([^:\000-\037\040]++):[\011\040]*+ ([^\012\015]*+) [\011\040]*+ \015\012/sxogca ){
 
-              \my $e=\$form_headers->{uc $1=~tr/-/_/r};
+              my $k=lc $1;
+              
+              \my $e=\$form_headers->{$k};
               $e = defined $e ? $e.','.$2: $2;
 
+              my $v;
+              if($k eq HTTP_CONTENT_DISPOSITION()){
+                my @f=split ";", $2;
+
+                #First is expected to always be form-data
+                shift @f;
+                @f=map split("=", $_,2), @f;
+                for my($k, $v)(@f){
+                  $v=~s/^"//;
+                  $v=~s/"$//;
+                  $k=builtin::trim $k;
+                  $v=builtin::trim $v;
+                  $form_headers->{"_$k"}=$v;
+                }
+              }
               #need to split to isolate name and filename
               redo;
             }
