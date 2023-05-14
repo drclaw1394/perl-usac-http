@@ -25,13 +25,13 @@ sub uhm_multipart {
     #my $b_len;
     sub {
       my $ctx;
-      #\my $buf=\$_[PAYLOAD];
+
       if($_[OUT_HEADER]){
-
         # skip if not multipart
-        return &$next unless ($_[IN_HEADER]{"content-type"}//"") =~/multipart/i;
+        #
+        return &$next unless ($_[IN_HEADER]{HTTP_CONTENT_TYPE()}//"") =~/multipart/i;
 
-        my $boundary="--".(split("=", $_[IN_HEADER]{"content-type"}))[1]; #boundary
+        my $boundary="--".(split("=", $_[IN_HEADER]{HTTP_CONTENT_TYPE()}))[1]; #boundary
         $ctx=[
           0,    #state
           1,    #first flag

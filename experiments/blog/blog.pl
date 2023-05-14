@@ -103,6 +103,7 @@ my $server; $server=usac_server {
       # }                          #
       #=> uhm_gzip()
       #=> uhm_deflate()
+      #=>uhm_multipart()
       => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, usac_path root=>usac_dirname, "static/hot.txt";
 
     usac_route "/die"
@@ -181,7 +182,6 @@ my $server; $server=usac_server {
       =>uhm_slurp(
         close_on_complete=>1,
         upload_dir=>"uploads" 
-        
       )
       =>sub {
         use Data::Dumper;
