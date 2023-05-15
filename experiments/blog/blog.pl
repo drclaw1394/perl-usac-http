@@ -1,11 +1,7 @@
 #!/usr/bin/env perl
-BEGIN{
-  #$ENV{LIBEV_FLAGS}=8; #POLL
-}
-
-
 use EV;
 use AnyEvent;
+
 use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
@@ -22,25 +18,7 @@ use uSAC::HTTP::Middleware::Multipart;
 
 
 use Socket;
-
-#############################################
-# use modules                               #
-#     Static=>undef,  #import with defaults #
-#     Static=>[],     #import nothing       #
-#     Static=>[qw< a b c>]                  #
-# );                                        #
-# use modules "uSAC::HTTP::Middleware" => [ #
-#     Static=>undef,  #import with defaults #
-#     Static=>[],     #import nothing       #
-#     Static=>[qw< a b c>]                  #
-# ]                                         #
-#                                           #
-# modules::require                          #
-#############################################
-
 use Net::ARP;
-
-
 use uSAC::HTTP::Rex;
 
 
@@ -176,8 +154,19 @@ my $server; $server=usac_server {
                 #         usac_path root =>usac_dirname, "." #
                 # );                                         #
                 ##############################################
+    usac_route GET
+      =>"/multipart"
+      => sub {
+        #render the form page
+        use uSAC::HTTP::Route;
+        $_[PAYLOAD]="some html goes gere";
+        $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/plain";
+        1;
+      };
+
     usac_route POST
       =>"/multipart"
+
       =>uhm_multipart()
       =>uhm_slurp(
         close_on_complete=>1,
@@ -191,8 +180,6 @@ my $server; $server=usac_server {
         if(ref $_[PAYLOAD]){
           $_[PAYLOAD]=$_[PAYLOAD][0][1];
         }
-        #say Dumper $_[CB];
-        #else {
         $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/plain" if $_[OUT_HEADER];
         1;
       };

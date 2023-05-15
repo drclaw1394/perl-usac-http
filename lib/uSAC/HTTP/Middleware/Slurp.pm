@@ -33,6 +33,7 @@ our @EXPORT=@EXPORT_OK;
 
 # Converts partial incomming data into a stream of completed items
 my $dummy_cb=sub {};
+
 sub uhm_slurp {
   my %options=@_;
   
@@ -69,7 +70,6 @@ sub uhm_slurp {
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
 
         }
-
 
         my $payload=$_[PAYLOAD];
         my $cb=$_[CB];

@@ -285,7 +285,19 @@ method _add_route {
     }
 
     my ($matcher, $type)=$self->__adjust_matcher($host, $method_matcher, $path_matcher);
-    $self->find_root->add_host_end_point($host, $matcher, [$self, $inner_head, $outer_head, $error_head, 0], $type);
+
+    # Create a route structure
+    my @route;
+    $route[ROUTE_SITE]=$self;
+    $route[ROUTE_INNER_HEAD]=$inner_head;
+    $route[ROUTE_OUTER_HEAD]=$outer_head;
+    $route[ROUTE_ERROR_HEAD]=$error_head;
+    $route[ROUTE_SERIALIZE]=$serialize;
+    $route[ROUTE_COUNTER]=0;
+    $route[ROUTE_TABLE]=undef;
+
+    # Actually add the route to the server/client
+    $self->find_root->add_host_end_point($host, $matcher, \@route, $type);
     last unless defined $matcher;
 
   }
@@ -547,11 +559,13 @@ method add_site ($site){
 }
 
 sub usac_site :prototype(&) {
-	my $server=$uSAC::HTTP::Site->find_root;
 	my $sub=pop;
   my %options=@_;
+  my $parent=$options{parent}//$uSAC::HTTP::Site;
+	my $server=$parent->find_root;
+
 	my $self= uSAC::HTTP::Site->new(server=>$server, mode=>$server->mode);
-	$self->parent=$options{parent}//$uSAC::HTTP::Site;
+	$self->parent=$parent;
 	$self->id=$options{id}//join ", ", caller;
 	$self->set_prefix(%options,$options{prefix}//'');
 	
@@ -565,6 +579,11 @@ sub usac_site :prototype(&) {
     $e->throw;
   }
 	$self;
+}
+
+method child_site {
+  my $root=$self->find_root;
+  my $child=uSAC::HTTP::Site->new(server=> $root, mode=>$root->mode);
 }
 
 method find_root {

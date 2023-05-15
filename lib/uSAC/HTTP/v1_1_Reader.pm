@@ -520,15 +520,11 @@ sub make_serialize{
       # If no valid code is set then set default 200
       #
       my $code=(delete $_[OUT_HEADER]{":status"})//HTTP_OK;
-      #$code=HTTP_OK if !defined($code) or $code<0;
 
       if($mode == MODE_SERVER){
-        # serialize in server mode is a response
         $reply=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
       }
       else {
-        #say "CLIENT CODE: $_[OUT_HEADER]{":status"}";
-        # TODO: check CODE. If an error then don't serialize. call the error head
         return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $code;
 
         # serialize in client mode is a request
@@ -542,8 +538,8 @@ sub make_serialize{
         $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
       }
 
-      #$reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
-      #$reply.=$static_headers;
+      $reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
+      $reply.=$static_headers;
       $reply.=CRLF;
 
       Log::OK::DEBUG and log_debug "->Serialize: headers:";
@@ -565,7 +561,7 @@ sub make_serialize{
         $reply.=$_[PAYLOAD];
       }
 
-      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);#, $_[6]);
+      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
     }
     else{
       # No header specified. Just a body
@@ -574,12 +570,15 @@ sub make_serialize{
         $reply= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
 
         unless($_[CB]){
+          # Marked as last call
           $reply.="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
+
         $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
       }
       else{
+        # not chunked, so just write
         $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD], $cb);
       }
 

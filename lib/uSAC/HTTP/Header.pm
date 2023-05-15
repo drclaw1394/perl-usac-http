@@ -80,8 +80,15 @@ BEGIN {
 		Sec-WebSocket-Protocol
 		Sec-WebSocket-Extensions
 		DataServiceVersion
+
+    :Method
+    :Scheme
+    :Path
+    :Authority
+    :Status
 	);
-	%const_names=map {(("HTTP_".uc)=~s/-/_/gr, lc $_)} @names;
+
+	%const_names=map {(("HTTP_".uc)=~s/-|:/_/gr, lc $_)} @names;
 
 	my $i=0;
 	#our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $i++)} @names;
@@ -97,36 +104,12 @@ BEGIN {
 
 use constant \%const_names; #Direct constants to use
 #use constant \%name_to_index;
-our @EXPORT_OK=(keys(%const_names), "find_header");
+
+our @EXPORT_OK=(keys(%const_names));
+
 our %EXPORT_TAGS=(
-	constants=>["find_header", keys %const_names]
+	constants=>[keys %const_names]
 );
 
-my @key_indexes=map {$_*2} 0..99;
-sub find_header_old: lvalue {
-	\my @headers=$_[0];
-	my $key=$_[1];
-	#print "Searching for key $key\n";
-	#print @headers;
-	my $index=first {$headers[$_] == $key} @key_indexes;
-	#print $index."\n";
-	return $headers[($index//-2)+1];
-	#?$headers[$index+1]:undef;
-
-
-}
-sub find_header: lvalue{
-	#my($headers, $key)=@_;	
-	\my @headers=$_[0];
-	for my $k (@key_indexes){
-		return undef if $k >=@headers;
-		Log::OK::TRACE and do {
-			log_trace "iteration key is $k, search key is $_[1]";
-			log_trace "serching through headers: ".$index_to_name[$headers[$k]]//$headers[$k];
-			log_trace "lable: $headers[$k]";
-		};
-		$headers[$k] == $_[1] and return $headers[$k+1];
-	}
-}
 
 1;
