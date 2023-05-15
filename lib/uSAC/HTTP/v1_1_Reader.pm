@@ -512,6 +512,10 @@ sub make_serialize{
         $ctx=1; #Mark as needing chunked
         $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
       }
+      else {
+        $_[PAYLOAD]="";
+        $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
+      }
 
       # If no valid code is set then set default 200
       #

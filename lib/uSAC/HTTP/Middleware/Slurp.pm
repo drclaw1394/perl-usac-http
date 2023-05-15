@@ -38,7 +38,7 @@ sub uhm_slurp {
   
   my $upload_dir=$options{upload_dir};
 	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
-  my $close_on_complete=$options{close_on_complete};
+  my $close_on_complete=$options{close_on_complete}//1; # Default is to close
   my $mem_flag;
 
   my $fields_to_file=$options{fields_to_file}//[];   #list of field names to store to disk
@@ -52,9 +52,6 @@ sub uhm_slurp {
     # warn about memory only slurping
     carp "No upload dir destination. Content slurping is memory only";
     $mem_flag=1;
-    #use Error::Show;
-    #say Error::Show::context shortmess; 
-    #say Error::Show::context undef;
   }
   # Test if upload directory exists;
 
@@ -90,15 +87,38 @@ sub uhm_slurp {
         # Restore callback after CONTINUE
         #
         $_[CB]=$cb;
+
         # Wrap payload if need be 
         unless(ref $payload){
-          $payload=[{}, $payload];
+          my $head={};
+          for($_[IN_HEADER]{HTTP_CONTENT_DISPOSITION()}//()){
+            $head->{HTTP_CONTENT_DISPOSITION()}=$_;
+            my @f=split ";", $_;
+            shift @f;
+
+            @f=map split("=", $_,2), @f;
+            for my($k, $v)(@f){
+              $v=~s/^"//;
+              $v=~s/"$//;
+              $k=builtin::trim $k;
+              $v=builtin::trim $v;
+              $head->{"_$k"}=$v;
+            }
+
+          }
+          for($_[IN_HEADER]{HTTP_CONTENT_TYPE()}//()){
+            $head->{HTTP_CONTENT_TYPE()}=$_;
+          }
+          $head->{_filename}//="single_part";
+          $payload=[$head, $payload];
         }
+
           #For each part (or partial part) we need to append to the right section
           #$c=$ctx{$_[REX]};
           $last=@$c-1;
           if(@$c and $payload->[0] == $c->[$last][0]){
             #Header information is the same. Append data
+            #
             if($c->[$last][0]{_filename} and !$mem_flag){
               my $fd=$c->[$last][1];
               if(defined IO::FD::syswrite $fd, $payload->[1]){
@@ -109,11 +129,11 @@ sub uhm_slurp {
               $c->[$last][1].=$payload->[1];
             }
           }
-
           else {
             #New part
 
             #close old one
+            #
             IO::FD::close $c->[$last][1] if @$c and !$mem_flag and $c->[$last][0]{_filename} and $close_on_complete;
 
             #open new one
@@ -128,7 +148,7 @@ sub uhm_slurp {
 
                 if(defined IO::FD::syswrite $fd, $payload->[1]){
                   $payload->[0]{_path}=$path;
-                  $payload->[1]=$close_on_complete?undef:$fd;
+                  $payload->[1]=$fd;#$close_on_complete?undef:$fd;
                   push @$c, $payload;
                 }
                 else {
@@ -147,16 +167,18 @@ sub uhm_slurp {
               # Append into memory
               push @$c, $payload;
             }
-             
-
           }
 
 
         #Call next only when accumulation is done
         #Pass the list to the next
         unless($_[CB]){
-            #close old one
-            IO::FD::close $c->[$last][1] if @$c and !$mem_flag and $c->[$last][0]{_filename} and $close_on_complete;
+          #close old one
+          if(@$c and !$mem_flag and $c->[$last][0]{_filename} and $close_on_complete){
+            IO::FD::close $c->[$last][1];
+            $c->[$last][1]=undef;
+          }
+
           $_[PAYLOAD]=delete $ctx{$_[REX]};
           &$next;
         }

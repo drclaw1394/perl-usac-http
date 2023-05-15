@@ -14,7 +14,7 @@ use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware::Log;
 use uSAC::HTTP::Middleware::Deflate;
 use uSAC::HTTP::Middleware::Gzip;
-use uSAC::HTTP::Middleware::Slurp;#AccumulateContent;
+use uSAC::HTTP::Middleware::Slurp;
 use uSAC::HTTP::Middleware::Multipart;
 
 #use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
