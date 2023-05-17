@@ -544,7 +544,7 @@ sub parse_form_params {
 # First innerware. Strips site prefix and also monitors if the REX has been marked activly in
 # progress
 #
-sub umw_dead_horse_stripper {
+sub uhm_dead_horse_stripper {
   my ($package, $prefix)=@_;
 	my $len=length $prefix;
 	my $inner=sub {
@@ -558,6 +558,8 @@ sub umw_dead_horse_stripper {
         $len
         ?substr($_[REX][uri_raw_], $len)
         : $_[REX][uri_raw_];
+
+        $_[IN_HEADER]{":path_stripped"}=$_[REX][uri_stripped_];
       }
       ######################################
       # $_[REX][uri_stripped_]=            #

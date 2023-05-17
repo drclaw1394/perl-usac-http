@@ -275,7 +275,6 @@ my $server; $server=usac_server {
     usac_error_route "/error" 
       => sub {
         $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[OUT_HEADER]{":status"};
-        #&rex_write;
         1;
 		  };
 
@@ -285,7 +284,7 @@ my $server; $server=usac_server {
 		usac_error_page 415 
       => "/error";
 
-      #usac_catch_route usac_error_not_found;
+    usac_catch_route usac_error_not_found;
 	};
 
 
@@ -294,4 +293,3 @@ my $server; $server=usac_server {
 	#usac_route  "/static/$Path"=> static_file_from "static", cache_size=>10;
   usac_run;
 };
-#$server->run();

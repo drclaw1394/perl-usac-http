@@ -67,8 +67,8 @@ my $server; $server=usac_server {
 			#View/render
 			###########
 			$_[PAYLOAD]=Template::Plex->immediate(undef,\*DATA,$vars);
-			push $_[HEADER]->@*, HTTP_CONTENT_TYPE, "text/html";
-
+			$_[OUT_HEADER]{HTTP_CONTENT_TYPE()}= "text/html";
+      1;
 			&rex_write;
 		};
 
@@ -82,7 +82,7 @@ my $server; $server=usac_server {
 		usac_error_page 404 => "/error/404";
 
 		#Catch all
-    #usac_catch_route usac_error_not_found;
+    usac_catch_route usac_error_not_found;
 	};
 	#usac_route "/static/$Path" => static_file_from "static";
 	

@@ -178,7 +178,7 @@ method _add_route {
 
 
 
-  #unshift @_, uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
+  unshift @_, uSAC::HTTP::Rex->uhm_dead_horse_stripper($_built_prefix);
   # Fix up and break out middleware
   #
   \my (@inner, @outer, @error)=$self->wrap_middleware(@_);
