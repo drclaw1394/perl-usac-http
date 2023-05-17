@@ -413,7 +413,6 @@ sub uhm_slurp {
           $_[CB]=sub {say "callback dummy for slurp";};
           $_[ROUTE][1][ROUTE_OUTER_HEAD]->&*;
           return unless $payload;
-          #&rex_write;
         }
         # Restore callback after CONTINUE
         #

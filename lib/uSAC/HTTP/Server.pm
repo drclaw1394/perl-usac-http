@@ -458,7 +458,7 @@ method add_host_end_point{
 
   # NOTE: This is the route context. This is  a back refernce to the table
   # TODO: Possibly weaken this
-  push $ctx->@*, $table;
+  $ctx->[ROUTE_TABLE]=$table;
 
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }

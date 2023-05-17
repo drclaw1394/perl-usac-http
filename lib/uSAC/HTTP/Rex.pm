@@ -523,64 +523,19 @@ sub new {
 }
 
 
-#multipart for type.
-#Sub parts can be of different types and possible content encodings?
-sub usac_multipart_stream {
-		my $cb=pop;
-		sub {
-			my $line=$_[ROUTE];#shift;
-			my $rex=$_[REX];#shift;
-			#shift;		#remove place holder for mime
-			my $session=$rex->[uSAC::HTTP::Rex::session_];
-			#check if content type is correct first
-      #unless (index($rex->[headers_]{CONTENT_TYPE},'multipart/form-data')>=0){
-			unless (index($_[IN_HEADER]{"content-type"},'multipart/form-data')>=0){
-				#$session->[uSAC::HTTP::Session::closeme_]=1;
-				$rex->[closeme_]->$*=1;
-
-
-				rex_write $line, $rex, HTTP_UNSUPPORTED_MEDIA_TYPE,{} ,"multipart/formdata required";
-				return;
-			}
-			#uSAC::HTTP::Session::push_reader
-			
-			$_[CB]=$cb->();
-			$session->push_reader(
-				#make_form_data_reader @_, $session, $cb->()
-
-				&make_form_data_reader # @_, $session, $cb->()
-			);
-
-			Log::OK::INFO and log_info "multipart stream";
-			$_[1][in_progress_]=1;
-
-			$session->pump_reader;
-			return;
-		}
-}
-
-
-
 #parse a form in either form-data or urlencoded.
 #First arg is rex
 #second is data
 #third is the header for each part if applicable
 sub parse_form_params {
 	my $rex=$_[1];
-	#0=>line
-	#1=>rex
-	#2=>code
-	#3=>out_header
-	#4=>payload
-	#5=>section header
-	#
 	#parse the fields	
   #for ($rex->[headers_]{CONTENT_TYPE}){
 	for ($_[IN_HEADER]{"content-type"}){
 		if(/multipart\/form-data/){
 			#parse content disposition (name, filename etc)
 			my $kv={};
-			for(map tr/ //dr, split ";", $_[CB]->{CONTENT_DISPOSITION}){
+			for(map tr/ //dr, split ";", $_[IN_HEADER]{HTTP_CONTENT_DISPOSITION()}){
 				my ($key, $value)=split "=";
 				$kv->{$key}=defined($value)?$value=~tr/"//dr : undef;
 			}
@@ -602,18 +557,6 @@ sub parse_form_params {
 	}
 }
 
-#Parse the query
-sub parse_query_params_old {
-	my $rex=shift;
-	#NOTE: This should already be decoded so no double decode
-	my $kv={};
-	for(map tr/ //dr, split "&", $rex->[query_string_]){
-		my ($key,$value)=split "=";
-		$kv->{$key}=$value;
-
-	}
-	return $kv;
-}
 
 # First innerware. Strips site prefix and also monitors if the REX has been marked activly in
 # progress
@@ -688,7 +631,6 @@ sub umw_dead_horse_stripper {
 
 }
 
-*rex_parse_form_params=*parse_form_params;
 
 
 1;

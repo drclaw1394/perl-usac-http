@@ -178,7 +178,7 @@ method _add_route {
 
 
 
-  unshift @_, uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
+  #unshift @_, uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
   # Fix up and break out middleware
   #
   \my (@inner, @outer, @error)=$self->wrap_middleware(@_);
@@ -687,9 +687,11 @@ method add_route {
 
   }
   catch($e){
-    my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
-    log_fatal context message=>"", frames=>[$trace->frames];
-    $e->throw;
+    #my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
+    #say $e->trace->frames;
+    log_fatal context message=>$e, frames=>[$e->trace->frames];
+    exit;
+    #$e->throw;
   }
   $self;    #Chaining
 }
@@ -940,7 +942,6 @@ sub usac_redirect_internal {
 	sub {
 		$_[PAYLOAD]=$url;
 		&rex_redirect_internal;# @_, $url;
-		#rex_write (@_,HTTP_NOT_MODIFIED, [HTTP_LOCATION, $url],"");
 	}
 
 }

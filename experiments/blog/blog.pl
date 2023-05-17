@@ -12,6 +12,7 @@ use uSAC::HTTP::Middleware::Deflate;
 use uSAC::HTTP::Middleware::Gzip;
 use uSAC::HTTP::Middleware::Slurp;
 use uSAC::HTTP::Middleware::Multipart;
+use uSAC::HTTP::Middleware::ScriptWrap;
 
 #use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 #use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
@@ -23,7 +24,7 @@ use uSAC::HTTP::Rex;
 
 
 
-#use uSAC::MIME;
+use uSAC::MIME;
 use Data::Dumper;
 
 my $server; $server=usac_server {
@@ -42,7 +43,7 @@ my $server; $server=usac_server {
 
 	
 
-	#usac_mime_db uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type");
+	usac_mime_db(uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type"));
 	#usac_mime_default "some/stuff";
 	#usac_listen "192.168.1.104";
 	
@@ -138,7 +139,7 @@ my $server; $server=usac_server {
                         #no_compress=>qr/txt$/,
                         do_dir=>1,
                         indexes=>["index.html"],
-                        sendfile=>0,#4096*32,
+                        #sendfile=>0,#4096*32,
                         usac_dirname #  "static"
                 );
 
@@ -154,6 +155,19 @@ my $server; $server=usac_server {
                 #         usac_path root =>usac_dirname, "." #
                 # );                                         #
                 ##############################################
+
+    usac_route GET
+      =>"/wrapped"
+      =>uhm_script_wrap() # Wrap result so usable as javascript source
+      => sub {
+        $_[PAYLOAD]=qq|
+        <form method="post" action="/multipart">
+          <input name="dummy" type="text" value="test value">
+          <input type="submit">
+        </form>|;
+      };
+
+
     usac_route GET
       =>"/multipart"
       => sub {
@@ -166,22 +180,20 @@ my $server; $server=usac_server {
 
     usac_route POST
       =>"/multipart"
-
-      =>uhm_multipart()
+      #=>uhm_multipart()
       =>uhm_slurp(
         close_on_complete=>1,
-        upload_dir=>"uploads" 
+        #upload_dir=>"uploads" 
       )
       =>sub {
         use Data::Dumper;
-        #say Dumper $_[PAYLOAD];
-        #say $_[PAYLOAD][0];
         say "GOT PAYLOAD: ", Dumper $_[PAYLOAD];
         if(ref $_[PAYLOAD]){
           $_[PAYLOAD]=$_[PAYLOAD][0][1];
         }
         $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/plain" if $_[OUT_HEADER];
-        1;
+
+        1; #Auto call next
       };
 
     usac_route POST
@@ -263,7 +275,8 @@ my $server; $server=usac_server {
     usac_error_route "/error" 
       => sub {
         $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[OUT_HEADER]{":status"};
-        &rex_write;
+        #&rex_write;
+        1;
 		  };
 
 		usac_error_page 404 

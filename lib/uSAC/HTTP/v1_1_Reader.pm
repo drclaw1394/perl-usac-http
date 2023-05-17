@@ -435,10 +435,12 @@ sub make_parser{
       Log::OK::ERROR and log_error  $context;
 
       if(Log::OK::DEBUG){
-        uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+        #uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
       }
       else {
-        uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>0},my $c="", my $d=undef);
+        $route and $route->[0][ROUTE_SERIALIZE]($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>0},my $c="", my $d=undef);
+        #uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>0},my $c="", my $d=undef);
       }
     }
 
@@ -512,10 +514,8 @@ sub make_serialize{
         $ctx=1; #Mark as needing chunked
         $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
       }
-      else {
-        $_[PAYLOAD]="";
-        $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
-      }
+        #$_[PAYLOAD]="";
+      $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
 
       # If no valid code is set then set default 200
       #

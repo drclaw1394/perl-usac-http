@@ -79,10 +79,9 @@ sub uhm_slurp {
           # Bypass and write a 100 reponse 
           my $header=$_[OUT_HEADER];
           $_[OUT_HEADER]{":status"}=HTTP_CONTINUE;
-          $_[CB]=$dummy_cb;#sub {say "callback dummy for slurp";};
+          $_[CB]=$dummy_cb;
           $_[ROUTE][1][ROUTE_OUTER_HEAD]->&*;
           return unless $payload;
-          #&rex_write;
         }
         # Restore callback after CONTINUE
         #

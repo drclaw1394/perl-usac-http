@@ -783,7 +783,7 @@ sub uhm_static_root {
         #
         unless($entry->[File::Meta::Cache::user_]){
           $entry->[File::Meta::Cache::user_]=[
-            HTTP_CONTENT_TYPE, $content_type, #($mime->{$ext}//$default_mime),
+            HTTP_CONTENT_TYPE, $content_type, 
             HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
               CORE::gmtime($entry->[File::Meta::Cache::stat_][9])),
             HTTP_ETAG, "\"$entry->[File::Meta::Cache::stat_][9]-$entry->[File::Meta::Cache::stat_][7]\"",
