@@ -82,7 +82,7 @@ my $server; $server=usac_server {
 		usac_error_page 404 => "/error/404";
 
 		#Catch all
-		usac_catch_route usac_error_not_found;
+    #usac_catch_route usac_error_not_found;
 	};
 	#usac_route "/static/$Path" => static_file_from "static";
 	

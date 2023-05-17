@@ -309,7 +309,7 @@ sub rex_redirect_internal;
 
 #General error call, Takes an additional argument of new status code
 sub rex_error {
-    my $site=$_[ROUTE][1][0];
+    my $site=$_[ROUTE][1][ROUTE_SITE];
     $_[CB]=undef;
     $_[REX][method_]="GET";
     $_[REX][in_progress_]=1;
@@ -322,11 +322,6 @@ sub rex_error {
         return &rex_redirect_internal
       }
     }
-    #return rex_redirect_internal @_, $uri if $uri;
-
-    #If one wasn't found, then make an ugly one
-    #$_[PAYLOAD]||="Site: ".$site->id.': Error: '.$_[CODE];
-    #$_[PAYLOAD]="";
 	&rex_write;
 }
 
@@ -369,9 +364,6 @@ sub rex_redirect_internal {
   my $in_header=$_[IN_HEADER];
   my $header=$_[OUT_HEADER]?{$_[OUT_HEADER]->%*}:{};
 
-  #$_[CODE]=0;
-  
-  
   $rex->[in_progress_]=1;
 
 	if(($rex->[recursion_count_]) > 10){
@@ -381,32 +373,29 @@ sub rex_redirect_internal {
 		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, {HTTP_CONTENT_LENGTH, 0},"",undef);
 		return;
 	}
-  my $t; 
-  #say $matcher->[1][1];
-  #$matcher->[1][ROUTE_ERROR_HEAD]($matcher, $rex); #force a reset of the current chain, starting at innerware
-    $rex->[in_progress_]=undef;
-    $rex->[uri_raw_]=$uri;
-    $rex->[uri_stripped_]=$uri;
-    #say "AFTER CALL TO RESET EXISTING CHAIN";
-    #Here we reenter the main processing chain with a  new url, potential
-    #undef $_[0];
-    $t=undef;
-    $rex->[recursion_count_]++;
-    Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
-    my $route;
-    ($route, $rex->[captures_])=$rex->[session_]->server->current_cb->(
-      $rex->[host_],			#Internal redirects are to same host
-      join(" ", $rex->@[method_, uri_raw_]),#New method and url
-    );
-    
-    $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header,my $a="",my $b=undef);
-  #};
+  $rex->[in_progress_]=undef;
+  $rex->[uri_raw_]=$uri;
+  $rex->[uri_stripped_]=$uri;
+  #say "AFTER CALL TO RESET EXISTING CHAIN";
+  #Here we reenter the main processing chain with a  new url, potential
+  #undef $_[0];
+  $rex->[recursion_count_]++;
+  Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
+  my $route;
+  ($route, $rex->[captures_])=$rex->[session_]->server->current_cb->(
+    $rex->[host_],			#Internal redirects are to same host
+    join(" ", $rex->@[method_, uri_raw_]),#New method and url
+  );
+  
+  $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header,my $a="",my $b=undef);
 }
 
 
-sub rex_headers {
-	return $_[REX]->[headers_];
-}
+#######################################
+# sub rex_headers {                   #
+#         return $_[REX]->[headers_]; #
+# }                                   #
+#######################################
 
 sub rex_reply_json {
 	Log::OK::DEBUG and log_debug "rex_reply_json caller: ". join ", ", caller;
@@ -425,35 +414,29 @@ sub rex_reply_json {
 
 #Assume payload has content
 sub rex_reply_html {
-
-#push $_[HEADER]->@*,
   for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/html",
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
     $_[HEADER]{$k}=$v;
   }
-
 	&rex_write;
 }
+
 sub rex_reply_javascript {
-#push $_[HEADER]->@*,
   for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/javascript",
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
     $_[HEADER]{$k}=$v;
   }
-
 	&rex_write;
 }
 
 sub rex_reply_text {
-#push $_[HEADER]->@*,
   for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/plain",
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
     $_[HEADER]{$k}=$v;
   }
-
 	&rex_write;
 }
 

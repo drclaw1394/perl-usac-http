@@ -59,7 +59,7 @@ my $server; $server=usac_server {
 	usac_site {
     usac_id "blog";
     #usac_host "127.0.0.1:8084";
-    #usac_host "localhost:8084";
+    usac_host "localhost:8084";
     #usac_host "192.168.1.102:8084";
 
 
@@ -285,7 +285,7 @@ my $server; $server=usac_server {
 		usac_error_page 415 
       => "/error";
 
-		usac_catch_route usac_error_not_found;
+      #usac_catch_route usac_error_not_found;
 	};
 
 

@@ -123,10 +123,10 @@ my $dummy_default=[];
 sub _default_handler {
 		state $sub=sub {
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
-      #Log::OK::DEBUG and log_debug __PACKAGE__.join $_[REX]->headers->%*;
 			Log::OK::DEBUG and log_debug __PACKAGE__.join ", ", $_[IN_HEADER]->%*;
 			$_[PAYLOAD]="NOT FOUND";
 			&rex_error_not_found;
+      undef;
 		};
 }
 
@@ -441,25 +441,32 @@ method current_cb {
 method add_host_end_point{
 	my ( $host, $matcher, $ctx, $type)=@_;
 
-	#ctx is array
-	#[$site, $endpoint, $outer, $default_flag]
+	#ctx is route context array [$site, $endpoint, $outer, $default_flag]
+  #
 	#This becomes the value field in hustle table entry
 	#[matcher, value, type, default]
-	my $table=$_host_tables->{$host}//=[
-		Hustle::Table->new($dummy_default), # Table
-    {},                                  # Table cache
-    undef,                              #  dispatcher
-    "",
-    [],
-    [],
-    0
+  
+	my $table=$_host_tables->{$host};
+  unless ($table){
+    # Host table does not exist. So create on. Add a default path also
+    $_host_tables->{$host}=$table=[
+      Hustle::Table->new($dummy_default), # Table
+      {},                                  # Table cache
+      undef,                              #  dispatcher
+      "",
+      [],
+      [],
+      0
 
-	];
+    ];
+  }
+
 
   # NOTE: This is the route context. This is  a back refernce to the table
   # TODO: Possibly weaken this
   $ctx->[ROUTE_TABLE]=$table;
 
+  #Actually add the entry to hustle table
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
@@ -478,8 +485,10 @@ method rebuild_dispatch {
     #If the table has a dummy catch all then lets make an fallback
     my $entry=$_host_tables->{$host}; 
     my $last=$entry->[0]->@*-1; #Index of default in hustle table
+    #say join ", ", $entry->[0][$last][1]->@*;
+    #sleep 1;
 
-    if($entry->[0][$last] == $dummy_default){
+    if($entry->[0][$last][1] == $dummy_default){
       Log::OK::TRACE and log_trace(__PACKAGE__. " host table special default. detected. Adding special site");
       my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self, mode=>$self->mode);
       $site->parent_site=$self;
@@ -553,7 +562,6 @@ method rebuild_dispatch {
     
     #$table=$lookup{$_[0]//""}//$any_host;
     $table=$_host_tables->{$_[0]//""}//$any_host;
-    #say "TABLE IS DEFAULt : ".($table==$any_host);
 
     #use Data::Dumper;
     #Log::OK::TRACE and  log_trace  join ", ",$table->@*;
