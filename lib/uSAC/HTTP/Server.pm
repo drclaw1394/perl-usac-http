@@ -85,8 +85,6 @@ our @EXPORT_OK=qw<
   usac_include
   usac_listen
   usac_listen2
-  usac_mime_map
-  usac_mime_default
   usac_sub_product
   usac_workers
 >;
@@ -163,16 +161,17 @@ field $_cv;
 field $_options :reader;
 field $_application_parser;
 field $_total_requests;
-field $_mime_db;
-field $_mime_default;
+#field $_mime_db;
 field $_static_headers :mutator;
 field $_running_flag  :mutator;
 #field $_mode           :mutator :param=undef;
 
 
 BUILD {
-	$_mime_db//=uSAC::MIME->new;
-	$_mime_default="application/octet-stream";
+  
+  # server is top level, set  default mime
+	$self->set_mime_db(uSAC::MIME->new); # set 
+	$self->set_mime_default("application/octet-stream");
 
 	$_host_tables={};
   $_zombies=[];

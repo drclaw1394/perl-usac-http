@@ -43,7 +43,7 @@ my $server; $server=usac_server {
 
 	
 
-	usac_mime_db(uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type"));
+  #usac_mime_db(uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type"));
 	#usac_mime_default "some/stuff";
 	#usac_listen "192.168.1.104";
 	

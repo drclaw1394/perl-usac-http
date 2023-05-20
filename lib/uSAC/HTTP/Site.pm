@@ -95,9 +95,10 @@ field $_errorware   :mutator :param=[];
 field $_error_uris  :param={};
 field $_delegate  :mutator :param=undef;
 
-field $_mime_default:mutator;
-field $_mime_db     :mutator;
-field $_mime_lookup :mutator;
+field $_mime_default :mutator;  #Default mime type
+field $_mime_db     :mutator;   #the usac::mime object
+field $_mime_lookup :mutator;   # lookup table (hash) of 
+                                # extension to mime type
 field $_mount;
 field $_cors;
 field $_unsupported;
@@ -850,7 +851,6 @@ method set_mime_db {
 	my %options=@_;
 	$self->mime_db=$db;
 	($self->mime_lookup)=$self->mime_db->index;
-
 }
 
 #HELPERS..

@@ -481,7 +481,6 @@ sub _make_list_dir {
 	my $self=shift;
 
 	\my $html_root=\$self->[html_root_];
-  #\my %cache=$self->[cache_];
 	my %options=@_;
 	my $renderer=$options{renderer};
 	my @type;
