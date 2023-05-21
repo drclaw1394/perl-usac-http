@@ -63,8 +63,6 @@ our @EXPORT_OK=(qw(
   usac_middleware
   usac_mime_db
   usac_mime_default
-  usac_dirname
-  usac_path 
   $Path
   $Comp
   $Query
@@ -861,52 +859,4 @@ method set_mime_db {
 	($self->mime_lookup)=$self->mime_db->index;
 }
 
-############################################################################
-# #HELPERS..                                                               #
-# #                                                                        #
-# #                                                                        #
-#                                                                          #
-# #returns the dir of the caller.                                          #
-# #Path is abs path, so files loaded via a symlink will refer to           #
-# #the origina path                                                        #
-# sub usac_dirname :prototype(){                                           #
-#         my %options=@_;                                                  #
-#         #Use Cwd::abs_path to normalise path                             #
-#         #Use File::Spec::Functions::abs2rel to make relative             #
-#                                                                          #
-#         my $path=abs2rel abs_path((caller)[1]);                          #
-#         return dirname $path;                                            #
-# }                                                                        #
-#                                                                          #
-# #Make a path suitable for loading  files via do scripts                  #
-# #Makes paths relative to specified root dir                              #
-# #Prepends a "./" for relative files.                                     #
-# sub usac_path {                                                          #
-#         my $in_path=pop;                                                 #
-#         my %options=@_;                                                  #
-#         return $in_path if ($in_path=~m|^/|); #If path is abs, let it be #
-#                                                                          #
-#         my $path;                                                        #
-#         if ($options{root}){                                             #
-#                 $path=$options{root};                                    #
-#                 $path.="/".$in_path if $in_path and $path;               #
-#         }                                                                #
-#         else {                                                           #
-#                 $path=$in_path;                                          #
-#         }                                                                #
-#                                                                          #
-#         #                                                                #
-#         if( $path =~ m|^/|){                                             #
-#                 #abs path. Do nothing more                               #
-#         }                                                                #
-#         elsif($path!~m|^\.+/|){                                          #
-#                 #relative path, but no leading dot slashe                #
-#                 $path="./".$path;                                        #
-#         }                                                                #
-#         else {                                                           #
-#                 #assume ok                                               #
-#         }                                                                #
-#         $path;                                                           #
-# }                                                                        #
-############################################################################
 1;

@@ -441,10 +441,6 @@ sub make_parser{
         $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0, HTTP__STATUS()=>500}, my $c="", my $d=undef);
       }
     }
-
-
-
-
   };
 }
 
@@ -589,13 +585,16 @@ sub make_serialize{
 # reset on the write streamer
 sub make_error {
 
-  # Call the error/reset for the rout
+  # Call the error/reset for the route
   #
   sub {
-    if(@_){
+  #if(@_){
       delete $out_ctx{$_[REX]};
+
+      # Reset the serialize stack
+      #
       return $_[REX][uSAC::HTTP::Rex::write_]() 
-    }
+      #}
   }
 }
 
