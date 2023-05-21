@@ -1,11 +1,6 @@
 package uSAC::HTTP::Middleware::Static;
 use strict;
 use warnings;
-
-
-
-
-
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
 #use uSAC::HTTP::FileMetaCache;
@@ -18,11 +13,11 @@ use File::Basename qw<basename dirname>;
 use IO::FD;
 use uSAC::IO;
 
-#use uSAC::HTTP ":constants";
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Constants;
+use uSAC::Util;
 
 
 use Errno qw<EAGAIN EINTR EBUSY>;
@@ -49,22 +44,6 @@ use constant KET_COUNT=>end_-mime_+1;
 use constant RECURSION_LIMIT=>10;
 use IO::FD;
 
-sub new {
-	my $package=shift//__PACKAGE__;
-	my $self=[];	
-	my %options=@_;
-	my $root=$options{root};
-	$self->[html_root_]=uSAC::HTTP::Site::usac_path(%options, $options{html_root});
-	$self->[mime_]=$options{mime}//{};		#A mime lookup hash
-	$self->[default_mime_]=$options{default_mime}//"";		#A mime type
-	$self->[cache_]={};#$options{mime_lookup}//{};		#A mime lookup hash
-	$self->[cache_sweep_size_]=$options{cache_sweep_size}//100;
-	$self->[cache_timer_]=undef;
-	$self->[cache_sweep_interval_]=$options{cache_sweep_interval}//30;
-	$self->[cache_size_]=$options{cache_size};
-	bless $self, $package;
-	$self;
-}
 
 
 #TODO:
@@ -478,9 +457,9 @@ sub _json_dir_list {
 }
 
 sub _make_list_dir {
-	my $self=shift;
 
-	\my $html_root=\$self->[html_root_];
+  my %options=@_;
+	\my $html_root=\$options{html_root};
 	my %options=@_;
 	my $renderer=$options{renderer};
 	my @type;
@@ -568,10 +547,10 @@ sub _make_list_dir {
 #Specifies the url prefix (and or regex) to match
 #The prefix is removed and
 sub uhm_static_root {
-  #create a new static file object
-  #my $parent=$_;
-  my $html_root=pop;
+  my $html_root=path pop, [caller];
   my %options=@_;
+
+  $options{html_root}=$html_root;
   my $parent=$options{parent}//$uSAC::HTTP::Site;
 
   my $mime=$options{mime}=$parent->resolve_mime_lookup;
@@ -588,17 +567,16 @@ sub uhm_static_root {
 
   \my @indexes=$options{indexes}//[];
 
-
   my @suffix_indexes;
   # Combinations of all pre encoded options. The unencoded form is last
   #
   @suffix_indexes=
-  map {
-    my $index=$_; 
-    (map {
-      $index.$_
-    } keys %$pre_encoded);
-  } @indexes;
+    map {
+      my $index=$_; 
+      (map {
+        $index.$_
+      } keys %$pre_encoded);
+    } @indexes;
 
 
   # Add unencoded options at end of list
@@ -629,7 +607,6 @@ sub uhm_static_root {
   Log::OK::DEBUG and log_debug "Sendfile: ".($sendfile?"yes $sendfile":"no");
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
-  my $static=uSAC::HTTP::Middleware::Static->new(html_root=>$html_root, %options);
 
   # We want to use pread from IO::FD. That means we don't need the filehandle
   my $fmc=File::Meta::Cache->new(no_fh=>1);
@@ -637,10 +614,8 @@ sub uhm_static_root {
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
   my $sweeper=$fmc->sweeper;
-  #state $timer=AE::timer 0, 10, $fmc->sweeper;
   state $timer=uSAC::IO::timer 0, 10, $sweeper;
-  $html_root=$static->[html_root_];
-  my $list_dir=$static->_make_list_dir(%options);
+  my $list_dir=_make_list_dir(%options);
 
   croak "Can not access dir $html_root to serve static files" unless -d $html_root;
   #check for mime type in parent 
@@ -867,31 +842,26 @@ sub uhm_static_content {
     unless $headers->{HTTP_TRANSFER_ENCODING()};
 
   [
-	sub {
-      my $next=shift;
-      sub {
-        if($_[OUT_HEADER]){
-          
-          for my  ($k, $v)(
-            %$headers
-          )
-          { 
-            $_[OUT_HEADER]{$k}=$v;
+    sub {
+        my $next=shift;
+        sub {
+          if($_[OUT_HEADER]){
+            for my  ($k, $v)(
+              %$headers
+            )
+            { 
+              $_[OUT_HEADER]{$k}=$v;
+            }
+            # Only set the payload when the out header is present (single shot)
+            $_[PAYLOAD]=$static;
           }
-
-          # Only set the payload when the out header is present (single shot)
-          $_[PAYLOAD]=$static;
+          &$next;
         }
-
-        &$next;
-      }
-	}
-  , sub {
+    }, 
+    sub {
       my $next=shift;
-  
     }
   ]
-
 }
 
 

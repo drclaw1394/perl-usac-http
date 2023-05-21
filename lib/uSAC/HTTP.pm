@@ -23,7 +23,7 @@ use uSAC::HTTP::Method ":constants";
 use uSAC::HTTP::Constants;  # Constants for the message structure of middleware
 use uSAC::HTTP::Rex;        # Request and Response
 use uSAC::HTTP::Site;       # Route grouping and base class
-use uSAC::HTTP::Server;     # Main class to store routes and listen
+#use uSAC::HTTP::Server;     # Main class to store routes and listen
 #use uSAC::HTTP::Client;     # subclass for clients
 
 # Common middleware

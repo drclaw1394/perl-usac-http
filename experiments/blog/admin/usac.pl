@@ -3,11 +3,13 @@ use warnings;
 use feature "say";
 
 use uSAC::HTTP;
-use Data::Dumper;
 use uSAC::HTTP::Site;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware::Log;
+use uSAC::HTTP::Middleware::Redirect;
+use uSAC::Util;
+
 use Template::Plexsite::URLTable;
 
 use Socket qw<getnameinfo NI_NUMERICHOST>;# ":all";
@@ -34,7 +36,7 @@ my $server; $server=usac_server {
 		#usac_innerware log_simple;
 		#
 		#error route forces a get method to the resource
-		usac_route "/static"   => uhm_static_root usac_dirname;
+		usac_route "/static"   => uhm_static_root path \"";#usac_dirname;
 
 		my $vars={fields=>[], peer=>undef};
 
@@ -82,7 +84,7 @@ my $server; $server=usac_server {
 		usac_error_page 404 => "/error/404";
 
 		#Catch all
-    usac_catch_route usac_error_not_found;
+    usac_catch_route uhm_error_not_found;
 	};
 	#usac_route "/static/$Path" => static_file_from "static";
 	

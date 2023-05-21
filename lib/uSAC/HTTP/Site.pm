@@ -47,24 +47,31 @@ use Exception::Class::Base;
 
 use URI;
 
-my @redirects=qw<
-	usac_redirect_see_other 
-	usac_redirect_found
-	usac_redirect_temporary
-	usac_redirect_not_modified
-	usac_redirect_internal
-	>;
-
 my @errors=qw<
   usac_catch_route
-  usac_error_not_found
 	usac_error_page
 	usac_error_route
 >;	
 	
-our @EXPORT_OK=(qw(usac_route usac_site usac_prefix usac_id usac_delegate usac_host usac_middleware usac_innerware usac_outerware usac_mime_db usac_mime_default usac_site_url usac_dirname usac_path $Path $Comp $Query $File_Path $Dir_Path $Any_Method
-	), @errors,
-  @redirects);
+our @EXPORT_OK=(qw(
+  usac_route
+  usac_site
+  usac_prefix
+  usac_id
+  usac_delegate
+  usac_host
+  usac_middleware
+  usac_mime_db
+  usac_mime_default
+  usac_dirname
+  usac_path 
+  $Path
+  $Comp
+  $Query
+  $File_Path
+  $Dir_Path
+  $Any_Method
+	), @errors);
 
 our @EXPORT=@EXPORT_OK;
 
@@ -112,6 +119,7 @@ my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE>;
 our $ANY_METH=qr/^(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS) /;
 our $ANY_URL=qr/.*+ /;
 our $ANY_VERS=qr/HTTP.*$/;
+
 our $Any_Method	=qr/(?:GET|POST|HEAD|PUT|UPDATE|DELETE|PATCH|OPTIONS)/;
 
 our $Method=		qr{^([^ ]+)};
@@ -445,8 +453,8 @@ method parent_site :lvalue{
   $_parent;
 }
 
-sub usac_site_url {
-	my $self=$uSAC::HTTP::Site;
+method site_url {
+  #my $self=$uSAC::HTTP::Site;
 	my $url=$self->built_prefix;
 	if($_[0]//""){
 		return "$url/$_[0]";
@@ -853,102 +861,52 @@ method set_mime_db {
 	($self->mime_lookup)=$self->mime_db->index;
 }
 
-#HELPERS..
-#
-#
-
-#returns the dir of the caller.
-#Path is abs path, so files loaded via a symlink will refer to 
-#the origina path
-sub usac_dirname :prototype(){
-	my %options=@_;	
-	#Use Cwd::abs_path to normalise path
-	#Use File::Spec::Functions::abs2rel to make relative
-	
-	my $path=abs2rel abs_path((caller)[1]);
-	return dirname $path;
-}
-
-#Make a path suitable for loading  files via do scripts
-#Makes paths relative to specified root dir
-#Prepends a "./" for relative files.
-sub usac_path {
-	my $in_path=pop;
-	my %options=@_;
-	return $in_path if ($in_path=~m|^/|); #If path is abs, let it be
-	
-	my $path;
-	if ($options{root}){
-		$path=$options{root};
-		$path.="/".$in_path if $in_path and $path;
-	}
-	else {
-		$path=$in_path;
-	}
-
-	#$path=abs2rel($path, $options{root});
-	#
-	if( $path =~ m|^/|){
-		#abs path. Do nothing more
-	}
-	elsif($path!~m|^\.+/|){
-		#relative path, but no leading dot slashe
-		$path="./".$path;
-	}
-	else {
-		#assume ok
-	}
-	$path;
-}
-
-
-#Immediate redirects
-
-sub usac_redirect_see_other {
-	my $url =pop;
-	sub {
-		$_[PAYLOAD]=$url;
-		&rex_redirect_see_other;#@_, $url;
-	}
-
-}
-
-sub usac_redirect_found{
-	my $url =pop;
-	sub {
-		$_[PAYLOAD]=$url;
-		&rex_redirect_found;#@_, $url;
-	}
-}
-
-sub usac_redirect_temporary {
-	my $url =pop;
-	sub {
-		$_[PAYLOAD]=$url;
-		&rex_redirect_temporary;#@_, $url;
-	}
-}
-
-sub usac_redirect_not_modified {
-	my $url =pop;
-	sub {
-		$_[PAYLOAD]=$url;
-		&rex_redirect_not_modified;#@_, $url;
-	}
-}
-
-sub usac_redirect_internal {
-	my $url =pop;
-	sub {
-		$_[PAYLOAD]=$url;
-		&rex_redirect_internal;# @_, $url;
-	}
-
-}
-
-sub usac_error_not_found {
-	\&rex_error_not_found;
-}
-
-
+############################################################################
+# #HELPERS..                                                               #
+# #                                                                        #
+# #                                                                        #
+#                                                                          #
+# #returns the dir of the caller.                                          #
+# #Path is abs path, so files loaded via a symlink will refer to           #
+# #the origina path                                                        #
+# sub usac_dirname :prototype(){                                           #
+#         my %options=@_;                                                  #
+#         #Use Cwd::abs_path to normalise path                             #
+#         #Use File::Spec::Functions::abs2rel to make relative             #
+#                                                                          #
+#         my $path=abs2rel abs_path((caller)[1]);                          #
+#         return dirname $path;                                            #
+# }                                                                        #
+#                                                                          #
+# #Make a path suitable for loading  files via do scripts                  #
+# #Makes paths relative to specified root dir                              #
+# #Prepends a "./" for relative files.                                     #
+# sub usac_path {                                                          #
+#         my $in_path=pop;                                                 #
+#         my %options=@_;                                                  #
+#         return $in_path if ($in_path=~m|^/|); #If path is abs, let it be #
+#                                                                          #
+#         my $path;                                                        #
+#         if ($options{root}){                                             #
+#                 $path=$options{root};                                    #
+#                 $path.="/".$in_path if $in_path and $path;               #
+#         }                                                                #
+#         else {                                                           #
+#                 $path=$in_path;                                          #
+#         }                                                                #
+#                                                                          #
+#         #                                                                #
+#         if( $path =~ m|^/|){                                             #
+#                 #abs path. Do nothing more                               #
+#         }                                                                #
+#         elsif($path!~m|^\.+/|){                                          #
+#                 #relative path, but no leading dot slashe                #
+#                 $path="./".$path;                                        #
+#         }                                                                #
+#         else {                                                           #
+#                 #assume ok                                               #
+#         }                                                                #
+#         $path;                                                           #
+# }                                                                        #
+############################################################################
 1;

@@ -388,7 +388,6 @@ method fetch {
   $options//={};
   # parse the uri
   unless($uri isa URI){
-    use URI;
     $uri=URI->new($uri);
   }
 

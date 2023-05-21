@@ -234,74 +234,67 @@ sub rex_peer {
 #TODO: "Multiple Choice"=>300,
 
 sub rex_redirect_moved{
-    my $url=$_[PAYLOAD];
-    $_[OUT_HEADER]{":status"}=HTTP_MOVED_PERMANENTLY;
-    #push $_[HEADER]->@*, 
-    for my ($k,$v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-      $_[HEADER]{$k}=$v;
-    }
-    $_[PAYLOAD]="";
-	&rex_write;
+  my $url=$_[PAYLOAD];
+  $_[OUT_HEADER]{":status"}=HTTP_MOVED_PERMANENTLY;
+  for my ($k,$v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+    $_[HEADER]{$k}=$v;
+  }
+  $_[PAYLOAD]="";
+  1;
 }
 
 sub rex_redirect_see_other{
-    my $url=$_[PAYLOAD];
-    $_[OUT_HEADER]{":status"}=HTTP_SEE_OTHER;
-    #push $_[HEADER]->@*, 
-    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-      $_[HEADER]{$k}=$v;
-    }
-    $_[PAYLOAD]="";
-	&rex_write;
+  my $url=$_[PAYLOAD];
+  $_[OUT_HEADER]{":status"}=HTTP_SEE_OTHER;
+  for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+    $_[HEADER]{$k}=$v;
+  }
+  $_[PAYLOAD]="";
+  1;
 }
 
 sub rex_redirect_found {
-	#my $url=pop;
-    my $url=$_[PAYLOAD];
-    $_[OUT_HEADER]{":status"}=HTTP_FOUND;
-    #push $_[HEADER]->@*,
-    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-      $_[HEADER]{$k}=$v;
-    }
-    $_[PAYLOAD]="";
-	&rex_write;
+  my $url=$_[PAYLOAD];
+  $_[OUT_HEADER]{":status"}=HTTP_FOUND;
+  for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+    $_[HEADER]{$k}=$v;
+  }
+  $_[PAYLOAD]="";
+  1;
 	
 }
 
 sub rex_redirect_temporary {
-    my $url=$_[PAYLOAD];
-    $_[OUT_HEADER]{":status"}=HTTP_TEMPORARY_REDIRECT;
-    #push $_[HEADER]->@*
-    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-      $_[HEADER]{$k}=$v;
-    }
+  my $url=$_[PAYLOAD];
+  $_[OUT_HEADER]{":status"}=HTTP_TEMPORARY_REDIRECT;
+  for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+    $_[HEADER]{$k}=$v;
+  }
 
-    $_[PAYLOAD]="";
-	&rex_write;
+  $_[PAYLOAD]="";
+  1;
 	
 }
 
 sub rex_redirect_permanent {
     my $url=$_[PAYLOAD];
     $_[OUT_HEADER]{":status"}=HTTP_PERMANENT_REDIRECT;
-    #push $_[HEADER]->@*,
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
-	&rex_write;
+    1;
 	
 }
 
 sub rex_redirect_not_modified {
-    my $url=$_[PAYLOAD];
-    $_[OUT_HEADER]{":status"}=HTTP_NOT_MODIFIED;
-    #push $_[HEADER]->@*, 
-    for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-      $_[HEADER]{$k}=$v;
-    }
-    $_[PAYLOAD]="";
-	&rex_write;
+  my $url=$_[PAYLOAD];
+  $_[OUT_HEADER]{":status"}=HTTP_NOT_MODIFIED;
+  for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+    $_[HEADER]{$k}=$v;
+  }
+  $_[PAYLOAD]="";
+  1;
 }
 
 sub rex_redirect_internal;
@@ -309,41 +302,41 @@ sub rex_redirect_internal;
 
 #General error call, Takes an additional argument of new status code
 sub rex_error {
-    my $site=$_[ROUTE][1][ROUTE_SITE];
-    $_[CB]=undef;
-    $_[REX][method_]="GET";
-    $_[REX][in_progress_]=1;
+  my $site=$_[ROUTE][1][ROUTE_SITE];
+  $_[CB]=undef;
+  $_[REX][method_]="GET";
+  $_[REX][in_progress_]=1;
 
-    #Locate applicable site urls to handle the error
+  #Locate applicable site urls to handle the error
 
-    for($site->error_uris->{$_[OUT_HEADER]{":status"}}){
-      if($_){
-        $_[PAYLOAD]=my $a=$_;
-        return &rex_redirect_internal
-      }
+  for($site->error_uris->{$_[OUT_HEADER]{":status"}}){
+    if($_){
+      $_[PAYLOAD]=my $a=$_;
+      return &rex_redirect_internal
     }
-	&rex_write;
+  }
+  1;
 }
 
 
 sub rex_error_not_found {
-    $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
+  $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
 	&rex_error;
 }
 
 sub rex_error_forbidden {
-    $_[OUT_HEADER]{":status"}= HTTP_FORBIDDEN;
+  $_[OUT_HEADER]{":status"}= HTTP_FORBIDDEN;
 	&rex_error;
 }
 
 sub rex_error_unsupported_media_type {
-    $_[OUT_HEADER]{":status"}= HTTP_UNSUPPORTED_MEDIA_TYPE;
+  $_[OUT_HEADER]{":status"}= HTTP_UNSUPPORTED_MEDIA_TYPE;
 	&rex_error;
 }
 
 sub rex_error_internal_server_error {
-    $_[OUT_HEADER]{":status"}=HTTP_INTERNAL_SERVER_ERROR;
-    &rex_error;
+  $_[OUT_HEADER]{":status"}=HTTP_INTERNAL_SERVER_ERROR;
+  &rex_error;
 }
 
 
@@ -391,25 +384,16 @@ sub rex_redirect_internal {
 }
 
 
-#######################################
-# sub rex_headers {                   #
-#         return $_[REX]->[headers_]; #
-# }                                   #
-#######################################
 
 sub rex_reply_json {
 	Log::OK::DEBUG and log_debug "rex_reply_json caller: ". join ", ", caller;
-
   $_[PAYLOAD]=encode_json $_[PAYLOAD] if(ref($_[PAYLOAD]));
-
-  #push $_[HEADER]->@*,
   for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/json",
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
     $_[HEADER]{$k}=$v;
   }
-
-	&rex_write;
+  1;
 }
 
 #Assume payload has content
@@ -419,7 +403,7 @@ sub rex_reply_html {
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
     $_[HEADER]{$k}=$v;
   }
-	&rex_write;
+  1;
 }
 
 sub rex_reply_javascript {
@@ -428,7 +412,7 @@ sub rex_reply_javascript {
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
     $_[HEADER]{$k}=$v;
   }
-	&rex_write;
+  1;
 }
 
 sub rex_reply_text {
@@ -437,7 +421,7 @@ sub rex_reply_text {
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
     $_[HEADER]{$k}=$v;
   }
-	&rex_write;
+  1;
 }
 
 sub rex_captures {

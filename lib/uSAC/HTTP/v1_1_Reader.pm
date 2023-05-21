@@ -435,12 +435,10 @@ sub make_parser{
       Log::OK::ERROR and log_error  $context;
 
       if(Log::OK::DEBUG){
-        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
-        #uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context, HTTP__STATUS()=>500} ,my $c=$context, my $d=undef);
       }
       else {
-        $route and $route->[0][ROUTE_SERIALIZE]($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>0},my $c="", my $d=undef);
-        #uSAC::HTTP::Rex::rex_write($route, $rex, my $a=500, my $b={HTTP_CONTENT_LENGTH()=>0},my $c="", my $d=undef);
+        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0, HTTP__STATUS()=>500}, my $c="", my $d=undef);
       }
     }
 

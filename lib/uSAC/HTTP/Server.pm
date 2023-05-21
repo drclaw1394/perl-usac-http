@@ -15,9 +15,15 @@ use uSAC::IO::Acceptor;
 use uSAC::HTTP::Route;
 use Error::Show;
 
+use uSAC::HTTP::Site;
+use uSAC::HTTP::Constants;
+use Hustle::Table;		#dispatching of endpoints
+use uSAC::Util;
+
 use constant::more {
 	"CONFIG::set_no_delay"=> 1
 };
+
 use constant::more {
 	"CONFIG::single_process"=>1,
 	"CONFIG::kernel_loadbalancing"=>1,
@@ -40,9 +46,6 @@ use version; our $VERSION = version->declare('v0.1.0');
 no warnings "experimental";
 
 
-use uSAC::HTTP::Site;
-use uSAC::HTTP::Constants;
-use Hustle::Table;		#dispatching of endpoints
 
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
@@ -72,7 +75,6 @@ use Carp 'croak';
 use uSAC::HTTP::Code ":constants";
 use uSAC::HTTP::Header ":constants";
 use uSAC::HTTP::Session;
-#use uSAC::HTTP::v1_1_Reader;
 use uSAC::HTTP::Rex;
 use uSAC::MIME;
 
@@ -94,17 +96,6 @@ our @EXPORT=@EXPORT_OK;
 
 my $session_id=0;
 
-# Basic handlers
-#
-# Welcome message
-sub _welcome {
-  state $data=do{ local $/=undef; <DATA>}; #execute template
-
-  state $sub=sub {
-    $_[PAYLOAD]=$data;
-    &rex_reply_html;
-  }
-}
 
 #
 # This is used as the default entry in a Hustle::Table and acts as a marker to
@@ -161,16 +152,14 @@ field $_cv;
 field $_options :reader;
 field $_application_parser;
 field $_total_requests;
-#field $_mime_db;
 field $_static_headers :mutator;
 field $_running_flag  :mutator;
-#field $_mode           :mutator :param=undef;
 
 
 BUILD {
   
   # server is top level, set  default mime
-	$self->set_mime_db(uSAC::MIME->new); # set 
+	$self->set_mime_db(uSAC::MIME->new); # set  and index
 	$self->set_mime_default("application/octet-stream");
 
 	$_host_tables={};
@@ -562,7 +551,6 @@ method rebuild_dispatch {
     #$table=$lookup{$_[0]//""}//$any_host;
     $table=$_host_tables->{$_[0]//""}//$any_host;
 
-    #use Data::Dumper;
     #Log::OK::TRACE and  log_trace  join ", ",$table->@*;
     (my $route, my $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
 
@@ -810,8 +798,7 @@ sub usac_run {
 sub usac_load {
 	my $path=pop;
 	my %options=@_;
-
-	$path=uSAC::HTTP::Site::usac_path %options, $path;
+  $path=path $path, [caller];
 	
 	$options{package}//=(caller)[0];
 	
@@ -902,7 +889,6 @@ method add_listeners {
 }
 
 method listeners:lvalue {
-  #my $self=shift;
   $_listen2;
 }
 
@@ -916,9 +902,7 @@ sub usac_workers {
 }
 
 method workers: lvalue {
-  #my $self=shift;
   my $workers=pop;
-  #my %options=@_;
   $_workers=shift;
 }
 
@@ -952,13 +936,11 @@ sub usac_application_parser {
 }
 
 method application_parser :lvalue {
-  #my $self=shift;
   $_application_parser;
     
 }
 
 method parse_cli_options {
-  #my $self=shift;
   my @options=@_?@_:@ARGV;
 
   #Attempt to parse the CLI options
@@ -993,14 +975,6 @@ method parse_cli_options {
   }
 }
 
-
-# Client side routing
-# Executes a request. the appropriate session and rex are configured 
-# at the start of the request. The incomming response calls this pre configured
-# value
-
-
-
 # Create a new stream connection to a server. Adds the connection to the idle pool
 method do_stream_connect {
   Log::OK::TRACE and log_trace __PACKAGE__." do_stream_connect";
@@ -1029,34 +1003,4 @@ method do_stream_connect {
   }
   $id;
 }
-
-
-
 1; 
-
-__DATA__
-<!doctype html>
-<html>
-<head>
-		<title>Welcome to uSAC HTTP Server</title>
-		<style>
-			html, body, div {
-				display: flex;
-				flex:1;
-				align-content: center;
-				align-items: center;
-			}
-			html {
-				height: 100%;
-
-			}
-
-		</style>
-	</head>
-	<body style="height: 100%;">
-		<div style="flex-direction: column;"> 
-			Welcome to uSAC HTTP Server</div>
-	
-
-</body>
-</html>

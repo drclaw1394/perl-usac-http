@@ -5,6 +5,10 @@ use AnyEvent;
 use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
+use uSAC::HTTP::Server;
+#use uSAC::HTTP::Site;
+
+use uSAC::Util;
 
 use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware::Log;
@@ -13,19 +17,19 @@ use uSAC::HTTP::Middleware::Gzip;
 use uSAC::HTTP::Middleware::Slurp;
 use uSAC::HTTP::Middleware::Multipart;
 use uSAC::HTTP::Middleware::ScriptWrap;
+use uSAC::HTTP::Middleware::Redirect;
 
 #use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 #use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
 
 
 use Socket;
-use Net::ARP;
+#use Net::ARP;
 use uSAC::HTTP::Rex;
 
 
 
 use uSAC::MIME;
-use Data::Dumper;
 
 my $server; $server=usac_server {
   usac_workers 4;
@@ -83,12 +87,11 @@ my $server; $server=usac_server {
       #=> uhm_gzip()
       #=> uhm_deflate()
       #=>uhm_multipart()
-      => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, usac_path root=>usac_dirname, "static/hot.txt";
+
+      => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, path \"static/hot.txt";
 
     usac_route "/die"
       => sub {
-      #return unless $_[CODE];
-      #say "a;lskjas;ldkjfa;lskjdf;lasjdf;lakjsdf;lakjsdf;lkajsdf;lkjasdfasf";
         my $a=10/0;
         use Exception::Class::Base;
         Exception::Class::Base->throw("Did not want to live");
@@ -109,26 +112,6 @@ my $server; $server=usac_server {
     usac_route '/statictest$'
       => uhm_static_content "This is some data";
 
-                ##################################################################################################################
-                # usac_route "/test/$Comp/$Comp" => sub {                                                                        #
-                #         my $captures=&rex_captures;                                                                            #
-                #         rex_write @_, $captures->[0];                                                                          #
-                # };                                                                                                             #
-                #                                                                                                                #
-                #                                                                                                                #
-                # usac_route 'testing.txt'=>state_json()=>state_uuid()=>deflate()=>sub {                                         #
-                #         my $state=&rex_state;                                                                                  #
-                #         say "Existing state: ". $state->{json}{id};                                                            #
-                #         say "Existing state: ". $state->{uuid};                                                                #
-                #         $state->{json}{id}="HELLO".rand 10;                                                                    #
-                #         $state->{uuid}="HELLO".rand 10;                                                                        #
-                #         push $_[3]->@*, HTTP_CONTENT_TYPE, "text/plain";                                                       #
-                #         rex_write @_, "HELLO";                                                                                 #
-                # };                                                                                                             #
-                #                                                                                                                #
-                # #                                                                                                            # #
-                # # #usac_route "/static/$Dir_Path"=> usac_dir_under renderer=>"json", usac_path root=>usac_dirname, "static"; # #
-                # #                                                                                                            # #
                 usac_route "/static"
                 #=> uhm_gzip()
                   #=>uhm_deflate()
@@ -140,21 +123,10 @@ my $server; $server=usac_server {
                         do_dir=>1,
                         indexes=>["index.html"],
                         #sendfile=>0,#4096*32,
-                        usac_dirname #  "static"
+                        path \""
                 );
 
-                usac_include usac_path root=>usac_dirname, "admin/usac.pl";                                                    #
-                ##################################################################################################################
-
-                ##############################################
-                # => usac_file_under (                       #
-                #         do_dir=>1,                         #
-                #         read_size=>4096*32,                #
-                #         no_compress=>'jpg$',               #
-                #         #sendfile=>12,                     #
-                #         usac_path root =>usac_dirname, "." #
-                # );                                         #
-                ##############################################
+                #usac_include \"admin/usac.pl";
 
     usac_route GET
       =>"/wrapped"
@@ -186,8 +158,8 @@ my $server; $server=usac_server {
         #upload_dir=>"uploads" 
       )
       =>sub {
-        use Data::Dumper;
-        say "GOT PAYLOAD: ", Dumper $_[PAYLOAD];
+      #use Data::Dumper;
+      #say "GOT PAYLOAD: ", Dumper $_[PAYLOAD];
         if(ref $_[PAYLOAD]){
           $_[PAYLOAD]=$_[PAYLOAD][0][1];
         }
@@ -200,7 +172,7 @@ my $server; $server=usac_server {
       => "/stream_url_upload\$"
       => sub {
         say "Expecting, content, chunged, multipart or similar";
-        $_[PAYLOAD]=Dumper $_[PAYLOAD];
+        #$_[PAYLOAD]=1Dumper $_[PAYLOAD];
         1;
       };
 
@@ -214,7 +186,6 @@ my $server; $server=usac_server {
       => "/slurp_url_upload"
       =>uhm_slurp()
       => sub {
-        say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
         1;
       };
@@ -226,7 +197,6 @@ my $server; $server=usac_server {
       => sub {
       #return &rex_write unless $_[CODE];
       #NOTE: This is only called when all the data is uploaded
-        say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
         1;
       };
@@ -244,7 +214,6 @@ my $server; $server=usac_server {
       #=> uhm_multipart_file(upload_dir=>usac_path(root=>usac_dirname, "uploads"))
       =>uhm_slurp()
       => sub {
-        say Dumper $_[PAYLOAD];
         $_[PAYLOAD]="OK";
         1;
       };
@@ -284,12 +253,8 @@ my $server; $server=usac_server {
 		usac_error_page 415 
       => "/error";
 
-    usac_catch_route usac_error_not_found;
+    usac_catch_route uhm_error_not_found;
 	};
 
-
-	#usac_route "/static/$Path" => static_file_from "static";
-	
-	#usac_route  "/static/$Path"=> static_file_from "static", cache_size=>10;
   usac_run;
 };

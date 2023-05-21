@@ -37,7 +37,6 @@ sub log_simple_in {
   my $dump_headers=$options{dump_headers};
 
 
-  require Data::Dumper if $dump_headers;
   my $dump_capture=$options{dump_captures};
   my $sort_headers=$options{sort};
 
