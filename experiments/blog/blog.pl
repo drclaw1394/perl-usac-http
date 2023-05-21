@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+#
 use EV;
 use AnyEvent;
 
@@ -6,7 +7,6 @@ use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
 use uSAC::HTTP::Server;
-#use uSAC::HTTP::Site;
 
 use uSAC::Util;
 
@@ -23,13 +23,8 @@ use uSAC::HTTP::Middleware::Redirect;
 #use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
 
 
-use Socket;
-#use Net::ARP;
-use uSAC::HTTP::Rex;
 
 
-
-use uSAC::MIME;
 
 my $server; $server=usac_server {
   usac_workers 4;
@@ -37,8 +32,8 @@ my $server; $server=usac_server {
     address=>"::",
     interface=>["en"],
     port=>[8084],
-    family=>[AF_INET6],
-    type=>SOCK_STREAM,
+    family=>["AF_INET6"],
+    type=>"SOCK_STREAM",
     data=> {
             hosts=>"dfs"
     }
@@ -47,31 +42,14 @@ my $server; $server=usac_server {
 
 	
 
-  #usac_mime_db(uSAC::MIME->new->rem("txt"=>"text/plain")->add("txt"=>"crazy/type"));
-	#usac_mime_default "some/stuff";
-	#usac_listen "192.168.1.104";
-	
-	#usac_error_route "/error/404" => sub {
-	#		rex_write (@_, "An error occored: $_[2]");
-	#	};
-
-		#usac_error_page 404 => "/error/404";
 	usac_sub_product "blog";
-  #usac_middleware log_simple dump_headers=>1;
 	
-  #usac_middleware log_simple dump_headers=>1;
 	usac_site {
     usac_id "blog";
-    #usac_host "127.0.0.1:8084";
     usac_host "localhost:8084";
-    #usac_host "192.168.1.102:8084";
-
-
 		#
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
-		
-		#error route forces a get method to the resource
   
     usac_route "/getme/($Comp)"
       =>sub {
@@ -123,7 +101,7 @@ my $server; $server=usac_server {
                         do_dir=>1,
                         indexes=>["index.html"],
                         #sendfile=>0,#4096*32,
-                        path \""
+                        path
                 );
 
                 #usac_include \"admin/usac.pl";
@@ -253,6 +231,7 @@ my $server; $server=usac_server {
 		usac_error_page 415 
       => "/error";
 
+    # Special route which is last in site to catch errors
     usac_catch_route uhm_error_not_found;
 	};
 

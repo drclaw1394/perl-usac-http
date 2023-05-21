@@ -154,14 +154,14 @@ sub uhm_urlencoded_file {
           }
           else {
             say STDERR "ERROR writing FILE $!";
-            &rex_error_internal_server_error;
+            return &rex_error_internal_server_error;
             #Internal server error
           }
         }
         else {
             #Internal server error
             say STDERR "ERROR OPENING FILE $!";
-            &rex_error_internal_server_error;
+            return &rex_error_internal_server_error;
         }
 
         $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
@@ -177,7 +177,7 @@ sub uhm_urlencoded_file {
         }
         else {
           #internal server error
-            &rex_error_internal_server_error;
+            return &rex_error_internal_server_error;
         }
 
       }
@@ -332,14 +332,14 @@ sub uhm_multipart_file {
               }
               else {
                 say STDERR "ERROR writing FILE $!";
-                &rex_error_internal_server_error;
+                return &rex_error_internal_server_error;
                 #Internal server error
               }
             }
             else {
               #Internal server error
               say STDERR "ERROR OPENING FILE $!";
-              &rex_error_internal_server_error;
+              return &rex_error_internal_server_error;
             }
           }
 
@@ -459,14 +459,14 @@ sub uhm_slurp {
                 }
                 else {
                   say STDERR "ERROR writing FILE $!";
-                  &rex_error_internal_server_error;
+                  return &rex_error_internal_server_error;
                   #Internal server error
                 }
               }
               else {
                 #Internal server error
                 say STDERR "ERROR OPENING FILE $!";
-                &rex_error_internal_server_error;
+                return &rex_error_internal_server_error;
               }
             }
             else {

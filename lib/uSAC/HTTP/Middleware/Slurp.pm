@@ -152,14 +152,14 @@ sub uhm_slurp {
                 }
                 else {
                   say STDERR "ERROR writing FILE $!";
-                  &rex_error_internal_server_error;
+                  return &rex_error_internal_server_error;
                   #Internal server error
                 }
               }
               else {
                 #Internal server error
                 say STDERR "ERROR OPENING FILE $!";
-                &rex_error_internal_server_error;
+                return &rex_error_internal_server_error;
               }
             }
             else {

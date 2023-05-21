@@ -14,22 +14,28 @@ our @EXPORT=@EXPORT_OK;
 # Process a path.  If a ref, make relative to caller dir if abs leave as it if
 # relative leave as is Optional second argument specifiy caller frame. If no
 # proveded is assumed to be direct caller of thsi sub
+# 
 sub path {
     
   my $p;
   my $prefix;
   my $frame=$_[1]//[caller];
+	$prefix=dirname abs2rel abs_path($frame->[1]);
   if(ref($_[0]) eq "SCALAR"){
     
     $p=$_[0]->$*;
     return $p if $p =~ m|^/|;
     #Create the roolt as a relative path to current working dir
-	  $prefix=dirname abs2rel abs_path($frame->[1]);
-    $p=catfile($prefix,$p);
-    
+    if($p){
+      $p=catfile($prefix,$p);
+    }
+    else{
+      # No suffix specified, don't join
+      $p=$prefix;
+    }
   }
   else {
-    $p=$_[0];
+    $p=$prefix;#$_[0];
   }
 
   if($p=~m|^/|){

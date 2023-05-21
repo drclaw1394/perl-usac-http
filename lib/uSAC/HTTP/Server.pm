@@ -114,7 +114,7 @@ sub _default_handler {
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
 			Log::OK::DEBUG and log_debug __PACKAGE__.join ", ", $_[IN_HEADER]->%*;
 			$_[PAYLOAD]="NOT FOUND";
-			&rex_error_not_found;
+			return &rex_error_not_found;
       undef;
 		};
 }
