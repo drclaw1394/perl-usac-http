@@ -528,8 +528,27 @@ sub make_serialize{
 
       # Render headers
       #
+      
+      # Special handling of set cookie header for multiple values
+      my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
+      unless(ref $v){
+        $reply.= HTTP_SET_COOKIE().": ".$v.CRLF if defined $v;
+      }
+      else{
+        $reply.= HTTP_SET_COOKIE().": ".$_.CRLF  for @$v;
+      }
+
+
       foreach my ($k, $v)(%{$_[OUT_HEADER]}){
-        $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
+        #Render anything that isn't a 'pseudo header'. and combine multiple
+        #header items onto one line
+        #
+        unless(ref $v){
+          $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
+        }
+        else{
+          $reply.=$k.": ". (join ", ", grep index($k, ":" )<0, @$v).CRLF;
+        }
       }
 
       $reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
