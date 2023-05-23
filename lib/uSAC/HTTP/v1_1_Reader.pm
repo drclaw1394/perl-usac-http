@@ -547,7 +547,7 @@ sub make_serialize{
           $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
         }
         else{
-          $reply.=$k.": ". (join ", ", grep index($k, ":" )<0, @$v).CRLF;
+          $reply.=$k.": ". (join "; ", grep index($k, ":" )<0, @$v).CRLF;
         }
       }
 

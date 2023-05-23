@@ -68,7 +68,7 @@ my $server; $server=usac_server {
       #=> uhm_gzip()
       #=> uhm_deflate()
       #=>uhm_multipart()
-      #=>test
+      =>test
 
       => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, path \"static/hot.txt";
 
