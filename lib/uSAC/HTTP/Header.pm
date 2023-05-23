@@ -26,6 +26,7 @@ BEGIN {
 		Access-Control-Allow-Origin
 		Access-Control-Allow-Headers
 		Cache-Control
+    Cookie
 		Connection
 		Content-Encoding
 		Content-Language

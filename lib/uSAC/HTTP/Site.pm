@@ -417,23 +417,28 @@ method wrap_middleware {
       # Scalar used as a method name. Call method on delegate
       # and unshift the result to be processed
       # TODO: need a iteration limit here...
-      my $a;
-        die Exception::Class::Base->throw("No delegate set for site. Cannot call method by name")unless $_delegate;
+      die Exception::Class::Base->throw("No delegate set for site. Cannot call method by name")unless $_delegate;
         
 
-      no strict "refs";
-      my $string="require $_delegate";
+      unless(ref $_delegate){
+        # If delegate is not a reference, assume it is a package name
+        #
+        no strict "refs";
+        my $string="require $_delegate";
 
-      unless(%{$_delegate."::"}){
-        eval $string;
-        die Exception::Class::Base->throw("Could not require $_delegate: $@") if $@;
-        $@=undef;
+        unless(%{$_delegate."::"}){
+          eval $string;
+          die Exception::Class::Base->throw("Could not require $_delegate: $@") if $@;
+          $@=undef;
+        }
       }
 
-      $string="$_delegate->".$_;
-      $a=eval $string;
+      # Use postfix notation to access either a package or object method 
+      #
+      my $string="$_delegate->".$_;
+      my @a=eval $string;
       die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
-      unshift @_, $a;
+      unshift @_, @a;
     }
     else {
       #Ignore anything else

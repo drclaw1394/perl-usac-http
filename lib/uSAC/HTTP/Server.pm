@@ -541,9 +541,10 @@ method rebuild_dispatch {
     #
   my $table;
   $_cb=sub {
+  use Time::HiRes qw<time>;
     Log::OK::TRACE and  log_trace "IN SERVER CB: @_";
 
-    Log::OK::TRACE and  log_trace values $_host_tables->%*;
+    Log::OK::TRACE and  log_trace join ", ", values $_host_tables->%*;
     #my ($host, $input);
     
     # input is "method url"
@@ -576,6 +577,7 @@ method rebuild_dispatch {
 
     delete $table->[uSAC::HTTP::Site::HOST_TABLE_CACHE]{$_[1]} if $route->[3];
     #return the entry sub for body forwarding
+    Log::OK::TRACE and log_trace "END OF SERVER CB";
     ($route, $captures);
   };
 }

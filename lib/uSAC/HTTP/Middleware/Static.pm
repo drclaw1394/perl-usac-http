@@ -460,7 +460,6 @@ sub _make_list_dir {
 
   my %options=@_;
 	\my $html_root=\$options{html_root};
-	my %options=@_;
 	my $renderer=$options{renderer};
 	my @type;
 	#resolve renderer
