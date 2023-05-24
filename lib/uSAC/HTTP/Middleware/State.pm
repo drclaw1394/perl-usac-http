@@ -48,19 +48,15 @@ sub uhm_state {
               my $state=$_[IN_HEADER]{":state"}={};
               for my($k,$v)(decode_cookies $_){
                 if(!exists $state->{$k}){
-                  say "first $v";
                   # First value 
                   $state->{$k}=$v;
                 }
                 elsif(ref $state->{$k}){
-                  say "existing $v";
                   # Existing ref Multiple values here
                   push $state->{$k}->@*, $v; 
                 }
                 else{
                   # Existing value, but wasn't a ref, wrap it
-                  say "non ref $k $v";
-                  say " exist $state->{$k}";
                   $state->{$k}=[$state->{$k}, $v];
                 }
               }
