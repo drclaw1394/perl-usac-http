@@ -64,7 +64,13 @@ sub log_simple_in {
             my $headers=$_[IN_HEADER];
             my $out="";
             for my($k, $v)(%$headers){
-              $out.="$k: $v\n"; 
+              if(ref $v){
+                $out.="$k: $_\n" for @$v;
+              }
+              else {
+                $out.="$k: $v\n";
+
+              }
             }
             say STDERR $out;
           }

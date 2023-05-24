@@ -486,10 +486,10 @@ sub _make_list_dir {
 
 		my $abs_path=$html_root.$uri;
 		stat $abs_path;
-    Log::OK::TRACE and "DIR LISTING for $abs_path";
+    Log::OK::TRACE and log_trace "DIR LISTING for $abs_path";
 		unless(-d _ and  -r _){
 
-      Log::OK::TRACE and "No dir here $abs_path";
+      Log::OK::TRACE and log_trace "No dir here $abs_path";
       #rex_error_not_found $line, $rex;
       $_[OUT_HEADER]{":status"}= HTTP_NOT_FOUND;
       $_[PAYLOAD]="";

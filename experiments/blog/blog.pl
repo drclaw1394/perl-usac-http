@@ -18,6 +18,7 @@ use uSAC::HTTP::Middleware::Slurp;
 use uSAC::HTTP::Middleware::Multipart;
 use uSAC::HTTP::Middleware::ScriptWrap;
 use uSAC::HTTP::Middleware::Redirect;
+use uSAC::HTTP::Middleware::State;
 
 #use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 #use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
@@ -60,6 +61,7 @@ my $server; $server=usac_server {
         $_[PAYLOAD]=join ", ", &rex_captures->@*;
       };
 
+      use Data::Dumper;
 		usac_route '/static/hot.txt'
       ##############################
       # => sub {                   #
@@ -68,7 +70,14 @@ my $server; $server=usac_server {
       #=> uhm_gzip()
       #=> uhm_deflate()
       #=>uhm_multipart()
-      =>test
+      #=>uhm_log(dump_headers=>1)
+      ########################################################
+      # =>uhm_state()                                        #
+      # =>sub {                                              #
+      #   say "MY state : ". Dumper $_[IN_HEADER]{":state"}; #
+      #   1;                                                 #
+      # }                                                    #
+      ########################################################
 
       => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, path \"static/hot.txt";
 

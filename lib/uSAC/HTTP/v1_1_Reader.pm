@@ -228,8 +228,27 @@ sub make_parser{
               #$val=~s/\A\s+//;#uo;
               #$val=~s/\s+\z//;#uo;
 
+            
               \my $e=\$h{$k};
-              $e?($e.=",$val"):($e=$val);
+              if(!defined $e){
+                $e=$val;
+              }
+              elsif(ref $e){
+                push @$e, $val;
+              }
+              else{
+                $e=[$e, $val];
+              }
+
+
+              ##################################
+              # if($k eq "cookie"){            #
+              #   $e?($e.="; $val"):($e=$val); #
+              # }                              #
+              # else {                         #
+              #   $e?($e.=",$val"):($e=$val);  #
+              # }                              #
+              ##################################
 
 
               #$ppos=$pos3+2;
