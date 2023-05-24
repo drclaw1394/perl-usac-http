@@ -98,7 +98,7 @@ field $_innerware   :mutator :param=[];
 field $_outerware   :mutator :param=[];
 field $_errorware   :mutator :param=[];
 field $_error_uris  :param={};
-field $_delegate  :mutator :param=undef;
+field $_delegate  :param=undef;
 
 field $_mime_default :mutator;  #Default mime type
 field $_mime_db     :mutator;   #the usac::mime object
@@ -420,19 +420,6 @@ method wrap_middleware {
       die Exception::Class::Base->throw("No delegate set for site. Cannot call method by name")unless $_delegate;
         
 
-      unless(ref $_delegate){
-        # If delegate is not a reference, assume it is a package name
-        #
-        no strict "refs";
-        my $string="require $_delegate";
-
-        unless(%{$_delegate."::"}){
-          eval $string;
-          die Exception::Class::Base->throw("Could not require $_delegate: $@") if $@;
-          $@=undef;
-        }
-      }
-
       # Use postfix notation to access either a package or object method 
       #
       my $string="$_delegate->".$_;
@@ -582,12 +569,19 @@ sub usac_site :prototype(&) {
 	$self->set_prefix(%options,$options{prefix}//'');
 	
 	local  $uSAC::HTTP::Site=$self;
+  my $line;
   try {
-	  $sub->($self);
+	  $sub->($self); $line=__LINE__;
   }
   catch($e){
-    log_fatal  "$self->id";
-    log_fatal context message=>$e, frames=>[$e->trace->frames];
+    log_fatal  "Site: ".$self->id;
+
+    my @frames=$e->trace->frames;
+    # remove any frames from start
+    shift @frames while $frames[0]->filename =~ /Site\.pm/;
+    splice @frames,1;
+
+    log_fatal context reverse=>1, message=>$e, frames=>\@frames;
     $e->throw;
   }
 	$self;
@@ -716,7 +710,30 @@ sub usac_delegate {
       }
       my %options=@_;
       my $self=$options{parent}//$uSAC::HTTP::Site;
-      $self->delegate=$delegate;
+      $self->delegate($delegate);
+}
+
+method delegate {
+  $_delegate=$_[0];
+  unless(ref $_delegate){
+    # If delegate is not a reference, assume it is a package name
+    #
+    no strict "refs";
+    my $string;
+    if($_delegate=~/::/){
+      #Bare word
+      $string="require $_delegate";
+    }
+    else{
+      #Non barword
+      $string=qq|require "$_delegate"|;
+    }
+
+    local $@=undef;
+    eval $string;
+    die Exception::Class::Base->throw("Could not require $_delegate: $@") if $@;
+    $@=undef;
+  }
 }
 
 

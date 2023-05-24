@@ -24,13 +24,10 @@ use HTTP::State ":all";
 #use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 #use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
 #
-$|=1;
 
 # Delegate has class subs for sets of middleware
 #
-require(path(\"delegate.pl"));
-
-
+#require(path(\"delegate.pl"));
 
 
 my $server; $server=usac_server {
@@ -51,7 +48,8 @@ my $server; $server=usac_server {
 	usac_site {
     usac_id "blog";
     usac_host "localhost:8084";
-    usac_delegate "Blog::Delegate";
+    usac_delegate path \"delegate.pl";#"Blog::Delegate";
+    #usac_delegate path \"deleigate.pl";#"Blog::Delegate";
 		#
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
@@ -81,7 +79,6 @@ my $server; $server=usac_server {
         }
         1;
       }
-
       => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, path \"static/hot.txt";
 
     usac_route "/die"
