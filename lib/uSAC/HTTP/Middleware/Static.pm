@@ -350,11 +350,8 @@ sub send_file_uri_norange {
 
         #NON Send file
         #
-        #IO::FD::sysseek $in_fh, $offset, 0;
         my $sz=($content_length-$total);
         $sz=$read_size if $sz>$read_size;
-        #$reply=IO::FD::SV $sz; #reset//allocate buffer
-        #$total+=$rc=IO::FD::sysread $in_fh, $reply, $sz;#, $offset;
         $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
         $offset+=$rc;
 
@@ -392,7 +389,6 @@ sub send_file_uri_norange {
           :return undef $sub);
 
         #if ($rc);
-
         #No data but error
         if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
           log_error "Static files: READ ERROR from file";

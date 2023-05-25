@@ -48,18 +48,18 @@ my $server; $server=usac_server {
 	usac_site {
     usac_id "blog";
     usac_host "localhost:8084";
-    usac_delegate path \"delegate.pl";#"Blog::Delegate";
 
-    usac_middleware uhm_state;
-    #usac_delegate path \"deleigate.pl";#"Blog::Delegate";
-		#
+    usac_delegate path \"delegate.pl";
+
+    usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_gzip;#, uhm_deflate;
+
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
   
     usac_route "/getme/($Comp)"
       =>sub {
-      #return unless $_[CODE];
         $_[PAYLOAD]=join ", ", &rex_captures->@*;
+        1;
       };
 
       use Data::Dumper;
@@ -71,7 +71,7 @@ my $server; $server=usac_server {
       #=> uhm_gzip()
       #=> uhm_deflate()
       #=>uhm_multipart()
-     =>uhm_log(dump_headers=>1)
+      #=>uhm_log(dump_headers=>1)
      ######################################################
       =>sub {
         say "MY state : ". Dumper $_[IN_HEADER]{":state"};
@@ -90,8 +90,6 @@ my $server; $server=usac_server {
       };  
 
     usac_route "/no_write"
-      => uhm_gzip()
-      => uhm_deflate()
       => sub {
         $_[PAYLOAD]="no write indeed";
       };
@@ -113,7 +111,7 @@ my $server; $server=usac_server {
                         pre_encoded=>{gzip=>".gz"},
                         #no_compress=>qr/txt$/,
                         do_dir=>1,
-                        indexes=>["index.html"],
+                        #indexes=>["index.html"],
                         #sendfile=>0,#4096*32,
                         path
                 );
