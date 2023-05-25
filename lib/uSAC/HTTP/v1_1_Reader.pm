@@ -240,17 +240,6 @@ sub make_parser{
                 $e=[$e, $val];
               }
 
-
-              ##################################
-              # if($k eq "cookie"){            #
-              #   $e?($e.="; $val"):($e=$val); #
-              # }                              #
-              # else {                         #
-              #   $e?($e.=",$val"):($e=$val);  #
-              # }                              #
-              ##################################
-
-
               #$ppos=$pos3+2;
               if($k eq "host"){
                 $host=$val;
@@ -261,8 +250,6 @@ sub make_parser{
               elsif($k eq "connection"){
                 $connection=$val;
               }
-
-
           }
           $ppos=0;
           $buf=substr($buf, $pos3+4);

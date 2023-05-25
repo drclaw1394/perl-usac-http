@@ -806,8 +806,10 @@ method add_middleware {
   #my $self=shift;
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
-	push $_innerware->@*, $mw->[0];
-	push $_outerware->@*, $mw->[1];
+  \my (@inner, @outer, @error)=$self->wrap_middleware($mw);
+	push $_innerware->@*, @inner;#$mw->[0];
+	push $_outerware->@*, @outer;# mw->[1];
+  push $_errorware->@*, @error;
 
 }
 

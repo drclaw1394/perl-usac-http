@@ -49,6 +49,8 @@ my $server; $server=usac_server {
     usac_id "blog";
     usac_host "localhost:8084";
     usac_delegate path \"delegate.pl";#"Blog::Delegate";
+
+    usac_middleware uhm_state;
     #usac_delegate path \"deleigate.pl";#"Blog::Delegate";
 		#
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
@@ -71,7 +73,6 @@ my $server; $server=usac_server {
       #=>uhm_multipart()
      =>uhm_log(dump_headers=>1)
      ######################################################
-      =>uhm_state()
       =>sub {
         say "MY state : ". Dumper $_[IN_HEADER]{":state"};
         for($_[IN_HEADER]{":state"}){
@@ -79,7 +80,7 @@ my $server; $server=usac_server {
         }
         1;
       }
-      => uhm_static_file headers=>{"transfer-encoding"=>"chunked"}, path \"static/hot.txt";
+      => uhm_static_file( headers=>{"transfer-encoding"=>"chunked"}, path \"static/hot.txt");
 
     usac_route "/die"
       => sub {

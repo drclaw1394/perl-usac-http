@@ -24,6 +24,7 @@ our @EXPORT=@EXPORT_OK;
 
 
 sub uhm_state {
+
   [
   sub {
     # called when linking middleware
@@ -31,42 +32,37 @@ sub uhm_state {
     my ($next, $index)=(shift, shift);
     my %options=@_;
     if($options{site}->mode){
-      # True. client
-
+      # True. client, want to process set-cookie headers into cookie jar
       Log::OK::TRACE and log_trace " HTTP State middleware configured for CLIENT";
     }
     else{
       Log::OK::TRACE and log_trace " HTTP State middleware configured for SERVER";
       # false server. 
-      # Innerware simply parses the cookie header and stores it in state
+      # Innerware simply parses the cookie header and stores it in state hash
       
-        sub {
-          Log::OK::TRACE and log_trace " Server side state management";
-          for($_[IN_HEADER]{HTTP_COOKIE()}){
-            if($_ and !$_[IN_HEADER]{":state"}){
-              # If there is a cookie header and it hasn't been parsed, parse it
-              my $state=$_[IN_HEADER]{":state"}={};
-              for my($k,$v)(decode_cookies $_){
-                if(!exists $state->{$k}){
-                  # First value 
-                  $state->{$k}=$v;
-                }
-                elsif(ref $state->{$k}){
-                  # Existing ref Multiple values here
-                  push $state->{$k}->@*, $v; 
-                }
-                else{
-                  # Existing value, but wasn't a ref, wrap it
-                  $state->{$k}=[$state->{$k}, $v];
-                }
-              }
+      sub {
+        Log::OK::TRACE and log_trace " Server side state management";
+        if($_[OUT_HEADER] and $_[IN_HEADER]{HTTP_COOKIE()}){
+          # If there is a cookie header and it hasn't been parsed, parse it
+          my $state=$_[IN_HEADER]{":state"}={};
+
+          for my($k,$v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
+            if(!exists $state->{$k}){
+              # First value 
+              $state->{$k}=$v;
+            }
+            elsif(ref $state->{$k}){
+              # Existing ref Multiple values here
+              push $state->{$k}->@*, $v; 
             }
             else{
-              $_[IN_HEADER]{":state"}={};
+              # Existing value, but wasn't a ref, wrap it
+              $state->{$k}=[$state->{$k}, $v];
             }
           }
-          &$next;
         }
+        &$next;
+      }
     }
   },
   undef,

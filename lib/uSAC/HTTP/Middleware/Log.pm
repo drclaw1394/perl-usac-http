@@ -38,7 +38,6 @@ sub log_simple_in {
 
 
   my $dump_capture=$options{dump_captures};
-  my $sort_headers=$options{sort};
 
 	#Header processing sub
 	sub {
@@ -49,31 +48,25 @@ sub log_simple_in {
 			my $time=time;
 
       package uSAC::HTTP::Rex {
-          say STDERR "\n<<<---";
-          say STDERR "Arraval initial time:		$time";
-          say STDERR "Host: 			$_[REX][host_]";
-          say STDERR "Method:       $_[REX][method_]";
-          say STDERR "Original matched URI: 	$_[REX][uri_raw_]";
-          say STDERR "Site relative URI:	$_[REX][uri_stripped_]";
-          say STDERR "Matched for site:	".($_[ROUTE][1][ROUTE_SITE]->id//"n/a");
-          say STDERR "Hit counter:		$_[ROUTE][1][ROUTE_COUNTER]";
-          say STDERR "Captures:\n".join "\n",($_[REX][captures_]//[])->@* if $dump_capture;
-          if($dump_headers){
-            say STDERR "Incomming Headers:\n" if $dump_headers;
-            #my $headers=$_[REX]->headers;
-            my $headers=$_[IN_HEADER];
-            my $out="";
-            for my($k, $v)(%$headers){
-              if(ref $v){
-                $out.="$k: $_\n" for @$v;
-              }
-              else {
-                $out.="$k: $v\n";
+          my @out=(
+            "<<<---",
+            "Arraval initial time:		$time",
+            "Host: 			$_[REX][host_]",
+            "Method:       $_[REX][method_]",
+            "Original matched URI: 	$_[REX][uri_raw_]",
+            "Site relative URI:	$_[REX][uri_stripped_]",
+            "Matched for site:	".($_[ROUTE][1][ROUTE_SITE]->id//"n/a"),
+            "Hit counter:		$_[ROUTE][1][ROUTE_COUNTER]"
+          );
+          push @out, "Captures:\n".join "\n",($_[REX][captures_]//[])->@* if $dump_capture;
 
-              }
-            }
-            say STDERR $out;
+          if($dump_headers){
+            push @out, "==Incomming Headers==","";
+            require Data::Dumper;
+            push @out, Data::Dumper::Dumper $_[IN_HEADER];
           }
+          push @out, "";
+          say STDERR join "\n", @out;
 			}
 			&$inner_next;		#alway call next. this is just logging
 		}
@@ -82,26 +75,24 @@ sub log_simple_in {
 
 sub log_simple_out {
 	#header processing sub
+  my %options=@_;
+  my $dump_headers=$options{dump_headers};
 	sub {
 		my $outer_next=shift;
 		sub {
 			#matcher, rex, code, header, body, cb, arg
       return &$outer_next unless $_[OUT_HEADER];
-
-      say STDERR "\n--->>>";
-      say STDERR "Depature time:		".time;
-      my $out="HEADERS: \n";
-      for my ($k, $v)($_[HEADER]->%*){
-        $out.="$k: $v\n"; 
+      my @out;
+      push @out, "Depature time:		".time;
+      if($dump_headers){
+        push @out, "==Outgoing Headers==","";
+        require Data::Dumper;
+        push @out, Data::Dumper::Dumper $_[OUT_HEADER];
       }
-      say STDERR $out;
+      say STDERR join "\n", @out;
 
 			&$outer_next;
 		}
 	};
-
-	#Body processing sub
-	
-	#Return as a array [$header, $body]
 }
 1;
