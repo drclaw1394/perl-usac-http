@@ -16,7 +16,7 @@ use Exporter "import";
 #use Stream::Buffered::PerlIO;	#From PSGI distribution
 use Plack::TempBuffer;
 
-use uSAC::Util ();
+use uSAC::Util;
 use uSAC::HTTP;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
@@ -103,6 +103,8 @@ sub uhm_psgi {
 
   #the sub returned is the endpoint in terms of the usac flow
   my %ctx;
+  my $psgi_version=[1,1];
+  my $logger=sub {};
   my $inner=sub {
     my $next=shift;
     sub {
@@ -118,10 +120,13 @@ sub uhm_psgi {
 
         my $session=$_[REX]->session;#$rex->[uSAC::HTTP::Rex::session_];
 
-        state $psgi_version=[1,1];
 
-        \my %h=$_[IN_HEADER];
-        my %env=map(("HTTP_".uc $_, $h{$_}), keys %h);
+        #\my %h=$_[IN_HEADER];
+        #my %env;=map(("HTTP_".uc $_, $h{$_}), keys %h);
+        my %env;
+        for my ($k,$v)($_[IN_HEADER]->%*){
+              $env{"HTTP_".uc $k}=$v;
+        }
 
         $env{CONTENT_TYPE}//=delete $env{HTTP_CONTENT_TYPE};
         $env{CONTENT_LENGTH}//=delete $env{HTTP_CONTENT_LENGTH};
@@ -132,10 +137,10 @@ sub uhm_psgi {
           #We have a body to process
           $buffer=Stream::Buffered->new($env{CONTENT_LENGTH});
           $ctx=$ctx{$_[REX]}=[ $env, $buffer, $_[HEADER]];
-			    $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
+          $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
         }
         
-          $_[HEADER]=undef;
+        $_[HEADER]=undef;
         #
         # Do silly CGI convention here
         #
@@ -200,7 +205,6 @@ sub uhm_psgi {
         #Extensions
         $env{'psgix.io'}= "";
         $env{'psgix.input.buffered'}=1;
-        state $logger=sub {};
         $env{'psgix.logger'}=		$logger;
         $env{'psgix.session'}=		{};
         $env{'psgix.session.options'}={};
@@ -231,54 +235,48 @@ sub uhm_psgi {
             return;
           }
       }
-      
+    
 
-        #Execute the PSGI application
-        my $res=$app->($env);
+      #Execute the PSGI application
+      my $res=$app->($env);
 
 
-        if(ref($res) eq  "CODE"){
-          #DELAYED RESPONSE
-          $res->(sub {
-              my $res=shift;
-              #Convert array of headers to hash
-              $res->[1]={$res->[1]->@*};
-              $res->[1]{":status"}=$res->[0];
-              if(@$res==3){
-                #DELAYED RESPONSE IS A 3 elemement response
-                #$res->[1]{":status"}=$res->[0];
-                $next->($usac, $rex, $in_header, $res->[1], join "", $res->[2]->@*);
-                return;
-              }
-
-              #or it is streaming. return writer
-              my ($code, $psgi_headers, $psgi_body)=@$res;
-              uSAC::HTTP::Middleware::PSGI::Writer->new(%options,  in_header=>$in_header, headers=>$psgi_headers, rex=>$rex, matcher=>$usac, next=>$next);
-            });
-          return
-        }
-
-        for(ref($res->[2])){
-          #Convert array of headers to hash
-          $res->[1]={$res->[1]->@*};
-          if($_ eq "ARRAY"){
-            Log::OK::TRACE and log_trace "IN DO ARRAY";
-            #do_array($usac, $rex, $res);
+      if(ref($res) eq  "CODE"){
+        #DELAYED RESPONSE
+        $res->(sub {
+            my $res=shift;
+            #Convert array of headers to hash
+            $res->[1]={$res->[1]->@*};
             $res->[1]{":status"}=$res->[0];
-            $next->($usac, $rex, $in_header, $res->[1], join("", $res->[2]->@*),undef);
-            #delete $ctx{$_[REX]} if $buffer;  #Immediate respose dispose of context if it was created
-          }
-          #elsif($_ eq "GLOB" or $res->[2] isa "IO::Handle"){
-          else{
-            Log::OK::TRACE and log_trace "DOING GLOB";
-            do_glob($usac, $rex, $res, $next);
-          }
+            if(@$res==3){
+              #DELAYED RESPONSE IS A 3 elemement response
+              #$res->[1]{":status"}=$res->[0];
+              $next->($usac, $rex, $in_header, $res->[1], join "", $res->[2]->@*);
+              return;
+            }
+
+            #or it is streaming. return writer
+            my ($code, $psgi_headers, $psgi_body)=@$res;
+            uSAC::HTTP::Middleware::PSGI::Writer->new(%options,  in_header=>$in_header, headers=>$psgi_headers, rex=>$rex, matcher=>$usac, next=>$next);
+          });
+        return
+      }
+
+      for(ref($res->[2])){
+        #Convert array of headers to hash
+        $res->[1]={$res->[1]->@*};
+        if($_ eq "ARRAY"){
+          Log::OK::TRACE and log_trace "IN DO ARRAY";
+          #do_array($usac, $rex, $res);
+          $res->[1]{":status"}=$res->[0];
+          $next->($usac, $rex, $in_header, $res->[1], join("", $res->[2]->@*), undef);
         }
-        delete $ctx{$_[REX]};
-
-
-
-
+        else{
+          Log::OK::TRACE and log_trace "DOING GLOB";
+          do_glob($usac, $rex, $res, $next);
+          delete $ctx{$_[REX]} if $ctx;
+        }
+      }
     };
   };
 

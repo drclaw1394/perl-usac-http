@@ -800,7 +800,7 @@ sub usac_run {
 sub usac_load {
 	my $path=pop;
 	my %options=@_;
-  $path=path $path, [caller];
+  $path=uSAC::Util::path $path, [caller];
 	
 	$options{package}//=(caller)[0];
 	

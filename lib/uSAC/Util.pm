@@ -10,7 +10,7 @@ use feature "say";
 our @EXPORT_OK=qw(
   path
 );
-our @EXPORT=@EXPORT_OK;
+our @EXPORT;#=@EXPORT_OK;
 
 # Process a path.  
 # If a ref and defined, make relative to caller dir
@@ -27,7 +27,6 @@ sub path {
   my $p;
   my $prefix;
   my $frame=$_[1]//[caller];
-  say $_[0];
 	$prefix=dirname abs2rel abs_path($frame->[1]);
   if(ref($_[0]) eq "SCALAR"){
     

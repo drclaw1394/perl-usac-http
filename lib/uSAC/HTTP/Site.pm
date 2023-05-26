@@ -19,7 +19,7 @@ use Object::Pad;
 # table is the host table associated with the route
 #
 use uSAC::HTTP::Route;
-use uSAC::Util ();
+use uSAC::Util;
 
 # Fields for a host structure. contains the lookup table (hustle::Table), the cache for the table, the dispatcher for the table.
 #

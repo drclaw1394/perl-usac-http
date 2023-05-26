@@ -5,6 +5,7 @@ use AnyEvent;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Server;
+use uSAC::HTTP::Middleware::Log;
 use uSAC::HTTP::Middleware::PSGI;
 
 
@@ -37,6 +38,7 @@ my $app4=sub {
 my $server; $server=usac_server {
   usac_id "asdf";
 	usac_listen "a=0.0.0.0,po=8081,t=stream";
+  #usac_middleware uhm_log(dump_headers=>1);
 
         ################################################################################
         # usac_include root=>usac_dirname, "enabled";                                  #
