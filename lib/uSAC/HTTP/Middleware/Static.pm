@@ -542,7 +542,7 @@ sub _make_list_dir {
 #Specifies the url prefix (and or regex) to match
 #The prefix is removed and
 sub uhm_static_root {
-  my $html_root=path pop, [caller];
+  my $html_root=uSAC::Util::path pop, [caller];
   my %options=@_;
 
   $options{html_root}=$html_root;
@@ -786,7 +786,7 @@ sub uhm_static_root {
 
 
 sub uhm_static_file {
-	my $path=pop;
+	my $path=uSAC::Util::path pop, [caller];
 	my %options=@_;
 	my $self=$options{parent}//$uSAC::HTTP::Site;
 

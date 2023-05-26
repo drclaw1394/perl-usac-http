@@ -4,6 +4,7 @@ use EV;
 use AnyEvent;
 
 use uSAC::HTTP;
+use uSAC::HTTP::Server;
 use uSAC::HTTP::Middleware::PSGI;
 
 
@@ -46,7 +47,7 @@ my $server; $server=usac_server {
 
 
 	usac_route "/app0"
-    =>uhm_psgi(root=>usac_dirname, "test.psgi");
+    =>uhm_psgi(\"test.psgi");
 
   usac_route "/app4"
     =>uhm_psgi keep_alive=>1, $app4;

@@ -75,7 +75,7 @@ sub uhm_deflate {
             Log::OK::TRACE  and log_trace "exe ". $exe; 
             Log::OK::TRACE  and log_trace "Single shot: ". !$_[CB];
 
-            $ctx=$exe;
+            $ctx=[];#$exe;
 
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
@@ -84,16 +84,16 @@ sub uhm_deflate {
             $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()}="deflate";
 
             unless($_[CB]){
-              $ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
+              $ctx->[0]=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
 
               Log::OK::TRACE and log_trace "single shot";
               my $scratch=""; 	#new scratch each call
-              my $status=$ctx->deflate($_[PAYLOAD], $scratch);
+              my $status=$ctx->[0]->deflate($_[PAYLOAD], $scratch);
               $status == Z_OK or log_error "Error creating deflate context";
-              $status=$ctx->flush($scratch);
-              $ctx->deflateReset;
+              $status=$ctx->[0]->flush($scratch);
+              $ctx->[0]->deflateReset;
               Log::OK::TRACE and log_debug "about to push for single shot";
-              push @deflate_pool, $ctx;
+              push @deflate_pool, $ctx->[0];
               #$next->(@_[0,1,2,3], $scratch, @_[5,6]);
               $_[PAYLOAD]=$scratch;
               &$next;
@@ -103,8 +103,9 @@ sub uhm_deflate {
             else{
               #multiple calls required so setup context
               #my $scratch="";
-              $ctx=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
+              $ctx->[0]=pop(@deflate_pool)//Compress::Raw::Zlib::Deflate->new(-AppendOutput=>1, -Level=>6,-ADLER32=>1);
               Log::OK::TRACE and log_trace "Multicalls required $_[REX]";
+              $ctx->[1]=$_[CB]; #Save callback
               $out_ctx{$_[REX]}=$ctx;
 
 
@@ -125,7 +126,7 @@ sub uhm_deflate {
           # Append comppressed data to the scratch when its ready
           #
           my $scratch=""; 	#new scratch each call
-          $status=$ctx->deflate($_[PAYLOAD], $scratch);
+          $status=$ctx->[0]->deflate($_[PAYLOAD], $scratch);
           $status == Z_OK or log_error "Error creating deflate context";
 
 
@@ -133,12 +134,12 @@ sub uhm_deflate {
           unless($_[CB]){
             Log::OK::TRACE and log_debug "No more data expected";
             #if no callback is provided, then this is the last write
-            $status=$ctx->flush($scratch);
+            $status=$ctx->[0]->flush($scratch);
             delete $out_ctx{$_[REX]};
 
-            $ctx->deflateReset;
+            $ctx->[0]->deflateReset;
             Log::OK::TRACE and log_debug "about to push for multicall";
-            push @deflate_pool, $ctx;
+            push @deflate_pool, $ctx->[0];
             Log::OK::TRACE and log_trace "delete...".scalar keys %out_ctx;
 
             #$next->(@_[0,1,2,3], $scratch, @_[5,6]);
@@ -153,14 +154,13 @@ sub uhm_deflate {
             if(length $scratch){
               Log::OK::TRACE and log_debug "Writing what we have";
               #enough data to send out
-              #$next->(@_[0,1,2,3], $scratch,$dummy);# @_[5,6]);
               $_[PAYLOAD]=$scratch;
               $_[CB]=$dummy;
               &$next;
-              $_[CB]->($_[6]);	#execute callback to force feed
+              $ctx->[1]->($_[6]);	#execute callback to force feed
             }
             else{
-              $_[CB]->($_[6]);	#execute callback to force feed
+              $ctx->[1]->($_[6]);	#execute callback to force feed
             }
           }
       },

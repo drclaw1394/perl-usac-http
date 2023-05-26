@@ -8,7 +8,6 @@ use Log::ger::Output 'Screen';
 use uSAC::HTTP;
 use uSAC::HTTP::Server;
 
-use uSAC::Util;
 
 use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware::Log;
@@ -19,7 +18,20 @@ use uSAC::HTTP::Middleware::Multipart;
 use uSAC::HTTP::Middleware::ScriptWrap;
 use uSAC::HTTP::Middleware::Redirect;
 use uSAC::HTTP::Middleware::State;
-use HTTP::State ":all";
+
+#use HTTP::State ":all";
+
+###########################################################
+# use use::prefix ("uSAC::HTTP::",                        #
+#   Static=>[], #default import                           #
+#   Static=>Log  #Next item is a string, so defaul import #
+#   Static=>["options"], #request particular imports      #
+#   Static=>undef,  # no default import into namespace    #
+#   Static=>[{}],                                         #
+#   Log=>[{"asdf"=>","}]                                  #
+#   Deflate Gzip Slurp Multipart ScripWrap Redirect State #
+#   >;                                                    #
+###########################################################
 
 #use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 #use uSAC::HTTP::Middleware::State::UUID qw<state_uuid>;
@@ -49,9 +61,9 @@ my $server; $server=usac_server {
     usac_id "blog";
     usac_host "localhost:8084";
 
-    usac_delegate path \"delegate.pl";
+    usac_delegate \"delegate.pl";
 
-    usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_gzip;#, uhm_deflate;
+    usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_deflate;#uhm_gzip;#, uhm_deflate;
 
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
@@ -62,7 +74,6 @@ my $server; $server=usac_server {
         1;
       };
 
-      use Data::Dumper;
 		usac_route '/static/hot.txt'
       ##############################
       # => sub {                   #
@@ -74,13 +85,11 @@ my $server; $server=usac_server {
       #=>uhm_log(dump_headers=>1)
      ######################################################
       =>sub {
-        say "MY state : ". Dumper $_[IN_HEADER]{":state"};
-        for($_[IN_HEADER]{":state"}){
-          $_[OUT_HEADER]{HTTP_SET_COOKIE()}=encode_set_cookie cookie_struct name=>time unless $_->{name};
-        }
+        require Data::Dumper;
+        say "MY state : ". Data::Dumper::Dumper $_[IN_HEADER]{":state"};
         1;
       }
-      => uhm_static_file( headers=>{"transfer-encoding"=>"chunked"}, path \"static/hot.txt");
+      => uhm_static_file( headers=>{"transfer-encoding"=>"chunked"}, \"static/hot.txt");
 
     usac_route "/die"
       => sub {
@@ -102,19 +111,20 @@ my $server; $server=usac_server {
     usac_route '/statictest$'
       => uhm_static_content "This is some data";
 
-                usac_route "/static"
-                #=> uhm_gzip()
-                  #=>uhm_deflate()
-                  => uhm_static_root (
-                        #filter=>'txt$',
-                        read_size=>4096*16,
-                        pre_encoded=>{gzip=>".gz"},
-                        #no_compress=>qr/txt$/,
-                        do_dir=>1,
-                        #indexes=>["index.html"],
-                        #sendfile=>0,#4096*32,
-                        path
-                );
+    usac_route "/static"
+    #=> uhm_gzip()
+      #=>uhm_deflate()
+      => uhm_static_root (
+            #filter=>'txt$',
+            read_size=>4096*16,
+            #pre_encoded=>{gzip=>".gz"},
+            #no_compress=>qr/txt$/,
+            do_dir=>1,
+            #indexes=>["index.html"],
+            #sendfile=>0,#4096*32,
+            #\undef #"static/" 
+            \undef
+    );
 
                 #usac_include \"admin/usac.pl";
 

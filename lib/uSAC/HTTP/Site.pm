@@ -19,6 +19,7 @@ use Object::Pad;
 # table is the host table associated with the route
 #
 use uSAC::HTTP::Route;
+use uSAC::Util ();
 
 # Fields for a host structure. contains the lookup table (hustle::Table), the cache for the table, the dispatcher for the table.
 #
@@ -710,6 +711,11 @@ sub usac_delegate {
       }
       my %options=@_;
       my $self=$options{parent}//$uSAC::HTTP::Site;
+      for(ref $delegate){
+        if(/SCALAR/||//){
+          $delegate=uSAC::Util::path $delegate, [caller];
+        }
+      }
       $self->delegate($delegate);
 }
 

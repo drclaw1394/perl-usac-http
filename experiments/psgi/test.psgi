@@ -8,13 +8,3 @@ my $app= sub {
 
 	[200,["test"=>"AD"],["content from psgi file"]];
 };
-
-
-
-#############
-# builder { #
-#     $app; #
-# };        #
-#           #
-# $app;     #
-#############

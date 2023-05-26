@@ -16,6 +16,7 @@ use Exporter "import";
 #use Stream::Buffered::PerlIO;	#From PSGI distribution
 use Plack::TempBuffer;
 
+use uSAC::Util ();
 use uSAC::HTTP;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
@@ -78,13 +79,17 @@ sub uhm_psgi {
   my $app=pop;
 
   my %options=@_;
-  if(ref($app)eq "CODE"){
+  my $ref=ref $app;
 
+  if($ref eq "CODE"){
+    #Assume a code ref
   }
-  else{
+  elsif($ref eq "SCALAR" or $ref eq "") {
+    # Assume a simple scalar or reference to one
 
     #assume a file path
-    my $path=usac_path %options, $app;
+    my $path=uSAC::Util::path $app, [caller];
+
     Log::OK::INFO and log_info "Attempting to load psgi: $path";
 		$app=eval "require '$path'";
 
