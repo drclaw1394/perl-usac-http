@@ -66,7 +66,6 @@ no warnings "experimental";
     $session->closeme=1;
     #$session->[uSAC::HTTP::Session::dropper_]->();	#no keep alive
     $session->dropper->();
-
   }
 }
 
@@ -116,17 +115,14 @@ sub uhm_psgi {
       my $header;
 
       if($_[HEADER]){
-        #buffer to become psgi.input
-
-        my $session=$_[REX]->session;#$rex->[uSAC::HTTP::Rex::session_];
-
-
-        #\my %h=$_[IN_HEADER];
-        #my %env;=map(("HTTP_".uc $_, $h{$_}), keys %h);
+        my $session=$_[REX]->session;
         my %env;
-        for my ($k,$v)($_[IN_HEADER]->%*){
-              $env{"HTTP_".uc $k}=$v;
-        }
+
+        ######################################
+        # for my ($k,$v)($_[IN_HEADER]->%*){ #
+        #       $env{"HTTP_".uc $k}=$v;      #
+        # }                                  #
+        ######################################
 
         $env{CONTENT_TYPE}//=delete $env{HTTP_CONTENT_TYPE};
         $env{CONTENT_LENGTH}//=delete $env{HTTP_CONTENT_LENGTH};
@@ -138,6 +134,9 @@ sub uhm_psgi {
           $buffer=Stream::Buffered->new($env{CONTENT_LENGTH});
           $ctx=$ctx{$_[REX]}=[ $env, $buffer, $_[HEADER]];
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
+        }
+        else {
+          $ctx=0;
         }
         
         $_[HEADER]=undef;
@@ -162,56 +161,57 @@ sub uhm_psgi {
           #No query
           $path=$uri;
         }
+
         $env{SCRIPT_NAME}="";
         #utf8::encode $path;
         #$path=url_encode_utf8 $path;
         #utf8::encode $path;
+
         $env{PATH_INFO}=$path;
 
-
-        $env{REQUEST_METHOD}=	$_[IN_HEADER]{":method"};#$_[REX]->[uSAC::HTTP::Rex::method_];
-        $env{REQUEST_URI}=		$_[IN_HEADER]{":path"};#$_[REX]->[uSAC::HTTP::Rex::uri_raw_];
+        # See COMPAT
+        #$env{REQUEST_METHOD}=	$_[IN_HEADER]{":method"};
+        #$env{REQUEST_URI}=		$_[IN_HEADER]{":path"};
         
 
         $env{QUERY_STRING}=		$_[REX][uSAC::HTTP::Rex::query_string_];
 
-        my($host,$port)=split ":", $env{HTTP_HOST};
+        my($host, $port)=split ":", $_[IN_HEADER]{HTTP_HOST()}//"";
         $env{SERVER_NAME}=	$host;
         $env{SERVER_PORT}=		$port;
-        $env{SERVER_PROTOCOL}=	$_[REX]->[uSAC::HTTP::Rex::version_];
 
-        #CONTENT_LENGTH=>	"",
-        #CONTENT_TYPE=>		"",
 
-        #HTTP_HEADERS....
+        #SEE COMPAT
+        #$env{SERVER_PROTOCOL}=	$_[REX]->[uSAC::HTTP::Rex::version_];
+
 
         $env{'psgi.version'}=		$psgi_version;
-        $env{'psgi.url_scheme'}=	$session->scheme;#[uSAC::HTTP::Session::scheme_];
+        $env{'psgi.url_scheme'}=	$_[IN_HEADER]{HTTP__SCHEME()};#$session->scheme;#[uSAC::HTTP::Session::scheme_];
 
-        # the input stream.	Buffer?
-        $env{'psgi.input'}=		undef;#$buffer;
+        # the input stream.     Buffer?
+        $env{'psgi.input'}=             undef;#$buffer;
         # the error stream.
         ###############################################
         # state $io=IO::Handle->new();                #
         # $io->fdopen(fileno(STDERR),"w") unless $io; #
         ###############################################
-        $env{'psgi.errors'}=	*STDERR;#$io;
-        $env{'psgi.multithread'}=	undef;
-        $env{'psgi.multiprocess'}=	undef;
-        $env{'psgi.run_once'}=	undef;
-        $env{'psgi.nonblocking'}= 	1;
-        $env{'psgi.streaming'}=	1;
+        #$env{'psgi.errors'}=    *STDERR;#$io;
+        $env{'psgi.multithread'}=       undef;
+        $env{'psgi.multiprocess'}=      undef;
+        $env{'psgi.run_once'}=  undef;
+        $env{'psgi.nonblocking'}=       1;
+        $env{'psgi.streaming'}= 1;
 
         #Extensions
         $env{'psgix.io'}= "";
         $env{'psgix.input.buffered'}=1;
-        $env{'psgix.logger'}=		$logger;
-        $env{'psgix.session'}=		{};
+        $env{'psgix.logger'}=           $logger;
+        $env{'psgix.session'}=          {};
         $env{'psgix.session.options'}={};
-        $env{'psgix.harakiri'}=		undef;
-        $env{'psgix.harakiri.commit'}=		"";
+        $env{'psgix.harakiri'}=         undef;
+        $env{'psgix.harakiri.commit'}=          "";
         $env{'psgix.cleanup'}=undef;
-        $env{'psgix.cleanup.handlers'}=	[];
+        $env{'psgix.cleanup.handlers'}= [];
 
 
         #return if $env{CONTENT_LENGTH};

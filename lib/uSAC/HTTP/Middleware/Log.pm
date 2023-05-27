@@ -51,14 +51,11 @@ sub log_simple_in {
           my @out=(
             "<<<---",
             "Arraval initial time:		$time",
-            "Host: 			$_[REX][host_]",
-            "Method:       $_[REX][method_]",
             "Original matched URI: 	$_[REX][uri_raw_]",
             "Site relative URI:	$_[REX][uri_stripped_]",
             "Matched for site:	".($_[ROUTE][1][ROUTE_SITE]->id//"n/a"),
             "Hit counter:		$_[ROUTE][1][ROUTE_COUNTER]"
           );
-          push @out, "Captures:\n".join "\n",($_[REX][captures_]//[])->@* if $dump_capture;
 
           if($dump_headers){
             push @out, "==Incomming Headers==","";

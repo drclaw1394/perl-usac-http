@@ -47,6 +47,22 @@ my $server; $server=usac_server {
   usac_route "/app3"
     =>uhm_psgi $app3;                                      
 
+  # in app.psgi
+  use Plack::Builder;
+  #my $logger = Log::Dispatch->new();
+
+  my $app2=sub {
+
+    [200,[],["app2"]];
+  };
+
+  builder {
+    #enable "Plack::Middleware::AccessLog", format => "combined";
+      $app2;
+  };
+
+  usac_route "/app2"
+    =>uhm_psgi $app2;
 
 	usac_route "/app0"
     =>uhm_psgi(\"test.psgi");

@@ -121,7 +121,6 @@ sub make_parser{
   my $code=-1;
   my $payload="";
 
-  my $captures;
   my $body_len=0;
   my $body_type;
   my $multi_state=0;
@@ -130,6 +129,7 @@ sub make_parser{
   my $out_header;#={":status"=> -1 };
   my $dummy_cb=sub {};
 
+use constant PSGI_COMPAT=>undef;
 
   sub {
     my $processed=0;
@@ -222,7 +222,14 @@ sub make_parser{
             map split(":", $_, 2) ,
               split("\015\012", substr($buf, $ppos, $pos3-$ppos))
             ){
-              $k=lc $k;
+              if(PSGI_COMPAT){
+                $k=uc $k;
+                $k=~tr/-/_/;
+                $k="HTTP_$k";
+              }
+              else {
+               $k=lc $k;
+              }
 
               $val=builtin::trim $val;  #perl 5.36 required
               #$val=~s/\A\s+//;#uo;
@@ -241,15 +248,30 @@ sub make_parser{
               }
 
               #$ppos=$pos3+2;
-              if($k eq "host"){
-                $host=$val;
+              if(PSGI_COMPAT){
+                if($k eq "HTTP_HOST"){
+                  $host=$val;
+                }
+                elsif($k eq "HTTP_CONTENT_LENGTH"){
+                  $body_len= int $val;
+                }
+                elsif($k eq "HTTP_CONNECTION"){
+                  $connection=$val;
+                }
               }
-              elsif($k eq "content-length"){
-                $body_len= int $val;
+              else{
+                if($k eq "host"){
+                  $host=$val;
+                }
+                elsif($k eq "content-length"){
+                  $body_len= int $val;
+                }
+                elsif($k eq "connection"){
+                  $connection=$val;
+                }
               }
-              elsif($k eq "connection"){
-                $connection=$val;
-              }
+
+
           }
           $ppos=0;
           $buf=substr($buf, $pos3+4);
@@ -275,12 +297,25 @@ sub make_parser{
             $h{":scheme"}="http";
             $h{":authority"}=$host;
             $h{":path"}=$uri;
+            $h{":version"}=$version;
 
+            my $_i;
+            $h{":query"}=substr($uri, $_i+1)
+              if(($_i=index($uri, "?"))>=0);
+
+
+            if(PSGI_COMPAT){
+              $h{REQUEST_METHOD}=	$method;
+              $h{REQUEST_URI}=		$uri;
+              $h{SERVER_PROTOCOL}=	$version;
+
+            }
             # In server mode, the route need needs to be matched for incomming
             # processing and a rex needs to be created
             #
-            ($route, $captures)=$cb->($host, "$method $uri");
-            $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex, $captures,$out_header);
+            ($route, $h{":captures"})=$cb->($host, "$method $uri");
+            #$rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex);
+            $rex=uSAC::HTTP::Rex->new($r, $ex);
 
           }
           else {
@@ -294,7 +329,7 @@ sub make_parser{
             # Set the status in the innerware
             $h{":status"}=$code;
 
-            $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
+            #$out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
           }
 
           #Before calling the dispatch, setup the parser to process further data.

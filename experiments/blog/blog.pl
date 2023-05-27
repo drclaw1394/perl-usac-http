@@ -63,7 +63,7 @@ my $server; $server=usac_server {
 
     usac_delegate \"delegate.pl";
 
-    usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_deflate;#uhm_gzip;#, uhm_deflate;
+    #usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_deflate;#uhm_gzip;#, uhm_deflate;
 
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
@@ -84,11 +84,13 @@ my $server; $server=usac_server {
       #=>uhm_multipart()
       #=>uhm_log(dump_headers=>1)
      ######################################################
-      =>sub {
-        require Data::Dumper;
-        say "MY state : ". Data::Dumper::Dumper $_[IN_HEADER]{":state"};
-        1;
-      }
+      ######################################################################
+      # =>sub {                                                            #
+      #   require Data::Dumper;                                            #
+      #   say "MY state : ". Data::Dumper::Dumper $_[IN_HEADER]{":state"}; #
+      #   1;                                                               #
+      # }                                                                  #
+      ######################################################################
       => uhm_static_file( headers=>{"transfer-encoding"=>"chunked"}, \"static/hot.txt");
 
     usac_route "/die"

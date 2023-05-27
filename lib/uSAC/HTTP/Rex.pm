@@ -80,7 +80,7 @@ use Scalar::Util qw(weaken);
 #ctx_ reqcount_ 
 use enum (
 	"version_=0" ,qw< session_
-  headers_ write_ query_ query_string_ cookies_ host_ method_ uri_stripped_ uri_raw_ state_ captures_ id_
+  write_ query_ method_ uri_stripped_ uri_raw_ id_
 	closeme_
 	dropper_
 	server_
@@ -90,7 +90,6 @@ use enum (
 	recursion_count_
 	peer_
   uri_decoded_
-  out_headers_
 	end_
 	>
 );
@@ -122,7 +121,7 @@ sub rex_write{
 		$_[OUT_HEADER]{HTTP_CONNECTION()}="close" if($_[REX][closeme_]->$*);
 
 		#Hack to get HTTP/1.0 With keepalive working
-		$_[HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[REX][version_] eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
+		$_[OUT_HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[IN_HEADER]{":version"} eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
 	}
 
 
@@ -147,9 +146,6 @@ sub rex_terminate {
 
 
 
-sub rex_method {
-  $_[REX][method_];
-}
 
 ##
 #OO Methods
@@ -157,12 +153,6 @@ sub rex_method {
 
 
 # Returns the headers parsed at connection time
-sub headers {
-	return $_[0]->[headers_];
-}
-sub method {
-	$_[0][method_];
-}
 sub uri: lvalue{
 	$_[0][uri_raw_];
 }
@@ -170,31 +160,6 @@ sub uri_stripped :lvalue{
 	$_[0][uri_stripped_];
 }
 
-#Returns parsed query parameters. If they don't exist, they are parse first
-sub query_params {
-	unless($_[0][query_]){
-		#NOTE: This should already be decoded so no double decode
-		#$_[1][query_]={};
-		for ($_[0][query_string_]){
-			#tr/ //d;
-
-                        ##############################################
-                        # for my $pair (split "&"){                  #
-                        #         my ($key,$value)=split "=", $pair; #
-                        #         $_[1][query_]{$key}=$value;        #
-                        #                                            #
-                        # }                                          #
-                        ##############################################
-			$_[0][query_]->%*=map ((split /=/a)[0,1], split /&/a);
-		}
-	}
-
-	$_[0][query_];
-}
-
-sub rex_query_params{
-	$_[REX]->query_params;	
-}
 
 #Builds a url based on the url of the current site/group
 #match, rex, partial url
@@ -217,9 +182,6 @@ sub rex_site {
 	$_[ROUTE][1][0];	
 }
 
-sub rex_state :lvalue{
-	$_[REX][state_];
-}
 
 sub rex_peer {
   $_[REX][peer_];
@@ -304,7 +266,8 @@ sub rex_redirect_internal;
 sub rex_error {
   my $site=$_[ROUTE][1][ROUTE_SITE];
   $_[CB]=undef;
-  $_[REX][method_]="GET";
+  #$_[REX][method_]="GET";
+  $_[IN_HEADER]{":method"}="GET";
   $_[REX][in_progress_]=1;
 
   #Locate applicable site urls to handle the error
@@ -373,11 +336,11 @@ sub rex_redirect_internal {
   #Here we reenter the main processing chain with a  new url, potential
   #undef $_[0];
   $rex->[recursion_count_]++;
-  Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
+  #Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
   my $route;
-  ($route, $rex->[captures_])=$rex->[session_]->server->current_cb->(
-    $rex->[host_],			#Internal redirects are to same host
-    join(" ", $rex->@[method_, uri_raw_]),#New method and url
+  ($route, $_[IN_HEADER]{":captures"})=$rex->[session_]->server->current_cb->(
+    $_[IN_HEADER]{host},
+    join(" ", $_[IN_HEADER]{":method"}, $_[IN_HEADER]{":path"}),#New method and url
   );
   
   $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header,my $a="",my $b=undef);
@@ -424,23 +387,9 @@ sub rex_reply_text {
   1;
 }
 
-sub rex_captures {
-	$_[REX][captures_]
-}
-
-
-#returns parsed cookies from headers
-#Only parses if the internal field is undefined
-#otherwise uses pre parsed values
-#Read only
-sub cookies :lvalue {
-	$_[0][cookies_]//=$_[0][cookies_]=decode_cookies $_[0][headers_]{COOKIE};
-}
 
 #RW accessor
 #Returns the current state information for the rex
-sub state :lvalue { $_[0][state_] }
-sub captures:lvalue { $_[0][captures_] }
 sub writer {
 	$_[0][write_];
 
@@ -460,32 +409,25 @@ my $_i;
 
 sub new {
 	#my ($package, $session, $headers, $host, $version, $method, $uri, $ex, $captures, $out_headers)=@_;
-	#	0	1	  2	    3		4	5	6   7 8 9
+	#	    0	        1	          2	      3		    4	        5	      6     7     8           9
 
 	#state $id=0;
-	my $query_string="";
-	$query_string=substr($_[6], $_i+1)
-		if(($_i=index($_[6], "?"))>=0);
 	
 	Log::OK::DEBUG and log_debug "+++++++Create rex: $id";
-  Log::OK::DEBUG and log_debug "Query string is $query_string";
 
 	#my $write=undef;
 
-	my $self=bless [ $_[4], $_[1], $_[2], undef, undef, $query_string ,undef,$_[3], $_[5], $_[6], $_[6], {}, [], $id++], $_[0];
+	my $self=bless [], $_[0];
+  $self->[session_]=$_[1];
 
-  Log::OK::DEBUG and log_debug "Query string is $self->[query_string_]";
-	#my $write=$_[1]->[uSAC::HTTP::Session::write_];
-	#
+
 	#NOTE: A single call to Session export. give references to important variables
 	
-	($self->[closeme_], $self->[dropper_], $self->[server_], undef, undef, $self->[write_], $self->[peer_])= $_[7]->@*;#$_[1]->exports->@*;
+	($self->[closeme_], $self->[dropper_], $self->[server_], undef, undef, $self->[write_], $self->[peer_])= $_[2]->@*;
+
 	$self->[recursion_count_]=0;
-  $self->[captures_]=$_[8];
-  $self->[out_headers_]=$_[9];
   $self->[in_progress_]=undef;
   $self->[id_]=$id++;
-  #$self->[uri_decoded_]=url_decode_utf8 $self->[uri_raw_];
 	$self;
 }
 
@@ -497,7 +439,6 @@ sub new {
 sub parse_form_params {
 	my $rex=$_[1];
 	#parse the fields	
-  #for ($rex->[headers_]{CONTENT_TYPE}){
 	for ($_[IN_HEADER]{"content-type"}){
 		if(/multipart\/form-data/){
 			#parse content disposition (name, filename etc)
