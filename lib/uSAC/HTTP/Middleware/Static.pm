@@ -631,7 +631,7 @@ sub uhm_static_root {
         # Path is either given with the rex object or passed in by the payload
         # middleware argument.
         #
-        $p=$_[PAYLOAD]||$_[REX][uSAC::HTTP::Rex::uri_stripped_];
+        $p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};#$_[REX][uSAC::HTTP::Rex::uri_stripped_];
 
         my $path=$html_root.$p;
 

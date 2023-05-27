@@ -129,7 +129,9 @@ sub make_parser{
   my $out_header;#={":status"=> -1 };
   my $dummy_cb=sub {};
 
-use constant PSGI_COMPAT=>undef;
+  #TODO: this needs to be an argument supplied by the server
+  # Currently set from the PSGI middleware
+  our $PSGI_COMPAT=0;
 
   sub {
     my $processed=0;
@@ -222,14 +224,7 @@ use constant PSGI_COMPAT=>undef;
             map split(":", $_, 2) ,
               split("\015\012", substr($buf, $ppos, $pos3-$ppos))
             ){
-              if(PSGI_COMPAT){
-                $k=uc $k;
-                $k=~tr/-/_/;
-                $k="HTTP_$k";
-              }
-              else {
                $k=lc $k;
-              }
 
               $val=builtin::trim $val;  #perl 5.36 required
               #$val=~s/\A\s+//;#uo;
@@ -247,31 +242,19 @@ use constant PSGI_COMPAT=>undef;
                 $e=[$e, $val];
               }
 
-              #$ppos=$pos3+2;
-              if(PSGI_COMPAT){
-                if($k eq "HTTP_HOST"){
-                  $host=$val;
-                }
-                elsif($k eq "HTTP_CONTENT_LENGTH"){
-                  $body_len= int $val;
-                }
-                elsif($k eq "HTTP_CONNECTION"){
-                  $connection=$val;
-                }
+              if($k eq "host"){
+                $host=$val;
               }
-              else{
-                if($k eq "host"){
-                  $host=$val;
-                }
-                elsif($k eq "content-length"){
-                  $body_len= int $val;
-                }
-                elsif($k eq "connection"){
-                  $connection=$val;
-                }
+              elsif($k eq "content-length"){
+                $body_len= int $val;
+              }
+              elsif($k eq "connection"){
+                $connection=$val;
               }
 
-
+              # If the package variable for PSGI compatibility is set
+              # we make sure our in header more like psgi environment
+              $h{"HTTP_".((uc $k) =~tr/-/_/r)}=$e if $PSGI_COMPAT;
           }
           $ppos=0;
           $buf=substr($buf, $pos3+4);
@@ -297,19 +280,13 @@ use constant PSGI_COMPAT=>undef;
             $h{":scheme"}="http";
             $h{":authority"}=$host;
             $h{":path"}=$uri;
-            $h{":version"}=$version;
-
+            
+            ## psudeo spsudeo headers
+            $h{":protocol"}=$version;
             my $_i;
             $h{":query"}=substr($uri, $_i+1)
               if(($_i=index($uri, "?"))>=0);
 
-
-            if(PSGI_COMPAT){
-              $h{REQUEST_METHOD}=	$method;
-              $h{REQUEST_URI}=		$uri;
-              $h{SERVER_PROTOCOL}=	$version;
-
-            }
             # In server mode, the route need needs to be matched for incomming
             # processing and a rex needs to be created
             #

@@ -20,6 +20,8 @@ use uSAC::HTTP::Constants;
 use Hustle::Table;		#dispatching of endpoints
 use uSAC::Util;
 
+use uSAC::HTTP::Middleware::Log;
+
 use constant::more {
 	"CONFIG::set_no_delay"=> 1
 };
@@ -110,13 +112,16 @@ my $dummy_default=[];
 # ie expecting a request line but getting something else
 #
 sub _default_handler {
-		state $sub=sub {
+(
+		uhm_log,
+    sub {
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER: ". $_[1]->uri;
 			Log::OK::DEBUG and log_debug __PACKAGE__.join ", ", $_[IN_HEADER]->%*;
 			$_[PAYLOAD]="NOT FOUND";
 			return &rex_error_not_found;
       undef;
-		};
+		}
+  )
 }
 
 class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);

@@ -346,8 +346,10 @@ method __request {
     #
     $ex=$session->exports;
     $version="HTTP/1.1"; # TODO: FIX
-    my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%in_header, $host, $version, $method, $path, $ex, $captures, $out_header);
-
+    #my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%in_header, $host, $version, $method, $path, $ex, $captures, $out_header);
+    
+    my $rex=uSAC::HTTP::Rex->new($session, $ex);
+    
 
     # Set the current rex and route for the session.
     # This is needed for the parser in client mode. It makes the route known

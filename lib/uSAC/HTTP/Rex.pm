@@ -121,7 +121,7 @@ sub rex_write{
 		$_[OUT_HEADER]{HTTP_CONNECTION()}="close" if($_[REX][closeme_]->$*);
 
 		#Hack to get HTTP/1.0 With keepalive working
-		$_[OUT_HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[IN_HEADER]{":version"} eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
+		$_[OUT_HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[IN_HEADER]{":protocol"} eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
 	}
 
 
@@ -326,12 +326,16 @@ sub rex_redirect_internal {
 		$rex->[recursion_count_]=0;
 		#carp "Redirections loop detected for $uri";
 		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
-		rex_write($matcher, $rex, HTTP_LOOP_DETECTED, {HTTP_CONTENT_LENGTH, 0},"",undef);
+    $_[OUT_HEADER]{":status"}=HTTP_LOOP_DETECTED;
+    $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+    #rex_write($matcher, $rex, HTTP_LOOP_DETECTED, {HTTP_CONTENT_LENGTH, 0},"",undef);
 		return;
 	}
   $rex->[in_progress_]=undef;
-  $rex->[uri_raw_]=$uri;
-  $rex->[uri_stripped_]=$uri;
+  #$rex->[uri_raw_]=$uri;
+  #$rex->[uri_stripped_]=$uri;
+  $_[IN_HEADER]{":path"}=$uri;
+  $_[IN_HEADER]{":path_stripped"}=$uri;
   #say "AFTER CALL TO RESET EXISTING CHAIN";
   #Here we reenter the main processing chain with a  new url, potential
   #undef $_[0];
@@ -479,12 +483,13 @@ sub uhm_dead_horse_stripper {
 		sub {
       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
       if($_[OUT_HEADER]){
+        $_[IN_HEADER]{":path_stripped"}=
         $_[REX][uri_stripped_]= 
         $len
-        ?substr($_[REX][uri_raw_], $len)
-        : $_[REX][uri_raw_];
+        ?substr($_[IN_HEADER]{":path"}, $len)
+        : $_[IN_HEADER]{":path"};
 
-        $_[IN_HEADER]{":path_stripped"}=$_[REX][uri_stripped_];
+        #$_[IN_HEADER]{":path_stripped"}=$_[REX][uri_stripped_];
       }
       ######################################
       # $_[REX][uri_stripped_]=            #

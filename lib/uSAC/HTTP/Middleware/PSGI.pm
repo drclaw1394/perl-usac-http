@@ -31,6 +31,10 @@ use constant KEY_COUNT=> end_-entries_+1;
 our @EXPORT_OK=qw<uhm_psgi>;
 our @EXPORT=@EXPORT_OK;
 
+# TODO fix this hack
+#
+$uSAC::HTTP::v1_1_Reader::PSGI_COMPAT=1;
+
 #This is to mimic a filehandle?
 package uSAC::HTTP::Middleware::PSGI::Writer {
 no warnings "experimental";
@@ -111,107 +115,61 @@ sub uhm_psgi {
       
       my $ctx;
       my $env;
-      my $buffer;
-      my $header;
 
       if($_[HEADER]){
         my $session=$_[REX]->session;
-        my %env;
+        $env=$_[IN_HEADER];
 
-        ######################################
-        # for my ($k,$v)($_[IN_HEADER]->%*){ #
-        #       $env{"HTTP_".uc $k}=$v;      #
-        # }                                  #
-        ######################################
+        # Convert / create he environmen variables which
+        # did not originate from the client or have special meaning
+        #
+        $env->{'psgi.url_scheme'}=	$env->{":scheme"};
+        $env->{REQUEST_METHOD}=	$env->{":method"};
 
-        $env{CONTENT_TYPE}//=delete $env{HTTP_CONTENT_TYPE};
-        $env{CONTENT_LENGTH}//=delete $env{HTTP_CONTENT_LENGTH};
+        $env->{REQUEST_URI}=$env->{PATH_INFO}=$env->{":path"};
 
-        $env=\%env;
+        $env->{SERVER_PROTOCOL}=	$env->{":protocol"};
+        $env->{QUERY_STRING}=	$env->{":query"};	
+        ($env->{SERVER_NAME}, $env->{SERVER_PORT})=split ":", $env->{":authority"};
 
-        if($env{CONTENT_LENGTH}){
+        $env->{CONTENT_TYPE}//=delete $env->{HTTP_CONTENT_TYPE};
+        $env->{CONTENT_LENGTH}//=delete $env->{HTTP_CONTENT_LENGTH};
+
+
+        if($env->{CONTENT_LENGTH}){
           #We have a body to process
-          $buffer=Stream::Buffered->new($env{CONTENT_LENGTH});
+          my $buffer=Stream::Buffered->new($env->{CONTENT_LENGTH});
           $ctx=$ctx{$_[REX]}=[ $env, $buffer, $_[HEADER]];
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
+
+          # the input stream.     Buffer?
+          $env->{'psgi.input'}= $buffer;
         }
         else {
           $ctx=0;
         }
         
-        $_[HEADER]=undef;
-        #
-        # Do silly CGI convention here
-        #
-        my $path;
-        my $query;
-        my $uri=$_[REX][uSAC::HTTP::Rex::uri_raw_];
-        #utf8::encode $uri;
-        
-        $uri=url_decode $uri;
-        #$uri= url_encode $uri;
-        my $index=index $uri, "?";
-        if($index>=0){
-          #Split
-          $path=substr $uri,0, $index;
-          $query=substr $uri, $index+1;
-          #($path, $query)=split $_, "?", 2;
-        }
-        else {
-          #No query
-          $path=$uri;
-        }
+        #$_[OUT_HEADER]=undef;
 
-        $env{SCRIPT_NAME}="";
-        #utf8::encode $path;
-        #$path=url_encode_utf8 $path;
-        #utf8::encode $path;
-
-        $env{PATH_INFO}=$path;
-
-        # See COMPAT
-        #$env{REQUEST_METHOD}=	$_[IN_HEADER]{":method"};
-        #$env{REQUEST_URI}=		$_[IN_HEADER]{":path"};
-        
-
-        $env{QUERY_STRING}=		$_[REX][uSAC::HTTP::Rex::query_string_];
-
-        my($host, $port)=split ":", $_[IN_HEADER]{HTTP_HOST()}//"";
-        $env{SERVER_NAME}=	$host;
-        $env{SERVER_PORT}=		$port;
-
-
-        #SEE COMPAT
-        #$env{SERVER_PROTOCOL}=	$_[REX]->[uSAC::HTTP::Rex::version_];
-
-
-        $env{'psgi.version'}=		$psgi_version;
-        $env{'psgi.url_scheme'}=	$_[IN_HEADER]{HTTP__SCHEME()};#$session->scheme;#[uSAC::HTTP::Session::scheme_];
-
-        # the input stream.     Buffer?
-        $env{'psgi.input'}=             undef;#$buffer;
-        # the error stream.
-        ###############################################
-        # state $io=IO::Handle->new();                #
-        # $io->fdopen(fileno(STDERR),"w") unless $io; #
-        ###############################################
-        #$env{'psgi.errors'}=    *STDERR;#$io;
-        $env{'psgi.multithread'}=       undef;
-        $env{'psgi.multiprocess'}=      undef;
-        $env{'psgi.run_once'}=  undef;
-        $env{'psgi.nonblocking'}=       1;
-        $env{'psgi.streaming'}= 1;
+        $env->{SCRIPT_NAME}="";
+        $env->{'psgi.version'}=		$psgi_version;
+        $env->{'psgi.errors'}=      *STDERR;#$io;
+        $env->{'psgi.multithread'}= undef;
+        $env->{'psgi.multiprocess'}=undef;
+        $env->{'psgi.run_once'}=  undef;
+        $env->{'psgi.nonblocking'}=       1;
+        $env->{'psgi.streaming'}= 1;
 
         #Extensions
-        $env{'psgix.io'}= "";
-        $env{'psgix.input.buffered'}=1;
-        $env{'psgix.logger'}=           $logger;
-        $env{'psgix.session'}=          {};
-        $env{'psgix.session.options'}={};
-        $env{'psgix.harakiri'}=         undef;
-        $env{'psgix.harakiri.commit'}=          "";
-        $env{'psgix.cleanup'}=undef;
-        $env{'psgix.cleanup.handlers'}= [];
+        $env->{'psgix.io'}= "";
+        $env->{'psgix.input.buffered'}=1;
+        $env->{'psgix.logger'}=           $logger;
+        $env->{'psgix.session'}=          {};
+        $env->{'psgix.session.options'}={};
+        $env->{'psgix.harakiri'}=         undef;
+        $env->{'psgix.harakiri.commit'}=          "";
+        $env->{'psgix.cleanup'}=undef;
+        $env->{'psgix.cleanup.handlers'}= [];
 
 
         #return if $env{CONTENT_LENGTH};
@@ -221,7 +179,7 @@ sub uhm_psgi {
 
       if($ctx//=$ctx{$_[REX]}){
         $env=$ctx->[0];
-        $buffer=$ctx->[1];
+        my $buffer=$ctx->[1];
 
           $buffer->print($_[PAYLOAD]);
           unless($_[CB]){
@@ -257,7 +215,14 @@ sub uhm_psgi {
 
             #or it is streaming. return writer
             my ($code, $psgi_headers, $psgi_body)=@$res;
-            uSAC::HTTP::Middleware::PSGI::Writer->new(%options,  in_header=>$in_header, headers=>$psgi_headers, rex=>$rex, matcher=>$usac, next=>$next);
+            uSAC::HTTP::Middleware::PSGI::Writer->new(
+              %options,
+              in_header=>$in_header,
+              headers=>$psgi_headers,
+              rex=>$rex,
+              matcher=>$usac,
+              next=>$next
+            );
           });
         return
       }
