@@ -51,8 +51,8 @@ sub log_simple_in {
           my @out=(
             "<<<---",
             "Arraval initial time:		$time",
-            #"Original matched URI: 	$_[REX][uri_raw_]",
-            #"Site relative URI:	$_[REX][uri_stripped_]",
+            "Original matched URI: 	$_[IN_HEADER]{':path'}",
+            "Site relative URI:	$_[IN_HEADER]{':path_stripped'}",
             "Matched for site:	".($_[ROUTE][1][ROUTE_SITE]->id//"n/a"),
             "Hit counter:		$_[ROUTE][1][ROUTE_COUNTER]"
           );

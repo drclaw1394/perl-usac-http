@@ -76,27 +76,26 @@ use Scalar::Util qw(weaken);
 
 
 #Class attribute keys
-#method_ uri_
 #ctx_ reqcount_ 
 use enum (
-	"version_=0" ,qw< session_
-  write_ query_ method_ uri_stripped_ uri_raw_ id_
+	"start_=0" ,qw< session_
+  write_ id_
 	closeme_
 	dropper_
 	server_
 	in_progress_
 
-	response_code_
+  out_headers_
+
 	recursion_count_
 	peer_
-  uri_decoded_
 	end_
 	>
 );
 
 #Add a mechanism for sub classing
 use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>end_-version_+1;
+use constant KEY_COUNT=>end_-start_+1;
 
 require uSAC::HTTP::Middleware;
 		
@@ -153,12 +152,6 @@ sub rex_terminate {
 
 
 # Returns the headers parsed at connection time
-sub uri: lvalue{
-	$_[0][uri_raw_];
-}
-sub uri_stripped :lvalue{
-	$_[0][uri_stripped_];
-}
 
 
 #Builds a url based on the url of the current site/group
@@ -266,7 +259,6 @@ sub rex_redirect_internal;
 sub rex_error {
   my $site=$_[ROUTE][1][ROUTE_SITE];
   $_[CB]=undef;
-  #$_[REX][method_]="GET";
   $_[IN_HEADER]{":method"}="GET";
   $_[REX][in_progress_]=1;
 
@@ -331,12 +323,10 @@ sub rex_redirect_internal {
     #rex_write($matcher, $rex, HTTP_LOOP_DETECTED, {HTTP_CONTENT_LENGTH, 0},"",undef);
 		return;
 	}
+
   $rex->[in_progress_]=undef;
-  #$rex->[uri_raw_]=$uri;
-  #$rex->[uri_stripped_]=$uri;
   $_[IN_HEADER]{":path"}=$uri;
   $_[IN_HEADER]{":path_stripped"}=$uri;
-  #say "AFTER CALL TO RESET EXISTING CHAIN";
   #Here we reenter the main processing chain with a  new url, potential
   #undef $_[0];
   $rex->[recursion_count_]++;
@@ -484,19 +474,11 @@ sub uhm_dead_horse_stripper {
       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
       if($_[OUT_HEADER]){
         $_[IN_HEADER]{":path_stripped"}=
-        $_[REX][uri_stripped_]= 
         $len
         ?substr($_[IN_HEADER]{":path"}, $len)
         : $_[IN_HEADER]{":path"};
 
-        #$_[IN_HEADER]{":path_stripped"}=$_[REX][uri_stripped_];
       }
-      ######################################
-      # $_[REX][uri_stripped_]=            #
-      # ($_[HEADER] and $len)              #
-      #   ?substr($_[REX][uri_raw_], $len) #
-      #   : $_[REX][uri_raw_];             #
-      ######################################
       
       &$inner_next; #call the next
 

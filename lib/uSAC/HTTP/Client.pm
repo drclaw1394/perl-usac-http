@@ -69,7 +69,7 @@ method _inner_dispatch :override {
             }
             elsif(300<=$_<400){
               #Redirect. don't deque  just yet
-              say STDERR __PACKAGE__." redirect $_  location: $_[IN_HEADER]{location}";
+              Log::OK::INFO and log_info __PACKAGE__." redirect $_  location: $_[IN_HEADER]{location}";
               $self->_redirect_external(@_);
             }
             elsif(400 <= $_< 500){
@@ -179,7 +179,6 @@ method request {
 
   # Attempt to connect to host if we have no connections  in the pool
   state $any_host=$self->host_tables->{"*.*"};
-
   my $entry=$self->host_tables->{$host}//$any_host;
   
   # Push to queue
@@ -349,6 +348,7 @@ method __request {
     #my $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $session, \%in_header, $host, $version, $method, $path, $ex, $captures, $out_header);
     
     my $rex=uSAC::HTTP::Rex->new($session, $ex);
+    $rex->[uSAC::HTTP::Rex::out_headers_]=$out_header;
     
 
     # Set the current rex and route for the session.
@@ -394,7 +394,7 @@ method fetch {
   }
 
   #set host header if not present
-  $options->{headers}{HTTP_HOST()}=$uri->host unless exists $options->{headers}{HTTP_HOST()};
+  $options->{headers}{HTTP_HOST()}=$uri->host_port unless exists $options->{headers}{HTTP_HOST()};
   $self->request(
     $uri->host_port,               # Host
     $options->{method}//"GET",     # Method
@@ -414,9 +414,11 @@ method post {
 
 # expects IN_HEADER to contain a location header
 method _redirect_external {
-    my $url=URI->new($_[IN_HEADER]{location});
-    my $hp=($url->host_port)//$_[OUT_HEADER]{":authority"};
-    $self->request($hp, $_[OUT_HEADER]{":method"}, $url->path, {}, "", 1);
+    my $uri=URI->new($_[IN_HEADER]{location});
+    my $hp=($uri->host_port);#//$_[OUT_HEADER]{":authority"};
+    my $header={};
+    $header->{HTTP_HOST()}=$uri->host_port;
+    $self->request($hp, $_[OUT_HEADER]{":method"}, $uri->path, $header, "", 1);
 }
 
 1;

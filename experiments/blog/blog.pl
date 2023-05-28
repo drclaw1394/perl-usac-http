@@ -59,10 +59,11 @@ my $server; $server=usac_server {
 	
 	usac_site {
     usac_id "blog";
-    usac_host "localhost:8084";
+    #usac_host "localhost:8084";
 
     usac_delegate \"delegate.pl";
 
+    usac_middleware uhm_log(dump_headers=>1);
     #usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_deflate;#uhm_gzip;#, uhm_deflate;
 
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
@@ -72,6 +73,11 @@ my $server; $server=usac_server {
       =>sub {
         $_[PAYLOAD]=join ", ", &rex_captures->@*;
         1;
+      };
+    usac_route "/redirect"
+      =>sub {
+        $_[OUT_HEADER]{":status"}=301;
+        $_[OUT_HEADER]{HTTP_LOCATION()}="http://localhost:8084/static/hot.txt";
       };
 
 		usac_route '/static/hot.txt'
@@ -91,7 +97,9 @@ my $server; $server=usac_server {
       #   1;                                                               #
       # }                                                                  #
       ######################################################################
-      => uhm_static_file( headers=>{"transfer-encoding"=>"chunked"}, \"static/hot.txt");
+      => uhm_static_file(
+        #headers=>{"transfer-encoding"=>"chunked"}, 
+        \"static/hot.txt");
 
     usac_route "/die"
       => sub {

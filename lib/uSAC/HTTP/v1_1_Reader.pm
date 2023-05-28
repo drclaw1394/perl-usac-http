@@ -306,7 +306,9 @@ sub make_parser{
             # Set the status in the innerware
             $h{":status"}=$code;
 
-            #$out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
+            # Loopback the output headers to the input side of the chain.
+            # 
+            $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
           }
 
           #Before calling the dispatch, setup the parser to process further data.

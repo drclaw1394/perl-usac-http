@@ -258,7 +258,7 @@ sub send_file_uri_norange {
 
 
   $next->($matcher, $rex, $in_header, $out_headers, "" ) and return
-  if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD" 
+  if($in_header->{":method"} eq "HEAD" 
       or $out_headers->{":status"}==HTTP_NOT_MODIFIED);
 
   # Send file
@@ -509,14 +509,14 @@ sub _make_list_dir {
         s|^$html_root/||;                       #strip out html_root
         my $base=(split "/")[-1].($isDir? "/":"");
 
-        ["$rex->[uSAC::HTTP::Rex::uri_raw_]$base", $base, stat _]
+        #["$rex->[uSAC::HTTP::Rex::uri_raw_]$base", $base, stat _]
+        ["$_[IN_HEADER]{':path'}$base", $base, stat _]
       }
       @fs_paths;
 		my $ren=$renderer//&_html_dir_list;
 
 		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
 		$ren->($data, $labels, \@results);	#Render to output
-    #if($rex->[uSAC::HTTP::Rex::method_] eq "HEAD"){
     $_[OUT_HEADER]{":status"}=HTTP_OK; 
     $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $data;
     for my ($k,$v)(@type){
@@ -631,7 +631,7 @@ sub uhm_static_root {
         # Path is either given with the rex object or passed in by the payload
         # middleware argument.
         #
-        $p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};#$_[REX][uSAC::HTTP::Rex::uri_stripped_];
+        $p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
 
         my $path=$html_root.$p;
 

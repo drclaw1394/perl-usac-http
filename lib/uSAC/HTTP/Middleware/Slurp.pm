@@ -51,7 +51,7 @@ sub uhm_slurp {
   }
   else {
     # warn about memory only slurping
-    carp "No upload dir destination. Content slurping is memory only";
+    Log::OK::WARN and log_warn "No upload dir destination. Content slurping is memory only";
     $mem_flag=1;
   }
   # Test if upload directory exists;
