@@ -910,20 +910,13 @@ sub uhm_dead_horse_stripper {
           $len
           ?substr($_[IN_HEADER]{":path"}, $len)
           : $_[IN_HEADER]{":path"};
-
-          ################################
-          # say "lenght of prefix $len"; #
-          # use Data::Dumper;            #
-          # say Dumper $_[IN_HEADER];    #
-          # sleep 2;                     #
-          ################################
       }
       
       &$inner_next; #call the next
 
       #Check the inprogress flag
       #here we force write unless the rex is in progress
-
+      #Log::OK::WARN and log_warn "REX in progress flag not set!";
       #####################################################################################
       # unless($_[REX][uSAC::HTTP::Rex::in_progress_]){                                   #
       #   Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef"; #

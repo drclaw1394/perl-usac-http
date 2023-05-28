@@ -63,7 +63,7 @@ my $server; $server=usac_server {
 
     usac_delegate \"delegate.pl";
 
-    usac_middleware uhm_log(dump_headers=>1);
+    #usac_middleware uhm_log(dump_headers=>1);
     #usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_deflate;#uhm_gzip;#, uhm_deflate;
 
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";

@@ -37,9 +37,6 @@ $server->add_route('GET'
   }
 );
 
-
-
-
 $server->add_route(GET
   =>"/ws"
   => uhm_websocket()
@@ -76,50 +73,6 @@ $server->add_route(GET
 			};
       undef; #Needed to prevent calling of next
 	}
-);
-
-$server->add_route("GET"
-  =>"/large"
-  =>()
-  =>sub {
-    state $data= "x"x(4096*4096);
-    $_[PAYLOAD]=$data;
-    &rex_write;
-  }
-);
-
-$server->add_route("GET"
-  =>"/chunks"
-  =>()
-  =>sub {
-    state $data= "x" x (4096*4096);
-    my $size=4096*1;
-    my $offset=0;#-$size;;
-    my @g=@_;
-
-    my @args=@_;
-    my $sub;
-    $sub=sub {
-      my $d=substr($data, $offset, $size);	#Data to send
-
-      $offset+=$size;				#update offset
-      #rex_write @g, $data, $offset<length($data)?__SUB__:undef;
-      
-      if($offset<length($data)){
-          $args[PAYLOAD]= substr $data, $offset, $size;
-          $args[CB]=__SUB__;
-      }
-      else {
-        $args[PAYLOAD]= "";
-        $args[CB]=undef;
-        $sub=undef;
-      }
-
-      rex_write @args;
-    };
-
-    $sub->();
-  }
 );
 
 $server->parse_cli_options(@ARGV);
