@@ -66,9 +66,7 @@ no warnings "experimental";
     #Also need to pass defined but empty data
     rex_write( $self->{matcher}, $self->{rex}, $self->{in_header}, $self->{headers}, my $a="");
 
-    #$session->[uSAC::HTTP::Session::closeme_]=1;
     $session->closeme=1;
-    #$session->[uSAC::HTTP::Session::dropper_]->();	#no keep alive
     $session->dropper->();
   }
 }
@@ -310,7 +308,6 @@ sub do_glob {
       
       #Do the final write with no callback
 			$next->($usac, $rex, $code, $psgi_headers, my $a="", my$b=undef);
-      #$dropper->();
 		}
 	};
   $do_it->(undef);

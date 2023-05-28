@@ -241,7 +241,7 @@ sub websocket_server_in {
 
     sub {
       Log::OK::TRACE and log_trace "Testing for websocket";
-      my ($line, $rex, $code, $headers, $payload, $usac_cb)=@_;
+      my ($line, $rex, $in_headers, $headers, $payload, $usac_cb)=@_;
       my $session=$rex->[uSAC::HTTP::Rex::session_];
       #attempt to do the match
 
@@ -264,7 +264,8 @@ sub websocket_server_in {
           #
           #reply
           my $reply=
-          "$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS." ".$uSAC::HTTP::Code::code_to_name[HTTP_SWITCHING_PROTOCOLS].CRLF
+          #"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS." ".$uSAC::HTTP::Code::code_to_name[HTTP_SWITCHING_PROTOCOLS].CRLF
+          "$in_headers->{':protocol'} ".HTTP_SWITCHING_PROTOCOLS." ".$uSAC::HTTP::Code::code_to_name[HTTP_SWITCHING_PROTOCOLS].CRLF
           .HTTP_CONNECTION.": Upgrade".CRLF
           .HTTP_UPGRADE.": websocket".CRLF
           .HTTP_SEC_WEBSOCKET_ACCEPT.": $key".CRLF
@@ -286,7 +287,6 @@ sub websocket_server_in {
 
           #write reply	
           Log::OK::DEBUG and log_debug __PACKAGE__." setting in progress flag";
-          #$session->[uSAC::HTTP::Session::in_progress_]=1;
           local $/=", ";
           #for($session->[uSAC::HTTP::Session::write_]){
 

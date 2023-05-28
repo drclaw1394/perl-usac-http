@@ -27,7 +27,7 @@ our %EXPORT_TAGS=();
 # Log Simple - Log basic stats to STDERR
 #
 sub uhm_log {
-	[&log_simple_in, &log_simple_out, uSAC::HTTP::Middleware::bypass]
+	[&log_simple_in, &log_simple_out, undef];
 }
 
 sub log_simple_in {

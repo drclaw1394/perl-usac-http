@@ -29,75 +29,61 @@ use URL::Encode::XS;
 use URL::Encode qw<url_decode_utf8>;
 use Cpanel::JSON::XS qw<encode_json decode_json>;
 
-our @EXPORT_OK=qw<rex_headers 
+our @EXPORT_OK=qw<
+  rex_site_url
+  rex_site
+  rex_peer
 
+  rex_redirect_see_other
+  rex_redirect_found
+  rex_redirect_temporary
+  rex_redirect_not_modified
 
-usac_multipart_stream
+  rex_error_not_found
+  rex_error_forbidden 
+  rex_error_internal_server_error 
+  rex_error_unsupported_media_type 
+  rex_error
 
+  rex_redirect_internal
 
-rex_parse_form_params 
-rex_query_params
+  rex_reply_json
+  rex_reply_html
+  rex_reply_javascript
+  rex_reply_text
 
-rex_method
-rex_site_url
-rex_site
-rex_state
-rex_peer
-
-rex_redirect_see_other
-rex_redirect_found
-rex_redirect_temporary
-rex_redirect_not_modified
-
-rex_error_not_found
-rex_error_forbidden 
-rex_error_internal_server_error 
-rex_error_unsupported_media_type 
-rex_error
-
-rex_redirect_internal
-
-rex_reply_json
-rex_reply_html
-rex_reply_javascript
-rex_reply_text
-
-rex_captures
-rex_write
+  rex_captures
+  rex_write
 >;
 our @EXPORT=@EXPORT_OK;
 
 
 
 
-use Time::HiRes qw/gettimeofday/;
-use Scalar::Util qw(weaken);
+#use Time::HiRes qw/gettimeofday/;
+#use Scalar::Util qw(weaken);
 #use Encode qw<decode encode decode_utf8>;
 
 
 #Class attribute keys
 #ctx_ reqcount_ 
 use enum (
-	"start_=0" ,qw< session_
-  write_ id_
-	closeme_
-	dropper_
-	server_
-	in_progress_
+  "session_",   # The established channel this rex is a part of 
+  "write_",     # Writer for above
+  "id_",        # ID/sequence of the rex object
+	"closeme_",   # Reference to closer in session
+	"dropper_",   # Reference to dropper in session
+	"server_",      # The server object
+	"in_progress_", # Flag indicating this rex is in progress. This is automatically set by serializer
+                  # However if middleware prevents synchronous call to serialize, then this needs
+                  # manual setting. USe for debugging mainly
 
-  out_headers_
+  "out_headers_", # Glue to link out headers to input side of HTTP Client
 
-	recursion_count_
-	peer_
-	end_
-	>
+	"recursion_count_",   # Sanity check against server loops
+	"peer_",        # The address structure of the other this connection
 );
 
-#Add a mechanism for sub classing
-use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>end_-start_+1;
-
-require uSAC::HTTP::Middleware;
 		
 # TODO: rename this subroutine
 # This is routine is the glue between server innerware and server outerware
@@ -116,11 +102,10 @@ sub rex_write{
 
 		#Tell the other end the connection will be closed
     #
-    #push $_[HEADER]->@*, HTTP_CONNECTION, "close" if($_[REX][closeme_]->$*);
-		$_[OUT_HEADER]{HTTP_CONNECTION()}="close" if($_[REX][closeme_]->$*);
+    #$_[OUT_HEADER]{HTTP_CONNECTION()}="close" if($_[REX][closeme_]->$*);
 
 		#Hack to get HTTP/1.0 With keepalive working
-		$_[OUT_HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[IN_HEADER]{":protocol"} eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
+    #$_[OUT_HEADER]{HTTP_CONNECTION()}="Keep-Alive" if($_[IN_HEADER]{":protocol"} eq "HTTP/1.0" and !$_[REX][closeme_]->$*);
 	}
 
 
@@ -320,7 +305,6 @@ sub rex_redirect_internal {
 		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
     $_[OUT_HEADER]{":status"}=HTTP_LOOP_DETECTED;
     $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
-    #rex_write($matcher, $rex, HTTP_LOOP_DETECTED, {HTTP_CONTENT_LENGTH, 0},"",undef);
 		return;
 	}
 
@@ -332,7 +316,8 @@ sub rex_redirect_internal {
   $rex->[recursion_count_]++;
   #Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
   my $route;
-  ($route, $_[IN_HEADER]{":captures"})=$rex->[session_]->server->current_cb->(
+  #($route, $_[IN_HEADER]{":captures"})=$rex->[session_]->server->current_cb->(
+  ($route, $_[IN_HEADER]{":captures"})=$rex->[server_]->current_cb->(
     $_[IN_HEADER]{host},
     join(" ", $_[IN_HEADER]{":method"}, $_[IN_HEADER]{":path"}),#New method and url
   );
@@ -458,76 +443,4 @@ sub parse_form_params {
 
 	}
 }
-
-
-# First innerware. Strips site prefix and also monitors if the REX has been marked activly in
-# progress
-#
-sub uhm_dead_horse_stripper {
-  my ($package, $prefix)=@_;
-	my $len=length $prefix;
-	my $inner=sub {
-		my $inner_next=shift;
-    my $index=shift;
-    my %options=@_;
-		sub {
-      Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
-      if($_[OUT_HEADER]){
-        $_[IN_HEADER]{":path_stripped"}=
-        $len
-        ?substr($_[IN_HEADER]{":path"}, $len)
-        : $_[IN_HEADER]{":path"};
-
-      }
-      
-      &$inner_next; #call the next
-
-      #Check the inprogress flag
-      #here we force write unless the rex is in progress
-
-      unless($_[REX][in_progress_]){
-        Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef";
-        $_[CB]=undef;
-        return &rex_write;
-      }
-
-      Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
-      undef;
-    },
-
-	};
-
-  my $outer=sub {
-    my ($next ,$index, %options)=@_;
-    $next;
-  };
-
-  my $error=sub {
-    my ($next ,$index, %options)=@_;
-    my $site=$options{site};
-
-    if($site->mode==0){
-      sub {
-      #say "error DEAD HORSE";
-        &$next;
-      }
-    }
-    else {
-      sub {
-      #say "CLIENT error dead horse";
-        #say $_[ROUTE][1][ROUTE_TABLE][uSAC::HTTP::Site::ACTIVE_COUNT]--;
-        #my($route, $captures)=$entry->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
-
-
-        &$next;
-      }
-    }
-  };
-
-  [$inner, $outer, $error];
-
-}
-
-
-
 1;

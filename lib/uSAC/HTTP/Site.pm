@@ -87,6 +87,7 @@ use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
 
 
+
 class uSAC::HTTP::Site;
 
 no warnings "experimental";
@@ -186,7 +187,12 @@ method _add_route {
 
 
 
-  unshift @_, uSAC::HTTP::Rex->uhm_dead_horse_stripper($_built_prefix);
+  # Dead horse stripper is always the first
+  #
+  unshift @_, uhm_dead_horse_stripper($_built_prefix);
+
+
+
   # Fix up and break out middleware
   #
   \my (@inner, @outer, @error)=$self->wrap_middleware(@_);
@@ -195,18 +201,20 @@ method _add_route {
 
 
   # Innerware run form parent to child to route in
-  # the order of listing
+  # the order of listing. Splice after dead horse
   #
-  unshift @inner, $self->construct_innerware;
+  #unshift @inner, $self->construct_innerware;
+  splice @inner, 1,0, $self->construct_innerware;
 
   # Outerware is in reverse order
-  unshift @outer, $self->construct_outerware;
+  #unshift @outer, $self->construct_outerware;
+  splice @outer,1,0, $self->construct_outerware;
   @outer=reverse @outer;
 
-  #unshift @inner , uSAC::HTTP::Rex->umw_dead_horse_stripper($_built_prefix);
 
 
-  unshift @error, $self->construct_errorware;
+  #unshift @error, $self->construct_errorware;
+  splice @error, 1, 0, $self->construct_errorware;
 
   my $end=$self->_inner_dispatch;
 
@@ -380,10 +388,8 @@ method wrap_middleware {
       
       my $sub=sub {  #Sub which will be called during linking
         my $next=shift;
-        sub {         #wrapper sub (inner middleware)
-          #&$target;   #User supplied
-          #  &$next unless $_[REX][uSAC::HTTP::Rex::in_progress_];     #Call next here
-          #
+        sub {        #wrapper sub (inner middleware)
+          # if target returns true, will automatically call next
           &$target and &$next;
         }
       };
@@ -888,5 +894,80 @@ method set_mime_db {
 	$self->mime_db=$db;
 	($self->mime_lookup)=$self->mime_db->index;
 }
+
+sub uhm_dead_horse_stripper {
+  my ($package, $prefix)=@_;
+	my $len=length $prefix;
+	my $inner=sub {
+		my $inner_next=shift;
+    my $index=shift;
+    my %options=@_;
+		sub {
+      Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
+
+      if($_[OUT_HEADER]){
+        $_[IN_HEADER]{":path_stripped"}=
+          $len
+          ?substr($_[IN_HEADER]{":path"}, $len)
+          : $_[IN_HEADER]{":path"};
+
+          ################################
+          # say "lenght of prefix $len"; #
+          # use Data::Dumper;            #
+          # say Dumper $_[IN_HEADER];    #
+          # sleep 2;                     #
+          ################################
+      }
+      
+      &$inner_next; #call the next
+
+      #Check the inprogress flag
+      #here we force write unless the rex is in progress
+
+      #####################################################################################
+      # unless($_[REX][uSAC::HTTP::Rex::in_progress_]){                                   #
+      #   Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef"; #
+      #   $_[CB]=undef;                                                                   #
+      #   return &rex_write;                                                              #
+      # }                                                                                 #
+      #####################################################################################
+
+      Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
+      undef;
+    },
+
+	};
+
+  my $outer=sub {
+    my ($next ,$index, %options)=@_;
+    $next;
+  };
+
+  my $error=sub {
+    my ($next ,$index, %options)=@_;
+    my $site=$options{site};
+
+    if($site->mode==0){
+      sub {
+      #say "error DEAD HORSE";
+        &$next;
+      }
+    }
+    else {
+      sub {
+      #say "CLIENT error dead horse";
+        #say $_[ROUTE][1][ROUTE_TABLE][uSAC::HTTP::Site::ACTIVE_COUNT]--;
+        #my($route, $captures)=$entry->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
+
+
+        &$next;
+      }
+    }
+  };
+
+  [$inner, $outer, $error];
+
+}
+
 
 1;

@@ -7,7 +7,7 @@ use Log::ger;
 use Log::OK;
 
 use Scalar::Util 'openhandle','refaddr', 'weaken';
-use Devel::Peek qw<SvREFCNT>;
+#use Devel::Peek qw<SvREFCNT>;
 
 use uSAC::IO::SReader;
 use uSAC::IO::SWriter;
@@ -106,8 +106,6 @@ method init {
     Log::OK::DEBUG and log_debug "Session: args: @_";
     Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";
     Log::OK::DEBUG and log_debug join ", " , caller;
-    #Normal end of transaction operations
-    #$_rex=undef;
 
 
     $_fh or return;	#don't drop if already dropped
@@ -122,9 +120,7 @@ method init {
     IO::FD::close $_fh;
     $_fh=undef;
     $_id=undef;
-    #$closeme=undef;
 
-    #$self->[write_queue_]->@*=();
     #If the dropper was called with an argument that indicates no error
     if($_[0] and @zombies < 100){
       # NOTE: Complete reuses of a zombie may still be causing corruption
@@ -139,24 +135,19 @@ method init {
     else{
       #dropper was called without an argument. ERROR. Do not reuse 
       #
-      #################################
-      $_dropper=undef;      #
-      undef $_sr->on_eof;            #
-      undef $_sr->on_error;          #
-      #undef $_sr->on_read;
-      #                               #
-      undef $_sw->on_error; #
-      # undef $self->[sw_];           #
-      # undef $self->[sr_];           #
-      undef $self;                  #
-      #################################
+      $_dropper=undef;
+      undef $_sr->on_eof;
+      undef $_sr->on_error;
+      undef $_sw->on_error;
+      undef $self;
+
       Log::OK::DEBUG and log_debug "NO Pushed zombie";
     }
 
     Log::OK::DEBUG and log_debug "Session: zombies: ".@zombies;
 
-    Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
-    Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
+    #Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
+    #Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
 
     Log::OK::DEBUG and log_debug "Session: Dropper end";
 
@@ -189,6 +180,7 @@ method revive {
   $_route=undef;
 	@_write_stack=();
 	$_closeme=undef;
+
 	$_sr->start($_fh);
 	$_sw->set_write_handle($_fh);
 	
@@ -207,11 +199,6 @@ method closeme :lvalue {
 method dropper :lvalue {
 	$_dropper;
 }
-########################
-# method rex :lvalue { #
-#         $_rex;       #
-# }                    #
-########################
 
 method server {
 	$_server;
@@ -249,8 +236,6 @@ method pop_reader {
 method pop_writer {
 	pop @_write_stack;			#remove the previous
 	my $name=$_write_stack[@_write_stack-1];
-	#$self->[read_]=$self->[writer_cache_]{$name};
-	#$self->[read_]=$self->[read_stack_][@{$self->[read_stack_]}-1];
 }
 
 method set_writer {

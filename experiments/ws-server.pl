@@ -7,6 +7,8 @@ use EV;
 use AnyEvent;
 
 use uSAC::HTTP;
+use uSAC::HTTP::Server;
+
 use uSAC::HTTP::Middleware::Log;
 use uSAC::HTTP::Middleware::Websocket;
 

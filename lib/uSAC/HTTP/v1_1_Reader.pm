@@ -261,9 +261,19 @@ sub make_parser{
 
         
 
-          $version eq "HTTP/1.0"
-          ? ($closeme=($connection!~ /keep-alive/ai))
-          : ($closeme=($connection and $connection=~ /close/ai));
+          #$version eq "HTTP/1.0"
+          #? ($closeme=($connection!~ /keep-alive/ai))
+          #: ($closeme=($connection and $connection=~ /close/ai));
+
+          if( $version eq "HTTP/1.0"){
+            # Explicit keep alive
+            $closeme=$connection!~ /keep-alive/ai;
+          }
+          else{
+            # Explicit close
+            $closeme=$connection and $connection=~ /close/ai;
+          }
+
 
 
           Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: $closeme";
@@ -291,8 +301,15 @@ sub make_parser{
             # processing and a rex needs to be created
             #
             ($route, $h{":captures"})=$cb->($host, "$method $uri");
-            #$rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, \%h, $host, $version, $method, $uri, $ex);
             $rex=uSAC::HTTP::Rex->new($r, $ex);
+
+            # Work around for HTTP/1.0
+            if($closeme){
+              $out_header->{HTTP_CONNECTION()}="close";
+            }
+            else{
+              $out_header->{HTTP_CONNECTION()}="Keep-Alive" if($version eq "HTTP/1.0");
+            }
 
           }
           else {
@@ -310,6 +327,7 @@ sub make_parser{
             # 
             $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
           }
+
 
           #Before calling the dispatch, setup the parser to process further data.
           #Attempt to further parse the message. It is up to middleware or application
@@ -336,10 +354,7 @@ sub make_parser{
 
             #$out_header={":status"=> -1};
           }
-
           #$state=$start_state;
-
-
         }
         elsif($state==STATE_BODY_CONTENT){
           #Process the body until the content length was found or last chunk found.
@@ -433,8 +448,6 @@ sub make_parser{
         elsif($state==STATE_ERROR){
           #say  "______ERROR STATE IN PARSER";
           $body_len=0;
-          #$closeme=1;
-          #$dropper->();
           last;
         }
         else {
