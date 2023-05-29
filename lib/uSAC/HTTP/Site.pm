@@ -709,42 +709,68 @@ method add_route {
   $self;    #Chaining
 }
 
+#DLS wrapper for delegate
 sub usac_delegate {
       my $delegate=pop;
+      my $caller=[caller];
       unless($delegate){
-        # If delegate is called with no arguments then make it the same package as the caller?
-        my ($delegate,undef,undef)=caller;
+        # If delegate is called with no arguments then make it the same
+        # package as the caller?
+        my ($delegate, undef,undef)=caller;
       }
       my %options=@_;
       my $self=$options{parent}//$uSAC::HTTP::Site;
-      for(ref $delegate){
-        if(/SCALAR/||//){
-          $delegate=uSAC::Util::path $delegate, [caller];
-        }
-      }
-      $self->delegate($delegate);
+
+      $self->delegate($delegate, $caller);
 }
 
+# Set the delegate for the site. Can be an
+#   object reference
+#   Package name (ie My::Package)
+#   CWD Relative or absolute path  to file to require
+#   reference to scalar relative-to-caller path to require
+# Note does not attempt to require a Package if the package has any keys
+# present
 method delegate {
   $_delegate=$_[0];
+  my $caller=$_[1]//[caller];
+  if(ref $_delegate eq "SCALAR"){
+    #resolve relative-to-caller- path
+    $_delegate=uSAC::Util::path $_delegate, $caller;
+  }
+    
   unless(ref $_delegate){
-    # If delegate is not a reference, assume it is a package name
+    # If delegate is not a reference, assume it is a package name or a
+    # realtive file path to load
     #
     no strict "refs";
     my $string;
     if($_delegate=~/::/){
-      #Bare word
-      $string="require $_delegate";
+      # Bare word
+      # Check that the package exists
+      if(%{$_delegate."::"}){
+        # package exists. do not require
+        Log::OK::DEBUG and log_debug "Delegate is package: $_delegate and already exists. Skipping require";
+        $string="";
+      }
+      else{
+        $string="require $_delegate";
+      }
     }
     else{
       #Non barword
       $string=qq|require "$_delegate"|;
     }
 
-    local $@=undef;
-    eval $string;
-    die Exception::Class::Base->throw("Could not require $_delegate: $@") if $@;
-    $@=undef;
+    if($string){
+      local $@=undef;
+      eval $string;
+      die Exception::Class::Base->throw("Could not require $_delegate: $@") if $@;
+      $@=undef;
+    }
+  }
+  else{
+    # Delegate is an object
   }
 }
 
@@ -960,7 +986,6 @@ sub uhm_dead_horse_stripper {
   };
 
   [$inner, $outer, $error];
-
 }
 
 

@@ -267,11 +267,11 @@ sub make_parser{
 
           if( $version eq "HTTP/1.0"){
             # Explicit keep alive
-            $closeme=$connection!~ /keep-alive/ai;
+            $closeme=($connection!~ /keep-alive/ai);
           }
           else{
             # Explicit close
-            $closeme=$connection and $connection=~ /close/ai;
+            $closeme=($connection and $connection=~ /close/ai);
           }
 
 
