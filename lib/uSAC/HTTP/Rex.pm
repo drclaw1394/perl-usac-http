@@ -387,22 +387,20 @@ my $id=0;	#Instead of using state
 my $_i;
 
 sub new {
-	#my ($package, $session, $headers, $host, $version, $method, $uri, $ex, $captures, $out_headers)=@_;
+	#my ($package, $session, $exports)
 	#	    0	        1	          2	      3		    4	        5	      6     7     8           9
 
-	#state $id=0;
 	
 	Log::OK::DEBUG and log_debug "+++++++Create rex: $id";
 
-	#my $write=undef;
 
 	my $self=bless [], $_[0];
-  $self->[session_]=$_[1];
 
+  $self->[session_]=$_[1];
 
 	#NOTE: A single call to Session export. give references to important variables
 	
-	($self->[closeme_], $self->[dropper_], $self->[server_], undef, undef, $self->[write_], $self->[peer_])= $_[2]->@*;
+	($self->[closeme_], $self->[dropper_], \$self->[server_], undef, undef, $self->[write_], $self->[peer_])= $_[2]->@*;
 
 	$self->[recursion_count_]=0;
   $self->[in_progress_]=undef;

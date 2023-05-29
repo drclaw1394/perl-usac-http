@@ -189,7 +189,7 @@ method _add_route {
 
   # Dead horse stripper is always the first
   #
-  unshift @_, uhm_dead_horse_stripper($_built_prefix);
+  unshift @_, uhm_dead_horse_stripper(prefix=>$_built_prefix);
 
 
 
@@ -896,8 +896,9 @@ method set_mime_db {
 }
 
 sub uhm_dead_horse_stripper {
-  my ($package, $prefix)=@_;
-	my $len=length $prefix;
+  my %options=@_;
+  
+	my $len=length ($options{prefix}//"");;
 	my $inner=sub {
 		my $inner_next=shift;
     my $index=shift;

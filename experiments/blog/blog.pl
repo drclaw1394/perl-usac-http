@@ -136,7 +136,7 @@ my $server; $server=usac_server {
             \undef
     );
 
-                #usac_include \"admin/usac.pl";
+    usac_include \"admin/usac.pl";
 
     usac_route GET
       =>"/wrapped"

@@ -634,7 +634,6 @@ sub uhm_static_root {
         $p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
 
         my $path=$html_root.$p;
-
         #
         # First this is to report not found  and call next middleware
         # if the filter doesn't match (if a filter exists)

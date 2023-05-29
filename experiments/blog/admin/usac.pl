@@ -4,7 +4,7 @@ use feature "say";
 
 use uSAC::HTTP;
 use uSAC::HTTP::Site;
-use uSAC::HTTP::Server;
+#use uSAC::HTTP::Server;
 use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware::Log;
 use uSAC::HTTP::Middleware::Redirect;
@@ -36,9 +36,12 @@ my $server; $server=usac_server {
 		#usac_innerware log_simple;
 		#
 		#error route forces a get method to the resource
-		usac_route "/static"   => uhm_static_root path \"";#usac_dirname;
+		usac_route "/static"   => uhm_static_root \"";
 
-		my $vars={fields=>[], peer=>undef};
+		my $vars={
+      fields=>[],
+      peer=>undef
+    };
 
 		usac_route "/about" => sub {
 			#Model
