@@ -41,7 +41,7 @@ sub run{
   #
   say "ADDING ROUTE";
   #sleep 1;
-  $server->add_route(undef, uSAC::HTTP::Middleware::PSGI::psgi($app));
+  $server->add_route(undef, uSAC::HTTP::Middleware::PSGI::uhm_psgi($app));
 
 
   #

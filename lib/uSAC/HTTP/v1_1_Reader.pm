@@ -282,7 +282,7 @@ sub make_parser{
 
           # Find route
           
-          unless($mode){
+          if($mode==MODE_SERVER){
 
             ##$out_header={":status" => -1};
             $out_header={};
@@ -649,6 +649,5 @@ sub make_error {
       #}
   }
 }
-
 
 1;
