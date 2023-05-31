@@ -297,7 +297,7 @@ sub make_parser{
             $h{":authority"}=$host;
             $h{":path"}=$uri;
             
-            ## psudeo spsudeo headers
+            ## psudeo psudeo headers
             $h{":protocol"}=$version;
             my $_i;
             $h{":query"}=

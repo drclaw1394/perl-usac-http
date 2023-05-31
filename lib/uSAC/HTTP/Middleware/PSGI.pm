@@ -131,9 +131,15 @@ sub uhm_psgi {
 
         $env->{REQUEST_URI}=$env->{":path"};
 
-        $env->{PATH_INFO}=encode 'UTF-8', url_decode_utf8 ($env->{":path"} =~ s/\?$env->{":query"}$//r);
+        #$env->{PATH_INFO}=encode 'UTF-8', url_decode_utf8 ($env->{":path"} =~ s/\?$env->{":query"}$//r);
+        #$env->{PATH_INFO}=url_decode ($env->{":path"} =~ s/\?$env->{":query"}$//r);
+        my $query=$env->{":query"};
+        $env->{PATH_INFO}=url_decode ($query
+          ?substr $env->{":path"} ,0, -(1+length($query))
+          :$env->{":path"}
+        );
 
-        $env->{SERVER_PROTOCOL}=	$env->{":protocol"};
+        $env->{SERVER_PROTOCOL}=$env->{":protocol"};
         $env->{QUERY_STRING}=	$env->{":query"};	
         ($env->{SERVER_NAME}, $env->{SERVER_PORT})=split ":", $env->{":authority"};
 
@@ -167,15 +173,15 @@ sub uhm_psgi {
         $env->{'psgi.streaming'}= 1;
 
         #Extensions
-        $env->{'psgix.io'}= "";
-        $env->{'psgix.input.buffered'}=1;
-        $env->{'psgix.logger'}=           $logger;
-        $env->{'psgix.session'}=          {};
-        $env->{'psgix.session.options'}={};
-        $env->{'psgix.harakiri'}=         undef;
-        $env->{'psgix.harakiri.commit'}=          "";
-        $env->{'psgix.cleanup'}=undef;
-        $env->{'psgix.cleanup.handlers'}= [];
+        #$env->{'psgix.io'}= "";
+        #$env->{'psgix.input.buffered'}=1;
+        #$env->{'psgix.logger'}=           $logger;
+        #$env->{'psgix.session'}=          {};
+        #$env->{'psgix.session.options'}={};
+        #$env->{'psgix.harakiri'}=         undef;
+        #$env->{'psgix.harakiri.commit'}=          "";
+        #$env->{'psgix.cleanup'}=undef;
+        #$env->{'psgix.cleanup.handlers'}= [];
 
 
         #return if $env{CONTENT_LENGTH};
@@ -216,7 +222,7 @@ sub uhm_psgi {
             my %h;
             for my ($k, $v)($res->[1]->@*){
               \my $e=\$h{$k};
-              $e=defined($e)
+              $e=$e
                 ?join ", ", $e, $v
                 : $v;
             }
@@ -254,7 +260,7 @@ sub uhm_psgi {
         # NOTE This does not work for SET-COOKIE
         for my ($k, $v)($res->[1]->@*){
           \my $e=\$h{$k};
-          $e=defined($e)
+          $e=$e
             ?join ", ", $e, $v
             : $v;
         }
