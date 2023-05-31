@@ -221,7 +221,8 @@ sub uhm_psgi {
                 ?join ", ", $e, $v
                 : $v;
             }
-            $h{HTTP_CONNECTION()}=$_[OUT_HEADER]{HTTP_CONNECTION()};
+            my $_connection=$_[OUT_HEADER]{HTTP_CONNECTION()};
+            $h{HTTP_CONNECTION()}=$_connection if $_connection;
             $res->[1]=\%h;
             $res->[1]{":status"}=$res->[0];
 
@@ -258,7 +259,8 @@ sub uhm_psgi {
             ?join ", ", $e, $v
             : $v;
         }
-        $h{HTTP_CONNECTION()}=$_[OUT_HEADER]{HTTP_CONNECTION()};
+        my $_connection=$_[OUT_HEADER]{HTTP_CONNECTION()};
+        $h{HTTP_CONNECTION()}=$_connection if $_connection;
         $res->[1]=\%h;
         $res->[1]{":status"}=$res->[0];
 

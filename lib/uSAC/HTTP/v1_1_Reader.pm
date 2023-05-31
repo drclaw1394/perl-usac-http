@@ -269,9 +269,6 @@ sub make_parser{
 
         
 
-          #$version eq "HTTP/1.0"
-          #? ($closeme=($connection!~ /keep-alive/ai))
-          #: ($closeme=($connection and $connection=~ /close/ai));
 
           say "VERSION : $version";
           use Data::Dumper;
@@ -306,8 +303,10 @@ sub make_parser{
             ## psudeo spsudeo headers
             $h{":protocol"}=$version;
             my $_i;
-            $h{":query"}=substr($uri, $_i+1)
-              if(($_i=index($uri, "?"))>=0);
+            $h{":query"}=
+              (($_i=index($uri, "?"))>=0)
+                ?substr($uri, $_i+1)
+                :"";
 
             # In server mode, the route need needs to be matched for incomming
             # processing and a rex needs to be created
@@ -599,6 +598,7 @@ sub make_serialize{
         #Render anything that isn't a 'pseudo header'. and combine multiple
         #header items onto one line
         #
+        #say $k."  ".$v;
         unless(ref $v){
           $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
         }
