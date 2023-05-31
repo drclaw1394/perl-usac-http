@@ -33,25 +33,30 @@ our @EXPORT=@EXPORT_OK;
 
 # TODO fix this hack
 #
-$uSAC::HTTP::v1_1_Reader::PSGI_COMPAT=1;
 
 #This is to mimic a filehandle?
 package uSAC::HTTP::Middleware::PSGI::Writer {
-no warnings "experimental";
+  no warnings "experimental";
 
   use uSAC::HTTP::Rex;
   use uSAC::HTTP::Constants;
+  use Log::ger;
+  use Log::OK;
+  use Data::Dumper;
   #simple class to wrap the push write of the session
   sub new {
     my $package=shift;
 
     bless {@_},$package
   }
+
   sub write {
     my $self=shift;
     my $rex=$self->{rex};
 
     #call with generic sub as callback to continue the chunks
+    Log::OK::TRACE and log_trace ("Writer called: ".join ", ", @_);
+    Log::OK::TRACE and log_trace "out headers: ". Dumper $self->{headers};
     $self->{next}( $self->{matcher}, $self->{rex}, $self->{in_header},$self->{headers}, my $a=$_[0], sub {});
 
     $self->{headers}=undef;
@@ -60,14 +65,15 @@ no warnings "experimental";
 
   sub close {
     my $self=shift;
+    Log::OK::TRACE and log_trace ("Write closed");
     my $rex=$self->{rex};
     my $session=$rex->[uSAC::HTTP::Rex::session_];
     #call with no callback to mark the end of chunked stream
     #Also need to pass defined but empty data
-    rex_write( $self->{matcher}, $self->{rex}, $self->{in_header}, $self->{headers}, my $a="");
+    #rex_write( $self->{matcher}, $self->{rex}, $self->{in_header}, $self->{headers}, my $a="");
 
     $session->closeme=1;
-    $session->dropper->();
+    $session->dropper->(undef);
   }
 }
 
@@ -124,7 +130,9 @@ sub uhm_psgi {
         $env->{'psgi.url_scheme'}=	$env->{":scheme"};
         $env->{REQUEST_METHOD}=	$env->{":method"};
 
-        $env->{REQUEST_URI}=$env->{PATH_INFO}=$env->{":path"};
+        $env->{REQUEST_URI}=$env->{":path"};
+
+        $env->{PATH_INFO}=url_decode_utf8 ($env->{":path"} =~ s/\?$env->{":query"}$//r);
 
         $env->{SERVER_PROTOCOL}=	$env->{":protocol"};
         $env->{QUERY_STRING}=	$env->{":query"};	
@@ -145,6 +153,7 @@ sub uhm_psgi {
         }
         else {
           $ctx=0;
+          $env->{'psgi.input'}= undef;
         }
         
         #$_[OUT_HEADER]=undef;
@@ -198,22 +207,36 @@ sub uhm_psgi {
 
 
       if(ref($res) eq  "CODE"){
+        Log::OK::TRACE and log_trace "PSGI CODE response";
         #DELAYED RESPONSE
         $res->(sub {
+            Log::OK::TRACE and log_trace "PSGI CODE response->call";
             my $res=shift;
             #Convert array of headers to hash
-            $res->[1]={$res->[1]->@*};
+            #$res->[1]={$res->[1]->@*};
+            my %h;
+            for my ($k, $v)($res->[1]->@*){
+              \my $e=\$h{$k};
+              $e=defined($e)
+                ?join ", ", $e, $v
+                : $v;
+            }
+            $h{HTTP_CONNECTION()}=$_[OUT_HEADER]{HTTP_CONNECTION()};
+            $res->[1]=\%h;
             $res->[1]{":status"}=$res->[0];
+
             if(@$res==3){
+              Log::OK::TRACE and log_trace "PSGI CODE response->call is 3 element (delayed)";
               #DELAYED RESPONSE IS A 3 elemement response
               #$res->[1]{":status"}=$res->[0];
               $next->($usac, $rex, $in_header, $res->[1], join "", $res->[2]->@*);
               return;
             }
+            Log::OK::TRACE and log_trace "PSGI CODE response->call is 2 element (stream)";
 
             #or it is streaming. return writer
             my ($code, $psgi_headers, $psgi_body)=@$res;
-            uSAC::HTTP::Middleware::PSGI::Writer->new(
+            return uSAC::HTTP::Middleware::PSGI::Writer->new(
               %options,
               in_header=>$in_header,
               headers=>$psgi_headers,
@@ -225,18 +248,28 @@ sub uhm_psgi {
         return
       }
 
+      my %h;
       for(ref($res->[2])){
-        #Convert array of headers to hash
-        $res->[1]={$res->[1]->@*};
+        #Convert array of headers to hash. Join multiple headers
+        # NOTE This does not work for SET-COOKIE
+        for my ($k, $v)($res->[1]->@*){
+          \my $e=\$h{$k};
+          $e=defined($e)
+            ?join ", ", $e, $v
+            : $v;
+        }
+        $h{HTTP_CONNECTION()}=$_[OUT_HEADER]{HTTP_CONNECTION()};
+        $res->[1]=\%h;
+        $res->[1]{":status"}=$res->[0];
+
         if($_ eq "ARRAY"){
           Log::OK::TRACE and log_trace "IN DO ARRAY";
           #do_array($usac, $rex, $res);
-          $res->[1]{":status"}=$res->[0];
           $next->($usac, $rex, $in_header, $res->[1], join("", $res->[2]->@*), undef);
         }
         else{
           Log::OK::TRACE and log_trace "DOING GLOB";
-          do_glob($usac, $rex, $res, $next);
+          do_glob($usac, $rex, $env, $res, $next);
           delete $ctx{$_[REX]} if $ctx;
         }
       }
@@ -261,17 +294,19 @@ sub uhm_psgi {
 
 sub do_glob {
   Log::OK::TRACE and log_trace "IN DO GLOB";
-	my ($usac, $rex, $res,$next)=@_;
+	my ($usac, $rex, $env, $res, $next)=@_;
 	my $session=$rex->[uSAC::HTTP::Rex::session_];
 	my $dropper=$session->dropper;
 
 	my ($code, $psgi_headers, $psgi_body)=@$res;
 
+  #$psgi_headers->{":status"}=$code;
 
 	#setup headers
 
 
-  unless(exists $psgi_headers->{HTTP_CONTENT_LENGTH()}){
+  # User supplied headers could be mixed case... so regex match it is
+  unless(grep /Content-Length/i, $psgi_headers->%*){
     #unless(first {/Content-Length/i} @$psgi_headers)	{
 		#calculate the file size from stating it
     if(ref($psgi_body) eq "GLOB" or $psgi_body isa IO::Handle){
@@ -287,6 +322,7 @@ sub do_glob {
 	my $do_it;
   $do_it=sub{
     unless (@_){
+      say "error cb";
       Log::OK::TRACE and log_trace "ERROR CB";
       #callback error. Close file
         $psgi_body->close;
@@ -294,22 +330,27 @@ sub do_glob {
         $dropper->();
         return;
     }
+    say " do it";
 		$data=$psgi_body->getline;#<$psgi_body>;
 		if(defined($data) or length($data)){
+      say " file read line $data";
       Log::OK::TRACE and log_trace "FILE READ: line: $data";
-			$next->($usac, $rex, $code, $psgi_headers, $data, __SUB__);
+			$next->($usac, $rex, $env, $psgi_headers, $data, __SUB__);
       $psgi_headers=undef;
 		}
 		else {
+      say " end of glob";
       Log::OK::TRACE and log_trace "END OF GLOB";
+      
+      #Do the final write with no callback
+			$next->($usac, $rex, $env, $psgi_headers, my $a="", my $b=undef);
       $do_it=undef;     #Release this sub
 			$psgi_body->close; #close the file
       $psgi_body=undef;
-      
-      #Do the final write with no callback
-			$next->($usac, $rex, $code, $psgi_headers, my $a="", my$b=undef);
+      say "after next call";
 		}
 	};
+  say "DOING GLOB";
   $do_it->(undef);
 }
 

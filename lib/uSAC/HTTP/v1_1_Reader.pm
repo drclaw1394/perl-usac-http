@@ -19,8 +19,9 @@ use uSAC::HTTP::Route;    # For routing structure
 
 our @EXPORT_OK=qw<
 		parse_form
-		MODE_SERVER
-		MODE_CLIENT
+		MODE_RESPONSE
+		MODE_REQUEST
+    MODE_NONE
 		>;
     #make_parser
 
@@ -33,6 +34,9 @@ our @EXPORT=@EXPORT_OK;
 #Package global for decoding utf8. Faster than using decode_utf8 function.
 our $UTF_8=find_encoding "utf-8";
 
+our $ENABLE_CHUNKED=1;
+our $PSGI_COMPAT=undef;
+our $KEEP_ALIVE=1;
 
 use Time::HiRes qw/gettimeofday/;
 use Scalar::Util 'refaddr', 'weaken';
@@ -58,8 +62,9 @@ sub parse_form {
 #
 #
 use enum (qw<
-  MODE_SERVER
-  MODE_CLIENT
+  MODE_RESPONSE
+  MODE_REQUEST
+  MODE_NONE
 >);
 
 use enum (qw<
@@ -91,8 +96,10 @@ sub make_parser{
   my $cb=$options{callback};  # Callback for new rex  processing and route location
 
   #default is server mode to handle client requests
-  my $start_state = $mode == MODE_CLIENT? STATE_RESPONSE : STATE_REQUEST;
+  my $start_state = $mode == MODE_REQUEST? STATE_RESPONSE : STATE_REQUEST;
 
+  my $psgi_compat=$options{psgi_compat}//$PSGI_COMPAT;
+  my $keep_alive=$options{keep_alive}//$KEEP_ALIVE;
 
   my $ex=$r->exports;
 
@@ -131,7 +138,6 @@ sub make_parser{
 
   #TODO: this needs to be an argument supplied by the server
   # Currently set from the PSGI middleware
-  our $PSGI_COMPAT=0;
 
   sub {
     my $processed=0;
@@ -254,7 +260,9 @@ sub make_parser{
 
               # If the package variable for PSGI compatibility is set
               # we make sure our in header more like psgi environment
-              $h{"HTTP_".((uc $k) =~tr/-/_/r)}=$e if $PSGI_COMPAT;
+              #  Upper case headers sent from the client
+              #  combine multiple headers into a single comma separated list
+              $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e if $psgi_compat;
           }
           $ppos=0;
           $buf=substr($buf, $pos3+4);
@@ -265,6 +273,9 @@ sub make_parser{
           #? ($closeme=($connection!~ /keep-alive/ai))
           #: ($closeme=($connection and $connection=~ /close/ai));
 
+          say "VERSION : $version";
+          use Data::Dumper;
+          say Dumper \%h;
           if( $version eq "HTTP/1.0"){
             # Explicit keep alive
             $closeme=($connection!~ /keep-alive/ai);
@@ -275,6 +286,7 @@ sub make_parser{
           }
 
 
+          $closeme=!$keep_alive and $closeme;
 
           Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: $closeme";
           Log::OK::DEBUG and log_debug "URI/Code: $uri";
@@ -282,7 +294,7 @@ sub make_parser{
 
           # Find route
           
-          if($mode==MODE_SERVER){
+          if($mode==MODE_RESPONSE){
 
             ##$out_header={":status" => -1};
             $out_header={};
@@ -312,7 +324,7 @@ sub make_parser{
             }
 
           }
-          else {
+          elsif($mode == MODE_REQUEST) {
             # In client mode the route (and the rex) is already defined.
             # However the headers from incomming request and the response code
             # need updating. 
@@ -326,6 +338,12 @@ sub make_parser{
             # Loopback the output headers to the input side of the chain.
             # 
             $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
+          }
+          else {
+            #MODE_NONE
+            # Lookup route based on default method, host, version and url and execute innerware.
+            # In addition to the start_state being set to header, this should support LSP 
+            # 
           }
 
 
@@ -484,10 +502,11 @@ sub make_serialize{
 
   my %options=@_;
   my $protocol=$options{protocol}//"HTTP/1.1";
-  my $mode=$options{mode}//MODE_SERVER;
+  my $mode=$options{mode}//MODE_RESPONSE;
   my $code_to_name=$options{information}//\@uSAC::HTTP::Code::code_to_name;
 
   my $static_headers="";
+  my $enable_chunked=$options{enable_chunk}//$ENABLE_CHUNKED;
 
 
   #
@@ -527,36 +546,40 @@ sub make_serialize{
     # for HTTP/1.0 dropper is called on close anyhow.
     # saves call
     #
-    my $cb=$_[CB];
+    my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
 
     my $reply="";
     if($_[OUT_HEADER]){
 
       # TODO: fix with multipart uploads? what is the content length
       #
-      if($_[PAYLOAD] and not exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
+      if($_[PAYLOAD] and not exists($_[HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
 
         $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
 
         $ctx=1; #Mark as needing chunked
         $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
       }
-        #$_[PAYLOAD]="";
-      $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
+
+      #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
 
       # If no valid code is set then set default 200
       #
       my $code=(delete $_[OUT_HEADER]{":status"})//HTTP_OK;
 
-      if($mode == MODE_SERVER){
+      if($mode == MODE_RESPONSE){
         $reply=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
       }
-      else {
+      elsif($mode == MODE_REQUEST) {
         return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $code;
 
         # serialize in client mode is a request
         #
         $reply="$_[OUT_HEADER]{':method'} $_[OUT_HEADER]{':path'} $protocol".CRLF;
+      }
+      else {
+        # Mode none
+        # DO NO RENDER REQUEST/RESPONSE LINE
       }
 
       # Render headers
