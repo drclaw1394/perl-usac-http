@@ -270,9 +270,6 @@ sub make_parser{
         
 
 
-          say "VERSION : $version";
-          use Data::Dumper;
-          say Dumper \%h;
           if( $version eq "HTTP/1.0"){
             # Explicit keep alive
             $closeme=($connection!~ /keep-alive/ai);
@@ -283,7 +280,7 @@ sub make_parser{
           }
 
 
-          $closeme=!$keep_alive and $closeme;
+          $closeme=(!$keep_alive or $closeme);
 
           Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: $closeme";
           Log::OK::DEBUG and log_debug "URI/Code: $uri";

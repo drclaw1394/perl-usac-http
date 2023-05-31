@@ -3,7 +3,7 @@ use v5.36;
 #PSGI adaptor for uSAC::HTTP::Server
 use strict;
 use warnings;
-use feature qw<switch say refaliasing state>;
+use feature qw<say refaliasing state>;
 no warnings "experimental";
 use Log::ger;
 use Log::OK;
@@ -15,7 +15,7 @@ use Exporter "import";
 
 #use Stream::Buffered::PerlIO;	#From PSGI distribution
 use Plack::TempBuffer;
-
+use uSAC::IO;
 use uSAC::Util;
 use uSAC::HTTP;
 use uSAC::HTTP::Rex;
@@ -23,6 +23,7 @@ use uSAC::HTTP::Session;
 #use uSAC::HTTP::Middleware qw<chunked>;
 use uSAC::HTTP::Constants;
 use URL::Encode qw<url_decode_utf8 url_decode url_encode_utf8 url_encode>;
+use Encode qw<encode>;
 
 use constant KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
@@ -42,7 +43,6 @@ package uSAC::HTTP::Middleware::PSGI::Writer {
   use uSAC::HTTP::Constants;
   use Log::ger;
   use Log::OK;
-  use Data::Dumper;
   #simple class to wrap the push write of the session
   sub new {
     my $package=shift;
@@ -56,7 +56,6 @@ package uSAC::HTTP::Middleware::PSGI::Writer {
 
     #call with generic sub as callback to continue the chunks
     Log::OK::TRACE and log_trace ("Writer called: ".join ", ", @_);
-    Log::OK::TRACE and log_trace "out headers: ". Dumper $self->{headers};
     $self->{next}( $self->{matcher}, $self->{rex}, $self->{in_header},$self->{headers}, my $a=$_[0], sub {});
 
     $self->{headers}=undef;
@@ -132,7 +131,7 @@ sub uhm_psgi {
 
         $env->{REQUEST_URI}=$env->{":path"};
 
-        $env->{PATH_INFO}=url_decode_utf8 ($env->{":path"} =~ s/\?$env->{":query"}$//r);
+        $env->{PATH_INFO}=encode 'UTF-8', url_decode_utf8 ($env->{":path"} =~ s/\?$env->{":query"}$//r);
 
         $env->{SERVER_PROTOCOL}=	$env->{":protocol"};
         $env->{QUERY_STRING}=	$env->{":query"};	
@@ -261,6 +260,8 @@ sub uhm_psgi {
         }
         my $_connection=$_[OUT_HEADER]{HTTP_CONNECTION()};
         $h{HTTP_CONNECTION()}=$_connection if $_connection;
+        #use Data::Dumper;
+        #say Dumper \%h;
         $res->[1]=\%h;
         $res->[1]{":status"}=$res->[0];
 
@@ -323,8 +324,8 @@ sub do_glob {
 	my $data;
 	my $do_it;
   $do_it=sub{
+  #say "DO IT";
     unless (@_){
-      say "error cb";
       Log::OK::TRACE and log_trace "ERROR CB";
       #callback error. Close file
         $psgi_body->close;
@@ -332,27 +333,26 @@ sub do_glob {
         $dropper->();
         return;
     }
-    say " do it";
 		$data=$psgi_body->getline;#<$psgi_body>;
-		if(defined($data) or length($data)){
-      say " file read line $data";
-      Log::OK::TRACE and log_trace "FILE READ: line: $data";
-			$next->($usac, $rex, $env, $psgi_headers, $data, __SUB__);
+		if(defined($data) ){#or length($data)){
+      #Log::OK::TRACE and log_trace "FILE READ: line: $data";
+      #Log::OK::FATAL and log_fatal "FILE READ: line: $data";
+      #
+      my $s="$data";# STRANGE BUG work around
+
+      $next->($usac, $rex, $env, $psgi_headers, $s, $do_it);
       $psgi_headers=undef;
 		}
 		else {
-      say " end of glob";
       Log::OK::TRACE and log_trace "END OF GLOB";
+      $psgi_body->close; #close the file
+      $psgi_body=undef;
       
       #Do the final write with no callback
-			$next->($usac, $rex, $env, $psgi_headers, my $a="", my $b=undef);
+      $next->($usac, $rex, $env, $psgi_headers, my $a="", my $b=undef);
       $do_it=undef;     #Release this sub
-			$psgi_body->close; #close the file
-      $psgi_body=undef;
-      say "after next call";
 		}
 	};
-  say "DOING GLOB";
   $do_it->(undef);
 }
 
