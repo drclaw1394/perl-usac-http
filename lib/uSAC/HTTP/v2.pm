@@ -31,56 +31,56 @@ our @EXPORT=@EXPORT_OK;
 #Values from RFC7540
 #frame types
 use constant {
-		FRAME_DATA		=>0x00,
-		FRAME_HEADERS		=>0x01,
-		FRAME_PRIORITY	=>0x02,
-		FRAME_RST_STREAM	=>0x03,
-		FRAME_SETTINGS	=>0x04,
-		FRAME_PUSH_PROMISE	=>0x05,
-		FRAME_PING		=>0x06,
-		FRAME_GO_AWAY		=>0x07,
-		FRAME_WINDOW_UPDATE	=>0x08,
-		FRAME_CONTINUATION	=>0x09,
+  FRAME_DATA		      =>0x00,
+  FRAME_HEADERS		    =>0x01,
+  FRAME_PRIORITY	    =>0x02,
+  FRAME_RST_STREAM	  =>0x03,
+  FRAME_SETTINGS	    =>0x04,
+  FRAME_PUSH_PROMISE	=>0x05,
+  FRAME_PING		      =>0x06,
+  FRAME_GO_AWAY		    =>0x07,
+  FRAME_WINDOW_UPDATE	=>0x08,
+  FRAME_CONTINUATION	=>0x09,
 	};
 
 
 #Flags
 use constant {
-		PING		=>0x01,
-		END_STREAM	=>0x01,
-		END_HEADERS	=>0x04,
-		PADDED		=>0x08,
-		PRIORITY	=>0x20,
+  PING		            =>0x01,
+  END_STREAM	        =>0x01,
+  END_HEADERS	        =>0x04,
+  PADDED		          =>0x08,
+  PRIORITY	          =>0x20,
 
 
-	};
+};
 #Error codes
 use constant {
-		NO_ERROR		=>0x00,
-		PROTOCOL_ERROR		=>0x01,
-		INTERNAL_ERROR		=>0x02,
-		FLOW_CONTROL_ERROR	=>0x03,
-		SETTINGS_TIMEROUT	=>0x04,
-		STREAM_CLOSED		=>0x05,
-		FRAME_SIZE_ERROR	=>0x06,
-		REFUSED_STREAM		=>0x07,
-		CANCEL			=>0x08,
-		COMPRESSION_ERROR	=>0x09,
-		CONNECT_ERROR		=>0x0a,
-		ENHANCE_YOUR_CLAIM	=>0x0b,
-		INADEQUATE_SECURITY	=>0x0c,
-		HTTP_1_1_REQUIRED	=>0x0d,
-	};
+  NO_ERROR		        =>0x00,
+  PROTOCOL_ERROR		  =>0x01,
+  INTERNAL_ERROR		  =>0x02,
+  FLOW_CONTROL_ERROR	=>0x03,
+  SETTINGS_TIMEROUT	  =>0x04,
+  STREAM_CLOSED		    =>0x05,
+  FRAME_SIZE_ERROR	  =>0x06,
+  REFUSED_STREAM		  =>0x07,
+  CANCEL			        =>0x08,
+  COMPRESSION_ERROR	  =>0x09,
+  CONNECT_ERROR		    =>0x0a,
+  ENHANCE_YOUR_CLAIM	=>0x0b,
+  INADEQUATE_SECURITY	=>0x0c,
+  HTTP_1_1_REQUIRED	  =>0x0d,
+};
 
 	#Settings
 use constant {
-		HEADER_TABLE_SIZE	=>0x01,
-		ENABLE_PUSH		=>0x02,
-		MAX_CONCURRENT_STREAMS	=>0x03,
-		INITIAL_WINDOW_SIZE	=>0x04,
-		MAX_FRAME_SIZE		=>0x05,
-		MAX_HEADER_LIST_SIZE	=>0x06,
-	};
+  HEADER_TABLE_SIZE	  =>0x01,
+  ENABLE_PUSH		      =>0x02,
+  MAX_CONCURRENT_STREAMS =>0x03,
+  INITIAL_WINDOW_SIZE	=>0x04,
+  MAX_FRAME_SIZE		  =>0x05,
+  MAX_HEADER_LIST_SIZE=>0x06,
+};
 
 
 
@@ -105,6 +105,7 @@ sub serialize_data_frame {
 		#$pad_len				#pad_len 0s
 	;
 }
+
 sub serialize_priority_frame {
 	#stream_id
 	#dependency
@@ -160,58 +161,54 @@ sub parse_data_frame {
 }
 
 sub parse_frame {
-	my $frame =shift;
-	my ($length, $flags, $stream_id)=unpack "NCN", $frame;	#includes type byte
-	my $type=$length&0xFF;
-	$length>>=8;
-	$stream_id&=0x7FFFFFFF;
-	
-	say "length $length, flags $flags, stream $stream_id";
+  my $frame =shift;
+  my ($length, $flags, $stream_id)=unpack "NCN", $frame;	#includes type byte
+  my $type=$length&0xFF;
+  $length>>=8;
+  $stream_id&=0x7FFFFFFF;
 
-	#decode based on frame type
-	for($type){
-		when(FRAME_DATA){
-			if($flags & PADDED){
-				return substr $frame, 10;
-			}
-			return substr $frame, 9;
-		}
-		when(FRAME_HEADERS){
-		}
-		when(FRAME_PRIORITY){
-			my ($stream, $weight)=unpack "NC", substr $frame, 9;
-			my $exclusive=($stream>>31);
-			$stream&=0x7FFFFFFF;
-			say "stream $stream, exclusive $exclusive, wieght $weight";
-		}
-		when(FRAME_RST_STREAM){
-			my ($error_code)=unpack "N", substr $frame, 9;
-			say "Error code:  $error_code";
-		}
-		when(FRAME_SETTINGS){
-			my @settings=unpack "(nN)*", substr $frame, 9;
-			local $,=", ";
-			say @settings
-		}
-		when(FRAME_PUSH_PROMISE){
+  say "length $length, flags $flags, stream $stream_id";
 
-		}
-		when(FRAME_PING){
-			my $payload= unpack "a*", substr $frame, 9;
-			say $payload;
-		}
-		when(FRAME_GO_AWAY){
-		}
-		when(FRAME_WINDOW_UPDATE){
-		}
-		when(FRAME_CONTINUATION){
-		}
-		default {
-		}
-	}
+  #decode based on frame type
+  for($type){
+    when(FRAME_DATA){
+      if($flags & PADDED){
+        return substr $frame, 10;
+      }
+      return substr $frame, 9;
+    }
+    when(FRAME_HEADERS){
+    }
+    when(FRAME_PRIORITY){
+      my ($stream, $weight)=unpack "NC", substr $frame, 9;
+      my $exclusive=($stream>>31);
+      $stream&=0x7FFFFFFF;
+      say "stream $stream, exclusive $exclusive, wieght $weight";
+    }
+    when(FRAME_RST_STREAM){
+      my ($error_code)=unpack "N", substr $frame, 9;
+      say "Error code:  $error_code";
+    }
+    when(FRAME_SETTINGS){
+      my @settings=unpack "(nN)*", substr $frame, 9;
+      local $,=", ";
+      say @settings
+    }
+    when(FRAME_PUSH_PROMISE){
 
-
-
-
+    }
+    when(FRAME_PING){
+      my $payload= unpack "a*", substr $frame, 9;
+      say $payload;
+    }
+    when(FRAME_GO_AWAY){
+    }
+    when(FRAME_WINDOW_UPDATE){
+    }
+    when(FRAME_CONTINUATION){
+    }
+    default {
+    }
+  }
 }
 1;
