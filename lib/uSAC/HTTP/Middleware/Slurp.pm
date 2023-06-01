@@ -83,13 +83,16 @@ sub uhm_slurp {
           $_[ROUTE][1][ROUTE_OUTER_HEAD]->&*;
           return unless $payload;
         }
+
         # Restore callback after CONTINUE
         #
         $_[CB]=$cb;
 
-        # Wrap payload if need be 
+        # Wrap payload if presenting as a normal body
         unless(ref $payload){
-          my $head={};
+
+          # Reuse the head created of the first (and only) part if it exists
+          my $head=@$c?$c->[0][0]:{};
           for($_[IN_HEADER]{HTTP_CONTENT_DISPOSITION()}//()){
             $head->{HTTP_CONTENT_DISPOSITION()}=$_;
             my @f=split ";", $_;

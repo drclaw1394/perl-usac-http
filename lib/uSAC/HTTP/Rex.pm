@@ -82,6 +82,7 @@ use enum (
 
 	"recursion_count_",   # Sanity check against server loops
 	"peer_",        # The address structure of the other this connection
+  "route_",     #the route associated with this request
 );
 
 		
@@ -397,6 +398,7 @@ sub new {
 	my $self=bless [], $_[0];
 
   $self->[session_]=$_[1];
+  $self->[route_]=$_[2];
 
 	#NOTE: A single call to Session export. give references to important variables
 	

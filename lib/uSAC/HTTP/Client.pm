@@ -349,13 +349,14 @@ method __request {
     
     my $rex=uSAC::HTTP::Rex->new($session, $ex);
     $rex->[uSAC::HTTP::Rex::out_headers_]=$out_header;
+    $rex->[uSAC::HTTP::Rex::route_]=$route;
     
 
     # Set the current rex and route for the session.
     # This is needed for the parser in client mode. It makes the route known
     # ahead of time.
     $ex->[3]->$*=$rex;
-    $ex->[7]->$*=$route;
+    #$ex->[7]->$*=$route;
 
 
     # Call the head of the outerware function

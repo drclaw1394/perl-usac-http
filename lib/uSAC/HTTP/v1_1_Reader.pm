@@ -100,14 +100,29 @@ sub make_parser{
 
   my $psgi_compat=$options{psgi_compat}//$PSGI_COMPAT;
   my $keep_alive=$options{keep_alive}//$KEEP_ALIVE;
+  my $enable_pipeline=$options{enable_pipeline}//0;
 
   my $ex=$r->exports;
 
   \my $closeme=$ex->[0];
   my $dropper=$ex->[1];
   \my $self=$ex->[2];
-  \my $rex=$ex->[3];
-  \my $route=$ex->[7];
+  my $rex_ref;
+  if($enable_pipeline){
+    # Expecting external middleware to pair up requests and responses with sequencing
+    $rex_ref=\undef;
+  }
+  else{
+    # Synchronous request response cycle. Outgoing rex is stored in session
+    $rex_ref=$ex->[3];
+  }
+
+  #\my $rex=$ex->[3];
+  #\my $route=$ex->[7];
+  my $route;
+
+  \my $rex=$rex_ref;
+  
   weaken $r;
 
   #my $cb=$self->current_cb;	
@@ -309,7 +324,7 @@ sub make_parser{
             # processing and a rex needs to be created
             #
             ($route, $h{":captures"})=$cb->($host, "$method $uri");
-            $rex=uSAC::HTTP::Rex->new($r, $ex);
+            $rex=uSAC::HTTP::Rex->new($r, $ex, $route);
 
             # Work around for HTTP/1.0
             if($closeme){
@@ -333,7 +348,15 @@ sub make_parser{
 
             # Loopback the output headers to the input side of the chain.
             # 
-            $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
+            #$out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
+            unless($enable_pipeline){
+              #Session stores the outgoing rex for clients 
+              $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
+              $route=$rex->[uSAC::HTTP::Rex::route_];
+              $rex=uSAC::HTTP::Rex->new($r, $ex);
+              $rex->[uSAC::HTTP::Rex::out_headers_]=$out_header;
+              $rex->[uSAC::HTTP::Rex::route_]=$route;
+            }
           }
           else {
             #MODE_NONE
