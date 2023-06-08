@@ -249,8 +249,8 @@ method pump_reader {
 #timer for generating timestamps. 1 second resolution for HTTP date
 my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
-our $timer=AE::timer 0,1, sub {
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime($Time=time);
+our $timer=uSAC::IO::timer 0,1, sub {
+	my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = gmtime($Time=time);
 	#export to globally available time?
 	#
 	#Format Tue, 15 Nov 1994 08:12:31 GMT

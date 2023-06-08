@@ -683,13 +683,15 @@ sub make_error {
   # Call the error/reset for the route
   #
   sub {
-  #if(@_){
+    if($_[REX]){
+      # There might not be rex. ie could be a complete reply and client closes
+      # connection which will trigger this 
       delete $out_ctx{$_[REX]};
-
       # Reset the serialize stack
       #
-      return $_[REX][uSAC::HTTP::Rex::write_]() 
-      #}
+      my $c=$_[REX][uSAC::HTTP::Rex::write_];
+      $c->() if $c;
+    }
   }
 }
 

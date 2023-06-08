@@ -14,6 +14,7 @@ use uSAC::HTTP;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use HTTP::State qw<:all>;
+use HTTP::State::Cookie qw<:all>;
 
 use Exporter 'import';
 
