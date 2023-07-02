@@ -16,7 +16,8 @@ use Carp qw<carp>;
 #use File::Spec::Functions qw<catfile>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
-use HTTP::State qw<:constants :encode :decode>;
+use HTTP::State::Cookie qw<:constants :encode :decode>;
+#use HTTP::State;
 use uSAC::HTTP::Route;
 
 use uSAC::HTTP::Constants;

@@ -74,13 +74,16 @@ my $server; $server=usac_server {
 			$_[PAYLOAD]=Template::Plex->immediate(undef,\*DATA,$vars);
 			$_[OUT_HEADER]{HTTP_CONTENT_TYPE()}= "text/html";
       1;
-			&rex_write;
+      #&rex_write;
 		};
 
 		usac_error_route "/error/404" => sub {
 			say "ERROR FOR BLOG admin";
       #$_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT admin: $_[OUT_HEADER]{":status"}";
-			&rex_write;
+      #&rex_write;
+      $_[PAYLOAD]="";#:"asdf";
+      $_[OUT_HEADER]{":status"}=404;
+      1;
 		};
 
 		#usac_error_page uses the current site prefix

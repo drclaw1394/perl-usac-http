@@ -13,7 +13,7 @@ use uSAC::HTTP;
 
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
-use HTTP::State qw<:all>;
+use HTTP::State;# qw<:all>;
 use HTTP::State::Cookie qw<:all>;
 
 use Exporter 'import';
@@ -25,7 +25,6 @@ our @EXPORT=@EXPORT_OK;
 
 
 sub uhm_state {
-
   [
   sub {
     # called when linking middleware
@@ -39,7 +38,7 @@ sub uhm_state {
     else{
       Log::OK::TRACE and log_trace " HTTP State middleware configured for SERVER";
       # false server. 
-      # Innerware simply parses the cookie header and stores it in state hash
+      # Innerware simply parses the cookie header and stores it in state hash from innerware
       
       sub {
         Log::OK::TRACE and log_trace " Server side state management";
@@ -47,7 +46,7 @@ sub uhm_state {
           # If there is a cookie header and it hasn't been parsed, parse it
           my $state=$_[IN_HEADER]{":state"}={};
 
-          for my($k,$v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
+          for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
             if(!exists $state->{$k}){
               # First value 
               $state->{$k}=$v;
