@@ -71,16 +71,18 @@ my $server; $server=usac_server {
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
   
-    usac_route POST=>"/login"=>"login";
+    usac_route POST=>"/login";
     usac_route "/login";
     usac_route "/logout";
     usac_route "/test";
+    usac_route GET=>"/test2"=>"test";
 
     usac_route "/getme/($Comp)"
       =>sub {
-        $_[PAYLOAD]=join ", ", &rex_captures->@*;
+        $_[PAYLOAD]=join ", ", $_[IN_HEADER]{":captures"}->@*;
         1;
       };
+
     usac_route "/redirect"
       =>sub {
         $_[OUT_HEADER]{":status"}=301;

@@ -639,82 +639,149 @@ method add_route {
   #my $self=shift;
   my $result; 
 
+  my $del_meth;
   try {
+    # Adjust for 1 and two argument short hand
+    #
     if(@_== 1 and ref($_[0]) eq ""){
+      #
+      # Only 1 argument (path). Implict method and route to delegate
+      #
       #single argument and its a scalar
       # Duplicate the argument as it will be the name of a method to call on the delegate
-      my $method=$_[0];
-      $method=~s|^/||g;
-      $method=~s|/|_|g;
-      push @_, $method;
-    }
-
-    die Exception::Class::Base->throw("Route Addition: a route needs at least two
-      parameters (path, middleware, ...) or (method, path, middleware ...")
-        unless @_>=2;
-
-    if(!defined($_[0])){
-      # 
-      # Sets the default for the host
       #
-      shift; unshift @_, $self->any_method, undef;
-      $result=$self->_add_route(@_);
-    }
-
-
-    elsif(ref($_[0]) eq "ARRAY"){
-      #
-      # Methods specified as an array ref, which will get
-      # converted to a regexp
-      # Also means the path matcher must also be changed
-      #
-      my $a=shift;
-      #unshift @_, "(?:".join("|", @$a).")";
-      $a= "(?:".join("|", @$a).")";
-
-      #Test the methods actually match somthing
-
-
-      $a=qr{$a};
-      my $b=shift;
-      my $method=$b;
-      $b=qr{$b} if defined $b;
-      unshift @_, $a, $b;
-      
-      if(@_ == 2){
-        #Only method type and path specified.
-        $method=~s|^/||g;
-        $method=~s|/|_|g;
-        push @_, $method;
-      }
-
-      $result=$self->_add_route(@_);
-    }
-
-
-    elsif(ref($_[0]) eq "Regexp"){
-      if(@_>=3){
-        #method matcher specified
-        $result=$self->_add_route(@_);
-      }
-      else {
-        #Path matcher is a regex
-        unshift @_, "GET";
-        $result=$self->_add_route(@_);
-      }
-    }
-    elsif($_[0]=~m|^/|){
-      #starting with a slash, short cut for GET and head
+      $del_meth=$_[0];
+      $del_meth=~s|^/||;
+      $del_meth=~s|/|_|g;
       unshift @_, $self->default_method;
+      push @_, $del_meth;
       $result=$self->_add_route(@_);
     }
-    else{
-      # method, url and middleware specified
-      $result=$self->_add_route(@_);
+    elsif(@_ == 2 and ref($_[0]) eq "" and ref($_[1]) eq ""){
+        # Two argument , first string is method, second is path
+        # implicit route to delegate
+        #
+        $del_meth=$_[1];
+        $del_meth=~s|^/||;
+        $del_meth=~s|/|_|g;
+        push @_, $del_meth;
+        $result=$self->_add_route(@_);
     }
+    elsif(@_ == 2 and ref($_[0]) eq "ARRAY" and ref($_[1]) eq ""){
+        # Two argument ,first is HTTP method array, second is path
+        # implicit route to delegate
+        #
+        my $a=shift;
 
-    die Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
+        $a= "(?:".join("|", @$a).")";
 
+        #Test the methods actually match somthing
+
+        $a=qr{$a};
+        my $b=shift;
+        $del_meth=$b;   # The path is the basis for implicit method
+        $del_meth=~s|^/||;
+        $del_meth=~s|/|_|g;
+
+        $b=qr{$b}; #if defined $b;
+        unshift @_, $a, $b, $del_meth;
+        $result=$self->_add_route(@_);
+
+    }
+    elsif(@_ == 2 and ref($_[0]) eq "RegExp" and ref($_[1]) eq ""){
+        # Two argument ,first is HTTP method regex, second is path scalar
+        # implicit route to delegate
+        #
+        my $a=shift;
+
+        #$a= "(?:".join("|", @$a).")";
+
+        #Test the methods actually match somthing
+
+        #$a=qr{$a};
+        
+        my $b=shift;
+
+        $del_meth=$b;   # The path is the basis for implicit method
+        $del_meth=~s|^/||;
+        $del_meth=~s|/|_|g;
+
+        $b=qr{$b}; #if defined $b;
+        unshift @_, $a, $b, $del_meth;
+        $result=$self->_add_route(@_);
+    }
+    else {
+      # Long form processing
+      #
+      #
+
+      die Exception::Class::Base->throw("Route Addition: a route needs at least two parameters (path, middleware, ...) or (method, path, middleware ...")
+      unless @_>=2;
+
+
+
+      if(!defined($_[0])){
+        # 
+        # Sets the default for the host
+        #
+        shift; unshift @_, $self->any_method, undef;
+        $result=$self->_add_route(@_);
+      }
+
+
+      elsif(ref($_[0]) eq "ARRAY"){
+        #
+        # Methods specified as an array ref, which will get
+        # converted to a regexp
+        # Also means the path matcher must also be changed
+        #
+        my $a=shift;
+        #unshift @_, "(?:".join("|", @$a).")";
+        $a= "(?:".join("|", @$a).")";
+
+        #Test the methods actually match somthing
+
+
+        $a=qr{$a};
+        my $b=shift;
+        my $method=$b;
+        $b=qr{$b} if defined $b;
+        unshift @_, $a, $b;
+
+        if(@_ == 2){
+          #Only method type and path specified.
+          $method=~s|^/||g;
+          $method=~s|/|_|g;
+          push @_, $method;
+        }
+
+        $result=$self->_add_route(@_);
+      }
+
+
+      elsif(ref($_[0]) eq "Regexp"){
+        if(@_>=3){
+          #method and path matcher specified
+          $result=$self->_add_route(@_);
+        }
+        else {
+          #Path matcher is a regex
+          unshift @_, "GET";
+          $result=$self->_add_route(@_);
+        }
+      }
+      elsif($_[0]=~m|^/|){
+        #starting with a slash, short cut for GET and head
+        unshift @_, $self->default_method;
+        $result=$self->_add_route(@_);
+      }
+      else{
+        # method, url and middleware specified
+        $result=$self->_add_route(@_);
+      }
+
+      die Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
+    }
   }
   catch($e){
     #my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
