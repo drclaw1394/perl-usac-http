@@ -412,36 +412,4 @@ sub new {
 }
 
 
-#parse a form in either form-data or urlencoded.
-#First arg is rex
-#second is data
-#third is the header for each part if applicable
-sub parse_form_params {
-	my $rex=$_[1];
-	#parse the fields	
-	for ($_[IN_HEADER]{"content-type"}){
-		if(/multipart\/form-data/){
-			#parse content disposition (name, filename etc)
-			my $kv={};
-			for(map tr/ //dr, split ";", $_[IN_HEADER]{HTTP_CONTENT_DISPOSITION()}){
-				my ($key, $value)=split "=";
-				$kv->{$key}=defined($value)?$value=~tr/"//dr : undef;
-			}
-			return $kv;
-		}
-		elsif($_ eq 'application/x-www-form-urlencoded'){
-			my $kv={};
-			for(split "&", url_decode_utf8 $_[PAYLOAD]){
-				my ($key,$value)=split "=";
-				$kv->{$key}=$value;
-			}
-			return $kv;
-		}
-
-		else{
-			return {};
-		}
-
-	}
-}
 1;

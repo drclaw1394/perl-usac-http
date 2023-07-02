@@ -5,10 +5,12 @@ use File::Spec::Functions qw<catfile abs2rel>;
 use File::Basename qw<dirname>;
 use Cwd qw<abs_path cwd>;
 use Exporter "import";
+use URL::Encode qw<url_decode_utf8>;
 use feature "say";
 
 our @EXPORT_OK=qw(
   path
+  decode_urlencoded_form
 );
 our @EXPORT;#=@EXPORT_OK;
 
@@ -61,5 +63,56 @@ sub path {
 }
 
 *usac_path=\&path;
+
+#parse a form in either form-data or urlencoded.
+#First arg is rex
+#second is data
+#third is the header for each part if applicable
+sub decode_urlencoded_form {
+  my %kv;
+  for(split "&", url_decode_utf8 $_[0]){
+    my ($k, $v)=split "=", $_, 2;
+    if(!exists $kv{$k}){
+        $kv{$k}=$v;
+    }
+    elsif(ref $kv{$k}){
+      push $kv{$k}->@*, $v; 
+    }
+    else {
+      $kv{$k}=[$kv{$k}, $v];
+    }
+  }
+  \%kv;
+}
+
+####################################################################################################
+#         my $rex=$_[1];                                                                           #
+#         #parse the fields                                                                        #
+#         for ($_[IN_HEADER]{"content-type"}){                                                     #
+#                 if(/multipart\/form-data/){                                                      #
+#                         #parse content disposition (name, filename etc)                          #
+#                         my $kv={};                                                               #
+#                         for(map tr/ //dr, split ";", $_[IN_HEADER]{HTTP_CONTENT_DISPOSITION()}){ #
+#                                 my ($key, $value)=split "=";                                     #
+#                                 $kv->{$key}=defined($value)?$value=~tr/"//dr : undef;            #
+#                         }                                                                        #
+#                         return $kv;                                                              #
+#                 }                                                                                #
+#                 elsif($_ eq 'application/x-www-form-urlencoded'){                                #
+#                         my $kv={};                                                               #
+#                         for(split "&", url_decode_utf8 $_[PAYLOAD]){                             #
+#                                 my ($key,$value)=split "=",2;                                    #
+#                                 $kv->{$key}=$value;                                              #
+#                         }                                                                        #
+#                         return $kv;                                                              #
+#                 }                                                                                #
+#                                                                                                  #
+#                 else{                                                                            #
+#                         return {};                                                               #
+#                 }                                                                                #
+#                                                                                                  #
+#         }                                                                                        #
+# }                                                                                                #
+####################################################################################################
 
 1;

@@ -42,8 +42,9 @@ sub uhm_state {
       
       sub {
         Log::OK::TRACE and log_trace " Server side state management";
-        if($_[OUT_HEADER] and $_[IN_HEADER]{HTTP_COOKIE()}){
-          # If there is a cookie header and it hasn't been parsed, parse it
+        if($_[OUT_HEADER]){  # and $_[IN_HEADER]{HTTP_COOKIE()}){
+
+          # 
           my $state=$_[IN_HEADER]{":state"}={};
 
           for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){

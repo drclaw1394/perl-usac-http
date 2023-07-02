@@ -204,11 +204,11 @@ method _add_route {
   # the order of listing. Splice after dead horse
   #
   #unshift @inner, $self->construct_innerware;
-  splice @inner, 1,0, $self->construct_innerware;
+  splice @inner, 1, 0, $self->construct_innerware;
 
   # Outerware is in reverse order
   #unshift @outer, $self->construct_outerware;
-  splice @outer,1,0, $self->construct_outerware;
+  splice @outer, 1, 0, $self->construct_outerware;
   @outer=reverse @outer;
 
 
@@ -640,9 +640,18 @@ method add_route {
   my $result; 
 
   try {
+    if(@_== 1 and ref($_[0]) eq ""){
+      #single argument and its a scalar
+      # Duplicate the argument as it will be the name of a method to call on the delegate
+      my $method=$_[0];
+      $method=~s|^/||g;
+      $method=~s|/|_|g;
+      push @_, $method;
+    }
+
     die Exception::Class::Base->throw("Route Addition: a route needs at least two
       parameters (path, middleware, ...) or (method, path, middleware ...")
-    unless @_>=2;
+        unless @_>=2;
 
     if(!defined($_[0])){
       # 
@@ -668,8 +677,16 @@ method add_route {
 
       $a=qr{$a};
       my $b=shift;
+      my $method=$b;
       $b=qr{$b} if defined $b;
       unshift @_, $a, $b;
+      
+      if(@_ == 2){
+        #Only method type and path specified.
+        $method=~s|^/||g;
+        $method=~s|/|_|g;
+        push @_, $method;
+      }
 
       $result=$self->_add_route(@_);
     }
@@ -740,37 +757,10 @@ method delegate {
   }
     
   unless(ref $_delegate){
-    # If delegate is not a reference, assume it is a package name or a
-    # realtive file path to load
+    # If delegate is not a reference, assume it is a package name. Check the package exists
     #
     no strict "refs";
-    my $string;
-    if($_delegate=~/::/){
-      # Bare word
-      # Check that the package exists
-      if(%{$_delegate."::"}){
-        # package exists. do not require
-        Log::OK::DEBUG and log_debug "Delegate is package: $_delegate and already exists. Skipping require";
-        $string="";
-      }
-      else{
-        $string="require $_delegate";
-      }
-    }
-    else{
-      #Non barword
-      $string=qq|require "$_delegate"|;
-    }
-
-    if($string){
-      local $@=undef;
-      eval $string;
-      die Exception::Class::Base->throw("Could not require $_delegate: $@") if $@;
-      $@=undef;
-    }
-  }
-  else{
-    # Delegate is an object
+    die Exception::Class::Base->throw("Delegate package $_delegate not found. Do you need ro require it?") unless (%{$_delegate."::"});
   }
 }
 

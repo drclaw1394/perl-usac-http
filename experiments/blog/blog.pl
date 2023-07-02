@@ -7,6 +7,7 @@ use Log::ger::Output 'Screen';
 
 use uSAC::HTTP;
 use uSAC::HTTP::Server;
+use uSAC::Util qw<path>;
 
 
 use uSAC::HTTP::Middleware::Static;
@@ -39,7 +40,7 @@ use uSAC::HTTP::Middleware::State;
 
 # Delegate has class subs for sets of middleware
 #
-#require(path(\"delegate.pl"));
+my $delegate=require(path(\"delegate.pl"));
 
 
 my $server; $server=usac_server {
@@ -61,7 +62,8 @@ my $server; $server=usac_server {
     usac_id "blog";
     #usac_host "localhost:8084";
 
-    usac_delegate \"delegate.pl";
+    # Either a package name or a object reference
+    usac_delegate $delegate;
 
     #usac_middleware uhm_log(dump_headers=>1);
     #usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_deflate;#uhm_gzip;#, uhm_deflate;
@@ -69,6 +71,11 @@ my $server; $server=usac_server {
 		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
 		#
   
+    usac_route POST=>"/login"=>"login";
+    usac_route "/login";
+    usac_route "/logout";
+    usac_route "/test";
+
     usac_route "/getme/($Comp)"
       =>sub {
         $_[PAYLOAD]=join ", ", &rex_captures->@*;
