@@ -572,6 +572,10 @@ sub make_serialize{
     my $reply="";
     if($_[OUT_HEADER]){
 
+      # If no valid code is set then set default 200
+      #
+      my $code=(delete $_[OUT_HEADER]{":status"})//HTTP_OK;
+
       # TODO: fix with multipart uploads? what is the content length
       #
       if($_[PAYLOAD] and not exists($_[HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
@@ -581,16 +585,15 @@ sub make_serialize{
         $ctx=1; #Mark as needing chunked
         $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
       }
-      elsif(!$_[PAYLOAD] and not exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
+      elsif(!$_[PAYLOAD] and $code == HTTP_OK){
+        # and exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
+
         # No content but client might not have indicated a close. Force a content length of 0
         $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
       }
 
       #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
 
-      # If no valid code is set then set default 200
-      #
-      my $code=(delete $_[OUT_HEADER]{":status"})//HTTP_OK;
 
       if($mode == MODE_RESPONSE){
         $reply=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
