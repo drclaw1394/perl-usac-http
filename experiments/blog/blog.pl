@@ -73,9 +73,14 @@ my $server; $server=usac_server {
   
     usac_route POST=>"/login";
     usac_route "/login";
+
     usac_route "/logout";
-    usac_route "/test";
-    usac_route GET=>"/test2"=>"test";
+    usac_route "/public";
+    usac_route "/home";
+
+    #usac_route "/test";
+    #    usac_route "/form_login";
+    #usac_route GET=>"/test";
 
     usac_route "/getme/($Comp)"
       =>sub {

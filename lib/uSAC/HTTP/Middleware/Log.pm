@@ -36,7 +36,7 @@ sub log_simple_in {
 
   my $dump_headers=$options{dump_headers};
 
-
+  my $dumper;
   my $dump_capture=$options{dump_captures};
 
 	#Header processing sub
@@ -60,8 +60,11 @@ sub log_simple_in {
           if($dump_headers){
             push @out, "==Incomming Headers==","";
             require Data::Dumper;
-            push @out, Data::Dumper::Dumper $_[IN_HEADER];
+            $dumper=Data::Dumper->new([$_[IN_HEADER]]);
+            $dumper->Sortkeys(1);
+            push @out, $dumper->Dump;
           }
+
           push @out, "";
           say STDERR join "\n", @out;
 			}
@@ -74,6 +77,8 @@ sub log_simple_out {
 	#header processing sub
   my %options=@_;
   my $dump_headers=$options{dump_headers};
+  my $dumper;
+
 	sub {
 		my $outer_next=shift;
 		sub {
@@ -84,7 +89,9 @@ sub log_simple_out {
       if($dump_headers){
         push @out, "==Outgoing Headers==","";
         require Data::Dumper;
-        push @out, Data::Dumper::Dumper $_[OUT_HEADER];
+        $dumper=Data::Dumper->new([$_[OUT_HEADER]]);
+        $dumper->Sortkeys(1);
+        push @out, $dumper->Dump;
       }
       say STDERR join "\n", @out;
 
@@ -92,4 +99,5 @@ sub log_simple_out {
 		}
 	};
 }
+
 1;

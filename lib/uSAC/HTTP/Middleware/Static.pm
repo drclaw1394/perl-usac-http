@@ -541,6 +541,9 @@ sub _make_list_dir {
 
 #Specifies the url prefix (and or regex) to match
 #The prefix is removed and
+
+# NOTE: If payload is NOT UNDEF, it is used as the relative path to search for!
+#       Otherwise the path to search for is from the url path in the request
 sub uhm_static_root {
   my $html_root=uSAC::Util::path pop, [caller];
   my %options=@_;

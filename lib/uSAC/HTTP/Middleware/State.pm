@@ -60,13 +60,49 @@ sub uhm_state {
               # Existing value, but wasn't a ref, wrap it
               $state->{$k}=[$state->{$k}, $v];
             }
+
+          }
+
+          # Define state for later middleware
+          $_[OUT_HEADER]{":state"}//=[];
+        }
+        &$next;
+      }
+    }
+  },
+
+  sub {
+    my ($next, $index)=(shift,shift);
+    my %options=@_;
+    if($options{site}->mode){
+      # true is client mode
+    }
+    else{
+      # 
+      # Otherwise server mode IN server mode we want to take the cookies stored
+      # in :state (output header) and serialize them into multiple head lines
+      #
+      sub {
+        for my $set ($_[OUT_HEADER]{HTTP_SET_COOKIE()}){
+          if(!defined $set){
+            $set=[];
+          }
+          elsif(! ref $set){
+            $set=[$set];
+          }
+          else {
+            # Already an array
+          }
+          # Render the cookies into the next stage...?
+          for my $cookie(($_[OUT_HEADER]{":state"}//=[])->@*){
+            push @$set, encode_set_cookie $cookie;
           }
         }
         &$next;
       }
     }
   },
-  undef,
+
   undef
   ]
 }

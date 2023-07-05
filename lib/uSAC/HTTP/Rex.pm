@@ -257,7 +257,10 @@ sub rex_error {
       return &rex_redirect_internal
     }
   }
-  1;
+  # Add this for short hand middleware support. If the redirect is the last
+  # statement, the return value is undef, which prevents from automatic
+  # middleware execution of the current chain.
+  undef;
 }
 
 
@@ -325,6 +328,7 @@ sub rex_redirect_internal {
   );
   
   $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header,my $a="",my $b=undef);
+  undef;
 }
 
 

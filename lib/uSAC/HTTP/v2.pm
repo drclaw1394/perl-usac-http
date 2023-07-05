@@ -417,12 +417,14 @@ sub decode_frames {
 }
 
 
-use enum qw<CON_STATE_DISCONNECTED CON_STATE_PREFACE CONSTATE_FRAMES>;
+use enum qw<CON_STATE_DISCONNECTED CON_STATE_PREFACE CON_STATE_FRAMES>;
 #Create a reader for a session
+#
 sub server_reader {
   my $state;
   $state=CON_STATE_DISCONNECTED;
   sub {
+    \my  $buf=$_[0];
     while($buf){
       if($state == CON_STATE_DISCONNECTED){
         # Freshly connected tcp transport
@@ -446,8 +448,6 @@ sub server_reader {
         #If new stream ids, create a new rex and add to context.
       }
     }
-
-      
-  }
+  };
 }
 1;
