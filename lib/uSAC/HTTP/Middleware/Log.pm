@@ -68,6 +68,7 @@ sub log_simple_in {
           push @out, "";
           say STDERR join "\n", @out;
 			}
+
 			&$inner_next;		#alway call next. this is just logging
 		}
 	};

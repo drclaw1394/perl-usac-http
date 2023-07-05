@@ -23,7 +23,6 @@ our @EXPORT=@EXPORT_OK;
 
 # Middleware interfacing code for a HTTP state. Client side this is commonly called a cookie jar
 
-
 sub uhm_state {
   [
   sub {

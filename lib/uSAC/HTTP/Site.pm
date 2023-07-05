@@ -430,7 +430,7 @@ method wrap_middleware {
       # Use postfix notation to access either a package or object method 
       #
       my $string;
-      $string="$_delegate->middleware";
+      $string="$_delegate->_middleware";
       my @pre=eval $string;
       #die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
       unshift @pre unless $@;  #Silently ignore any error calling the middleware function

@@ -65,11 +65,6 @@ my $server; $server=usac_server {
     # Either a package name or a object reference
     usac_delegate $delegate;
 
-    #usac_middleware uhm_log(dump_headers=>1);
-    #usac_middleware $_ for uhm_log(dump_headers=>1), uhm_state, uhm_deflate;#uhm_gzip;#, uhm_deflate;
-
-		#usac_route '/favicon.png$'   => usac_cached_file "images/favicon.png";
-		#
   
     usac_route POST=>"/login";
     usac_route "/login";
