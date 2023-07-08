@@ -10,7 +10,7 @@ use AnyEvent;
 use uSAC::HTTP;
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Middleware::Static;
-use uSAC::HTTP::Middleware qw<log_simple>;
+use uSAC::HTTP::Middleware::Log;
 
 use Log::ger;
 use Log::ger::Output "Screen";
@@ -26,17 +26,17 @@ use Cwd;
 
 #usac-http server command line utility
 
-use Socket;
+#use Socket;
 use Socket::More ":all";
 
 
-use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
+#use uSAC::HTTP::Middleware::State::JSON qw<state_json>;
 
 use Getopt::Long;
 Getopt::Long::Configure("pass_through");
 my %options;
 my $verbose=0;
-$options{quiet}=sub {$verbose=0};
+$options{quiet}=sub { $verbose=0 };
 $options{verbose}=\$verbose;
 $options{listen}=[];
 
@@ -115,7 +115,7 @@ Log::OK::INFO and log_info $welcome;
 my $server;
 $server=usac_server{
   #set the sub product
-  usac_middleware log_simple dump_headers=>1 if $options{log};
+  usac_middleware uhm_log dump_headers=>1 if $options{log};
   #add all listeners
   my @spec;
   my $listeners=$options{listen};
@@ -130,8 +130,8 @@ $server=usac_server{
     push @spec, {
       #interface=>[".*"],
       address=>["localhost"],
-      family=>[AF_INET, AF_INET6],
-      type=>[SOCK_STREAM],
+      family=>[qw<AF_INET AF_INET6>],
+      type=>["SOCK_STREAM"],
       port=>5000
     };
   }
@@ -174,10 +174,11 @@ $server=usac_server{
     for my $s (@$static){
       try {
         push @roots, 
-        usac_file_under list_dir=>$options{"list-dir"},
-          read_size=>$options{"read-size"},
-          indexes=>$options{indexes},
-          $s;
+          uhm_static_root 
+            list_dir  =>  $options{"list-dir"},
+            read_size =>  $options{"read-size"},
+            indexes   =>  $options{indexes},
+            $s;
       }
       catch($e){
         log_error "No access to static files in $s";
@@ -185,7 +186,7 @@ $server=usac_server{
       }
     } 
     if(@roots){
-      usac_route ["GET", "HEAD"],"/", @roots;#,state_json, @roots;
+      usac_route ["GET", "HEAD"],"/", @roots;
     }
     #TODO: fix dir listing so it can be chainable
   };
@@ -206,7 +207,7 @@ __END__
 
 =head1 TITLE
 
-usac - Serve files via HTTP
+usac -  HTTP Server
 
 =head1 SYNOPSIS
 
@@ -216,7 +217,7 @@ usac - Serve files via HTTP
 =head1 DESCRIPTION
 
 usac is a HTTP server easiliy configured for serving static files. It is a
-application wrapper around the uSAC::HTTP module.
+application wrapper around uSAC::HTTP
 
 
 =head1 OPTIONS

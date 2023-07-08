@@ -13,7 +13,7 @@ use Log::OK;
 #use Try::Catch;
 use Carp qw<carp>;
 #use File::Basename qw<basename dirname>;
-#use File::Spec::Functions qw<catfile>;
+use File::Spec::Functions qw<catpath>;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
 use HTTP::State::Cookie qw<:constants :encode :decode>;
@@ -38,6 +38,7 @@ our @EXPORT_OK=qw<
   rex_redirect_see_other
   rex_redirect_found
   rex_redirect_temporary
+  rex_redirect_permanent
   rex_redirect_not_modified
 
   rex_error_not_found
@@ -148,7 +149,7 @@ sub rex_terminate {
 sub rex_site_url {
 	#match_entry->context->site->built_prefix
 	#my $url= $_[0][4][0]->built_prefix;
-	my $url= $_[ROUTE][1][0]->built_prefix;
+	my $url= $_[ROUTE][REX][ROUTE_SITE]->built_prefix;
 	if($_[PAYLOAD]){
 		return "$url/$_[PAYLOAD]";
 	}
@@ -159,7 +160,7 @@ sub rex_site_url {
 #returns the site object associate with this request
 #match, rex, na
 sub rex_site {
-	$_[ROUTE][1][0];	
+	$_[ROUTE][REX][ROUTE_SITE];	
 }
 
 
@@ -187,6 +188,11 @@ sub rex_redirect_moved{
 
 sub rex_redirect_see_other{
   my $url=$_[PAYLOAD];
+  $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
+
+  # If url is string and relative, relative to server root
+  # if ref to stirng and relative, relative to site
+  # full url
   $_[OUT_HEADER]{":status"}=HTTP_SEE_OTHER;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
     $_[HEADER]{$k}=$v;
@@ -197,6 +203,7 @@ sub rex_redirect_see_other{
 
 sub rex_redirect_found {
   my $url=$_[PAYLOAD];
+  $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[OUT_HEADER]{":status"}=HTTP_FOUND;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
     $_[HEADER]{$k}=$v;
@@ -208,6 +215,7 @@ sub rex_redirect_found {
 
 sub rex_redirect_temporary {
   my $url=$_[PAYLOAD];
+  $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[OUT_HEADER]{":status"}=HTTP_TEMPORARY_REDIRECT;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
     $_[HEADER]{$k}=$v;
@@ -220,21 +228,23 @@ sub rex_redirect_temporary {
 
 sub rex_redirect_permanent {
     my $url=$_[PAYLOAD];
+    $url=catpath undef,$_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
     $_[OUT_HEADER]{":status"}=HTTP_PERMANENT_REDIRECT;
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
     1;
-	
 }
 
 sub rex_redirect_not_modified {
-  my $url=$_[PAYLOAD];
+  #my $url=$_[PAYLOAD];
   $_[OUT_HEADER]{":status"}=HTTP_NOT_MODIFIED;
-  for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-    $_[HEADER]{$k}=$v;
-  }
+  #################################################################
+  # for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){ #
+  #   $_[HEADER]{$k}=$v;                                          #
+  # }                                                             #
+  #################################################################
   $_[PAYLOAD]="";
   1;
 }
@@ -260,7 +270,7 @@ sub rex_error {
   # Add this for short hand middleware support. If the redirect is the last
   # statement, the return value is undef, which prevents from automatic
   # middleware execution of the current chain.
-  undef;
+  1;#undef;
 }
 
 

@@ -433,7 +433,7 @@ method wrap_middleware {
       $string="$_delegate->_middleware";
       my @pre=eval $string;
       #die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
-      unshift @pre unless $@;  #Silently ignore any error calling the middleware function
+      #unshift @pre if !$@ and @pre;  #Silently ignore any error calling the middleware function
       if($@){
         Log::OK::TRACE and log_trace "No middleware method/sub in delegate... ignoring";
       }
@@ -460,7 +460,6 @@ method parent_site :lvalue{
 }
 
 method site_url {
-  #my $self=$uSAC::HTTP::Site;
 	my $url=$self->built_prefix;
 	if($_[0]//""){
 		return "$url/$_[0]";
@@ -662,6 +661,8 @@ method add_route {
       $del_meth=$_[0];
       $del_meth=~s|^/||;
       $del_meth=~s|/|_|g;
+      $del_meth||="_empty";   # call the empty handler on emty string
+
       unshift @_, $self->default_method;
       push @_, $del_meth;
       $result=$self->_add_route(@_);
@@ -673,6 +674,8 @@ method add_route {
         $del_meth=$_[1];
         $del_meth=~s|^/||;
         $del_meth=~s|/|_|g;
+        $del_meth||="_empty";   # call the empty handler on emty string
+
         push @_, $del_meth;
         $result=$self->_add_route(@_);
     }
@@ -691,6 +694,7 @@ method add_route {
         $del_meth=$b;   # The path is the basis for implicit method
         $del_meth=~s|^/||;
         $del_meth=~s|/|_|g;
+        $del_meth||="_empty";   # call the empty handler on emty string
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
@@ -714,6 +718,7 @@ method add_route {
         $del_meth=$b;   # The path is the basis for implicit method
         $del_meth=~s|^/||;
         $del_meth=~s|/|_|g;
+        $del_meth||="_empty";   # call the empty handler on emty string
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
@@ -779,6 +784,11 @@ method add_route {
           $result=$self->_add_route(@_);
         }
       }
+      elsif($_[0] eq ""){
+        # Explicit matching for site prefix
+        unshift @_, $self->default_method;
+        $result=$self->_add_route(@_);
+      }
       elsif($_[0]=~m|^/|){
         #starting with a slash, short cut for GET and head
         unshift @_, $self->default_method;
@@ -837,6 +847,18 @@ method delegate {
     #
     no strict "refs";
     die Exception::Class::Base->throw("Delegate package $_delegate not found. Do you need ro require it?") unless (%{$_delegate."::"});
+  }
+
+  # Attempt to auto import any route chains
+  try {
+      my $string;
+      $string="$_delegate->_auto";
+      eval "require $string";
+  }
+  catch($e){
+    no strict "refs";
+    die Exception::Class::Base->throw("Delegate  has no import");
+
   }
 }
 

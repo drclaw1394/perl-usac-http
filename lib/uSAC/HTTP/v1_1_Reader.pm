@@ -585,7 +585,7 @@ sub make_serialize{
         $ctx=1; #Mark as needing chunked
         $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
       }
-      elsif(!$_[PAYLOAD] and $code == HTTP_OK){
+      elsif(!$_[PAYLOAD] and $code != HTTP_NOT_MODIFIED){
         # and exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
 
         # No content but client might not have indicated a close. Force a content length of 0

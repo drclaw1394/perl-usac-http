@@ -15,7 +15,7 @@ use uSAC::HTTP::Middleware::Log;
 use uSAC::HTTP::Middleware::Deflate;
 use uSAC::HTTP::Middleware::Gzip;
 use uSAC::HTTP::Middleware::Slurp;
-use uSAC::HTTP::Middleware::Multipart;
+#use uSAC::HTTP::Middleware::Multipart;
 use uSAC::HTTP::Middleware::ScriptWrap;
 use uSAC::HTTP::Middleware::Redirect;
 use uSAC::HTTP::Middleware::State;
@@ -40,7 +40,6 @@ use uSAC::HTTP::Middleware::State;
 
 # Delegate has class subs for sets of middleware
 #
-my $delegate=require(path(\"delegate.pl"));
 
 
 my $server; $server=usac_server {
@@ -63,6 +62,7 @@ my $server; $server=usac_server {
     #usac_host "localhost:8084";
 
     # Either a package name or a object reference
+    my $delegate=require(path(\"delegate.pl"));
     usac_delegate $delegate;
 
   

@@ -68,12 +68,8 @@ my $server; $server=usac_server {
     =>uhm_psgi(\"test.psgi");
 
   usac_route "/app4"
-    =>uhm_psgi keep_alive=>1, $app4;
+    =>uhm_psgi $app4;
 
-        # usac_route "/app5"=>chunked()=>sub {                                         #
-        #         rex_write @_, 200, [HTTP_CONTENT_TYPE, "text/plain"], "Hello there"; #
-        # };                                                                           #
-        ################################################################################
   usac_run;
 };
 
