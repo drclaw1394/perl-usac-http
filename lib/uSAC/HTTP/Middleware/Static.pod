@@ -1,0 +1,61 @@
+=head1 NAME
+
+uSAC::HTTP::Static - Static file serving middleware
+
+=head1 SYNOPSIS
+
+  usac_route "my_path"
+    =>umw_static_root(%options, $path)
+    =>umw_static_root(%options, $path)
+    ...
+
+  usac_route "another_path"
+    =>umw_static_file   %options, $path to file;
+    
+  usac_route "yet_another_path"
+    =>umw_static_content   %options, "inline content";
+
+=head1 DESCRIPTION
+
+Middlewares to support static file serving.
+
+Chainable static file middlware.
+
+Checks the status code of the message and processes if unset (ie -1) or Not Found (404).
+
+Attempts to map url path to local file system paths.
+
+=head1 OPTIONS
+
+=head3 $path
+
+The last element in the call in the path to the directory to serve files from.
+
+=head3 read_size=>int
+
+The bytes size to use when reading data from files. Also uses as the read size for sendfile
+
+=head3 sendfile=>int
+
+An integer representing the minimum size of file in bytes that will be
+processed with sendfile mechanism. A value of 0 disables send file.
+
+
+=head3 list_dir=>flag
+
+Generate a dir listing for paths that end in a slash, if the directory exists
+
+NOTE: If multiple static middlewares are chained together, the first one that
+matches the path will list its dir contents. Add multiple routes to fix this.
+
+=head3 indexes=>[list]
+
+Reference to an array of filenames to append to a dir path. If one is found it
+is served. Otherwise a dir listing is showing if enabled with C<list_dir>
+
+
+=head3 filter=regex
+
+A regex used to filter paths. If the path matches processing continues. If it
+does not, the next middleware is called. The status code is updated to 404 in this case.
+

@@ -10,9 +10,11 @@ use constant::more {
 
     #CODE=>2,
     IN_HEADER=>2,
+    HI=>2,
 
     HEADER=>3,
     OUT_HEADER=>3,
+    HO=>3,
 
     PAYLOAD=>4,
     CB=>5,

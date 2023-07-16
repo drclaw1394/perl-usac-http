@@ -1,12 +1,122 @@
 =head1 NAME
 
-uSAC::HTTP  - uSAC HTTP Server (and client eventually)
+uSAC::HTTP  - Event driven HTTP Server, Client and Middleware
 
 =head1 DESCRIPTION
 
-uSAC::HTTP is a web framework/web server implementing HTTP/1.1. It utilises
-persistant connections, a fast dispatching system and aliasing  to achieve solid
-performance in vanilla Perl.  It is implemented using:
+uSAC::HTTP is a web framework/web server currently implementing HTTP/1.1. It
+utilises persistant connections, a fast dispatching system and aliasing  to
+achieve solid performance.  
+
+It's written to support multiple event systems, such as AnyEvent, IO Async, for
+flexibility in deplyment.
+
+This is a very quick overview of basic concepts of the what, how and why of the
+system. Please refer to linked documents for details on  a topic.
+
+
+=head1 CORE CONCEPTS
+
+=head2 Using Perl BECAUSE it's Perl
+
+=over
+
+=item Perl is different from other languages
+
+So why not program to the benefits it can bring? Strong regex support is an
+obvious example of Perl power. However It also makes it straight foward to do
+functional-ish programming. This really make writing middleware a joy, without
+the forced object oriented convolution in almost every other framework.
+
+=item Not everything needs to be an object
+
+and perl is great for that.
+
+=item Your keyboard enjoys terse code
+
+Who wants to type more than is nessicary? Perl syntax make short work out or
+chained code which is used extensivly in this module, all while allowing
+comments. Let's do this.
+
+=back
+
+
+=head2 Middleware Only (no app)
+
+This the main processing unit for the user. Almost everything the user would
+need to do is done via middleware. Any number of middleware can be chained
+together. Each middleware has inner, outer and error phases.
+
+=head2 Route
+
+A route links a target url to a chain of middleware. Routes are searched in
+order of addition and give the full power of perl regex if needed to match
+against HTTP method, path and also supports captures.
+
+
+=head2 Site
+
+Sites are logical groupings of routes. A site can define default and shared
+behaviour/middleware across any routes defined in the site. It also 'chains'
+together prefixs so mounting sites within sites is very easy.
+
+
+=head2 Delegate
+
+A site my optionally have a Delegate, being an package name or object
+reference. This give extra flexibilty in separating routing and middleware
+chains across files and very quick creating of 'applications'.
+
+=head2 Separation of Concerns, Code across multiple files, or not
+
+How you structure your project is up to you. There is no 'template' to an
+application. The server for example can, load routes, sites and route from any
+file you like, which intern could have middleware defined in install packages,
+or locally, in other files.  The Delegate feature could be used, and more
+routes and middleware could also be stored there.
+
+Or you could simply add everything to a single file. 
+
+The flexibility is there for the user to choose.
+
+
+=head1 Middleware Coding by Convention
+
+Middleware and the internal parsing/serialisation intentionally avoids
+signatures of subroutines where possible.
+
+The middleware structure utilises the same arguments at each stage, so a
+signature wastes cycles with data copies, it allow just requires more typing
+for very little benefit.
+
+The arguments are indexed with compile time constants, so they are still
+'addressable by name',but removes runtime overhead associated with signatures
+and argument copying.
+
+
+=head1 Parameter aliasing
+
+Tied in with the previous, buffers are reused with aliasing. 
+
+
+
+=head2 Code (file) relative paths
+
+
+
+
+=head1 Server
+
+=head1 Client
+
+=head1 Middleware
+
+
+
+
+
+It is implemented using:
+
 
 	AnyEvent IO watchers
 	uSAC::SIO for Stream reading and writing 

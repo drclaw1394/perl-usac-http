@@ -168,14 +168,31 @@ sub rex_peer {
   $_[REX][peer_];
 }
 
-#redirect to within site
-#match entry
-#rex
-#partial url
-#code
 	
 #TODO: "Multiple Choice"=>300,
 
+=head2 Client (External) Redirect
+
+These client side redirects rotines return a redirect code to the client. The
+middleware environment is configured with correct code and header values, AND
+immediately rendered back to the client.  As such, the current middleware
+chain must NOT continue. This is done be returning immediately after calling
+the routines.
+
+If any remainder middleware is required to execute, manually setting the
+error code and Location header will need to be performed and these routines
+NOT used.
+
+=head3 rex_redirect_moved
+
+  return &rex_redirect_moved;
+
+Uses the current value of $_[PAYLOAD] as a URL target of client to
+redirect to. This invokes the serialiser and the current middleware
+chain will be halted immediately. Ensure code returns immediately after
+calling.
+
+=cut
 sub rex_redirect_moved{
   my $url=$_[PAYLOAD];
   $_[OUT_HEADER]{":status"}=HTTP_MOVED_PERMANENTLY;
@@ -183,9 +200,20 @@ sub rex_redirect_moved{
     $_[HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
-  1;
+  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  undef;
 }
 
+=head3 rex_redirect_see_other
+
+  return &rex_redirect_see_other;
+
+Uses the current value of $_[PAYLOAD] as a URL target of client to
+redirect to. This invokes the serialiser and the current middleware
+chain will be halted immediately. Ensure code returns immediately after
+calling.
+
+=cut
 sub rex_redirect_see_other{
   my $url=$_[PAYLOAD];
   $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
@@ -198,9 +226,21 @@ sub rex_redirect_see_other{
     $_[HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
-  1;
+  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  undef;
 }
 
+
+=head3 rex_redirect_found
+
+  return &rex_redirect_found;
+
+Uses the current value of $_[PAYLOAD] as a URL target of client to
+redirect to. This invokes the serialiser and the current middleware
+chain will be halted immediately. Ensure code returns immediately after
+calling.
+
+=cut
 sub rex_redirect_found {
   my $url=$_[PAYLOAD];
   $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
@@ -209,10 +249,22 @@ sub rex_redirect_found {
     $_[HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
-  1;
+  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  undef;
 	
 }
 
+
+=head3 rex_redirect_temporary
+
+  return &rex_redirect_temporary;
+
+Uses the current value of $_[PAYLOAD] as a URL target of client to
+redirect to. This invokes the serialiser and the current middleware
+chain will be halted immediately. Ensure code returns immediately after
+calling.
+
+=cut
 sub rex_redirect_temporary {
   my $url=$_[PAYLOAD];
   $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
@@ -222,21 +274,41 @@ sub rex_redirect_temporary {
   }
 
   $_[PAYLOAD]="";
-  1;
-	
+  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  undef;
 }
 
+=head3 rex_redirect_permanent
+
+  return &rex_redirect_permanent;
+
+Uses the current value of $_[PAYLOAD] as a URL target of client to
+redirect to. This invokes the serialiser and the current middleware
+chain will be halted immediately. Ensure code returns immediately after
+calling.
+=cut
 sub rex_redirect_permanent {
     my $url=$_[PAYLOAD];
-    $url=catpath undef,$_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
+    $url=catpath undef, $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
+
     $_[OUT_HEADER]{":status"}=HTTP_PERMANENT_REDIRECT;
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
       $_[HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
-    1;
+    $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+    undef; #ensure this chain stops
 }
 
+=head3 rex_redirect_not_modified
+
+  return &rex_redirect_not_modified;
+
+Uses the current value of $_[PAYLOAD] as a URL target of client to
+redirect to. This invokes the serialiser and the current middleware
+chain will be halted immediately. Ensure code returns immediately after
+calling.
+=cut
 sub rex_redirect_not_modified {
   #my $url=$_[PAYLOAD];
   $_[OUT_HEADER]{":status"}=HTTP_NOT_MODIFIED;
@@ -246,12 +318,28 @@ sub rex_redirect_not_modified {
   # }                                                             #
   #################################################################
   $_[PAYLOAD]="";
-  1;
+  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  undef;
 }
 
 sub rex_redirect_internal;
 
 
+=head3 rex_error
+
+  return &rex_error;
+
+Resolves a middleware chain/route based on the current output status code. If
+none is found, a minimal error response is generated.
+
+Otherwise, an internal redirect to the located chain is performed and
+execution continued from there
+
+It is important to end the current middlewar chain execution when calling
+this.
+
+
+=cut
 #General error call, Takes an additional argument of new status code
 sub rex_error {
   my $site=$_[ROUTE][1][ROUTE_SITE];
@@ -267,39 +355,84 @@ sub rex_error {
       return &rex_redirect_internal
     }
   }
+
+  # No custom error page so render immediately 
+  $_[PAYLOAD]="";
+  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  undef;
+
   # Add this for short hand middleware support. If the redirect is the last
   # statement, the return value is undef, which prevents from automatic
   # middleware execution of the current chain.
-  1;#undef;
+  #1;#undef;
 }
 
+=head3 rex_error_not_found
 
+  return &rex_error_not_found;
+
+Immediately renders a NOT FOUND error 
+=cut
 sub rex_error_not_found {
   $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
 	&rex_error;
 }
+
+=head3 rex_error_forbidden
+
+  return &rex_error_forbidden;
+
+Immediately renders a NOT FOUND error 
+=cut
 
 sub rex_error_forbidden {
   $_[OUT_HEADER]{":status"}= HTTP_FORBIDDEN;
 	&rex_error;
 }
 
+=head3 rex_error_unsupported_media_type
+
+  return &rex_error_unsupported_media_type;
+
+Immediately renders a NOT FOUND error 
+=cut
 sub rex_error_unsupported_media_type {
   $_[OUT_HEADER]{":status"}= HTTP_UNSUPPORTED_MEDIA_TYPE;
 	&rex_error;
 }
 
+=head3 rex_error_internal_server_error
+
+  return &rex_error_internal_server_error;
+
+Immediately renders a NOT FOUND error 
+=cut
 sub rex_error_internal_server_error {
   $_[OUT_HEADER]{":status"}=HTTP_INTERNAL_SERVER_ERROR;
   &rex_error;
 }
 
 
+=head3 rex_redirect_internal
+
+  return &rex_redirect_internal
+
+Redirects the current request to another route, specified in the
+C<$_[PAYLOAD]> parameter.
+
+It is important the current middleware chain is prevented from continuing
+execution by returning immediately after calling this routine.
+
+=cut
 #Rewrites the uri and matches through the dispatcher
 #TODO: recursion limit
 sub rex_redirect_internal {
 
 	my ($matcher, $rex, undef, undef, $uri)=@_;
+  
+  # If a scalar reference, 
+  $uri=catpath undef, $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$uri if ref $uri;
+
 	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	

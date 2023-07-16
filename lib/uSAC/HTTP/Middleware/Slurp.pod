@@ -1,0 +1,23 @@
+=head1 NAME
+
+uSAC::HTTP::Middlware::Slurp - Slurp a request and emit it
+
+=head1 SYNOPSIS
+
+  use uSAC::HTTP::Middlware::Slurp;
+
+  ...
+  usac_route ...
+  => uhm_slurp
+
+=head1 DESCRIPTION
+
+Consumes streaming request input and accumulates into a completed set. Handles
+single and multipart bodies.
+
+Multiparts are assumed to be header/body tuples in an array ref. See
+L<multipart> innerware for details
+
+
+The outupt is an array of parts, even if the input was not a multipart.
+
