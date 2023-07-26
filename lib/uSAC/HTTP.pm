@@ -5,11 +5,6 @@ use utf8;
 use warnings;
 
 use version; our $VERSION=version->declare("v0.1");
-use Log::ger;
-use Log::OK {
-  lvl=>"info",
-  opt=>"verbose",
-};
 
 # TODO: Event system to be via uSAC::IO eventually
 use AnyEvent;
@@ -23,12 +18,7 @@ use uSAC::HTTP::Method ":constants";
 use uSAC::HTTP::Constants;  # Constants for the message structure of middleware
 use uSAC::HTTP::Rex;        # Request and Response
 use uSAC::HTTP::Site;       # Route grouping and base class
-#use uSAC::HTTP::Server;     # Main class to store routes and listen
-#use uSAC::HTTP::Client;     # subclass for clients
 
-# Common middleware
-#
-#use uSAC::HTTP::Middleware::Static;
 
 
 # Contextual variables used in DSL
@@ -38,12 +28,18 @@ our $Site;
 # Re-export any symbols that start with usac_, rex_ or certain  constants
 #
 sub import {
-  my $caller=caller;
-  strict->import;
-  warnings->import;
-  feature->import(qw<say state refaliasing current_sub>);
+  # Target package is first argument, with dereferencing notatition this
+  # will be the same as this package.  Otherwise an explicit package name
+  # can be use as the first argument and will be the target of symbol
+  # injection
+  my $package=$_[0];  
+  my $caller=$package eq __PACKAGE__ ? caller: $package;
+
+  strict::import($caller);
+  warnings::import($caller);
+  feature::import($caller,qw<say state refaliasing current_sub>);
   #feature->unimport(qw<indirect>);
-  utf8->import;
+  utf8::import($caller);
 
   #say join ", ", @_;
   if(@_==1){

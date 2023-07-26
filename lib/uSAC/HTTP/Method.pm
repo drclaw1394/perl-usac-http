@@ -1,5 +1,4 @@
 package uSAC::HTTP::Method;
-use Exporter 'import';
 
 BEGIN {
 
@@ -22,11 +21,7 @@ BEGIN {
 
 #Create constant strings of the form:
 #HTTP_GET=>"GET"
-use constant \%const_names;
+use constant::more \%const_names;
 
-our @EXPORT_OK= keys %const_names;
-our %EXPORT_TAGS=(
-		constants=>[keys %const_names]
-
-);
+use Export::These keys %const_names, constants=>[keys %const_names];
 1;

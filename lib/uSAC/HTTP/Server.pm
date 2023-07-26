@@ -2,9 +2,13 @@ use v5.36;
 package uSAC::HTTP::Server; 
 use feature "try";
 
+# Attempt event system detection here...
+# and load default if none found
+#
+
 use Object::Pad;
 use Log::ger;
-use Log::OK;
+use Log::OK { lvl=>"info" };
 
 use Socket;
 use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
@@ -31,15 +35,10 @@ use constant::more {
 	"CONFIG::kernel_loadbalancing"=>1,
 };
 
-#Set a logging level if the use application hasn't
-use Log::OK {
-	lvl=>"warn"
-};
-
 
 use feature qw<refaliasing say state current_sub>;
-use constant NAME=>"uSAC";
-use constant VERSION=>"v0.1.0";
+use constant::more NAME=>"uSAC";
+use constant::more VERSION=>"v0.1.0";
 
 #our @Subproducts;#=();		#Global to be provided by applcation
 
@@ -53,7 +52,6 @@ no warnings "experimental";
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
 
-use Scalar::Util 'refaddr', 'weaken';
 
 use Socket qw(
   AF_INET
@@ -80,21 +78,46 @@ use uSAC::HTTP::Session;
 use uSAC::HTTP::Rex;
 use uSAC::MIME;
 
-use Exporter 'import';
 
-our @EXPORT_OK=qw<
-  usac_server
-  usac_run
-  usac_load
-  usac_include
-  usac_listen
-  usac_listen2
-  usac_sub_product
-  usac_workers
->;
+use Export::These
+  qw<
+    usac_server
+    usac_run
+    usac_load
+    usac_include
+    usac_listen
+    usac_listen2
+    usac_sub_product
+    usac_workers
+  >,
+  common=>[];
 
-our @EXPORT=@EXPORT_OK;
 
+sub _reexport {
+  my $target=shift;
+  # Re export to the caller package
+  #
+  require uSAC::HTTP;
+  uSAC::HTTP::import($target);
+  uSAC::HTTP::import($target, ":constants");
+
+  # Preload common middleware  if asked
+  #
+  if(grep /:common/, @_){
+    require uSAC::HTTP::Middleware::Static;
+    uSAC::HTTP::Middleware::Static::import($target);
+    
+
+    require uSAC::HTTP::Middleware::Slurp;
+    uSAC::HTTP::Middleware::Slurp::import($target);
+
+    require uSAC::HTTP::Middleware::Redirect;
+    uSAC::HTTP::Middleware::Redirect::import($target);
+
+    #require uSAC::HTTP::Middleware::WebSocket;
+  }
+
+}
 
 my $session_id=0;
 

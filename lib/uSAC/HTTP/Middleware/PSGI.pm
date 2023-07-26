@@ -11,7 +11,6 @@ use Error::Show;
 
 use List::Util qw<pairs first>;
 
-use Exporter "import";
 
 #use Stream::Buffered::PerlIO;	#From PSGI distribution
 use Plack::TempBuffer;
@@ -25,12 +24,14 @@ use uSAC::HTTP::Constants;
 use URL::Encode qw<url_decode_utf8 url_decode url_encode_utf8 url_encode>;
 use Encode qw<encode>;
 
-use constant KEY_OFFSET=>0;
+use constant::more KEY_OFFSET=>0;
 use enum ("entries_=".KEY_OFFSET, qw<end_>);
-use constant KEY_COUNT=> end_-entries_+1;
+use constant::more KEY_COUNT=> end_-entries_+1;
 
-our @EXPORT_OK=qw<uhm_psgi>;
-our @EXPORT=@EXPORT_OK;
+use Export::These qw<uhm_psgi>;
+
+
+
 
 # TODO fix this hack
 #

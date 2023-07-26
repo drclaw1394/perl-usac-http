@@ -16,10 +16,8 @@ use uSAC::HTTP::Header qw<:constants>;
 use HTTP::State;# qw<:all>;
 use HTTP::State::Cookie qw<:all>;
 
-use Exporter 'import';
 
-our @EXPORT_OK=("uhm_state");
-our @EXPORT=@EXPORT_OK;
+use Export::These "uhm_state";
 
 # Middleware interfacing code for a HTTP state. Client side this is commonly called a cookie jar
 

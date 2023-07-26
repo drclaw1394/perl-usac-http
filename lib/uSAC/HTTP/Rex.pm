@@ -24,13 +24,12 @@ use uSAC::HTTP::Constants;
 use IO::FD;
 #use Fcntl qw<O_CREAT O_RDWR>;
 
-use Exporter 'import';
 
 use URL::Encode::XS;
 use URL::Encode qw<url_decode_utf8>;
 use Cpanel::JSON::XS qw<encode_json decode_json>;
 
-our @EXPORT_OK=qw<
+use Export::These qw<
   rex_site_url
   rex_site
   rex_peer
@@ -54,16 +53,12 @@ our @EXPORT_OK=qw<
   rex_reply_javascript
   rex_reply_text
 
-  rex_captures
   rex_write
 >;
-our @EXPORT=@EXPORT_OK;
-
 
 
 
 #use Time::HiRes qw/gettimeofday/;
-#use Scalar::Util qw(weaken);
 #use Encode qw<decode encode decode_utf8>;
 
 

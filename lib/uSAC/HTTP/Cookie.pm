@@ -5,7 +5,6 @@ package uSAC::HTTP::Cookie;
 use Log::ger;
 use Log::OK;
 
-use Exporter 'import';
 
 #Please refer to rfc6265 HTTP State Management Mechanism
 #
@@ -48,11 +47,14 @@ our %reverse; @reverse{@names}=@values;
 $reverse{undef}=0;			#catching
 
 
-our @EXPORT_OK= (parse_cookie, new_cookie, expire_cookies, keys %const_names);
-our %EXPORT_TAGS=(
-	constants=> [keys %const_names],
-	all=>		[@EXPORT_OK]
-);
+##################################################################################
+# our @EXPORT_OK= (parse_cookie, new_cookie, expire_cookies, keys %const_names); #
+# our %EXPORT_TAGS=(                                                             #
+#         constants=> [keys %const_names],                                       #
+#         all=>           [@EXPORT_OK]                                           #
+# );                                                                             #
+##################################################################################
+use Export::These qw<parse_cookie new_cookie expire_cookies> keys %const_names, constants=>[keys %const_names];
 
 my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 my @days= qw(Sun Mon Tue Wed Thu Fri Sat);

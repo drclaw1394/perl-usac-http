@@ -3,7 +3,6 @@ use strict;
 use warnings;
 use feature qw<say switch>;
 no warnings "experimental";
-use Exporter 'import';
 use feature qw<say>;
 
 use Data::Dumper;
@@ -75,14 +74,14 @@ our @STATIC=(
 
 );
 
-use constant {
+use constant::more {
 		EXISTING=>		0,
 		INCREMENT=>		1,
 		TABLE_SIZE=>		2,
 		NO_INCREMENT=>		3,
 		NEVER_INCREMENT=>	4,
 	};
-use constant DYNAMIC_OFFSET=>62;
+use constant::more DYNAMIC_OFFSET=>62;
 
 our @BITS_PRE=(
 	7,
@@ -109,7 +108,8 @@ our @F_PRE=(
 );
 
 
-our @EXPORT_OK=qw<
+#our @EXPORT_OK=
+use Export::These qw<
 encode_integer
 decode_integer
 encode_string
@@ -121,7 +121,8 @@ encode_headers
 decode_headers
 build_static
 	>;
-our @EXPORT=@EXPORT_OK;
+  #our @EXPORT=@EXPORT_OK;
+  #
 use enum ("size_limit_=0",qw<current_size_ dynamic_hash_ dynamic_array_>);
 
 

@@ -22,8 +22,6 @@ use constant::more {
 
 };
 
-use Exporter "import";
 
-our @EXPORT_OK=qw<ROUTE REX IN_HEADER OUT_HEADER HEADER PAYLOAD CB CRLF>;
-our @EXPORT=@EXPORT_OK;
+use Export::These qw<ROUTE REX IN_HEADER OUT_HEADER HEADER PAYLOAD CB CRLF>;
 1;

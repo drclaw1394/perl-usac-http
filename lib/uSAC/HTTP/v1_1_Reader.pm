@@ -11,7 +11,6 @@ use Log::OK;
 
 use Error::Show;
 use uSAC::HTTP::Rex;
-use Exporter 'import';
 use Encode qw<find_encoding decode encode decode_utf8>;
 use URL::Encode::XS;
 use URL::Encode qw<url_decode_utf8>;
@@ -19,7 +18,7 @@ use URL::Encode qw<url_decode_utf8>;
 use uSAC::HTTP::Constants;# For message strucutre
 use uSAC::HTTP::Route;    # For routing structure
 
-our @EXPORT_OK=qw<
+use Export::These qw<
 		parse_form
 		MODE_RESPONSE
 		MODE_REQUEST
@@ -27,7 +26,6 @@ our @EXPORT_OK=qw<
 		>;
     #make_parser
 
-our @EXPORT=@EXPORT_OK;
 
 #make_form_data_reader
 ##		make_form_urlencoded_reader
@@ -40,16 +38,16 @@ our $ENABLE_CHUNKED=1;
 our $PSGI_COMPAT=undef;
 our $KEEP_ALIVE=1;
 
-use Time::HiRes qw/gettimeofday/;
-use Scalar::Util 'refaddr', 'weaken';
+#use Time::HiRes qw/gettimeofday/;
+#use Scalar::Util 'refaddr', 'weaken';
 
 #use uSAC::HTTP::Session;
 #use uSAC::HTTP::Rex;
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
 use uSAC::HTTP::Header qw<:constants>;
-use constant MAX_READ_SIZE => 128 * 1024;
-use constant CRLF2=>CRLF.CRLF;
+use constant::more MAX_READ_SIZE => 128 * 1024;
+use constant::more CRLF2=>CRLF.CRLF;
 
 
 sub parse_form {
@@ -125,7 +123,7 @@ sub make_parser{
 
   \my $rex=$rex_ref;
   
-  weaken $r;
+  #weaken $r;
 
   #my $cb=$self->current_cb;	
   my ($state, $seq) = ($start_state, 0);

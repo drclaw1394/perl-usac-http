@@ -1,5 +1,4 @@
 package uSAC::HTTP::Route;
-use Exporter "import";
 
 # A route as the first argument of a message is actuall the raw entry inthe
 # Hustle::Table lookup. This is an array of [matcher, value, type, default]
@@ -33,7 +32,7 @@ use enum qw<
   ROUTE_TABLE
   >;
 
-our @EXPORT_OK=qw<
+use Export::These qw<
   ROUTE_SITE
   ROUTE_INNER_HEAD
   ROUTE_OUTER_HEAD
@@ -43,6 +42,5 @@ our @EXPORT_OK=qw<
   ROUTE_TABLE
 >;
 
-our @EXPORT=@EXPORT_OK;
 
 1;

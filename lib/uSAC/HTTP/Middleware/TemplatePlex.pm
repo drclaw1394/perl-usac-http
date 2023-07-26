@@ -2,9 +2,8 @@ use uSAC::HTTP;
 use uSAC::HTTP::Constants;
 use uSAC::Util;
 
-use Exporter "import";
 
-our @EXPORT_OK=our @EXPORT= ("uhm_template_plex");
+use Export::These 'uhm_template_plex';
 # Template::Plex middleware driver 
 
 

@@ -4,15 +4,10 @@ package uSAC::Util;
 use File::Spec::Functions qw<catfile abs2rel>;
 use File::Basename qw<dirname>;
 use Cwd qw<abs_path cwd>;
-use Exporter "import";
 use URL::Encode qw<url_decode_utf8>;
 use feature "say";
 
-our @EXPORT_OK=qw(
-  path
-  decode_urlencoded_form
-);
-our @EXPORT;#=@EXPORT_OK;
+use Export::These qw( path decode_urlencoded_form);
 
 # Process a path.  
 # If a ref and defined, make relative to caller dir

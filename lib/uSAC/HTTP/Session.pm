@@ -6,8 +6,6 @@ no warnings "experimental";
 use Log::ger;
 use Log::OK;
 
-use Scalar::Util 'openhandle','refaddr', 'weaken';
-#use Devel::Peek qw<SvREFCNT>;
 
 use uSAC::IO::SReader;
 use uSAC::IO::SWriter;
@@ -21,7 +19,7 @@ use AnyEvent;
 
 use Errno qw(EAGAIN EINTR);
 
-use constant MAX_READ_SIZE => 4096*16;
+use constant::more MAX_READ_SIZE => 4096*16;
 
 field $_id;
 field $_fh;

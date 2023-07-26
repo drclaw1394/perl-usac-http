@@ -2,8 +2,6 @@ package uSAC::HTTP::Middleware::Deflate;
 use strict;
 use warnings;
 
-use Exporter 'import';
-
 use feature qw<refaliasing say state>;
 no warnings "experimental";
 
@@ -24,13 +22,8 @@ use Log::OK;
 
 
 
-our @EXPORT_OK=qw<uhm_deflate>;
+use Export::These qw<uhm_deflate>;
 
-our @EXPORT=@EXPORT_OK;
-
-our %EXPORT_TAGS=(
-	"all"=>[@EXPORT_OK]
-);
 
 
 

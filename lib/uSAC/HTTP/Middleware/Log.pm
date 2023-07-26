@@ -1,7 +1,7 @@
 package uSAC::HTTP::Middleware::Log;
 use strict;
 use warnings;
-use Exporter 'import';
+
 use feature qw<refaliasing say state>;
 no warnings "experimental";
 
@@ -18,10 +18,8 @@ use Time::HiRes qw<time>;
 use Log::ger;
 use Log::OK;
 
-our @EXPORT_OK=qw<uhm_log>;
+use Export::These qw<uhm_log>;
 
-our @EXPORT=@EXPORT_OK;
-our %EXPORT_TAGS=();
 
 # ===========
 # Log Simple - Log basic stats to STDERR

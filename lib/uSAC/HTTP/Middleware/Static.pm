@@ -19,29 +19,51 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::Constants;
 use uSAC::Util;
 
-
-use Errno qw<EAGAIN EINTR EBUSY>;
-use Exporter 'import';
-our @EXPORT_OK =(
+use Export::These (
   "uhm_static_root",     
   "uhm_static_file", # Preload (cache) a file in memory
   "uhm_static_content", # d
-);
-our @EXPORT=@EXPORT_OK;
+  );
 
+use Errno qw<EAGAIN EINTR EBUSY>;
+##################################################################
+# our @EXPORT_OK =(                                              #
+#   "uhm_static_root",                                           #
+#   "uhm_static_file", # Preload (cache) a file in memory        #
+#   "uhm_static_content", # d                                    #
+# );                                                             #
+# our @EXPORT=@EXPORT_OK;                                        #
+#                                                                #
+# sub import {                                                   #
+#   my $package=$_[0];                                           #
+#   my $caller=$package eq __PACKAGE__ ? caller: $package;       #
+#                                                                #
+#   no strict "refs";                                            #
+#   *{$caller."::".$_}=\*{ __PACKAGE__ ."::".$_} for @EXPORT_OK; #
+#                                                                #
+# }                                                              #
+#                                                                #
+# sub _import {                                                  #
+#   my ($target, $wanted)=@_;                                    #
+#   # Called just like import                                    #
+# }                                                              #
+#                                                                #
+##################################################################
 #my $path_ext=	qr{\.([^.]*)$}ao;
 
-use constant  READ_SIZE=>4096;
+use constant::more  READ_SIZE=>4096;
 
 #my %stat_cache;
 
 #use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_ key_ etag_ source_ user_>;
 #
-use constant KEY_OFFSET=>0;
 
-use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
-use constant KET_COUNT=>end_-mime_+1;
-use constant RECURSION_LIMIT=>10;
+
+#use constant KEY_OFFSET=>0;
+
+#use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
+#use constant KET_COUNT=>end_-mime_+1;
+#use constant RECURSION_LIMIT=>10;
 use IO::FD;
 
 

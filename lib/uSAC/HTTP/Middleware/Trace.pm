@@ -1,11 +1,9 @@
 use strict;
 use warnings;
-
 use uSAC::HTTP ":constants";
 use uSAC::HTTP::Route;
-use Exporter "import";
 
-our @EXPORT_OK=our @EXPORT="uhm_trace";
+use Export::These "uhm_trace";
 
 no warnings "experimental";
 

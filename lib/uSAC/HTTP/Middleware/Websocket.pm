@@ -6,7 +6,7 @@ use feature qw<bitwise state say refaliasing current_sub>;
 use Log::ger;
 use Log::OK;
 
-use Exporter 'import';
+#use Exporter 'import';
 use MIME::Base64;		
 use Digest::SHA1;
 use Encode qw<decode encode>;
@@ -16,8 +16,7 @@ use Encode qw<decode encode>;
 
 use Compress::Raw::Zlib;
 
-our @EXPORT_OK=qw<uhm_websocket>;
-our @EXPORT=@EXPORT_OK;
+use Export::These qw<uhm_websocket>;
 
 use AnyEvent;
 #use Config;
@@ -32,16 +31,14 @@ use Sub::Middler;
 
 
 
-use constant DEBUG => 1;
+use constant::more DEBUG => 1;
 
 
 use enum ( "id_=0" ,qw<writer_ maxframe_ mask_ ping_interval_ ping_id_ pinger_ state_ on_open_ on_message_ on_fragment_ on_close_ on_error_ PMD_ message_buf_ session_>);
 
 #Add a mechanism for sub classing
-use constant KEY_OFFSET=>0;
-use constant KEY_COUNT=>session_-id_+1;
 
-use constant {
+use constant::more {
 	CONTINUATION => 0,
 	TEXT         => 1,
 	BINARY       => 2,
@@ -56,7 +53,7 @@ use constant {
 };
 
 
-use constant {
+use constant::more {
 		FIN_FLAG =>0b10000000,
 		RSV1_FLAG=>0b01000000,
 		RSV2_FLAG=>0b00100000,
@@ -65,7 +62,7 @@ use constant {
 
 use enum qw<STATE_HEADER STATE_BODY>;
 
-use constant HAS_QUAD=>1;
+use constant::more HAS_QUAD=>1;
 
 sub  websocket_client {
     [&websocket_client_in, &websocket_client_out];

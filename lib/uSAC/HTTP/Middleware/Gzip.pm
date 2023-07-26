@@ -5,7 +5,6 @@ use warnings;
 use Log::ger;
 use Log::OK;
 
-use Exporter 'import';
 
 use feature qw<refaliasing say state>;
 no warnings "experimental";
@@ -17,20 +16,14 @@ use uSAC::HTTP::Header qw<:constants>;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Constants;
 
-#use IO::Compress::Gzip;
-#use IO::Compress::Gzip::Constants;
 use Compress::Raw::Zlib;
 
 
-our @EXPORT_OK=qw<uhm_gzip>;
+use Export::These qw<uhm_gzip>;
 
-our @EXPORT=@EXPORT_OK;
-our %EXPORT_TAGS=(
-	"all"=>[@EXPORT_OK]
-);
 
-use constant FLAG_APPEND             => 1 ;
-use constant FLAG_CRC                => 2 ;
+use constant::more FLAG_APPEND             => 1 ;
+use constant::more FLAG_CRC                => 2 ;
 sub uhm_gzip{
   my $in=sub {
     my $next=shift;

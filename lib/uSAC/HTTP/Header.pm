@@ -5,7 +5,6 @@ use warnings;
 use feature qw<refaliasing fc>;
 no warnings qw<experimental>;
 use List::Util qw<first>;
-use Exporter 'import';
 use Log::ger;
 use Log::OK;
 our %const_names;
@@ -103,14 +102,8 @@ BEGIN {
 	#
 };
 
-use constant \%const_names; #Direct constants to use
-#use constant \%name_to_index;
-
-our @EXPORT_OK=(keys(%const_names));
-
-our %EXPORT_TAGS=(
-	constants=>[keys %const_names]
-);
+use constant::more \%const_names; #Direct constants to use
+use Export::These keys(%const_names), constants=>[keys %const_names];
 
 
 1;

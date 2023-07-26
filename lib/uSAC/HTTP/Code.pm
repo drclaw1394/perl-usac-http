@@ -1,6 +1,5 @@
 package uSAC::HTTP::Code;
 use List::Util qw<pairs>;
-use Exporter 'import';
 
 BEGIN {
 
@@ -90,9 +89,6 @@ BEGIN {
 }
 use enum (map s/ |-|'/_/gr, @names);
 
-use constant \%const_names; #Direct constants to use
-our @EXPORT_OK=keys %const_names;
-our %EXPORT_TAGS=(
-	constants=>[keys %const_names]
-);
+use constant::more \%const_names; #Direct constants to use
+use Export::These keys(%const_names),constants=>[keys %const_names];
 1;

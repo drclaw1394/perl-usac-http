@@ -3,7 +3,6 @@ use strict;
 use warnings;
 use feature qw<say refaliasing>;
 no warnings "experimental";
-use Exporter 'import';
 my @frame_names=map "FRAME_$_", qw(
   DATA
   HEADERS
@@ -31,21 +30,28 @@ my @decode_names=qw(
   parse_frames
 );
 
-our @EXPORT_OK=(
+######################
+# our @EXPORT_OK=(   #
+#   @frame_names,    #
+#   @flag_names,     #
+#   "encode_frames", #
+#   "decode_frames"  #
+#                    #
+# );                 #
+######################
+
+#our @EXPORT=();
+
+#our %EXPORT_TAGS=(
+use Export::These
   @frame_names,
   @flag_names,
   "encode_frames",
-  "decode_frames"
-
-);
-
-our @EXPORT=();
-
-our %EXPORT_TAGS=(
-  "constants"=>[@frame_names,@flag_names],
+  "decode_frames",
+  "constants"=>[@frame_names, @flag_names],
   "decode"=>["decode_frames"],
   "encode"=>["encode_frames"]
-);
+;
 #Framing support for http2
 #
 #####################################################################
@@ -62,7 +68,7 @@ our %EXPORT_TAGS=(
 #Values from RFC7540
 
 #frame types
-use constant {
+use constant::more {
   FRAME_DATA		      =>0x00,
   FRAME_HEADERS		    =>0x01,
   FRAME_PRIORITY	    =>0x02,
@@ -77,7 +83,7 @@ use constant {
 
 
 #Flags
-use constant {
+use constant::more {
   FLAG_PING_ACK		        =>0x01,
   FLAG_END_STREAM	        =>0x01,
   FLAG_END_HEADERS	      =>0x04,
@@ -88,7 +94,7 @@ use constant {
 };
 
 #Error codes
-use constant {
+use constant::more {
   ERROR_NO_ERROR		        =>0x00,
   ERROR_PROTOCOL_ERROR		  =>0x01,
   ERROR_INTERNAL_ERROR		  =>0x02,
@@ -106,7 +112,7 @@ use constant {
 };
 
 	#Settings
-use constant {
+use constant::more {
   SETTINGS_HEADER_TABLE_SIZE	    =>0x01,
   SETTINGS_ENABLE_PUSH		        =>0x02,
   SETTINGS_MAX_CONCURRENT_STREAMS =>0x03,
@@ -117,12 +123,12 @@ use constant {
 
 
 #Preface
-use constant CLIENT_PREFACE=>pack "H*","0x505249202a20485454502f322e300d0a0d0a534d0d0a0d0a";
+use constant::more CLIENT_PREFACE=>pack "H*","0x505249202a20485454502f322e300d0a0d0a534d0d0a0d0a";
 
 
-use constant STATIC_FRAME_PING=> pack "NCNa64",(8<<8)|FRAME_PING, 0, map int(rand(256)), 1..8;
+use constant::more STATIC_FRAME_PING=> pack "NCNa64",(8<<8)|FRAME_PING, 0, map int(rand(256)), 1..8;
 
-use constant PAD=>pack "a256", "";
+use constant::more PAD=>pack "a256", "";
 
 my $len;
 my $pad;

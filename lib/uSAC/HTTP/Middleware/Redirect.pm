@@ -2,20 +2,17 @@ package uSAC::HTTP::Middleware::Redirect;
 
 use uSAC::HTTP::Constants;
 use uSAC::HTTP::Rex;
-use Exporter "import";
 
 
-our @EXPORT_OK=qw(
-  uhm_redirect_set_other
+use Export::These qw(
+  uhm_redirect_see_other
   uhm_redirect_found
   uhm_redirect_temporary
   uhm_redirect_permanent
-  uhm_redirect_not_found
   uhm_redirect_internal
   uhm_error_not_found
 );
 
-our @EXPORT=@EXPORT_OK;
 
 #Immediate redirects
 

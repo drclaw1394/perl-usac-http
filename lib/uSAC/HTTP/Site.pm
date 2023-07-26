@@ -39,7 +39,6 @@ use enum (
 
 use Cwd qw<abs_path>;
 use File::Spec::Functions;
-use Exporter "import";
 use uSAC::HTTP::Constants;
 use uSAC::IO;
 
@@ -54,7 +53,7 @@ my @errors=qw<
 	usac_error_route
 >;	
 	
-our @EXPORT_OK=(qw(
+use Export::These qw(
   usac_route
   usac_site
   usac_prefix
@@ -66,13 +65,11 @@ our @EXPORT_OK=(qw(
   usac_mime_default
   $Path
   $Comp
-  $Query
   $File_Path
   $Dir_Path
   $Any_Method
-	), @errors);
+	), @errors;
 
-our @EXPORT=@EXPORT_OK;
 
 use uSAC::HTTP::Code qw<:constants>;
 use uSAC::HTTP::Method qw<:constants>;
@@ -674,8 +671,11 @@ method add_route {
       # Hash keys are methods, values are expected to be a anon array of middlewares
       my $path= $_[0];
       $path="/".$path if index $path, "/"; #TODO fix regex
+
       for my ($k, $v)($_[1]->%*){
-        $result=$self->_add_route($k,$path, @$v);
+        # Recall this method with individual entries. Should allow string names
+        # and implicit paths
+        $result=$self->add_route($k,$path, @$v);
       }
     }
 

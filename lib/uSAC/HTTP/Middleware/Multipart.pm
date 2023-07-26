@@ -8,8 +8,6 @@ use Exporter "import";
 our @EXPORT_OK=qw<uhm_multipart>;
 our @EXPORT=@EXPORT_OK;
 
-#use constant CRLF2=>CRLF.CRLF;
-#use constant MAX_READ_SIZE => 128 * 1024;
 
 use enum qw<state_ first_ buff_ boundary_ b_len_>;
 use enum qw<BOUNDARY_SEARCH PROCESS_HEADER>;
