@@ -8,8 +8,8 @@ our $PART_LIMIT=$UPLOAD_LIMIT;
 use Log::ger;
 
 use Log::OK;
-use uSAC::HTTP::Code qw<:constants>;
-use uSAC::HTTP::Header qw<:constants>;
+use uSAC::HTTP::Code;
+use uSAC::HTTP::Header;
 use uSAC::HTTP::Constants;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Route;

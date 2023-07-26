@@ -43,9 +43,10 @@ our $KEEP_ALIVE=1;
 
 #use uSAC::HTTP::Session;
 #use uSAC::HTTP::Rex;
-use uSAC::HTTP::Code qw<:constants>;
-use uSAC::HTTP::Method qw<:constants>;
-use uSAC::HTTP::Header qw<:constants>;
+use uSAC::HTTP::Code;
+use uSAC::HTTP::Method;
+use uSAC::HTTP::Header;
+
 use constant::more MAX_READ_SIZE => 128 * 1024;
 use constant::more CRLF2=>CRLF.CRLF;
 

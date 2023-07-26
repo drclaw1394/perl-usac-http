@@ -5,10 +5,8 @@ use warnings;
 use feature qw<refaliasing say state>;
 no warnings "experimental";
 
-#no feature "indirect";
-#use uSAC::HTTP::Session;
-use uSAC::HTTP::Code qw<:constants>;
-use uSAC::HTTP::Header qw<:constants>;
+use uSAC::HTTP::Code;
+use uSAC::HTTP::Header;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Constants;
 

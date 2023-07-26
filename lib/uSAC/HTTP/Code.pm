@@ -1,10 +1,17 @@
 package uSAC::HTTP::Code;
-use List::Util qw<pairs>;
+use strict;
+use warnings;
+no warnings "experimental";
 
+#use List::Util qw<pairs>;
+
+our @names;
+our @values;
+our %const_names;
 BEGIN {
 
 	our @lookup=(
-		#Information respoinses
+		#Information responses
 		"Continue"=>100,
 		"Switching Protocols"=>101,
 		"Processing"=>102,
@@ -75,14 +82,17 @@ BEGIN {
 		"Not Extended"=>510,
 		"Network Authentication Required"=>511,
 	);
-	our @names= map {$lookup[$_*2]} 0..@lookup/2-1; 
-	our @values= map {$lookup[1+$_*2]} 0..@lookup/2-1; 
-	#our %const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr, "$values[$_] $names[$_]")} 0..@names-1;
-	our %const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr, "$values[$_]")} 0..@names-1;
+
+	@names= map {$lookup[$_*2]} 0..@lookup/2-1; 
+	@values= map {$lookup[1+$_*2]} 0..@lookup/2-1; 
+  %const_names=map {(("HTTP_".uc $names[$_])=~s/ |-|'/_/gr,
+    "$values[$_]")} 0..@names-1;
 	
 	#build value to code array
 	our @code_to_name;
-	for my $p (pairs(@lookup)){
+  #for my $p (pairs(@lookup)){
+  for my ($k,$v)(@lookup){
+    my $p=[$k,$v];
 		$code_to_name[$p->[1]]=$p->[0];
 	}
 	
@@ -90,5 +100,5 @@ BEGIN {
 use enum (map s/ |-|'/_/gr, @names);
 
 use constant::more \%const_names; #Direct constants to use
-use Export::These keys(%const_names),constants=>[keys %const_names];
+use Export::These keys(%const_names);#,constants=>[keys %const_names];
 1;

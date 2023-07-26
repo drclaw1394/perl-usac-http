@@ -13,8 +13,8 @@ use File::Basename qw<basename dirname>;
 use IO::FD;
 use uSAC::IO;
 
-use uSAC::HTTP::Code qw<:constants>;
-use uSAC::HTTP::Header qw<:constants>;
+use uSAC::HTTP::Code;
+use uSAC::HTTP::Header;
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Constants;
 use uSAC::Util;

@@ -1,5 +1,8 @@
 package uSAC::HTTP::Method;
+use strict;
+use warnings;
 
+our %const_names;
 BEGIN {
 
 	our @names=qw<
@@ -13,7 +16,7 @@ BEGIN {
 		TRACE
 		PATCH
 		>;
-	our %const_names=map {("HTTP_".uc $names[$_], $names[$_])} 0..@names-1;
+	%const_names=map {("HTTP_".uc $names[$_], $names[$_])} 0..@names-1;
 }
 
 #Create Enumerations 
@@ -23,5 +26,5 @@ BEGIN {
 #HTTP_GET=>"GET"
 use constant::more \%const_names;
 
-use Export::These keys %const_names, constants=>[keys %const_names];
+use Export::These keys %const_names;
 1;

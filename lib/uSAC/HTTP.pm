@@ -1,81 +1,56 @@
 package uSAC::HTTP;
-use strict;
-use feature qw<say state refaliasing>;
-use utf8;
 use warnings;
+use strict;
 
 use version; our $VERSION=version->declare("v0.1");
 
-# TODO: Event system to be via uSAC::IO eventually
-use AnyEvent;
-
-# HTTP constants for codes, methods and headers
-use uSAC::HTTP::Code ":constants";
-use uSAC::HTTP::Header ":constants";
-use uSAC::HTTP::Method ":constants";
-
-# Core of the uSAC::HTTP system
-use uSAC::HTTP::Constants;  # Constants for the message structure of middleware
-use uSAC::HTTP::Rex;        # Request and Response
-use uSAC::HTTP::Site;       # Route grouping and base class
-
-
+# Generate import sub and support reexporting
+#
+use Export::These;
 
 # Contextual variables used in DSL
+#
 our $Site;
 
-
-# Re-export any symbols that start with usac_, rex_ or certain  constants
+# Called from Export::These hook. $target is the package of the importer
+# of this module. Works at any level  with Export::These
 #
-sub import {
-  # Target package is first argument, with dereferencing notatition this
-  # will be the same as this package.  Otherwise an explicit package name
-  # can be use as the first argument and will be the target of symbol
-  # injection
-  my $package=$_[0];  
-  my $caller=$package eq __PACKAGE__ ? caller: $package;
+sub _reexport {
+  my $target=shift;
+  # The following manipulate hints, so the caller is irrelevant
+  #
+  require strict;
+  strict::import($target);
 
-  strict::import($caller);
-  warnings::import($caller);
-  feature::import($caller,qw<say state refaliasing current_sub>);
-  #feature->unimport(qw<indirect>);
-  utf8::import($caller);
+  require warnings;
+  warnings::import($target);
 
-  #say join ", ", @_;
-  if(@_==1){
-    #Anything sub with usac or rex prefix is rexported
-    #Also http constants and headers are rexported
-    #
-    for(keys %uSAC::HTTP::){
-      #print $_."\n";
-      no strict "refs";
-      if( /^usac_/ or /^rex_/ or  /^HTTP_/ or /^uhm_/){
-        *{$caller."::".$_}=\*{"uSAC::HTTP::".$_};
-      }
-      elsif(/Dir_Path/ or /File_Path/ or /Comp/ ){
-        #print 'Symbol name: '.$_."\n";;
-        s/\$//;
-        my $name=$caller."::".$_;
-        *{$name}=\${'uSAC::HTTP::Site::'.$_};
-      }
-    }
-  }
-  if(@_==1 or grep /:constants/, @_){
-    #Export contants
-    my $i=0;
-    for(qw<ROUTE REX IN_HEADER OUT_HEADER HEADER PAYLOAD CB LF>){
-      no strict "refs";
-      my $name=$caller."::".$_;
-      my $a=$i;
-      # Export only if it doesn't existin name space.
-      # stops warnings
-      next if exists ${$caller."::"}{$_};
-      *{$name}=\&{$_};
-      $i++;
-    }
-  }
+  require feature;
+  feature::import($target,qw<say state refaliasing current_sub>);
+  feature::unimport($target,qw<indirect>);
+
+  require utf8;
+  utf8::import($target);
+
+  require uSAC::HTTP::Site;
+  uSAC::HTTP::Site::import($target);
+
+  require uSAC::HTTP::Rex;
+  uSAC::HTTP::Rex::import($target);
+
+  require uSAC::HTTP::Header;
+  uSAC::HTTP::Header::import($target);
+
+  require uSAC::HTTP::Code;
+  uSAC::HTTP::Code::import($target);
+  
+  require uSAC::HTTP::Constants;
+  uSAC::HTTP::Constants::import($target);
+  
 }
-1;
+
+__PACKAGE__;
+
 
 =head1 NAME
 

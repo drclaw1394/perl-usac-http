@@ -1,14 +1,10 @@
-#Generate a list of header names as a hash or array
 package uSAC::HTTP::Header;
 use strict;
 use warnings;
-use feature qw<refaliasing fc>;
-no warnings qw<experimental>;
-use List::Util qw<first>;
-use Log::ger;
-use Log::OK;
+
 our %const_names;
 our @index_to_name;
+
 BEGIN {
 	our @names=qw(
 		_unkown_
@@ -94,7 +90,7 @@ BEGIN {
 	#our %const_names=map {(("HTTP_".uc)=~s/-/_/gr, $i++)} @names;
 
 	#Resolve index to name string
-	@index_to_name=@names;#map fc, @names;
+	@index_to_name=@names;
 	$index_to_name[0]=undef;
 
 	#Resolve name string to index
@@ -102,8 +98,8 @@ BEGIN {
 	#
 };
 
-use constant::more \%const_names; #Direct constants to use
-use Export::These keys(%const_names), constants=>[keys %const_names];
+use constant::more \%const_names;
+use Export::These keys %const_names;
 
 
 1;

@@ -72,9 +72,9 @@ use Export::These qw(
   >;	
 
 
-use uSAC::HTTP::Code qw<:constants>;
-use uSAC::HTTP::Method qw<:constants>;
-use uSAC::HTTP::Header qw<:constants>;
+use uSAC::HTTP::Code;
+use uSAC::HTTP::Method;
+use uSAC::HTTP::Header;
 use uSAC::HTTP::Constants;
 
 use uSAC::HTTP::Rex;
@@ -1096,4 +1096,4 @@ sub uhm_dead_horse_stripper {
 }
 
 
-1;
+__PACKAGE__;

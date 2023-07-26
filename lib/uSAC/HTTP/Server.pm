@@ -72,8 +72,8 @@ use Socket qw(
 use Carp 'croak';
 
 
-use uSAC::HTTP::Code ":constants";
-use uSAC::HTTP::Header ":constants";
+use uSAC::HTTP::Code;
+use uSAC::HTTP::Header;
 use uSAC::HTTP::Session;
 use uSAC::HTTP::Rex;
 use uSAC::MIME;
