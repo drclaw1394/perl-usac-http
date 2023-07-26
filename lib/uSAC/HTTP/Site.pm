@@ -47,13 +47,9 @@ use Exception::Class::Base;
 
 use URI;
 
-my @errors=qw<
-  usac_catch_route
-	usac_error_page
-	usac_error_route
->;	
 	
 use Export::These qw(
+  usac_catch_route
   usac_route
   usac_site
   usac_prefix
@@ -68,7 +64,12 @@ use Export::These qw(
   $File_Path
   $Dir_Path
   $Any_Method
-	), @errors;
+	),
+  qw<
+  usac_catch_route
+	usac_error_page
+	usac_error_route
+  >;	
 
 
 use uSAC::HTTP::Code qw<:constants>;
@@ -84,6 +85,14 @@ use File::Spec::Functions qw<rel2abs abs2rel>;
 use File::Basename qw<dirname>;
 
 
+sub usac_catch_route {
+	#Add a route matching all methods and any path	
+	$uSAC::HTTP::Site->add_route(qr{(?#SITE CATCH ALL)[^\s]+} ,qr{.*},pop);
+}
+
+sub usac_error_route {
+	$uSAC::HTTP::Site->add_error_route(@_);
+}
 
 class uSAC::HTTP::Site;
 
@@ -586,6 +595,7 @@ sub usac_site :prototype(&) {
 	  $sub->($self); $line=__LINE__;
   }
   catch($e){
+    log_fatal $e;
     log_fatal  "Site: ".$self->id;
 
     my @frames=$e->trace->frames;
@@ -959,14 +969,6 @@ method add_middleware {
 
 ########## Error handling - server side
 
-sub usac_catch_route {
-	#Add a route matching all methods and any path	
-	$uSAC::HTTP::Site->add_route(qr{(?#SITE CATCH ALL)[^\s]+} ,qr{.*},pop);
-}
-
-sub usac_error_route {
-	$uSAC::HTTP::Site->add_error_route(@_);
-}
 
 method add_error_route {
   #my $self=shift;

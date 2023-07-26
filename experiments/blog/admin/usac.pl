@@ -4,6 +4,7 @@ use feature "say";
 
 use uSAC::HTTP;
 use uSAC::HTTP::Site;
+#use uSAC::HTTP::Site "usac_catch_route";
 #use uSAC::HTTP::Server;
 use uSAC::HTTP::Middleware::Static;
 use uSAC::HTTP::Middleware::Log;
@@ -70,17 +71,15 @@ my $server; $server=usac_server {
       #&rex_write;
 		};
 
-		usac_error_route "/error/404" => sub {
-			say "ERROR FOR BLOG admin";
-      #$_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT admin: $_[OUT_HEADER]{":status"}";
-      #&rex_write;
-      $_[PAYLOAD]="";#:"asdf";
+    usac_error_route "/error/404" => sub {
+                        say "ERROR FOR BLOG admin";
+                        $_[PAYLOAD]="";#:"asdf";
       $_[OUT_HEADER]{":status"}=404;
       1;
-		};
+                };
 
-		#usac_error_page uses the current site prefix
-		usac_error_page 404 => "/error/404";
+    #usac_error_page uses the current site prefix
+    usac_error_page 404 => "/error/404";
 
 		#Catch all
     usac_catch_route uhm_error_not_found;

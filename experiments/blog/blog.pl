@@ -91,22 +91,6 @@ my $server; $server=usac_server {
       };
 
 		usac_route '/static/hot.txt'
-      ##############################
-      # => sub {                   #
-      #   say Dumper $_[IN_HEADER] #
-      # }                          #
-      #=> uhm_gzip()
-      #=> uhm_deflate()
-      #=>uhm_multipart()
-      #=>uhm_log(dump_headers=>1)
-     ######################################################
-      ######################################################################
-      # =>sub {                                                            #
-      #   require Data::Dumper;                                            #
-      #   say "MY state : ". Data::Dumper::Dumper $_[IN_HEADER]{":state"}; #
-      #   1;                                                               #
-      # }                                                                  #
-      ######################################################################
       => uhm_static_file(
         #headers=>{"transfer-encoding"=>"chunked"}, 
         \"static/hot.txt");
@@ -257,20 +241,17 @@ my $server; $server=usac_server {
       };
 		
 
-    #usac_route POST=>"/data_slurp" => MyApp::data_slurp;
 
-    #usac_route "POST|GET"=>"/url_sl(.)rp\\?([^=]+)=(.*)" => MyApp::url_slurp;
-
-    usac_error_route "/error" 
+    usac_error_route "/error"
       => sub {
         $_[PAYLOAD]="CUSTOM ERROR PAGE CONTENT: ". $_[OUT_HEADER]{":status"};
         1;
-		  };
+                  };
 
-		usac_error_page 404 
+                usac_error_page 404
       => "/error";
 
-		usac_error_page 415 
+                usac_error_page 415
       => "/error";
 
     # Special route which is last in site to catch errors
