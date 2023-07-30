@@ -48,7 +48,7 @@ use Exception::Class::Base;
 use URI;
 
 	
-use Export::These qw(
+use Export::These (qw(
   usac_catch_route
   usac_route
   usac_site
@@ -69,7 +69,7 @@ use Export::These qw(
   usac_catch_route
 	usac_error_page
 	usac_error_route
-  >;	
+  >);
 
 
 use uSAC::HTTP::Code;
@@ -348,18 +348,23 @@ method __adjust_matcher {
     $matcher=undef;
     #$matcher=qr{$method_matcher $bp$path_matcher};
   }
-  #is this right?
-  elsif($path_matcher =~ /[(\^\$]/){
-    $type=undef;
-    #$pm=$path_matcher;
-    $matcher=qr{^$method_matcher $bp$path_matcher};
-  }
+  #####################################################
+  # #is this right?                                   #
+  # elsif($path_matcher =~ /[(\^\$]/){                #
+  #   $type=undef;                                    #
+  #   #$pm=$path_matcher;                             #
+  #   $matcher=qr{^$method_matcher $bp$path_matcher}; #
+  # }                                                 #
+  #####################################################
 
   elsif($path_matcher =~ /\$$/){
     #$pm=substr $path_matcher, 0, -1;
     Log::OK::TRACE and log_trace "Exact match";
+    say "oijasdf";
     $type="exact";
-    $matcher="$method_matcher $bp$path_matcher";
+    my $pm=$path_matcher =~ s/\$$//r;
+    $matcher="$method_matcher $bp$pm";
+    #$matcher="$method_matcher $bp$path_matcher";
   }
   else {
     $type="begin";
@@ -444,7 +449,9 @@ method wrap_middleware {
         Log::OK::TRACE and log_trace "No middleware method/sub in delegate... ignoring";
       }
 
-      $string="$_delegate->".$_;
+
+      $string="$_delegate->".s/\$$//r;
+      #$string="$_delegate->".$_;
       my @a=eval $string;
       die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
       unshift @_, @pre, @a;
@@ -671,7 +678,7 @@ method add_route {
       $del_meth||="_empty";   # call the empty handler on emty string
 
       #unshift @_, $self->default_method;
-      unshift @_, $self->default_method if $_[0] =~ m|^/|;
+      unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
       push @_, $del_meth;
       $result=$self->_add_route(@_);
     }
@@ -699,7 +706,7 @@ method add_route {
         $del_meth||="_empty";   # call the empty handler on emty string
 
         push @_, $del_meth;
-        unshift @_, $self->default_method if $_[0] =~ m|^/|;
+        unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
         $result=$self->_add_route(@_);
     }
     

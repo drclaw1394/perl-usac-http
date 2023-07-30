@@ -19,8 +19,9 @@ use uSAC::IO::Acceptor;
 use uSAC::HTTP::Route;
 use Error::Show;
 
-use uSAC::HTTP::Site;
-use uSAC::HTTP::Constants;
+use uSAC::HTTP;
+#use uSAC::HTTP::Site;
+#use uSAC::HTTP::Constants;
 use Hustle::Table;		#dispatching of endpoints
 use uSAC::Util;
 
@@ -97,23 +98,40 @@ sub _reexport {
   my $target=shift;
   # Re export to the caller package
   #
-  require uSAC::HTTP;
-  uSAC::HTTP::import($target);
-  uSAC::HTTP::import($target, ":constants");
+  say "REXPORT FOR SERVER\n\n";
+  uSAC::HTTP->import;
+  uSAC::HTTP::Site->import;
+
+  say "after site import in server";
+  say "\n";
+  #uSAC::HTTP->import(":constants");
 
   # Preload common middleware  if asked
   #
   if(grep /:common/, @_){
-    require uSAC::HTTP::Middleware::Static;
-    uSAC::HTTP::Middleware::Static::import($target);
-    
+    {
+      {
+        local $Exporter::ExportLevel=0;
+        require uSAC::HTTP::Middleware::Trace;
+        require uSAC::HTTP::Middleware::Static;
+        require uSAC::HTTP::Middleware::Slurp;
+        require uSAC::HTTP::Middleware::Redirect;
+        require uSAC::HTTP::Middleware::Log;
+        require uSAC::HTTP::Middleware::TemplatePlex;
+      }
+      say "LEVEL IS: ".$Exporter::ExportLevel;
+      uSAC::HTTP::Middleware::Trace->import;
+      say "after trace import";
+      uSAC::HTTP::Middleware::Static->import;
+      say "after static import";
 
-    require uSAC::HTTP::Middleware::Slurp;
-    uSAC::HTTP::Middleware::Slurp::import($target);
+      uSAC::HTTP::Middleware::Slurp->import;
 
-    require uSAC::HTTP::Middleware::Redirect;
-    uSAC::HTTP::Middleware::Redirect::import($target);
+      uSAC::HTTP::Middleware::Redirect->import;
+      uSAC::HTTP::Middleware::Log->import;
+      uSAC::HTTP::Middleware::TemplatePlex->import;
 
+    }
     #require uSAC::HTTP::Middleware::WebSocket;
   }
 

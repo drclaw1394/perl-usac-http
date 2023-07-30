@@ -4,6 +4,13 @@ use strict;
 
 use version; our $VERSION=version->declare("v0.1");
 
+use uSAC::HTTP::Site ();
+use uSAC::HTTP::Rex ();
+use uSAC::HTTP::Header ();
+use uSAC::HTTP::Code ();
+use uSAC::HTTP::Constants ();
+use uSAC::HTTP::Route ();
+
 # Generate import sub and support reexporting
 #
 use Export::These;
@@ -20,32 +27,31 @@ sub _reexport {
   # The following manipulate hints, so the caller is irrelevant
   #
   require strict;
-  strict::import($target);
+  strict->import;#($target);
 
   require warnings;
-  warnings::import($target);
+  warnings->import;#($target);
 
   require feature;
-  feature::import($target,qw<say state refaliasing current_sub>);
-  feature::unimport($target,qw<indirect>);
+  feature->import(qw<say state refaliasing current_sub>);
+  feature->unimport(qw<indirect>);
 
   require utf8;
-  utf8::import($target);
+  utf8->import;#($target);
 
-  require uSAC::HTTP::Site;
-  uSAC::HTTP::Site::import($target);
+  print "\nExport level HTTP: ".$Exporter::ExportLevel;
+  print "\n";
+  uSAC::HTTP::Site->import;
 
-  require uSAC::HTTP::Rex;
-  uSAC::HTTP::Rex::import($target);
+  uSAC::HTTP::Rex->import;
 
-  require uSAC::HTTP::Header;
-  uSAC::HTTP::Header::import($target);
+  uSAC::HTTP::Header->import;
 
-  require uSAC::HTTP::Code;
-  uSAC::HTTP::Code::import($target);
+  uSAC::HTTP::Code->import;
   
-  require uSAC::HTTP::Constants;
-  uSAC::HTTP::Constants::import($target);
+  uSAC::HTTP::Constants->import;
+
+  uSAC::HTTP::Route->import;
   
 }
 

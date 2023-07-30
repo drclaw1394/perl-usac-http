@@ -23,8 +23,8 @@ use AnyEvent;
 
 use uSAC::HTTP::Rex;
 use uSAC::HTTP::Session;
-use uSAC::HTTP::Header qw<:constants>;
-use uSAC::HTTP::Code qw<:constants>;
+use uSAC::HTTP::Header;
+use uSAC::HTTP::Code;
 use uSAC::HTTP::Constants;
 
 use Sub::Middler;

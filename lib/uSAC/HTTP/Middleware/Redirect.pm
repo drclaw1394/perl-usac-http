@@ -70,6 +70,7 @@ sub uhm_redirect_temporary {
 
 Wrapper around rex_redirect_temporary to be used as innerware directly.
 =cut
+
 sub uhm_redirect_permanent {
 	my $url =pop;
 	sub {

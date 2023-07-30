@@ -1,3 +1,6 @@
+package uSAC::HTTP::Middleware::Trace;
+use strict;
+use warnings;
 use uSAC::HTTP;
 use uSAC::HTTP::Constants;
 use uSAC::Util;

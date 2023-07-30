@@ -1,8 +1,12 @@
+package uSAC::HTTP::Middleware::Trace;
 use strict;
 use warnings;
-use uSAC::HTTP ":constants";
-use uSAC::HTTP::Route;
 
+use uSAC::HTTP::Constants;
+use uSAC::HTTP::Route;
+use uSAC::HTTP::Header;
+
+use feature "say";
 use Export::These "uhm_trace";
 
 no warnings "experimental";
@@ -44,16 +48,3 @@ sub uhm_trace {
   ]
 }
 1;
-
-=head1 NAME
-
-U:T:M:Trace - HTTP/1.1 Trace Middeware
-
-=head1 DESCRIPTION
-
-Implements trace functionallity for HTTP/1.1. The incoming request (
-request line and headers) are re serialised in to the repsonse body. 
-
-This middleware expects to be the last in a chain so return immediately after.
-
-
