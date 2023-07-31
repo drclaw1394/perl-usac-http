@@ -134,11 +134,15 @@ sub uhm_psgi {
 
         #$env->{PATH_INFO}=encode 'UTF-8', url_decode_utf8 ($env->{":path"} =~ s/\?$env->{":query"}$//r);
         #$env->{PATH_INFO}=url_decode ($env->{":path"} =~ s/\?$env->{":query"}$//r);
-        my $query=$env->{":query"};
-        $env->{PATH_INFO}=url_decode ($query
-          ?substr $env->{":path"} ,0, -(1+length($query))
-          :$env->{":path"}
-        );
+        #
+        #####################################################
+        # my $query=$env->{":query"};                       #
+        # $env->{PATH_INFO}=url_decode ($query              #
+        #   ?substr $env->{":path"} ,0, -(1+length($query)) #
+        #   :$env->{":path"}                                #
+        # );                                                #
+        #####################################################
+        $env->{PATH_INFO}=url_decode($env->{":path"});
 
         $env->{SERVER_PROTOCOL}=$env->{":protocol"};
         $env->{QUERY_STRING}=	$env->{":query"};	

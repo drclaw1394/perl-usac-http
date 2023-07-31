@@ -311,15 +311,25 @@ sub make_parser{
             $h{":method"}=$method;
             $h{":scheme"}="http";
             $h{":authority"}=$host;
-            $h{":path"}=$uri;
+            #$h{":path"}=$uri;
             
             ## psudeo psudeo headers
             $h{":protocol"}=$version;
             my $_i;
-            $h{":query"}=
-              (($_i=index($uri, "?"))>=0)
-                ?substr($uri, $_i+1)
-                :"";
+            #################################
+            # $h{":query"}=                 #
+            #   (($_i=index($uri, "?"))>=0) #
+            #     ?substr($uri, $_i+1)      #
+            #     :"";                      #
+            #################################
+            $_i=index $uri, "?"; 
+            if($_i>=0){
+              $h{":query"}=substr($uri, $_i+1);
+              $uri=$h{":path"}=substr($uri, 0, $_i);
+            }
+            else {
+              $h{":path"}=$uri;
+            }
 
             # In server mode, the route need needs to be matched for incomming
             # processing and a rex needs to be created
