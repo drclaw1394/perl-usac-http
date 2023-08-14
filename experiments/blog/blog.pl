@@ -36,7 +36,6 @@ my $server=uSAC::HTTP::Server->new(
 my $delegate= require(path(\"delegate.pl"));
   print $delegate;
   print "\n";
-  sleep 1;
 
 $server
 ->add_site(uSAC::HTTP::Site->new(
@@ -65,7 +64,7 @@ $server
       #headers=>{"transfer-encoding"=>"chunked"},
       \"static/hot.txt")
   )
-  ->add_route(""=>sub { $_[PAYLOAD]="asdfasd default"})
+  #->add_route(""=>sub { $_[PAYLOAD]="asdfasd default"})
 )
 ->parse_cli_options
 ->run;

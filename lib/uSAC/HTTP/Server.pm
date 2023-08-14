@@ -170,15 +170,24 @@ BUILD {
 
   $self->mode//=0; #Only set to server mode if it hasn't been defined.
 
-	my $default=$self->add_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", mode=>$self->mode));
-	$default->_add_route([$Any_Method], undef, _default_handler);
+  # Add the wildcard host, incase no sites or route are added. Gives at least
+  # one table with rebuilding the routes/dispatch
+  # 
+  $_host_tables->{"*.*"}=[
+    Hustle::Table->new($dummy_default), # Table
+    {},                                  # Table cache
+    undef,                              #  dispatcher
+    "",
+    [],
+    [],
+    0
+
+  ];
 
 	$_backlog=4096;
 	$_read_size=4096;
-  #$_workers=undef;
   $_options={};
 
-	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$_sessions={};
 
   $self->_add_listeners(ref($_listen) eq "ARRAY"?@$_listen:$_listen);
@@ -452,13 +461,10 @@ method add_host_end_point{
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
-
-method rebuild_dispatch {
-  #my $self=shift;
-
-  Log::OK::DEBUG and log_debug(__PACKAGE__. " rebuilding dispatch...");
-  #Install error routes per site
-  #Error routes are added after other routes.
+method rebuild_routes {
+  # Add the staged routes for site structure into server
+  $self->SUPER::rebuild_routes;
+  
 
   # Create a special default site for each host that matches any method and uri
   #  An entry is only added if the dummy_defualt is currently the default
@@ -468,19 +474,22 @@ method rebuild_dispatch {
     #If the table has a dummy catch all then lets make an fallback
     my $entry=$_host_tables->{$host}; 
     my $last=$entry->[0]->@*-1; #Index of default in hustle table
-    #say join ", ", $entry->[0][$last][1]->@*;
-    #sleep 1;
 
     if($entry->[0][$last][1] == $dummy_default){
-      Log::OK::TRACE and log_trace(__PACKAGE__. " host table special default. detected. Adding special site");
+      Log::OK::DEBUG and log_debug "Adding default handler to $host";
       my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self, mode=>$self->mode);
       $site->parent_site=$self;
-      $self->add_site($site);
-      Log::OK::DEBUG and log_debug "Adding default handler to $host";
-
       $site->_add_route([$Any_Method], undef, _default_handler);
     }
   }
+}
+
+method rebuild_dispatch {
+
+  Log::OK::DEBUG and log_debug(__PACKAGE__. " rebuilding dispatch...");
+  #Install error routes per site
+  #Error routes are added after other routes.
+
 
 
   # Show a warning (if enabled) if the there is exactly the same number of
@@ -716,7 +725,7 @@ method dump_routes {
       
       for my $entry ($table->[0]->@*){
         
-        my $site=$entry->[1][0];
+        my $site=$entry->[1][ROUTE_SITE];
 
 
         my $matcher=$entry->[0];

@@ -1,7 +1,5 @@
 package uSAC::HTTP::Site;
-use warnings;
-use strict;
-
+use v5.36;
 use Log::ger;
 use Log::OK;
 
@@ -44,50 +42,21 @@ use Error::Show;
 use Exception::Class::Base;
 
 use URI;
-
 	
-  #usac_delegate
-use Export::These (qw(
-  usac_catch_route
-  usac_route
-  usac_site
-  usac_prefix
-  usac_id
-  usac_host
-  usac_middleware
-  usac_mime_db
-  usac_mime_default
+use Export::These qw(
   $Path
   $Comp
   $File_Path
   $Dir_Path
   $Any_Method
-	),
-  qw<
-  usac_catch_route
-	usac_error_page
-	usac_error_route
-  >);
+);
 
 
-use uSAC::HTTP::Code;
-use uSAC::HTTP::Method;
-use uSAC::HTTP::Header;
-use uSAC::HTTP::Constants;
+use Import::These qw<uSAC::HTTP:: Code Method Header Constants Rex>;
 
-use uSAC::HTTP::Rex;
 use uSAC::HTTP::v1_1_Reader;      #TODO: this will be dynamically linked in
 use Sub::Middler;
 
-
-sub usac_catch_route {
-	#Add a route matching all methods and any path	
-	$uSAC::HTTP::Site->add_route(qr{(?#SITE CATCH ALL)[^\s]+} ,qr{.*},pop);
-}
-
-sub usac_error_route {
-	$uSAC::HTTP::Site->add_error_route(@_);
-}
 
 class uSAC::HTTP::Site;
 
@@ -144,8 +113,6 @@ my $id=0;
 BUILD{
   $_id//=$id++;
   $_prefix//="";
-  say caller;
-  say $_delegate;
   $self->_delegate($_delegate, caller) if $_delegate;
 
   if(defined($_host) and ref $_host ne "ARRAY"){
@@ -173,7 +140,6 @@ method rebuild_routes {
   my $result;
   for my $r ($_staged_routes->@*){
     if($r isa __PACKAGE__){
-      say "is a site";
       $r->rebuild_routes; # Recurse down
     }
     else {
@@ -292,7 +258,6 @@ method _add_route {
   push @hosts, "*.*" unless @hosts;
 
 
-  #$hosts{"*.*"}//= {};
   Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
   my $pm;
 
@@ -319,7 +284,6 @@ method _add_route {
       $path_matcher=qr{$path_matcher} ;
 
     }
-
     my ($matcher, $type)=$self->__adjust_matcher($host, $method_matcher, $path_matcher);
 
     # Create a route structure
@@ -513,7 +477,6 @@ method construct_innerware {
 	my $parent=$self;#$_[0];
 	my @middleware;
 	while($parent){
-  say "in construct innerware: $parent";
 		Log::OK::TRACE and log_trace "Middleware from $parent";
 		Log::OK::TRACE and log_trace "Parent_site ". ($parent->parent_site//"");
 		unshift @middleware, @{$parent->innerware//[]};
@@ -602,75 +565,6 @@ method add_site {
   $self;
 }
 
-#############################################################################
-# method _add_site {                                                        #
-#         my $site=pop;                                                     #
-#   my %options=@_;                                                         #
-#   #my $parent=$self; #$options{parent}//$uSAC::HTTP::Site;                #
-#         my $server=$self->find_root;                                      #
-#                                                                           #
-#                                                                           #
-#   $site->mode($server->mode);                                             #
-#   $site->parent_site=$self;                                               #
-#                                                                           #
-#   #my $self= uSAC::HTTP::Site->new(server=>$server, mode=>$server->mode); #
-#   #$site->parent_site=$parent;                                            #
-#   #$site->id=$options{id}//join ", ", caller;                             #
-#   #$site->set_prefix(%options,$options{prefix}//'');                      #
-#                                                                           #
-#   #local  $uSAC::HTTP::Site=$self;                                        #
-#   ##################################################################      #
-#   # my $line;                                                      #      #
-#   # try {                                                          #      #
-#   #         $sub->($self); $line=__LINE__;                         #      #
-#   # }                                                              #      #
-#   # catch($e){                                                     #      #
-#   #   log_fatal $e;                                                #      #
-#   #   log_fatal  "Site: ".$self->id;                               #      #
-#   #                                                                #      #
-#   #   my @frames=$e->trace->frames;                                #      #
-#   #   # remove any frames from start                               #      #
-#   #   shift @frames while $frames[0]->filename =~ /Site\.pm/;      #      #
-#   #   splice @frames,1;                                            #      #
-#   #                                                                #      #
-#   #   log_fatal context reverse=>1, message=>$e, frames=>\@frames; #      #
-#   #   $e->throw;                                                   #      #
-#   # }                                                              #      #
-#   ##################################################################      #
-#         $self;                                                            #
-# }                                                                         #
-#############################################################################
-
-sub usac_site :prototype(&) {
-	my $sub=pop;
-  my %options=@_;
-  my $parent=$options{parent}//$uSAC::HTTP::Site;
-	my $server=$parent->find_root;
-
-	my $self= uSAC::HTTP::Site->new(server=>$server, mode=>$server->mode);
-	$self->parent_site=$parent;
-	$self->id=$options{id}//join ", ", caller;
-	$self->set_prefix(%options,$options{prefix}//'');
-	
-	local  $uSAC::HTTP::Site=$self;
-  my $line;
-  try {
-	  $sub->($self); $line=__LINE__;
-  }
-  catch($e){
-    log_fatal $e;
-    log_fatal  "Site: ".$self->id;
-
-    my @frames=$e->trace->frames;
-    # remove any frames from start
-    shift @frames while $frames[0]->filename =~ /Site\.pm/;
-    splice @frames,1;
-
-    log_fatal context reverse=>1, message=>$e, frames=>\@frames;
-    $e->throw;
-  }
-	$self;
-}
 
 method child_site {
   my $root=$self->find_root;
@@ -683,7 +577,6 @@ method find_root {
 	while($parent->parent_site){
 		$parent=$parent->parent_site;
 	}
-  say "ROOT Is: $parent";
 	$parent;
 }
 
@@ -696,21 +589,21 @@ method default_method {
 }
 
 sub any_method { $Any_Method; }
-#Fixes missing slashes in urls
-#As it is likely that the url is a constant, @_ is shifted/unshifted
-#to create new variables for the things we need to correct
-sub usac_route {
-	#my $self=$_;	#The site to use
-	my $self=$uSAC::HTTP::Site;
-	$self->add_route(@_);
-}
 
 method _method_match_check{
     my $result;
     my ($matcher)=@_;
+
+    if(ref($matcher) eq "ARRAY"){
+      # Convert from array or methods to a alterate regex
+      $matcher= "(?:".join("|", @$matcher).")"; 
+      $matcher=qr{$matcher};
+    }
+
     $result =$matcher if grep /$matcher/, $self->supported_methods;
     $result;
 }
+
 
 method add_route {
   #my $result; 
@@ -1025,25 +918,25 @@ method add_host {
 }
 
 
-sub usac_middleware {
-  #TODO: fix so specifid like a route
-	#my $self=$_;
-	my $mw=pop;	#Content is the last item
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	$self->add_middleware(%options, $mw);
-}
+#########################################################
+# sub usac_middleware {                                 #
+#   #TODO: fix so specifid like a route                 #
+#         #my $self=$_;                                 #
+#         my $mw=pop;     #Content is the last item     #
+#         my %options=@_;                               #
+#         my $self=$options{parent}//$uSAC::HTTP::Site; #
+#         $self->add_middleware(%options, $mw);         #
+# }                                                     #
+#########################################################
 
 method add_middleware {
-  #TODO: fix so specifid like a route
-  #my $self=shift;
-	my $mw=pop;	#Content is the last item
 	my %options=@_;
-  \my (@inner, @outer, @error)=$self->_wrap_middleware($mw);
-	push $_innerware->@*, @inner;#$mw->[0];
-	push $_outerware->@*, @outer;# mw->[1];
-  push $_errorware->@*, @error;
-
+  for my $mw (@_){
+    \my (@inner, @outer, @error)=$self->_wrap_middleware($mw);
+    push $_innerware->@*, @inner;
+    push $_outerware->@*, @outer;
+    push $_errorware->@*, @error;
+  }
 }
 
 
@@ -1057,10 +950,12 @@ method add_error_route {
 	$self->add_route(@_);
 }
 
-sub usac_error_page {
-	#my $self=
-	$uSAC::HTTP::Site->set_error_page(@_);
-}
+##################################################
+# sub usac_error_page {                          #
+#         #my $self=                             #
+#         $uSAC::HTTP::Site->set_error_page(@_); #
+# }                                              #
+##################################################
 
 method set_error_page {
   #my $self=shift;
@@ -1075,13 +970,15 @@ method error_uris {
   $_error_uris;
 }
 
-#set the default mime for this level
-sub usac_mime_default{
-	my $default=pop;
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	$self->set_mime_default(%options, $self);
-}
+#########################################################
+# #set the default mime for this level                  #
+# sub usac_mime_default{                                #
+#         my $default=pop;                              #
+#         my %options=@_;                               #
+#         my $self=$options{parent}//$uSAC::HTTP::Site; #
+#         $self->set_mime_default(%options, $self);     #
+# }                                                     #
+#########################################################
 
 method set_mime_default {
   #my $self=shift;
@@ -1093,12 +990,14 @@ method set_mime_default {
 
 #Set the mime db for this level
 #TODO should argument be a path to a file?
-sub usac_mime_db{
-	my $db=pop;
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	$self->set_mime_db(%options, $db);
-}
+#########################################################
+# sub usac_mime_db{                                     #
+#         my $db=pop;                                   #
+#         my %options=@_;                               #
+#         my $self=$options{parent}//$uSAC::HTTP::Site; #
+#         $self->set_mime_db(%options, $db);            #
+# }                                                     #
+#########################################################
 
 method set_mime_db {
 #my $self=shift;
