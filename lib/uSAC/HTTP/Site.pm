@@ -806,22 +806,6 @@ method add_route {
   $self;    #Chaining
 }
 
-#DLS wrapper for delegate
-###########################################################################
-# sub usac_delegate {                                                     #
-#       my $delegate=pop;                                                 #
-#       my $caller=[caller];                                              #
-#       unless($delegate){                                                #
-#         # If delegate is called with no arguments then make it the same #
-#         # package as the caller?                                        #
-#         my ($delegate, undef,undef)=caller;                             #
-#       }                                                                 #
-#       my %options=@_;                                                   #
-#       my $self=$options{parent}//$uSAC::HTTP::Site;                     #
-#                                                                         #
-#       $self->_delegate($delegate, $caller);                             #
-# }                                                                       #
-###########################################################################
 
 # Set the delegate for the site. Can be an
 #   object reference
@@ -852,12 +836,11 @@ method _delegate {
       #my $string;
       #$string="$_delegate->_auto";
       #eval "$string";
-      #eval $_delegate->_auto($self);
+      eval $_delegate->_auto($self);
   }
   catch($e){
     no strict "refs";
     die Exception::Class::Base->throw("Delegate  has no import $e");
-
   }
   $self;
 }
