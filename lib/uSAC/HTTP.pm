@@ -10,6 +10,8 @@ use Import::These "uSAC::HTTP::",
 
 use uSAC::MIME;
 
+our $Site;   
+
 # Generate import sub and support reexport
 #
 use Export::These;
@@ -57,16 +59,22 @@ uSAC::HTTP - Duct Tape x Chainsaw
 
 =head1 SYNOPSIS
 
-  use uSAC::HTTP;
+  
+  #For servers
+  use uSAC::HTTP::Server;
+
+  #For clients
+  use uSAC:HTTP::Client;
+
 
 =head1 DESCRIPTION
 
-A wrapper module which bundles multiple modules in the L<uSAC::HTTP>
-distrubution,re exporting constants and subrotines and setting up the run time
-environment.  It very quick to write high performance HTTP client and servers.
+
+This is grouping of core L<uSAC::HTTP> data structures and modules to write
+HTTP like client and server alpplications.
+
+Normally you would import the server or client (or both) to add it to your
+application.
 
 
-
-
-
-
+This is very much unfinished and under heavy development and changes....

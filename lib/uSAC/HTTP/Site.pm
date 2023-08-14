@@ -836,11 +836,11 @@ method _delegate {
       #my $string;
       #$string="$_delegate->_auto";
       #eval "$string";
-      eval $_delegate->_auto($self);
+      $_delegate->_auto($self);
   }
   catch($e){
     no strict "refs";
-    die Exception::Class::Base->throw("Delegate  has no import $e");
+    Exception::Class::Base->throw("Delegate  has no import $e");
   }
   $self;
 }
