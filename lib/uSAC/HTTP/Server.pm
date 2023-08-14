@@ -52,8 +52,8 @@ use Carp 'croak';
 
 
 
-
-use Export::These;
+# Use the common tag to rexport common middleware
+use Export::These ":common";
 
 
 
@@ -120,6 +120,7 @@ sub _reexport {
   }
 
 }
+
 
 class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 
