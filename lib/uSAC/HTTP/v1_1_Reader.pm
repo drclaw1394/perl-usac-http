@@ -39,7 +39,6 @@ our $PSGI_COMPAT=undef;
 our $KEEP_ALIVE=1;
 
 #use Time::HiRes qw/gettimeofday/;
-#use Scalar::Util 'refaddr', 'weaken';
 
 #use uSAC::HTTP::Session;
 #use uSAC::HTTP::Rex;

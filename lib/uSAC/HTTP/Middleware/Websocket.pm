@@ -6,13 +6,9 @@ use feature qw<bitwise state say refaliasing current_sub>;
 use Log::ger;
 use Log::OK;
 
-#use Exporter 'import';
 use MIME::Base64;		
 use Digest::SHA1;
 use Encode qw<decode encode>;
-#use IO::Compress::RawDeflate qw(rawdeflate $RawDeflateError) ;
-#use IO::Uncompress::RawInflate qw<rawinflate>;
-#use Compress::Raw::Zlib qw(Z_SYNC_FLUSH);
 
 use Compress::Raw::Zlib;
 

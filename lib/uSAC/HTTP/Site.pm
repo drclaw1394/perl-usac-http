@@ -37,8 +37,6 @@ use enum (
   >);
 
 
-use Cwd qw<abs_path>;
-use File::Spec::Functions;
 use uSAC::HTTP::Constants;
 use uSAC::IO;
 
@@ -48,13 +46,13 @@ use Exception::Class::Base;
 use URI;
 
 	
+  #usac_delegate
 use Export::These (qw(
   usac_catch_route
   usac_route
   usac_site
   usac_prefix
   usac_id
-  usac_delegate
   usac_host
   usac_middleware
   usac_mime_db
@@ -81,9 +79,6 @@ use uSAC::HTTP::Rex;
 use uSAC::HTTP::v1_1_Reader;      #TODO: this will be dynamically linked in
 use Sub::Middler;
 
-use File::Spec::Functions qw<rel2abs abs2rel>;
-use File::Basename qw<dirname>;
-
 
 sub usac_catch_route {
 	#Add a route matching all methods and any path	
@@ -98,15 +93,17 @@ class uSAC::HTTP::Site;
 
 no warnings "experimental";
 #field $_server      :mutator :param=undef;
-field $_parent      :mutator :param=undef;
+field $_staged_routes   :mutator;
+field $_parent_site      :mutator :param=undef;
+field $_id          :mutator :param=undef;
 field $_prefix      :reader :param =undef;
 field $_host        :reader :param =[];
-field $_id          :mutator :param=undef;
+field $_error_uris  :param={};
+field $_delegate  :param=undef;
 field $_innerware   :mutator :param=[];
 field $_outerware   :mutator :param=[];
 field $_errorware   :mutator :param=[];
-field $_error_uris  :param={};
-field $_delegate  :param=undef;
+field $_mode      :mutator :param=0; #server false, client true
 
 field $_mime_default :mutator;  #Default mime type
 field $_mime_db     :mutator;   #the usac::mime object
@@ -117,7 +114,6 @@ field $_cors;
 field $_unsupported;
 field $_built_prefix;
 field $_built_label;
-field $_mode      :mutator :param=undef; #server false, client true
 
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE TRACE>;
@@ -148,6 +144,9 @@ my $id=0;
 BUILD{
   $_id//=$id++;
   $_prefix//="";
+  say caller;
+  say $_delegate;
+  $self->_delegate($_delegate, caller) if $_delegate;
 
   if(defined($_host) and ref $_host ne "ARRAY"){
     $_host=[$_host];
@@ -168,6 +167,21 @@ method _inner_dispatch {
 
 method _error_dispatch {
   uSAC::HTTP::v1_1_Reader::make_error;
+}
+
+method rebuild_routes {
+  my $result;
+  for my $r ($_staged_routes->@*){
+    if($r isa __PACKAGE__){
+      say "is a site";
+      $r->rebuild_routes; # Recurse down
+    }
+    else {
+      $result=$self->_add_route(@$r);
+      die Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
+    }
+  }
+  $self;
 }
 
 #Adds routes to a servers dispatch table
@@ -195,13 +209,13 @@ method _add_route {
 
   # Dead horse stripper is always the first
   #
-  unshift @_, uhm_dead_horse_stripper(prefix=>$_built_prefix);
+  unshift @_, uhm_dead_horse_stripper(prefix=>$self->built_prefix);
 
 
 
   # Fix up and break out middleware
   #
-  \my (@inner, @outer, @error)=$self->wrap_middleware(@_);
+  \my (@inner, @outer, @error)=$self->_wrap_middleware(@_);
   
 
 
@@ -348,27 +362,15 @@ method __adjust_matcher {
     $matcher=undef;
     #$matcher=qr{$method_matcher $bp$path_matcher};
   }
-  #####################################################
-  # #is this right?                                   #
-  # elsif($path_matcher =~ /[(\^\$]/){                #
-  #   $type=undef;                                    #
-  #   #$pm=$path_matcher;                             #
-  #   $matcher=qr{^$method_matcher $bp$path_matcher}; #
-  # }                                                 #
-  #####################################################
-
   elsif($path_matcher =~ /\$$/){
     #$pm=substr $path_matcher, 0, -1;
     Log::OK::TRACE and log_trace "Exact match";
-    say "oijasdf";
     $type="exact";
     my $pm=$path_matcher =~ s/\$$//r;
     $matcher="$method_matcher $bp$pm";
-    #$matcher="$method_matcher $bp$path_matcher";
   }
   else {
     $type="begin";
-    #$pm=$path_matcher;
     $matcher="$method_matcher $bp$path_matcher";
   }
 
@@ -378,8 +380,8 @@ method __adjust_matcher {
 # Fix middle described only as a sub
 # Resolve delegate-by-name middleware specs
 #
-method wrap_middleware {
-  Log::OK::TRACE and log_trace __PACKAGE__. " wrap_middleware";
+method _wrap_middleware {
+  Log::OK::TRACE and log_trace __PACKAGE__. " _wrap_middleware";
 #my $self=shift;
   my @inner;
   my @outer;
@@ -468,9 +470,6 @@ method wrap_middleware {
 }
 
 
-method parent_site :lvalue{
-  $_parent;
-}
 
 method site_url {
 	my $url=$self->built_prefix;
@@ -514,6 +513,7 @@ method construct_innerware {
 	my $parent=$self;#$_[0];
 	my @middleware;
 	while($parent){
+  say "in construct innerware: $parent";
 		Log::OK::TRACE and log_trace "Middleware from $parent";
 		Log::OK::TRACE and log_trace "Parent_site ". ($parent->parent_site//"");
 		unshift @middleware, @{$parent->innerware//[]};
@@ -580,10 +580,66 @@ method resolve_mime_default {
 	$default?$default:"applcation/octet-stream";
 }
 
-method add_site ($site){
-  $site->parent=$self; 
-  $site;
+# Add a the callee to the supplied object
+method add_to {
+  my $parent=pop;
+	my $root=$self->find_root;
+  $self->mode=$root->mode;
+  $self->parent_site=$parent;
+  $parent->add_route($self);
+  $self;
+
 }
+
+# Add a site to the callee object
+method add_site {
+  for my $site(@_){
+    my $root=$self->find_root;
+    $site->mode=$root->mode;
+    $site->parent_site=$self;
+    $self->add_route($site);
+  }
+  $self;
+}
+
+#############################################################################
+# method _add_site {                                                        #
+#         my $site=pop;                                                     #
+#   my %options=@_;                                                         #
+#   #my $parent=$self; #$options{parent}//$uSAC::HTTP::Site;                #
+#         my $server=$self->find_root;                                      #
+#                                                                           #
+#                                                                           #
+#   $site->mode($server->mode);                                             #
+#   $site->parent_site=$self;                                               #
+#                                                                           #
+#   #my $self= uSAC::HTTP::Site->new(server=>$server, mode=>$server->mode); #
+#   #$site->parent_site=$parent;                                            #
+#   #$site->id=$options{id}//join ", ", caller;                             #
+#   #$site->set_prefix(%options,$options{prefix}//'');                      #
+#                                                                           #
+#   #local  $uSAC::HTTP::Site=$self;                                        #
+#   ##################################################################      #
+#   # my $line;                                                      #      #
+#   # try {                                                          #      #
+#   #         $sub->($self); $line=__LINE__;                         #      #
+#   # }                                                              #      #
+#   # catch($e){                                                     #      #
+#   #   log_fatal $e;                                                #      #
+#   #   log_fatal  "Site: ".$self->id;                               #      #
+#   #                                                                #      #
+#   #   my @frames=$e->trace->frames;                                #      #
+#   #   # remove any frames from start                               #      #
+#   #   shift @frames while $frames[0]->filename =~ /Site\.pm/;      #      #
+#   #   splice @frames,1;                                            #      #
+#   #                                                                #      #
+#   #   log_fatal context reverse=>1, message=>$e, frames=>\@frames; #      #
+#   #   $e->throw;                                                   #      #
+#   # }                                                              #      #
+#   ##################################################################      #
+#         $self;                                                            #
+# }                                                                         #
+#############################################################################
 
 sub usac_site :prototype(&) {
 	my $sub=pop;
@@ -592,7 +648,7 @@ sub usac_site :prototype(&) {
 	my $server=$parent->find_root;
 
 	my $self= uSAC::HTTP::Site->new(server=>$server, mode=>$server->mode);
-	$self->parent=$parent;
+	$self->parent_site=$parent;
 	$self->id=$options{id}//join ", ", caller;
 	$self->set_prefix(%options,$options{prefix}//'');
 	
@@ -622,13 +678,12 @@ method child_site {
 }
 
 method find_root {
-  #my $self=$_[0];
-	#locates the top level server/group/site in the tree
 	my $parent=$self;
 
 	while($parent->parent_site){
 		$parent=$parent->parent_site;
 	}
+  say "ROOT Is: $parent";
 	$parent;
 }
 
@@ -653,19 +708,21 @@ sub usac_route {
 method _method_match_check{
     my $result;
     my ($matcher)=@_;
-    $result =$matcher if grep $_ =~ /$matcher/, $self->supported_methods;
+    $result =$matcher if grep /$matcher/, $self->supported_methods;
     $result;
 }
 
 method add_route {
-  #my $self=shift;
-  my $result; 
+  #my $result; 
 
   my $del_meth;
   try {
+    if($_[0] isa uSAC::HTTP::Site){
+      push @$_staged_routes, $_[0]; # Copy to staging
+    }
     # Adjust for 1 and two argument short hand
     #
-    if(@_== 1 and ref($_[0]) eq ""){
+    elsif(@_== 1 and ref($_[0]) eq ""){
       #
       # Only 1 argument (path). Implict method and route to delegate
       #
@@ -680,7 +737,8 @@ method add_route {
       #unshift @_, $self->default_method;
       unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
       push @_, $del_meth;
-      $result=$self->_add_route(@_);
+      #$result=$self->_add_route(@_);
+      push @$_staged_routes, [@_]; # Copy to staging
     }
 
     elsif(@_ == 2 and ref($_[0]) eq "" and ref($_[1]) eq "HASH"){
@@ -692,7 +750,8 @@ method add_route {
       for my ($k, $v)($_[1]->%*){
         # Recall this method with individual entries. Should allow string names
         # and implicit paths
-        $result=$self->add_route($k,$path, @$v);
+        #$result=$self->add_route($k,$path, @$v);
+        push @$_staged_routes, [$k, $path, @$v]; # Copy to staging
       }
     }
 
@@ -707,7 +766,8 @@ method add_route {
 
         push @_, $del_meth;
         unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
-        $result=$self->_add_route(@_);
+        #$result=$self->_add_route(@_);
+        push @$_staged_routes, [@_]; # Copy to staging
     }
     
     elsif(@_ == 2 and ref($_[0]) eq "ARRAY" and ref($_[1]) eq ""){
@@ -729,7 +789,8 @@ method add_route {
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
-        $result=$self->_add_route(@_);
+        #$result=$self->_add_route(@_);
+        push @$_staged_routes, [@_]; # Copy to staging
 
     }
 
@@ -754,7 +815,8 @@ method add_route {
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
-        $result=$self->_add_route(@_);
+        #$result=$self->_add_route(@_);
+        push @$_staged_routes, [@_]; # Copy to staging
     }
 
     else {
@@ -772,7 +834,8 @@ method add_route {
         # Sets the default for the host
         #
         shift; unshift @_, $self->any_method, undef;
-        $result=$self->_add_route(@_);
+        #$result=$self->_add_route(@_);
+        push @$_staged_routes, [@_]; # Copy to staging
       }
 
 
@@ -802,43 +865,47 @@ method add_route {
           push @_, $method;
         }
 
-        $result=$self->_add_route(@_);
+        #$result=$self->_add_route(@_);
+        push @$_staged_routes, [@_]; # Copy to staging
       }
 
 
       elsif(ref($_[0]) eq "Regexp"){
         if(@_>=3){
           #method and path matcher specified
-          $result=$self->_add_route(@_);
+          #$result=$self->_add_route(@_);
+          push @$_staged_routes, [@_]; # Copy to staging
         }
         else {
           #Path matcher is a regex
           unshift @_, "GET";
-          $result=$self->_add_route(@_);
+          #$result=$self->_add_route(@_);
+          push @$_staged_routes, [@_]; # Copy to staging
         }
       }
       elsif($_[0] eq ""){
         # Explicit matching for site prefix
         unshift @_, $self->default_method;
-        $result=$self->_add_route(@_);
+        #$result=$self->_add_route(@_);
+        push @$_staged_routes, [@_]; # Copy to staging
       }
       elsif($_[0]=~m|^/|){
         #starting with a slash, short cut for GET and head
         unshift @_, $self->default_method;
-        $result=$self->_add_route(@_);
+        #$result=$self->_add_route(@_);
+        push @$_staged_routes, [@_]; # Copy to staging
       }
       else{
         # method, url and middleware specified
-        $result=$self->_add_route(@_);
+        #$result=$self->_add_route(@_);
+        push @$_staged_routes, [@_]; # Copy to staging
       }
 
-      die Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
     }
 
   }
   catch($e){
     #my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
-    #say $e->trace->frames;
     log_fatal context message=>$e, frames=>[$e->trace->frames];
     exit;
     #$e->throw;
@@ -847,19 +914,21 @@ method add_route {
 }
 
 #DLS wrapper for delegate
-sub usac_delegate {
-      my $delegate=pop;
-      my $caller=[caller];
-      unless($delegate){
-        # If delegate is called with no arguments then make it the same
-        # package as the caller?
-        my ($delegate, undef,undef)=caller;
-      }
-      my %options=@_;
-      my $self=$options{parent}//$uSAC::HTTP::Site;
-
-      $self->delegate($delegate, $caller);
-}
+###########################################################################
+# sub usac_delegate {                                                     #
+#       my $delegate=pop;                                                 #
+#       my $caller=[caller];                                              #
+#       unless($delegate){                                                #
+#         # If delegate is called with no arguments then make it the same #
+#         # package as the caller?                                        #
+#         my ($delegate, undef,undef)=caller;                             #
+#       }                                                                 #
+#       my %options=@_;                                                   #
+#       my $self=$options{parent}//$uSAC::HTTP::Site;                     #
+#                                                                         #
+#       $self->_delegate($delegate, $caller);                             #
+# }                                                                       #
+###########################################################################
 
 # Set the delegate for the site. Can be an
 #   object reference
@@ -868,7 +937,7 @@ sub usac_delegate {
 #   reference to scalar relative-to-caller path to require
 # Note does not attempt to require a Package if the package has any keys
 # present
-method delegate {
+method _delegate {
   $_delegate=$_[0];
   my $caller=$_[1]//[caller];
   if(ref $_delegate eq "SCALAR"){
@@ -883,17 +952,21 @@ method delegate {
     die Exception::Class::Base->throw("Delegate package $_delegate not found. Do you need ro require it?") unless (%{$_delegate."::"});
   }
 
+  
+  local $uSAC::HTTP::Site=$self;
   # Attempt to auto import any route chains
   try {
-      my $string;
-      $string="$_delegate->_auto";
-      eval "require $string";
+      #my $string;
+      #$string="$_delegate->_auto";
+      #eval "$string";
+      #eval $_delegate->_auto($self);
   }
   catch($e){
     no strict "refs";
-    die Exception::Class::Base->throw("Delegate  has no import");
+    die Exception::Class::Base->throw("Delegate  has no import $e");
 
   }
+  $self;
 }
 
 
@@ -935,9 +1008,9 @@ sub usac_host {
 
 #Options could include CA and server key paths
 method add_host {
-  #my $self=shift;
 	my $host=pop;	#Content is the last item
 	my %options=@_;
+
 	my @uri;
 	if(ref($host) eq "ARRAY"){
 		@uri= map {URI->new("http://$_")} @$host;
@@ -966,7 +1039,7 @@ method add_middleware {
   #my $self=shift;
 	my $mw=pop;	#Content is the last item
 	my %options=@_;
-  \my (@inner, @outer, @error)=$self->wrap_middleware($mw);
+  \my (@inner, @outer, @error)=$self->_wrap_middleware($mw);
 	push $_innerware->@*, @inner;#$mw->[0];
 	push $_outerware->@*, @outer;# mw->[1];
   push $_errorware->@*, @error;
@@ -1083,7 +1156,6 @@ sub uhm_dead_horse_stripper {
 
     if($site->mode==0){
       sub {
-      #say "error DEAD HORSE";
         &$next;
       }
     }

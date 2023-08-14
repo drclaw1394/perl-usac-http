@@ -18,11 +18,13 @@ WriteMakefile(
 		"uSAC::IO"	=> 0,           # IO streaming abstraction
 		"IO::FD"	=> "0.3.0",       # pread/pwrite
     "Error::Show"=>"0.3.0",     # 0.3.0 for default import of 'context'
-		"Socket::More"	=> "0.4.0", # passive/listen socket specification
+		"Socket::More"	=> "0.4.3", # passive/listen socket specification
 		"uSAC::MIME"	=> 0,         # MIME database
     "Sub::Middler"=>0,          # Subroutine middleware linking
     "File::Meta::Cache"=>0,     # Meta data and open file cache
     "Export::These"=>0,         # Simpler export and reexport
+    "Import::These"=>0,
+
 		
     "Object::Pad"=> "0.78",
 		"Crypt::JWT"	=> 0,

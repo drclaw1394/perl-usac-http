@@ -26,50 +26,11 @@ use Export::These (
   );
 
 use Errno qw<EAGAIN EINTR EBUSY>;
-##################################################################
-# our @EXPORT_OK =(                                              #
-#   "uhm_static_root",                                           #
-#   "uhm_static_file", # Preload (cache) a file in memory        #
-#   "uhm_static_content", # d                                    #
-# );                                                             #
-# our @EXPORT=@EXPORT_OK;                                        #
-#                                                                #
-# sub import {                                                   #
-#   my $package=$_[0];                                           #
-#   my $caller=$package eq __PACKAGE__ ? caller: $package;       #
-#                                                                #
-#   no strict "refs";                                            #
-#   *{$caller."::".$_}=\*{ __PACKAGE__ ."::".$_} for @EXPORT_OK; #
-#                                                                #
-# }                                                              #
-#                                                                #
-# sub _import {                                                  #
-#   my ($target, $wanted)=@_;                                    #
-#   # Called just like import                                    #
-# }                                                              #
-#                                                                #
-##################################################################
-#my $path_ext=	qr{\.([^.]*)$}ao;
 
 use constant::more  READ_SIZE=>4096;
 
-#my %stat_cache;
-
-#use enum qw<fh_ content_type_header_ size_ mt_ last_modified_header_ content_encoding_ cached_ key_ etag_ source_ user_>;
-#
-
-
-#use constant KEY_OFFSET=>0;
-
-#use enum ("mime_=".KEY_OFFSET, qw<default_mime_ html_root_ cache_ cache_size_ cache_sweep_size_ cache_timer_ cache_sweep_interval_ end_>);
-#use constant KET_COUNT=>end_-mime_+1;
-#use constant RECURSION_LIMIT=>10;
 use IO::FD;
 
-
-
-#TODO:
-#add directory listing option?
 
 sub _check_ranges{
 	my ($rex, $length)=@_;
@@ -571,10 +532,8 @@ sub uhm_static_root {
   my %options=@_;
 
   $options{html_root}=$html_root;
-  my $parent=$options{parent}//$uSAC::HTTP::Site;
+  #my $parent=$options{parent}//$uSAC::HTTP::Site;
 
-  my $mime=$options{mime}=$parent->resolve_mime_lookup;
-  my $default_mime=$options{default_mime}=$parent->resolve_mime_default;
 
   my $headers=$options{headers}//[];
   my $read_size=$options{read_size}//READ_SIZE;
@@ -642,6 +601,12 @@ sub uhm_static_root {
   my $inner=sub {
     #create the sub to use the static files here
     my $next=shift;
+    my $index=shift;
+    my %ropts=@_;
+    my $site=$ropts{site};
+    my $mime=$options{mime}=$site->resolve_mime_lookup;
+    my $default_mime=$options{default_mime}=$site->resolve_mime_default;
+
     my $p;	#tmp variable
     sub {
       if($_[OUT_HEADER]){
@@ -812,7 +777,6 @@ sub uhm_static_root {
 sub uhm_static_file {
 	my $path=uSAC::Util::path pop, [caller];
 	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
 
 	my $mime=$options{mime};
 	my $type;
@@ -821,25 +785,19 @@ sub uhm_static_file {
 		$type=$mime;
 	}
 	else{
-		my $ext=substr $path, rindex($path, ".")+1;
-		Log::OK::TRACE and log_trace "Extension: $ext";
-		$type=$self->resolve_mime_lookup->{$ext}//$self->resolve_mime_default;
-		Log::OK::TRACE and log_trace "type: $type";
-		$options{mime}=$type;
+    #my $ext=
+    $options{extension}=substr $path, rindex($path, ".")+1;
 	}
 
 	if( stat $path and -r _ and !-d _){
-		my $entry;
+    #my $entry;
 		open my $fh, "<", $path;
 		local $/;
-		$entry->[0]=<$fh>;
-		$entry->[1]=[HTTP_CONTENT_TYPE, $type];
-		$entry->[2]=(stat _)[7];
-		$entry->[3]=(stat _)[9];
+    my $data=<$fh>;
 		close $fh;
 
 		#Create a static content endpoint
-		uhm_static_content(%options, $entry->[0]);
+		uhm_static_content(%options, $data);
 	}
 	else {
 		log_error "Could not add hot path: $path";
@@ -847,28 +805,40 @@ sub uhm_static_file {
 }
 
 sub uhm_static_content {
+
+  # First stage config
 	my $static=pop;	#Content is the last item
 	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-
-
-	my $mime=$options{mime}//$self->resolve_mime_default;
-	my $headers=$options{headers}//{};
-
-  $headers->{HTTP_CONTENT_TYPE()}||=$mime;
-
-  $headers->{HTTP_CONTENT_LENGTH()}=length $static
-    unless $headers->{HTTP_TRANSFER_ENCODING()};
 
   [
     sub {
+      # Second stage config
         my $next=shift;
+        my $index=shift;
+        my %ropts=@_;
+        my $site=$ropts{site};
+
+	      my $mime=
+          $options{mime}
+          //$site->resolve_mime_lookup->{$options{extension}}
+          //$site->resolve_mime_default;
+
+        my $headers=$options{headers}//{};
+
+        $headers->{HTTP_CONTENT_TYPE()}||=$mime;
+
+        $headers->{HTTP_CONTENT_LENGTH()}=length $static
+          unless $headers->{HTTP_TRANSFER_ENCODING()};
+
         sub {
           if($_[OUT_HEADER]){
             for my  ($k, $v)(
               %$headers
             )
             { 
+              use Data::Dumper;
+              say $k;
+              say Dumper $v;
               $_[OUT_HEADER]{$k}=$v;
             }
             # Only set the payload when the out header is present (single shot)

@@ -1,17 +1,18 @@
 package uSAC::HTTP;
-use warnings;
-use strict;
+use v5.36;
 
-use version; our $VERSION=version->declare("v0.1");
+our $VERSION="v0.1.0";
 
+# Preload the core
 use uSAC::HTTP::Site ();
 use uSAC::HTTP::Rex ();
 use uSAC::HTTP::Header ();
 use uSAC::HTTP::Code ();
 use uSAC::HTTP::Constants ();
 use uSAC::HTTP::Route ();
+use uSAC::MIME;
 
-# Generate import sub and support reexporting
+# Generate import sub and support reexport
 #
 use Export::These;
 
@@ -23,35 +24,29 @@ our $Site;
 # of this module. Works at any level  with Export::These
 #
 sub _reexport {
-  my $target=shift;
+  my ($pack, $target)=(shift,shift);
   # The following manipulate hints, so the caller is irrelevant
   #
   require strict;
-  strict->import;#($target);
+  strict->import;
 
   require warnings;
-  warnings->import;#($target);
+  warnings->import;
 
   require feature;
   feature->import(qw<say state refaliasing current_sub>);
   feature->unimport(qw<indirect>);
 
   require utf8;
-  utf8->import;#($target);
+  utf8->import;
 
-  print "\nExport level HTTP: ".$Exporter::ExportLevel;
-  print "\n";
   uSAC::HTTP::Site->import;
-
   uSAC::HTTP::Rex->import;
-
   uSAC::HTTP::Header->import;
-
   uSAC::HTTP::Code->import;
-  
   uSAC::HTTP::Constants->import;
-
   uSAC::HTTP::Route->import;
+  uSAC::MIME->import;
   
 }
 
@@ -60,14 +55,11 @@ __PACKAGE__;
 
 =head1 NAME
 
-uSAC::HTTP - Top Level HTTP Server and Client
-
-uSAC::HTTP - Duct tape meets chainsaw
+uSAC::HTTP - Duct Tape x Chainsaw
 
 =head1 SYNOPSIS
 
   use uSAC::HTTP;
-  usc uSAC::HTTP ":constants";
 
 =head1 DESCRIPTION
 

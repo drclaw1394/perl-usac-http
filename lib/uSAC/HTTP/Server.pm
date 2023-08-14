@@ -1,31 +1,32 @@
 use v5.36;
 package uSAC::HTTP::Server; 
+our $VERSION = 'v0.1.0';
 use feature "try";
 
 # Attempt event system detection here...
 # and load default if none found
 #
 
-use Object::Pad;
-use Log::ger;
-use Log::OK { lvl=>"info" };
+use Object::Pad;          # Class
+use Log::ger;             # Log system
+use Log::OK { lvl=>"info" };  # CLI control of log system
 
-use Socket;
-use Socket::More qw<sockaddr_passive parse_passive_spec family_to_string sock_to_string>;
+# Socket::More also exports Socket Symbols
+use Socket::More;         # Socket symbols and passive socket
 
-use IO::FD;
-use uSAC::IO;
-use uSAC::IO::Acceptor;
-use uSAC::HTTP::Route;
-use Error::Show;
 
-use uSAC::HTTP;
-#use uSAC::HTTP::Site;
-#use uSAC::HTTP::Constants;
-use Hustle::Table;		#dispatching of endpoints
-use uSAC::Util;
+use IO::FD;               # IO
+use uSAC::IO;             # Readers/writers
+use uSAC::IO::Acceptor;   # Acceptors
+use Error::Show;          # Contentual Error presentation
 
-use uSAC::HTTP::Middleware::Log;
+use uSAC::HTTP;           # uSAC::HTTP Core code
+use uSAC::HTTP::Session;  # 'session' stuff
+use uSAC::Util;           # Auxillary functions
+
+use Hustle::Table;		    # Fancy dispatching of endpoints
+
+
 
 use constant::more {
 	"CONFIG::set_no_delay"=> 1
@@ -41,101 +42,20 @@ use feature qw<refaliasing say state current_sub>;
 use constant::more NAME=>"uSAC";
 use constant::more VERSION=>"v0.1.0";
 
-#our @Subproducts;#=();		#Global to be provided by applcation
-
-use version; our $VERSION = version->declare('v0.1.0');
-
 no warnings "experimental";
-
-
 
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
-
-
-use Socket qw(
-  AF_INET
-  AF_UNIX
-  SOCK_STREAM
-  SOCK_DGRAM
-  SOL_SOCKET
-  SO_REUSEADDR
-  SO_REUSEPORT
-  TCP_NODELAY
-  IPPROTO_TCP
-  TCP_NOPUSH 
-  TCP_NODELAY
-  SO_LINGER
-  inet_pton
-);
-
 use Carp 'croak';
 
 
-use uSAC::HTTP::Code;
-use uSAC::HTTP::Header;
-use uSAC::HTTP::Session;
-use uSAC::HTTP::Rex;
-use uSAC::MIME;
 
 
-use Export::These
-  qw<
-    usac_server
-    usac_run
-    usac_load
-    usac_include
-    usac_listen
-    usac_listen2
-    usac_sub_product
-    usac_workers
-  >,
-  common=>[];
+
+use Export::These;
 
 
-sub _reexport {
-  my $target=shift;
-  # Re export to the caller package
-  #
-  say "REXPORT FOR SERVER\n\n";
-  uSAC::HTTP->import;
-  uSAC::HTTP::Site->import;
-
-  say "after site import in server";
-  say "\n";
-  #uSAC::HTTP->import(":constants");
-
-  # Preload common middleware  if asked
-  #
-  if(grep /:common/, @_){
-    {
-      {
-        local $Exporter::ExportLevel=0;
-        require uSAC::HTTP::Middleware::Trace;
-        require uSAC::HTTP::Middleware::Static;
-        require uSAC::HTTP::Middleware::Slurp;
-        require uSAC::HTTP::Middleware::Redirect;
-        require uSAC::HTTP::Middleware::Log;
-        require uSAC::HTTP::Middleware::TemplatePlex;
-      }
-      say "LEVEL IS: ".$Exporter::ExportLevel;
-      uSAC::HTTP::Middleware::Trace->import;
-      say "after trace import";
-      uSAC::HTTP::Middleware::Static->import;
-      say "after static import";
-
-      uSAC::HTTP::Middleware::Slurp->import;
-
-      uSAC::HTTP::Middleware::Redirect->import;
-      uSAC::HTTP::Middleware::Log->import;
-      uSAC::HTTP::Middleware::TemplatePlex->import;
-
-    }
-    #require uSAC::HTTP::Middleware::WebSocket;
-  }
-
-}
 
 my $session_id=0;
 
@@ -153,8 +73,9 @@ my $dummy_default=[];
 # ie expecting a request line but getting something else
 #
 sub _default_handler {
+    require uSAC::HTTP::Middleware::Log;
 (
-		uhm_log,
+    uSAC::HTTP::Middleware::Log::uhm_log(),
     sub {
 			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER"; 
 			Log::OK::DEBUG and log_debug __PACKAGE__.join ", ", $_[IN_HEADER]->%*;
@@ -165,23 +86,55 @@ sub _default_handler {
   )
 }
 
+sub _reexport {
+  my ($pack, $target)=(shift, shift);
+
+  # Re export to the caller package
+  #
+  uSAC::HTTP->import;
+  uSAC::HTTP::Site->import;
+
+
+  # Preload common middleware  if asked
+  #
+  if(grep /:common/, @_){
+    {
+      {
+        local $Exporter::ExportLevel=0;
+        require uSAC::HTTP::Middleware::Trace;
+        require uSAC::HTTP::Middleware::Static;
+        require uSAC::HTTP::Middleware::Slurp;
+        require uSAC::HTTP::Middleware::Redirect;
+        require uSAC::HTTP::Middleware::Log;
+        require uSAC::HTTP::Middleware::TemplatePlex;
+      }
+      uSAC::HTTP::Middleware::Trace->import;
+      uSAC::HTTP::Middleware::Static->import;
+      uSAC::HTTP::Middleware::Slurp->import;
+      uSAC::HTTP::Middleware::Redirect->import;
+      uSAC::HTTP::Middleware::Log->import;
+      uSAC::HTTP::Middleware::TemplatePlex->import;
+
+    }
+    #require uSAC::HTTP::Middleware::WebSocket;
+  }
+
+}
+
 class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 
 no warnings "experimental";
-#field $_sites;
 field $_host_tables :mutator;
 field $_cb;
-field $_listen;
-field $_listen2;
+field $_listen :param=[];
+field $_listen_spec;
 field $_graceful;
 field $_aws;
 field $_aws2;
-field $_fh;
-field $_fhs;
 field $_fhs2;
 field $_fhs3;
 field $_backlog;
-field $_read_size;
+field $_read_size :mutator :param=4096;
 field $_upgraders;
 field $_sessions;
 field $_active_connections;
@@ -191,15 +144,16 @@ field $_zombies;
 field $_zombie_limit;
 field $_stream_timer;
 field $_server_clock;
-field $_www_roots;
 field $_mime;
-field $_workers;
+field $_sub_product :param="ductapeXchansaw";
+field $_workers :mutator :param=0;
 field $_cv;
 field $_options :reader;
 field $_application_parser;
 field $_total_requests;
 field $_static_headers :mutator;
 field $_running_flag  :mutator;
+
 
 
 BUILD {
@@ -216,19 +170,20 @@ BUILD {
   $self->mode//=0; #Only set to server mode if it hasn't been defined.
 
 	my $default=$self->add_site(uSAC::HTTP::Site->new(id=>"default", host=>"*.*", mode=>$self->mode));
-	$default->add_route([$Any_Method], undef, _default_handler);
+	$default->_add_route([$Any_Method], undef, _default_handler);
 
 	$_backlog=4096;
 	$_read_size=4096;
-	$_workers=undef;
+  #$_workers=undef;
   $_options={};
 
 	#$self->[max_header_size_]=MAX_READ_SIZE;
 	$_sessions={};
 
-	$_listen=[];
-	$_listen2=[];
+  $self->_add_listeners(ref($_listen) eq "ARRAY"?@$_listen:$_listen);
 
+	$self->static_headers={
+	  HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $_sub_product) )};
 }
 
 method _setup_dgram_passive {
@@ -262,7 +217,7 @@ method _setup_dgram_passive {
 }
 
 
-method _setup_stream_passive{
+method _setup_stream_passive {
 	my ($l)=@_;
 
 	#Create a socket from results from interface
@@ -310,8 +265,8 @@ method _setup_stream_passive{
 method do_passive {
   #my $self = shift;
 	#Listeners are in interface format
-	die "No listeners could be found" unless $_listen2->@*;
-	for my $l ($_listen2->@*){
+	die "No listeners could be found" unless @$_listen_spec;
+	for my $l (@$_listen_spec){
 		#Need to associate user protocol handler to listener type... how?
 		if($l->{type}==SOCK_STREAM){
 			$self->_setup_stream_passive($l);
@@ -325,6 +280,10 @@ method do_passive {
 	}
 
 }
+
+
+
+
 
 # 
 # Each worker calls this after spawning. Sets up timers, signal handlers etc
@@ -367,8 +326,12 @@ method prepare {
   
   #alarm $interval;
   Log::OK::INFO and log_info "Accepting connections on PID: $$";
-
 }
+
+
+
+
+
 
 #
 # Iterate over passive sockets and setup an asyncrhonous acceptor
@@ -376,22 +339,12 @@ method prepare {
 method do_accept{
   #Accept is only for SOCK_STREAM 
   Log::OK::DEBUG and log_debug __PACKAGE__. " Accepting connections";
-  #weaken( my $self = shift );
-  \my @zombies=$_zombies; #Alias to the zombie sessions for reuse
-  \my %sessions=$_sessions;	#Keep track of the sessions
 
   my $do_client=$self->make_basic_client;
 
   my @peers;
   my @afh;
   for my $fl ( values %$_fhs2 ) {
-    #TODO: based on per listener settings route to different processing subs
-    # eg
-    #   http
-    #   https
-    #   http2/s
-    #   sni
-
     #
     # Create an acceptor here but we start it later
     #
@@ -411,9 +364,7 @@ sub make_do_dgram_client {
 #
 #Returns a sub for processing new TCP client connections
 #
-method make_basic_client{
-
-  #my ($self)=@_;
+method make_basic_client {
   \my @zombies=$_zombies;
   \my %sessions=$_sessions;
 
@@ -427,14 +378,10 @@ method make_basic_client{
 
   sub {
     my ($fhs, $peers)=@_;
-
     my $i=0;
     for my $fh(@$fhs){
-      #TODO:
-      # Need to do OS check here
-      #CONFIG::set_no_delay and IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1 or Carp::croak "listen/so_nodelay $!";
-
-
+      # TCP_NODELY etc here?
+      #
       my $scheme="http";
 
       Log::OK::DEBUG and log_debug "Server new client connection: id $session_id";
@@ -447,21 +394,21 @@ method make_basic_client{
         $session=uSAC::HTTP::Session->new;
         $session->init($session_id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
         $session->push_reader($parser->(session=>$session, mode=>0, callback=>$self->current_cb));
-        
       }
 
       $i++;
       $sessions{ $session_id } = $session;
 
       $session_id++;
-      #$active_connections++;
-      #$total_connections++;
-
     }
+
     @{$fhs}=();
     @{$peers}=();
   }
 }
+
+
+
 
 method current_cb {
   $_cb;
@@ -504,6 +451,7 @@ method add_host_end_point{
 	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
 }
 
+
 method rebuild_dispatch {
   #my $self=shift;
 
@@ -529,7 +477,7 @@ method rebuild_dispatch {
       $self->add_site($site);
       Log::OK::DEBUG and log_debug "Adding default handler to $host";
 
-      $site->add_route([$Any_Method], undef, _default_handler);
+      $site->_add_route([$Any_Method], undef, _default_handler);
     }
   }
 
@@ -642,6 +590,7 @@ method run {
           $sig=undef;
   });
 
+  $self->rebuild_routes;
 	$self->rebuild_dispatch;
 
   
@@ -704,6 +653,7 @@ method run {
   require AnyEvent;
 	$_cv=AE::cv;
 	$_cv->recv();
+  $self;
 }
 
 
@@ -724,7 +674,7 @@ method dump_listeners {
 				sock_to_string($_->{type}),
 
 				])
-			for $_listen2->@*;
+			for @$_listen_spec;
 			#$tab->load(@data);
 		Log::OK::INFO and log_info join "", $tab->table;
 
@@ -778,21 +728,11 @@ method dump_routes {
         my @a;
 
         if($site){
-          #@a=$entry->[0], $entry->[2], $site->id, $site->prefix;
-          #$key=join "-",@a;
-
           $tab->load([$matcher, $entry->[2], $site->id, $site->prefix, join "\n",$host]);
         }
         else{
-
-          #@a=$entry->[0], $entry->[2], "na", "na";
-          #$key=join "-",@a;
-
           $tab->load([$matcher, $entry->[2], "na", "na", join "\n",$host]);
         }
-
-
-
       }
       Log::OK::INFO and log_info join "", $tab->table;
 
@@ -810,178 +750,41 @@ method dump_routes {
 }
 
 
-sub usac_server :prototype(&) {
-	#my $sub=shift;
-	#my $server=$_;
-	my $sub=pop;	#Content is the last item
-	my %options=@_;
-	my $server=$options{parent}//$uSAC::HTTP::Site;
 
-	#my $server=$uSAC::HTTP::Site;
-	unless(defined $server and ($server->isa( 'uSAC::HTTP::Site'  ))) {
-		#only create if one doesn't exist
-		log_info "Creating new server";
-		$server=uSAC::HTTP::Server->new(mode=>0);
-	}
+method _add_listeners {
+  #my $site=shift;
+  for my $spec(@_){
+    #my %options=@_;
 
-	#Push the server as the lastest 'site'
-	local $uSAC::HTTP::Site=$server;
-	$sub->($server);		#run the configuration for the server
-	$server;
-}
+    my @spec;
+    my @addresses;
 
-#Attempt to run the server, only if its in DSL mode
-sub usac_run {
-	my %options=@_;
-	my $site=$options{parent}//$uSAC::HTTP::Site;
-  $site->parse_cli_options(@ARGV);
+    my $ref=ref $spec;
+    if($ref  and $ref ne "HASH"){
+      croak "Listener must be a HASH ref or a sockaddr_passive cli string";
 
-	$site->run;
-
-}
-
-#include another config file
-#Do so in the callers package namespace
-#the package option allows including into that package
-sub usac_load {
-	my $path=pop;
-	my %options=@_;
-  $path=uSAC::Util::path $path, [caller];
-	
-	$options{package}//=(caller)[0];
-	
-	#recursivley include files
-	if(-d $path){
-		#Dir list and contin
-		my @files= <"${path}/*">;
-		for my $file (@files){
-			__SUB__->( %options, $file);
-		}
-	}
-	else{
-		#not a dir . do it
-		Log::OK::INFO and log_info "Including server script from $path";
-    #my $result=
-    eval "require '$path'";
-
-    if($@){
-      my $context=context;
-      log_error "Could not include file: $context";
-      die "Could not include file $path";	
+    }
+    elsif($ref eq ""){
+      @spec=parse_passive_spec($spec);
+      #use feature ":all";
+      croak  "could not parse listener specification" unless $spec;
+    }
+    else {
+      #Hash
+      @spec=($spec);
     }
 
-	}
-}
-*usac_include=\*usac_load;
-
-sub usac_listen2 {
-	my $spec=pop;		#The spec for interface matching
-	my %options=@_;		#Options for creating hosts
-	my $site=$options{parent}//$uSAC::HTTP::Site;
-	$site->add_listeners(%options, $spec);
-}
-
-*usac_listen=*usac_listen2;
-
-#TODO:
-# We wany to either specifiy the interface name (ie eth0 wlan0 etc)
-# or the specific address which exists on an interface.
-# need to look at GETIFADDRS library/syscall;
-#
-# Use getaddrinfo on supplied arguments. 
-#  try for numeric interfaces first  for supplied args
-#  then try for hostnames. For each hostname add the numeric  listener
-#
-#  Stream, dgram listeners And then add protocols
-#
-#	usac_listener type=>"http3", ssl=>cert,
-#		socketopts=>(
-#			SOL_SOCKET=>SO_REUSEADDR,	#
-#			SOL_SOCKET=>SO_REUSEPORT,	#Important for load balancing
-#			IPPROTO_TCP=>TCP_NODELAY,
-#		),
-#		"address:port";
-#
-#		#sets up initial server reader, udp port listener and ssl processing
-#		#address can be either a hostname, path or ipv4 ipv6 address
-#
-#	usac_listener type=>"http2", ssl=>cert, "address::port";
-#	usac_listener type=>"http1", ssl=>undef, "address::port";
-#	
-
-method add_listeners {
-  #my $site=shift;
-	my $spec=pop;
-	my %options=@_;
-
-  my @spec;
-  my @addresses;
-
-  my $ref=ref $spec;
-  if($ref  and $ref ne "HASH"){
-    croak "Listener must be a HASH ref or a sockaddr_passive cli string";
-
+    @addresses=sockaddr_passive(@spec);
+    push @$_listen_spec, @addresses;
   }
-  elsif($ref eq ""){
-    @spec=parse_passive_spec($spec);
-    #use feature ":all";
-    croak  "could not parse listener specification" unless $spec;
-  }
-  else {
-    #Hash
-    @spec=($spec);
-  }
-
-	@addresses=sockaddr_passive(@spec);
-	push $_listen2->@*, @addresses;
+  $self;
 }
 
 method listeners:lvalue {
-  $_listen2;
-}
-
-sub usac_workers {
-	my $workers=pop;	#Content is the last item
-	my %options=@_;
-	my $site=$options{parent}//$uSAC::HTTP::Site;
-
-	#FIXME
-  $site->workers=$workers;
-}
-
-method workers: lvalue {
-  my $workers=pop;
-  $_workers=shift;
+  $_listen_spec;
 }
 
 
-sub usac_sub_product {
-	my $sub_product=pop;	#Content is the last item
-	my %options=@_;
-	my $server=($options{parent}//$uSAC::HTTP::Site)->find_root;
-	$server->static_headers={
-	  HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $sub_product) )};
-}
-
-sub usac_read_size {
-	my $read_size=pop;	#Content is the last item
-	my %options=@_;
-	my $server=$options{parent}//$uSAC::HTTP::Site;
-  $server->read_size=$read_size;
-
-}
-
-method read_size :lvalue{
-  #my $self=shift;
-  $_read_size;
-}
-
-sub usac_application_parser {
-	my $parser=pop;	#Content is the last item
-	my %options=@_;
-	my $server=$options{parent}//$uSAC::HTTP::Site;
-  $server->application_parser=$parser;
-}
 
 method application_parser :lvalue {
   $_application_parser;
@@ -1008,7 +811,7 @@ method parse_cli_options {
       $self->workers=$value<0?undef:$value;
     }
     elsif($key eq "listener"){
-      $self->add_listeners($_) for(@$value);
+      $self->_add_listeners($_) for(@$value);
     }
     elsif($key eq "show"){
       $_options->{show_routes}=$value||".*";
@@ -1021,6 +824,7 @@ method parse_cli_options {
       #Unsupported option
     }
   }
+  $self;
 }
 
 # Create a new stream connection to a server. Adds the connection to the idle pool
@@ -1050,5 +854,44 @@ method do_stream_connect {
 
   }
   $id;
+}
+
+method load {
+	my $path=pop;
+	my %options=@_;
+  $path=uSAC::Util::path $path, [caller];
+	
+	$options{package}//=(caller)[0];
+	
+	#recursivley include files
+	if(-d $path){
+		#Dir list and contin
+		my @files= <"${path}/*">;
+
+		for my $file (@files){
+      local $uSAC::HTTP::Site=$self;
+			$self->load( %options, $file);
+		}
+	}
+	else{
+		#not a dir . do it
+		Log::OK::INFO and log_info "Including server script from $path";
+    #my $result=
+    eval "require '$path'";
+
+    if($@){
+      my $context=context;
+      log_error "Could not include file: $context";
+      die "Could not include file $path";	
+    }
+
+	}
+
+  $self;
+}
+
+method worker_count {
+  $_workers= pop;
+  $self;
 }
 1; 

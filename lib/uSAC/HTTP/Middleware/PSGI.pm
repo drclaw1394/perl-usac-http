@@ -1,32 +1,25 @@
 package uSAC::HTTP::Middleware::PSGI;
 use v5.36;
+
 #PSGI adaptor for uSAC::HTTP::Server
 use strict;
 use warnings;
+
 use feature qw<say refaliasing state>;
 no warnings "experimental";
 use Log::ger;
 use Log::OK;
 use Error::Show;
 
-use List::Util qw<pairs first>;
 
 
 #use Stream::Buffered::PerlIO;	#From PSGI distribution
 use Plack::TempBuffer;
 use uSAC::IO;
-use uSAC::Util;
-use uSAC::HTTP;
-use uSAC::HTTP::Rex;
-use uSAC::HTTP::Session;
-#use uSAC::HTTP::Middleware qw<chunked>;
-use uSAC::HTTP::Constants;
+use Import::These "uSAC::", "Util", "::HTTP::", qw<Rex Session Constants>;
 use URL::Encode qw<url_decode_utf8 url_decode url_encode_utf8 url_encode>;
 use Encode qw<encode>;
 
-use constant::more KEY_OFFSET=>0;
-use enum ("entries_=".KEY_OFFSET, qw<end_>);
-use constant::more KEY_COUNT=> end_-entries_+1;
 
 use Export::These qw<uhm_psgi>;
 
@@ -40,10 +33,10 @@ use Export::These qw<uhm_psgi>;
 package uSAC::HTTP::Middleware::PSGI::Writer {
   no warnings "experimental";
 
-  use uSAC::HTTP::Rex;
-  use uSAC::HTTP::Constants;
+  use Import::These qw<uSAC::HTTP:: Rex Constants>;
   use Log::ger;
   use Log::OK;
+
   #simple class to wrap the push write of the session
   sub new {
     my $package=shift;
@@ -132,16 +125,6 @@ sub uhm_psgi {
 
         $env->{REQUEST_URI}=$env->{":path"};
 
-        #$env->{PATH_INFO}=encode 'UTF-8', url_decode_utf8 ($env->{":path"} =~ s/\?$env->{":query"}$//r);
-        #$env->{PATH_INFO}=url_decode ($env->{":path"} =~ s/\?$env->{":query"}$//r);
-        #
-        #####################################################
-        # my $query=$env->{":query"};                       #
-        # $env->{PATH_INFO}=url_decode ($query              #
-        #   ?substr $env->{":path"} ,0, -(1+length($query)) #
-        #   :$env->{":path"}                                #
-        # );                                                #
-        #####################################################
         $env->{PATH_INFO}=url_decode($env->{":path"});
 
         $env->{SERVER_PROTOCOL}=$env->{":protocol"};
@@ -321,7 +304,6 @@ sub do_glob {
 
   # User supplied headers could be mixed case... so regex match it is
   unless(grep /Content-Length/i, $psgi_headers->%*){
-    #unless(first {/Content-Length/i} @$psgi_headers)	{
 		#calculate the file size from stating it
     if(ref($psgi_body) eq "GLOB" or $psgi_body isa IO::Handle){
       my $size=(stat $psgi_body)[7];

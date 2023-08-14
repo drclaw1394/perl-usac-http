@@ -12,8 +12,6 @@ use Log::OK;
 
 #use Try::Catch;
 use Carp qw<carp>;
-#use File::Basename qw<basename dirname>;
-use File::Spec::Functions qw<catpath>;
 use uSAC::HTTP::Code;
 use uSAC::HTTP::Header;
 use HTTP::State::Cookie qw<:constants :encode :decode>;
@@ -211,7 +209,7 @@ calling.
 =cut
 sub rex_redirect_see_other{
   my $url=$_[PAYLOAD];
-  $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
+  $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
 
   # If url is string and relative, relative to server root
   # if ref to stirng and relative, relative to site
@@ -238,7 +236,7 @@ calling.
 =cut
 sub rex_redirect_found {
   my $url=$_[PAYLOAD];
-  $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
+  $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[OUT_HEADER]{":status"}=HTTP_FOUND;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
     $_[HEADER]{$k}=$v;
@@ -262,7 +260,7 @@ calling.
 =cut
 sub rex_redirect_temporary {
   my $url=$_[PAYLOAD];
-  $url=catpath undef, $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
+  $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[OUT_HEADER]{":status"}=HTTP_TEMPORARY_REDIRECT;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
     $_[HEADER]{$k}=$v;
@@ -284,7 +282,7 @@ calling.
 =cut
 sub rex_redirect_permanent {
     my $url=$_[PAYLOAD];
-    $url=catpath undef, $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
+    $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
 
     $_[OUT_HEADER]{":status"}=HTTP_PERMANENT_REDIRECT;
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
@@ -426,7 +424,7 @@ sub rex_redirect_internal {
 	my ($matcher, $rex, undef, undef, $uri)=@_;
   
   # If a scalar reference, 
-  $uri=catpath undef, $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$uri if ref $uri;
+  $uri=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$uri if ref $uri;
 
 	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){

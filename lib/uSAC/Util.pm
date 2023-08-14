@@ -1,9 +1,8 @@
 package uSAC::Util;
 # Utility functions
 
-use File::Spec::Functions qw<catfile abs2rel>;
+use File::Spec::Functions qw<catfile abs2rel rel2abs>;
 use File::Basename qw<dirname>;
-use Cwd qw<abs_path cwd>;
 use URL::Encode qw<url_decode_utf8>;
 use feature "say";
 
@@ -24,14 +23,14 @@ sub path {
   my $p;
   my $prefix;
   my $frame=$_[1]//[caller];
-	$prefix=dirname abs2rel abs_path($frame->[1]);
+	$prefix=dirname abs2rel rel2abs($frame->[1]);
   if(ref($_[0]) eq "SCALAR"){
     
     $p=$_[0]->$*;
     return $p if $p =~ m|^/|;
     #Create the roolt as a relative path to current working dir
     if($p){
-      $p=catfile($prefix,$p);
+      $p=catfile($prefix, $p);
     }
     else{
       # No suffix specified, don't join
@@ -40,7 +39,8 @@ sub path {
   }
   elsif(!defined $_[0]){
     # If undefined, then we just want current working dir
-    $p=cwd;
+    #$p=cwd;
+    $p=rel2abs(".");
   }
   else {
     # Path is either CWD relative or absolute
@@ -79,35 +79,4 @@ sub decode_urlencoded_form {
   }
   \%kv;
 }
-
-####################################################################################################
-#         my $rex=$_[1];                                                                           #
-#         #parse the fields                                                                        #
-#         for ($_[IN_HEADER]{"content-type"}){                                                     #
-#                 if(/multipart\/form-data/){                                                      #
-#                         #parse content disposition (name, filename etc)                          #
-#                         my $kv={};                                                               #
-#                         for(map tr/ //dr, split ";", $_[IN_HEADER]{HTTP_CONTENT_DISPOSITION()}){ #
-#                                 my ($key, $value)=split "=";                                     #
-#                                 $kv->{$key}=defined($value)?$value=~tr/"//dr : undef;            #
-#                         }                                                                        #
-#                         return $kv;                                                              #
-#                 }                                                                                #
-#                 elsif($_ eq 'application/x-www-form-urlencoded'){                                #
-#                         my $kv={};                                                               #
-#                         for(split "&", url_decode_utf8 $_[PAYLOAD]){                             #
-#                                 my ($key,$value)=split "=",2;                                    #
-#                                 $kv->{$key}=$value;                                              #
-#                         }                                                                        #
-#                         return $kv;                                                              #
-#                 }                                                                                #
-#                                                                                                  #
-#                 else{                                                                            #
-#                         return {};                                                               #
-#                 }                                                                                #
-#                                                                                                  #
-#         }                                                                                        #
-# }                                                                                                #
-####################################################################################################
-
 1;

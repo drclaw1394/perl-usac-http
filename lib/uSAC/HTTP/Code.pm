@@ -1,9 +1,7 @@
+use v5.36;
 package uSAC::HTTP::Code;
-use strict;
-use warnings;
 no warnings "experimental";
 
-#use List::Util qw<pairs>;
 
 our @names;
 our @values;
