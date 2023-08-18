@@ -342,11 +342,9 @@ sub rex_error {
 
   #Locate applicable site urls to handle the error
 
-  for($site->error_uris->{$_[OUT_HEADER]{":status"}}){
-    if($_){
+  for($site->error_uris->{$_[OUT_HEADER]{":status"}}//()){
       $_[PAYLOAD]=my $a=$_;
       return &rex_redirect_internal
-    }
   }
 
   # No custom error page so render immediately 
@@ -457,7 +455,6 @@ sub rex_redirect_internal {
   $rex->[recursion_count_]++;
   #Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
   my $route;
-  #($route, $_[IN_HEADER]{":captures"})=$rex->[session_]->server->current_cb->(
   ($route, $_[IN_HEADER]{":captures"})=$rex->[server_]->current_cb->(
     $_[IN_HEADER]{host},
     join(" ", $_[IN_HEADER]{":method"}, $_[IN_HEADER]{":path"}),#New method and url

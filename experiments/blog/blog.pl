@@ -5,6 +5,7 @@ use EV;
 use AnyEvent;
 
 use Log::ger::Output 'Screen';
+use Log::OK {opt=>"verbose"};
 
 use uSAC::HTTP::Server;
 use uSAC::HTTP::Site;
@@ -59,11 +60,20 @@ $server
       $_[OUT_HEADER]{HTTP_LOCATION()}="http://localhost:8084/static/hot.txt";
     }
   )
+
+  # NOTE: prefix must be exact
+  ->add_route('/static'       => uhm_static_root(list_dir=>1, prefix=>"/static", \"static")
+                              
+                              => uhm_static_root(prefix=>"/static", \"admin/static"))
+  #->add_route('/admin/static' => uhm_static_root)
+
+
   ->add_route('/static/hot.txt'
     => uhm_static_file(
       #headers=>{"transfer-encoding"=>"chunked"},
       \"static/hot.txt")
   )
+  ->set_error_page(404=>\"not_found")
   #->add_route(""=>sub { $_[PAYLOAD]="asdfasd default"})
 )
 ->parse_cli_options

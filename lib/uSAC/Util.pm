@@ -24,7 +24,7 @@ sub path {
   my $prefix;
   my $frame=$_[1]//[caller];
 	$prefix=dirname abs2rel rel2abs($frame->[1]);
-  if(ref($_[0]) eq "SCALAR"){
+  if(ref($_[0]) eq "SCALAR" or !defined $_[0]){
     
     $p=$_[0]->$*;
     return $p if $p =~ m|^/|;
@@ -37,11 +37,13 @@ sub path {
       $p=$prefix;
     }
   }
-  elsif(!defined $_[0]){
-    # If undefined, then we just want current working dir
-    #$p=cwd;
-    $p=rel2abs(".");
-  }
+  ###########################################################
+  # elsif(!defined $_[0]){                                  #
+  #   # If undefined, then we just want current working dir #
+  #   #$p=cwd;                                              #
+  #   $p=rel2abs(".");                                      #
+  # }                                                       #
+  ###########################################################
   else {
     # Path is either CWD relative or absolute
     $p=$_[0];#$prefix;#$_[0];

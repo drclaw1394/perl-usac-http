@@ -933,35 +933,21 @@ method add_error_route {
 	$self->add_route(@_);
 }
 
-##################################################
-# sub usac_error_page {                          #
-#         #my $self=                             #
-#         $uSAC::HTTP::Site->set_error_page(@_); #
-# }                                              #
-##################################################
 
 method set_error_page {
-  #my $self=shift;
-	my $bp=$self->built_prefix;
+  #my $bp=$self->built_prefix;
 
 	for my($k, $v)(@_){
-		$_error_uris->{$k}="$bp$v";
+		$_error_uris->{$k}=$v;#"$bp$v";
 	}
+
+  $self;
 }
 
 method error_uris {
   $_error_uris;
 }
 
-#########################################################
-# #set the default mime for this level                  #
-# sub usac_mime_default{                                #
-#         my $default=pop;                              #
-#         my %options=@_;                               #
-#         my $self=$options{parent}//$uSAC::HTTP::Site; #
-#         $self->set_mime_default(%options, $self);     #
-# }                                                     #
-#########################################################
 
 method set_mime_default {
   #my $self=shift;
@@ -970,17 +956,6 @@ method set_mime_default {
 	$self->mime_default=$default//"application/octet-stream";
 
 }
-
-#Set the mime db for this level
-#TODO should argument be a path to a file?
-#########################################################
-# sub usac_mime_db{                                     #
-#         my $db=pop;                                   #
-#         my %options=@_;                               #
-#         my $self=$options{parent}//$uSAC::HTTP::Site; #
-#         $self->set_mime_db(%options, $db);            #
-# }                                                     #
-#########################################################
 
 method set_mime_db {
 #my $self=shift;

@@ -156,37 +156,28 @@ sub send_file_uri_norange {
 
   my @ranges;
 
+  # 
+  my $as_error= (HTTP_BAD_REQUEST<=($out_headers->{":status"}//HTTP_OK));
 
   #Ignore caching headers if we are processing as an error
-  my $as_error= HTTP_BAD_REQUEST<=($out_headers->{":status"}//HTTP_OK);
   if(!$as_error){
     #TODO: needs testing
     for my $t ($headers->{"if-none-match"}){
       #HTTP_IF_NONE_MATCH){
-      $out_headers->{":status"}=HTTP_OK and last unless $t;
-      $out_headers->{":status"}=HTTP_NOT_MODIFIED and last;	#no body to be sent
+      $out_headers->{":status"}//=HTTP_OK and last unless $t;
+      $out_headers->{":status"}//=HTTP_NOT_MODIFIED and last;	#no body to be sent
     }
 
     #TODO: needs testing
     for my $time ($headers->{"if-modified-since"}){
       #attempt to parse
-      $out_headers->{":status"}=HTTP_OK and last unless $time;
+      $out_headers->{":status"}//=HTTP_OK and last unless $time;
       my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
-      $out_headers->{":status"}=HTTP_OK  and last if $mod_time>$tp->epoch;
-      $out_headers->{":status"}=HTTP_NOT_MODIFIED;	#no body to be sent
+      $out_headers->{":status"}//=HTTP_OK  and last if $mod_time>$tp->epoch;
+      $out_headers->{":status"}//=HTTP_NOT_MODIFIED;	#no body to be sent
     }
   }
 
-  #Add no compress (ie identity) if encoding is not set
-  #and if no_encodingflag is set
-  #
-  #############################################
-  #                                           #
-  # push @$out_headers,                       #
-  #   $entry->[File::Meta::Cache::user_]->@*, #
-  #   HTTP_VARY, "Accept",                    #
-  #   HTTP_ACCEPT_RANGES,"bytes";             #
-  #############################################
   for my($k, $v)(
     $entry->[File::Meta::Cache::user_]->@*, 
     HTTP_VARY, "Accept",
@@ -200,7 +191,6 @@ sub send_file_uri_norange {
     @ranges=_check_ranges $rex, $content_length;
     unless(@ranges){
       $out_headers->{":status"}=HTTP_RANGE_NOT_SATISFIABLE;
-      #push @$out_headers, HTTP_CONTENT_RANGE, "bytes */$content_length";
       $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
 
       $next->($matcher, $rex, $in_header, $out_headers, "");
@@ -210,11 +200,6 @@ sub send_file_uri_norange {
       $out_headers->{":status"}=HTTP_PARTIAL_CONTENT;
       my $total_length=0;
       $total_length+=($_->[1]-$_->[0]+1) for @ranges;
-      ############################################################################
-      # push @$out_headers,                                                      #
-      # HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length", #
-      # HTTP_CONTENT_LENGTH, $total_length;                                      #
-      ############################################################################
       
       for my($k, $v)(
         HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
@@ -232,7 +217,7 @@ sub send_file_uri_norange {
     }
   }
   else {
-    #push @$out_headers, HTTP_CONTENT_LENGTH, $content_length;
+    # process as error or non partial content
     $out_headers->{HTTP_CONTENT_LENGTH()}= $content_length;
 
   }
@@ -470,7 +455,7 @@ sub _make_list_dir {
 
       Log::OK::TRACE and log_trace "No dir here $abs_path";
       #rex_error_not_found $line, $rex;
-      $_[OUT_HEADER]{":status"}= HTTP_NOT_FOUND;
+      $_[OUT_HEADER]{":status"}//= HTTP_NOT_FOUND;
       $_[PAYLOAD]="";
       $_[CB]=undef;
 			return &$next;
@@ -500,17 +485,19 @@ sub _make_list_dir {
 
 		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
 		$ren->($data, $labels, \@results);	#Render to output
-    $_[OUT_HEADER]{":status"}=HTTP_OK; 
+
+    # Set status if not already set
+    $_[OUT_HEADER]{":status"}//=HTTP_OK; 
     $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $data;
     for my ($k,$v)(@type){
       $_[OUT_HEADER]{$k}=$v;
     }
 		if($in_header->{":method"} eq "HEAD"){
-			$next->($line, $rex, $in_header,$headers , "",my $cb=undef);
+			$next->($line, $rex, $in_header, $headers , "", my $cb=undef);
 
 		}
 		else{
-			$next->($line, $rex, $in_header,$headers , $data,my $cb=undef);
+			$next->($line, $rex, $in_header,$headers , $data, my $cb=undef);
       #$next->($line, $rex, HTTP_OK,{HTTP_CONTENT_LENGTH, length $data, @type} , $data, my $cb=undef);
 		}
 	}
@@ -528,8 +515,20 @@ sub _make_list_dir {
 # NOTE: If payload is NOT UNDEF, it is used as the relative path to search for!
 #       Otherwise the path to search for is from the url path in the request
 sub uhm_static_root {
-  my $html_root=uSAC::Util::path pop, [caller];
-  my %options=@_;
+  
+  my $html_root;
+  my %options;
+  if(@_%2){
+    # Odd number of arguments assume last item is html root
+    $html_root=uSAC::Util::path pop, [caller];
+    %options=@_;
+  }
+  else {
+    # Even or zero arguments
+    %options=@_;
+    $html_root=uSAC::Util::path $options{html_root}, [caller];
+
+  }
 
   $options{html_root}=$html_root;
   #my $parent=$options{parent}//$uSAC::HTTP::Site;
@@ -543,6 +542,7 @@ sub uhm_static_root {
   my $no_encoding=$options{no_encoding}//"";
   my $do_dir=$options{list_dir}//$options{do_dir};
   my $pre_encoded=$options{pre_encoded}//{};
+  my $prefix=$options{prefix};
 
   \my @indexes=$options{indexes}//[];
 
@@ -622,6 +622,9 @@ sub uhm_static_root {
         # middleware argument.
         #
         $p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
+        
+        # Strip the prefix if its specified
+        $p=substr $p, length $prefix if($prefix and index($p, $prefix)==0);
 
         my $path=$html_root.$p;
         #
@@ -629,12 +632,14 @@ sub uhm_static_root {
         # if the filter doesn't match (if a filter exists)
         #
         if($filter and $path !~ /$filter/o){
-          $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
+          # Only set the header if it isn't set
+          $_[OUT_HEADER]{":status"}//=HTTP_NOT_FOUND;
           $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
           return &$next;
         }
 
         #Push any user static headers
+        #
         for my ($k, $v)(@$headers){
           $_[HEADER]{$k}=$v;
         }
@@ -692,7 +697,7 @@ sub uhm_static_root {
             #
             Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
             $_[PAYLOAD]="";
-            $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
+            $_[OUT_HEADER]{":status"}//=HTTP_NOT_FOUND;
             $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
             return &$next;
           }
@@ -731,7 +736,7 @@ sub uhm_static_root {
             # the next middleware
             #
             $_[PAYLOAD]="";
-            $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
+            $_[OUT_HEADER]{":status"}//=HTTP_NOT_FOUND;
             $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
             return &$next;
           }
@@ -771,7 +776,6 @@ sub uhm_static_root {
   #[$inner, $outer];
   [$outer, $inner];
 }
-#*usac_static_under=\*usac_file_under;
 
 
 sub uhm_static_file {
