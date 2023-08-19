@@ -68,10 +68,11 @@ $server
   )
 
   ->add_route('/static'       
-    => uhm_static_root(indexes=>["index.html"], list_dir=>undef, \"static")
-    => uhm_static_root( \"admin/static")
+    => uhm_static_root 
+      indexes=>["index.html"],
+      list_dir=>undef,
+      roots=> [\"static", \"admin/static"]
   )
-  #->add_route('/admin/static' => uhm_static_root)
 
 
   ->set_error_page(404=>\"not_found")

@@ -37,6 +37,7 @@ sub path {
       $p=$prefix;
     }
   }
+
   ###########################################################
   # elsif(!defined $_[0]){                                  #
   #   # If undefined, then we just want current working dir #

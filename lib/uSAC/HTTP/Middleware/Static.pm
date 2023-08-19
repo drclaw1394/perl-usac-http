@@ -3,24 +3,16 @@ use strict;
 use warnings;
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
-#use uSAC::HTTP::FileMetaCache;
-use File::Meta::Cache;
-use Carp;
+
 use Log::ger;
 use Log::OK;
-use JSON;
-use File::Basename qw<basename dirname>;
+
+use File::Meta::Cache;
+
 use IO::FD;
 use uSAC::IO;
 
-use Import::These qw<uSAC::HTTP:: Code Header Rex Constants Route>;
-##############################
-# use uSAC::HTTP::Code;      #
-# use uSAC::HTTP::Header;    #
-# use uSAC::HTTP::Rex;       #
-# use uSAC::HTTP::Constants; #
-##############################
-use uSAC::Util;
+use Import::These qw<uSAC:: Util ::HTTP:: Code Header Rex Constants Route>;
 
 use Export::These (
   "uhm_static_root",     
@@ -32,7 +24,6 @@ use Errno qw<EAGAIN EINTR EBUSY>;
 
 use constant::more  READ_SIZE=>4096;
 
-use IO::FD;
 
 
 sub _check_ranges{
@@ -405,6 +396,7 @@ sub _html_dir_list {
 }
 
 sub _json_dir_list {
+  require JSON;
 	sub {
 		state  $headers;
 		if($_[1]){
@@ -419,7 +411,7 @@ sub _json_dir_list {
 			}
 			push @tuples, $trow;
 		}
-		$_[0].=encode_json \@tuples
+		$_[0].=JSON::encode_json( \@tuples);
 	}
 
 }
@@ -487,12 +479,13 @@ sub _make_list_dir {
       @fs_paths;
 		my $ren=$renderer//&_html_dir_list;
 
-		my $data="";#"lkjasdlfkjasldkfjaslkdjflasdjflaksdjf";
+		my $data="";
 		$ren->($data, $labels, \@results);	#Render to output
 
     # Set status if not already set
     $_[OUT_HEADER]{":status"}=HTTP_OK; 
     $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $data;
+
     for my ($k,$v)(@type){
       $_[OUT_HEADER]{$k}=$v;
     }
@@ -520,22 +513,22 @@ sub _make_list_dir {
 #       Otherwise the path to search for is from the url path in the request
 sub uhm_static_root {
   
-  my $html_root;
+#my $html_root;
   my %options;
+  my $frame=[caller];
   if(@_ % 2){
     # Odd number of arguments assume last item is html root
-    $html_root=uSAC::Util::path pop, [caller];
+    my $tmp=pop;
     %options=@_;
+    unshift $options{roots}->@*, $tmp;#uSAC::Util::path $tmp, $frame;
   }
   else {
     # Even or zero arguments
     %options=@_;
-    $html_root=uSAC::Util::path $options{html_root}, [caller];
-
   }
 
-  $options{html_root}=$html_root;
-  #my $parent=$options{parent}//$uSAC::HTTP::Site;
+  # Resolve paths
+  $options{roots}->@*=map {uSAC::Util::path $_, $frame} $options{roots}->@*;
 
 
   my $headers=$options{headers}//[];
@@ -547,6 +540,7 @@ sub uhm_static_root {
   my $do_dir=$options{list_dir}//$options{do_dir};
   my $pre_encoded=$options{pre_encoded}//{};
   my $prefix=$options{prefix};
+  \my @roots=$options{roots};
 
   \my @indexes=$options{indexes}//[];
 
@@ -578,7 +572,7 @@ sub uhm_static_root {
 
   #TODO: Need to check only supported encodings are provided.
 
-  Log::OK::DEBUG and log_debug "Static files from: $html_root";
+  Log::OK::DEBUG and log_debug "Static files from: ",join ", ", $options{roots}->@*;
   Log::OK::DEBUG and log_debug "DIR Listing: ".($do_dir?"yes":"no");
   Log::OK::DEBUG and log_debug "DIR index: ".(@indexes?join(", ", @indexes):"no");
   Log::OK::DEBUG and log_debug "Filename Filter: ".($filter?$filter: "**NONE**");
@@ -600,7 +594,9 @@ sub uhm_static_root {
   state $timer=uSAC::IO::timer 0, 10, $sweeper;
   my $list_dir=_make_list_dir(%options);
 
-  croak "Can not access dir $html_root to serve static files" unless -d $html_root;
+  for my $html_root ($options{roots}->@*){
+    die "Can not access dir $html_root to serve static files" unless -d $html_root;
+  }
   #check for mime type in parent 
   my $inner=sub {
     #create the sub to use the static files here
@@ -615,20 +611,12 @@ sub uhm_static_root {
     my $as_error;
     sub {
       if($_[OUT_HEADER]){
-      
         $as_error=$_[OUT_HEADER]{":as_error"};
-        #
-        # Previous middleware did not find anything, or we don't have a
-        # response just yet
-        #
-        return &$next unless($_[OUT_HEADER]{":status"}//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
-       
         # 
         # Path is either given with the rex object or passed in by the payload
         # middleware argument.
         #
         $p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
-        
 
         #
         # Strip the prefix if its specified
@@ -636,142 +624,151 @@ sub uhm_static_root {
         $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
 
         $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
+        my $path;
 
-        my $path=$html_root.$p;
-        #
-        # First this is to report not found  and call next middleware
-        # if the filter doesn't match (if a filter exists)
-        #
-        if($filter and $path !~ /$filter/o){
-          # Only set the header if it isn't set
-          $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
-          $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
-          return &$next;
-        }
-
-        #Push any user static headers
-        #
-        for my ($k, $v)(@$headers){
-          $_[HEADER]{$k}=$v;
-        }
-
-        Log::OK::TRACE and log_trace "static: html_root: $html_root";
-
-
-        # File and Directory serving 
-        #
-        # Attempts to open the file and send it. If it fails, the next static
-        # middleware is called if present
-
-        
-        my $entry;
-        #my $path=$html_root.$p;
-        my $enc="";
-        my $content_type;
-
-        if(substr($path, -1) eq "/") {
-          # Attempt to match a file within a directory to that in the index list
-          # Update content type to the located file
+        for my $html_root(@roots){
           #
-          if(@suffix_indexes ){
+          # Previous middleware did not find anything, or we don't have a
+          # response just yet
+          #
+          return &$next unless($_[OUT_HEADER]{":status"}//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
 
-            Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
-            for(@suffix_indexes){
-              my $_path=$path.$_;
-              $entry=$opener->($_path, $open_modes);#, \@suffix_indexes);
-              if($entry){
-                my $index=rindex $_path, ".";
-                my $ext=substr $_path, $index+1;
-                $content_type=$mime->{$ext}//$default_mime;
-                last;
+
+          $path=$html_root.$p;
+          #
+          # First this is to report not found  and call next middleware
+          # if the filter doesn't match (if a filter exists)
+          #
+          next if($filter and $path !~ /$filter/o);
+
+
+          Log::OK::TRACE and log_trace "static: html_root: $html_root";
+
+
+          # File and Directory serving 
+          #
+          # Attempts to open the file and send it. If it fails, the next static
+          # middleware is called if present
+
+
+          my $entry;
+          #my $path=$html_root.$p;
+          my $enc="";
+          my $content_type;
+
+          if(substr($path, -1) eq "/") {
+            # Attempt to match a file within a directory to that in the index list
+            # Update content type to the located file
+            #
+            if(@suffix_indexes ){
+
+              Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
+              for(@suffix_indexes){
+                my $_path=$path.$_;
+                $entry=$opener->($_path, $open_modes);#, \@suffix_indexes);
+                if($entry){
+                  my $index=rindex $_path, ".";
+                  my $ext=substr $_path, $index+1;
+                  $content_type=$mime->{$ext}//$default_mime;
+                  last;
+                }
+                else {
+                  Log::OK::TRACE and log_trace "Static: did not locate index: $path";
+                }
               }
-              else {
-                Log::OK::TRACE and log_trace "Static: did not locate index: $path";
+              #goto SEND_FILE if $entry
+            }
+
+            #
+            if($do_dir and !$entry){
+              # Don't want an index file, just a dir listing
+              #
+              Log::OK::TRACE and log_trace "Static: Listing dir $p";
+              #dir listing
+              $_[PAYLOAD]=$p;   # hack
+              $_[CB]=$next;     # hack
+              #Push any user static headers
+              #
+              for my ($k, $v)(@$headers){
+                $_[HEADER]{$k}=$v;
+              }
+              return &$list_dir;
+            }
+            next;
+            #################################################################
+            # elsif(!$entry){                                               #
+            #   # Normally dir listing and index is disabled.               #
+            #   # Return non found                                          #
+            #   #                                                           #
+            #   Log::OK::TRACE and log_trace "Static: NO DIR LISTING";      #
+            #   #$_[PAYLOAD]="";                                            #
+            #   #$_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error; #
+            #   #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;                   #
+            #   next;                                                       #
+            # }                                                             #
+            #################################################################
+          }
+
+          else {
+            # Attempt a normal file serve
+            #
+            Log::OK::TRACE and log_trace "Working on opening normal file";
+            my $index=rindex $path, ".";
+            my $ext=substr $path, $index+1;
+            $content_type=$mime->{$ext}//$default_mime;
+
+
+            #if($pre_encoded and ($_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//"")=~/(gzip)/){
+            if($pre_encoded and ($_[IN_HEADER]{"accept-encoding"}//"")=~/(gzip)/){
+              # Attempt to find a pre encoded file when the client asks and if its enabled
+              #
+              $enc=$1;
+              my $enc_ext=$pre_encoded->{$1};
+              $entry=$opener->($path.$enc_ext, $open_modes) if $enc_ext;
+              unless($entry){
+                $entry=$opener->($path, $open_modes);
+                $enc=($no_encoding and $ext=~/$no_encoding/)?"identity":"";
+
               }
             }
-            #goto SEND_FILE if $entry
-          }
-
-          #
-          if($do_dir and !$entry){
-            # Don't want an index file, just a dir listing
-            #
-            Log::OK::TRACE and log_trace "Static: Listing dir $p";
-            #dir listing
-            $_[PAYLOAD]=$p;   # hack
-            $_[CB]=$next;     # hack
-            return &$list_dir;
-          }
-          elsif(!$entry){
-            # Normally dir listing and index is disabled.
-            # Return non found
-            #
-            Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
-            $_[PAYLOAD]="";
-            $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
-            $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
-            return &$next;
-          }
-        }
-
-        else {
-          # Attempt a normal file serve
-          #
-          Log::OK::TRACE and log_trace "Working on opening normal file";
-          my $index=rindex $path, ".";
-          my $ext=substr $path, $index+1;
-          $content_type=$mime->{$ext}//$default_mime;
-                
-
-          #if($pre_encoded and ($_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//"")=~/(gzip)/){
-          if($pre_encoded and ($_[IN_HEADER]{"accept-encoding"}//"")=~/(gzip)/){
-            # Attempt to find a pre encoded file when the client asks and if its enabled
-            #
-            #say  $_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"};
-            $enc=$1;
-            my $enc_ext=$pre_encoded->{$1};
-            $entry=$opener->($path.$enc_ext, $open_modes) if $enc_ext;
-            unless($entry){
+            else{
+              # No preencoded files enabled
               $entry=$opener->($path, $open_modes);
-              $enc=($no_encoding and $ext=~/$no_encoding/)?"identity":"";
-
             }
-          }
-          else{
-            # No preencoded files enabled
-            $entry=$opener->($path, $open_modes);
+
+            next unless($entry)
           }
 
-          unless($entry){
-            # We did not locate the file. Set a not found error and forward to
-            # the next middleware
-            #
-            $_[PAYLOAD]="";
-            $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
-            $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
-            return &$next;
+          # Setup meta cache fields if they don't exist
+          #
+          unless($entry->[File::Meta::Cache::user_]){
+            $entry->[File::Meta::Cache::user_]=[
+              HTTP_CONTENT_TYPE, $content_type, 
+              HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
+                CORE::gmtime($entry->[File::Meta::Cache::stat_][9])),
+              HTTP_ETAG, "\"$entry->[File::Meta::Cache::stat_][9]-$entry->[File::Meta::Cache::stat_][7]\"",
+            ];
           }
+
+          # Finally set the content encoding encountered along the way
+          #
+
+          $_[HEADER]{HTTP_CONTENT_ENCODING()}=$enc if $enc;
+          #Push any user static headers
+          #
+          for my ($k, $v)(@$headers){
+            $_[HEADER]{$k}=$v;
+          }
+
+          return send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, $closer);
+
         }
 
-        # Setup meta cache fields if they don't exist
-        #
-        unless($entry->[File::Meta::Cache::user_]){
-          $entry->[File::Meta::Cache::user_]=[
-            HTTP_CONTENT_TYPE, $content_type, 
-            HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
-              CORE::gmtime($entry->[File::Meta::Cache::stat_][9])),
-            HTTP_ETAG, "\"$entry->[File::Meta::Cache::stat_][9]-$entry->[File::Meta::Cache::stat_][7]\"",
-          ];
-        }
-
-        # Finally push the content encoding encountered along the way
-        #
-        #push @{$_[HEADER]}, HTTP_CONTENT_ENCODING, $enc if $enc;
-
-        $_[HEADER]{HTTP_CONTENT_ENCODING()}=$enc if $enc;
-
-        send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, $closer);
-
+        # Didn't match anything in the roots.
+        $_[PAYLOAD]="";
+        $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
+        $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
+        &$next;
       }
       else {
         #No HEADER
@@ -867,7 +864,5 @@ sub uhm_static_content {
     }
   ]
 }
-
-
 
 1;
