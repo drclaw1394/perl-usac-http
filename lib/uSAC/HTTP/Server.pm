@@ -545,7 +545,7 @@ method rebuild_dispatch {
     #
   my $table;
   $_cb=sub {
-  use Time::HiRes qw<time>;
+    use Time::HiRes qw<time>;
     Log::OK::TRACE and  log_trace "IN SERVER CB: @_";
 
     Log::OK::TRACE and  log_trace join ", ", values $_host_tables->%*;

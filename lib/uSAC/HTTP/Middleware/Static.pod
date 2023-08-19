@@ -50,8 +50,24 @@ matches the path will list its dir contents. Add multiple routes to fix this.
 
 =head3 indexes=>[list]
 
+  indexes=>["index.html", "index.htm"];
+
 Reference to an array of filenames to append to a dir path. If one is found it
 is served. Otherwise a dir listing is showing if enabled with C<list_dir>
+
+
+=head3 prefix=>string
+
+  prefix=>'/public/'
+
+A string to strip from the end of the the requested url. If not specified, the
+site relative path for the route is used, if not a regex match.
+
+  $site->add_route("/static/files" => uhm_static_root "...");
+  # prefix is "/static/files"
+
+  $site->add_route("/static/files" => uhm_static_root prefix=>"/files", "...");
+  # prefix is "/files"
 
 
 =head3 filter=regex

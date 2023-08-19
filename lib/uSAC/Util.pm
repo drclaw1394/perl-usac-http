@@ -13,7 +13,7 @@ use Export::These qw( path decode_urlencoded_form);
 # If a ref and undefined, is caller dir
 # if a ref and abs leave as it is
 # if not a ref and defined make relative to cwd
-# if not a ref and undefined is cwd
+# if not a ref and undefined is relative caller dir
 # if not a ref and abs leave as it is
 #
 # Optional second argument specifiy caller frame. If none proveded is
@@ -28,7 +28,7 @@ sub path {
     
     $p=$_[0]->$*;
     return $p if $p =~ m|^/|;
-    #Create the roolt as a relative path to current working dir
+    #Create the rool as a relative path to current working dir
     if($p){
       $p=catfile($prefix, $p);
     }

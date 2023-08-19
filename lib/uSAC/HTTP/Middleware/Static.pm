@@ -13,10 +13,13 @@ use File::Basename qw<basename dirname>;
 use IO::FD;
 use uSAC::IO;
 
-use uSAC::HTTP::Code;
-use uSAC::HTTP::Header;
-use uSAC::HTTP::Rex;
-use uSAC::HTTP::Constants;
+use Import::These qw<uSAC::HTTP:: Code Header Rex Constants Route>;
+##############################
+# use uSAC::HTTP::Code;      #
+# use uSAC::HTTP::Header;    #
+# use uSAC::HTTP::Rex;       #
+# use uSAC::HTTP::Constants; #
+##############################
 use uSAC::Util;
 
 use Export::These (
@@ -157,24 +160,25 @@ sub send_file_uri_norange {
   my @ranges;
 
   # 
-  my $as_error= (HTTP_BAD_REQUEST<=($out_headers->{":status"}//HTTP_OK));
+  my $as_error= $out_headers->{":as_error"};
+  #(HTTP_BAD_REQUEST<=($out_headers->{":status"}//HTTP_OK));
 
   #Ignore caching headers if we are processing as an error
   if(!$as_error){
     #TODO: needs testing
     for my $t ($headers->{"if-none-match"}){
       #HTTP_IF_NONE_MATCH){
-      $out_headers->{":status"}//=HTTP_OK and last unless $t;
-      $out_headers->{":status"}//=HTTP_NOT_MODIFIED and last;	#no body to be sent
+      $out_headers->{":status"}=HTTP_OK and last unless $t;
+      $out_headers->{":status"}=HTTP_NOT_MODIFIED and last;	#no body to be sent
     }
 
     #TODO: needs testing
     for my $time ($headers->{"if-modified-since"}){
       #attempt to parse
-      $out_headers->{":status"}//=HTTP_OK and last unless $time;
+      $out_headers->{":status"}=HTTP_OK and last unless $time;
       my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
-      $out_headers->{":status"}//=HTTP_OK  and last if $mod_time>$tp->epoch;
-      $out_headers->{":status"}//=HTTP_NOT_MODIFIED;	#no body to be sent
+      $out_headers->{":status"}=HTTP_OK  and last if $mod_time>$tp->epoch;
+      $out_headers->{":status"}=HTTP_NOT_MODIFIED;	#no body to be sent
     }
   }
 
@@ -455,7 +459,7 @@ sub _make_list_dir {
 
       Log::OK::TRACE and log_trace "No dir here $abs_path";
       #rex_error_not_found $line, $rex;
-      $_[OUT_HEADER]{":status"}//= HTTP_NOT_FOUND;
+      $_[OUT_HEADER]{":status"}= HTTP_NOT_FOUND;
       $_[PAYLOAD]="";
       $_[CB]=undef;
 			return &$next;
@@ -487,7 +491,7 @@ sub _make_list_dir {
 		$ren->($data, $labels, \@results);	#Render to output
 
     # Set status if not already set
-    $_[OUT_HEADER]{":status"}//=HTTP_OK; 
+    $_[OUT_HEADER]{":status"}=HTTP_OK; 
     $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $data;
     for my ($k,$v)(@type){
       $_[OUT_HEADER]{$k}=$v;
@@ -518,7 +522,7 @@ sub uhm_static_root {
   
   my $html_root;
   my %options;
-  if(@_%2){
+  if(@_ % 2){
     # Odd number of arguments assume last item is html root
     $html_root=uSAC::Util::path pop, [caller];
     %options=@_;
@@ -608,14 +612,16 @@ sub uhm_static_root {
     my $default_mime=$options{default_mime}=$site->resolve_mime_default;
 
     my $p;	#tmp variable
+    my $as_error;
     sub {
       if($_[OUT_HEADER]){
       
+        $as_error=$_[OUT_HEADER]{":as_error"};
         #
         # Previous middleware did not find anything, or we don't have a
         # response just yet
         #
-        return &$next unless($_[OUT_HEADER]{":status"}//HTTP_NOT_FOUND)==HTTP_NOT_FOUND;
+        return &$next unless($_[OUT_HEADER]{":status"}//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
        
         # 
         # Path is either given with the rex object or passed in by the payload
@@ -623,8 +629,13 @@ sub uhm_static_root {
         #
         $p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
         
+
+        #
         # Strip the prefix if its specified
-        $p=substr $p, length $prefix if($prefix and index($p, $prefix)==0);
+        #
+        $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
+
+        $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
 
         my $path=$html_root.$p;
         #
@@ -633,7 +644,7 @@ sub uhm_static_root {
         #
         if($filter and $path !~ /$filter/o){
           # Only set the header if it isn't set
-          $_[OUT_HEADER]{":status"}//=HTTP_NOT_FOUND;
+          $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
           $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
           return &$next;
         }
@@ -697,7 +708,7 @@ sub uhm_static_root {
             #
             Log::OK::TRACE and log_trace "Static: NO DIR LISTING";
             $_[PAYLOAD]="";
-            $_[OUT_HEADER]{":status"}//=HTTP_NOT_FOUND;
+            $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
             $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
             return &$next;
           }
@@ -736,7 +747,7 @@ sub uhm_static_root {
             # the next middleware
             #
             $_[PAYLOAD]="";
-            $_[OUT_HEADER]{":status"}//=HTTP_NOT_FOUND;
+            $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
             $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
             return &$next;
           }
@@ -773,8 +784,8 @@ sub uhm_static_root {
     my $next=shift;
   };
 
-  #[$inner, $outer];
-  [$outer, $inner];
+  [$inner, $outer];
+  #[$outer, $inner];
 }
 
 

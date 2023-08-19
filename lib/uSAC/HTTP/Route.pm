@@ -30,6 +30,7 @@ use enum qw<
   ROUTE_SERIALIZE
   ROUTE_COUNTER
   ROUTE_TABLE
+  ROUTE_PATH
   >;
 
 use Export::These qw<
@@ -40,6 +41,7 @@ use Export::These qw<
   ROUTE_SERIALIZE
   ROUTE_COUNTER
   ROUTE_TABLE
+  ROUTE_PATH
 >;
 
 

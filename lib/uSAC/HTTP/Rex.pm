@@ -344,6 +344,7 @@ sub rex_error {
 
   for($site->error_uris->{$_[OUT_HEADER]{":status"}}//()){
       $_[PAYLOAD]=my $a=$_;
+      $_[OUT_HEADER]{":as_error"}=1;
       return &rex_redirect_internal
   }
 

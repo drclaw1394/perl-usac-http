@@ -284,7 +284,7 @@ method _add_route {
       $path_matcher=qr{$path_matcher} ;
 
     }
-    my ($matcher, $type)=$self->__adjust_matcher($host, $method_matcher, $path_matcher);
+    my ($matcher, $type, $path_matcher)=$self->__adjust_matcher($host, $method_matcher, $path_matcher);
 
     # Create a route structure
     my @route;
@@ -295,6 +295,7 @@ method _add_route {
     $route[ROUTE_SERIALIZE]=$serialize;
     $route[ROUTE_COUNTER]=0;
     $route[ROUTE_TABLE]=undef;
+    $route[ROUTE_PATH]=$path_matcher;
 
     # Actually add the route to the server/client
     $self->find_root->add_host_end_point($host, $matcher, \@route, $type);
@@ -330,15 +331,15 @@ method __adjust_matcher {
     #$pm=substr $path_matcher, 0, -1;
     Log::OK::TRACE and log_trace "Exact match";
     $type="exact";
-    my $pm=$path_matcher =~ s/\$$//r;
-    $matcher="$method_matcher $bp$pm";
+    #my $pm=
+    $path_matcher =~ s/\$$//;
+    $matcher="$method_matcher $bp$path_matcher";
   }
   else {
     $type="begin";
     $matcher="$method_matcher $bp$path_matcher";
   }
-
-  ($matcher, $type);
+  ($matcher, $type, $path_matcher);
 }
 
 # Fix middle described only as a sub
