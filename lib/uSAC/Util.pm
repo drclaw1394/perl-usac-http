@@ -38,13 +38,6 @@ sub path {
     }
   }
 
-  ###########################################################
-  # elsif(!defined $_[0]){                                  #
-  #   # If undefined, then we just want current working dir #
-  #   #$p=cwd;                                              #
-  #   $p=rel2abs(".");                                      #
-  # }                                                       #
-  ###########################################################
   else {
     # Path is either CWD relative or absolute
     $p=$_[0];#$prefix;#$_[0];

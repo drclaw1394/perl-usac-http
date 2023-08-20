@@ -69,8 +69,8 @@ $server
 
   ->add_route('/static'       
     => uhm_static_root 
-      indexes=>["index.html"],
-      list_dir=>undef,
+    #index=>["index.html"],
+      list_dir=>1,
       roots=> [\"static", \"admin/static"]
   )
 

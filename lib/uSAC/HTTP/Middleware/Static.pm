@@ -136,13 +136,11 @@ sub send_file_uri_norange {
   $rex->[uSAC::HTTP::Rex::in_progress_]=1;
   my $in_fh=$entry->[File::Meta::Cache::fd_];
 
-  my ($content_length, $mod_time)=($entry->[File::Meta::Cache::stat_][7],$entry->[File::Meta::Cache::stat_][9]);
+  my ($content_length, $mod_time)=($entry->[File::Meta::Cache::stat_][7], $entry->[File::Meta::Cache::stat_][9]);
 
   $reply="";
   #process caching headers
-  #my $headers=$_[REX][uSAC::HTTP::Rex::headers_];#$rex->headers;
-  my $headers=$_[IN_HEADER];#$rex->headers;
-  # my $etag="\"$mod_time-$content_length\"";
+  my $headers=$_[IN_HEADER];
 
   my $offset=0;	#Current offset in file
   my $total=0;	#Current total read from file
@@ -165,7 +163,6 @@ sub send_file_uri_norange {
 
     #TODO: needs testing
     for my $time ($headers->{"if-modified-since"}){
-      #attempt to parse
       $out_headers->{":status"}=HTTP_OK and last unless $time;
       my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
       $out_headers->{":status"}=HTTP_OK  and last if $mod_time>$tp->epoch;
@@ -214,11 +211,9 @@ sub send_file_uri_norange {
   else {
     # process as error or non partial content
     $out_headers->{HTTP_CONTENT_LENGTH()}= $content_length;
-
   }
 
   Log::OK::TRACE and log_trace join ", ", %$out_headers;
-
 
   $next->($matcher, $rex, $in_header, $out_headers, "" ) and return
   if($in_header->{":method"} eq "HEAD" 
@@ -284,7 +279,6 @@ sub send_file_uri_norange {
     # Use a 0 for the callback to indicate we don't want one
     # and not to execute the default
     $next->($matcher, $rex, $in_header, $out_headers, "", $do_sendfile);
-    #return $do_sendfile->();
   }
 
   else{
@@ -341,7 +335,6 @@ sub send_file_uri_norange {
           else{
 
             $closer->($entry);
-            #IO::FD::close $in_fh unless $entry->[cached_];
             return $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
           }
         }
@@ -356,7 +349,6 @@ sub send_file_uri_norange {
         if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
           log_error "Static files: READ ERROR from file";
           log_error "Error: $!";
-          #IO::FD::close $in_fh;
           $closer->($entry);
           $rex->[uSAC::HTTP::Rex::dropper_]->(1);
           undef $sub;
@@ -436,21 +428,20 @@ sub _make_list_dir {
 		@type=(HTTP_CONTENT_TYPE, "text/json");
 	}
 	else {
-		$renderer=!defined $renderer? &_html_dir_list: $renderer;
+		$renderer=!defined $renderer? &_html_dir_list : $renderer;
 		@type=(HTTP_CONTENT_TYPE, "text/html");
 	}
 	
 	sub{
-		my ($line, $rex, $in_header, $headers, $uri, $next)=@_;
+		my ($line, $rex, $in_header, $headers, undef, $next, $html_root, $uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
-		my $abs_path=$html_root.$uri;
+		my $abs_path=$uri;#$html_root.$uri;
 		stat $abs_path;
     Log::OK::TRACE and log_trace "DIR LISTING for $abs_path";
 		unless(-d _ and  -r _){
 
       Log::OK::TRACE and log_trace "No dir here $abs_path";
-      #rex_error_not_found $line, $rex;
       $_[OUT_HEADER]{":status"}= HTTP_NOT_FOUND;
       $_[PAYLOAD]="";
       $_[CB]=undef;
@@ -473,7 +464,6 @@ sub _make_list_dir {
         s|^$html_root/||;                       #strip out html_root
         my $base=(split "/")[-1].($isDir? "/":"");
 
-        #["$rex->[uSAC::HTTP::Rex::uri_raw_]$base", $base, stat _]
         ["$_[IN_HEADER]{':path'}$base", $base, stat _]
       }
       @fs_paths;
@@ -495,7 +485,6 @@ sub _make_list_dir {
 		}
 		else{
 			$next->($line, $rex, $in_header,$headers , $data, my $cb=undef);
-      #$next->($line, $rex, HTTP_OK,{HTTP_CONTENT_LENGTH, length $data, @type} , $data, my $cb=undef);
 		}
 	}
 }
@@ -535,14 +524,15 @@ sub uhm_static_root {
   my $read_size=$options{read_size}//READ_SIZE;
   my $sendfile=$options{sendfile}//0;
   my $open_modes=$options{open_flags}//0;
-  my $filter=$options{filter};
+  my $allow=$options{allow};
+  my $block=$options{block};
   my $no_encoding=$options{no_encoding}//"";
   my $do_dir=$options{list_dir}//$options{do_dir};
   my $pre_encoded=$options{pre_encoded}//{};
   my $prefix=$options{prefix};
   \my @roots=$options{roots};
 
-  \my @indexes=$options{indexes}//[];
+  \my @indexes=($options{index}//$options{indexes}//[]);
 
   my @suffix_indexes;
   # Combinations of all pre encoded options. The unencoded form is last
@@ -575,7 +565,8 @@ sub uhm_static_root {
   Log::OK::DEBUG and log_debug "Static files from: ",join ", ", $options{roots}->@*;
   Log::OK::DEBUG and log_debug "DIR Listing: ".($do_dir?"yes":"no");
   Log::OK::DEBUG and log_debug "DIR index: ".(@indexes?join(", ", @indexes):"no");
-  Log::OK::DEBUG and log_debug "Filename Filter: ".($filter?$filter: "**NONE**");
+  Log::OK::DEBUG and log_debug "Filename Allow Filter: ".($allow?$allow:"**NONE**");
+  Log::OK::DEBUG and log_debug "Filename block Filter: ".($block?$block:"**NONE**");
   Log::OK::DEBUG and log_debug "Readsize: $read_size";
   Log::OK::DEBUG and log_debug "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
 
@@ -586,11 +577,14 @@ sub uhm_static_root {
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
 
   # We want to use pread from IO::FD. That means we don't need the filehandle
+  # which saves some cpu time
+  #
   my $fmc=File::Meta::Cache->new(no_fh=>1);
 
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
   my $sweeper=$fmc->sweeper;
+
   state $timer=uSAC::IO::timer 0, 10, $sweeper;
   my $list_dir=_make_list_dir(%options);
 
@@ -626,6 +620,7 @@ sub uhm_static_root {
         $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
         my $path;
 
+        ROOTS:
         for my $html_root(@roots){
           #
           # Previous middleware did not find anything, or we don't have a
@@ -637,9 +632,11 @@ sub uhm_static_root {
           $path=$html_root.$p;
           #
           # First this is to report not found  and call next middleware
-          # if the filter doesn't match (if a filter exists)
+          # if the allow doesn't match (if a ignore exists)
           #
-          next if($filter and $path !~ /$filter/o);
+          next if($allow and $path !~ /$allow/o);
+
+          next if($block and $path =~ /$block/o);
 
 
           Log::OK::TRACE and log_trace "static: html_root: $html_root";
@@ -676,7 +673,6 @@ sub uhm_static_root {
                   Log::OK::TRACE and log_trace "Static: did not locate index: $path";
                 }
               }
-              #goto SEND_FILE if $entry
             }
 
             #
@@ -692,21 +688,10 @@ sub uhm_static_root {
               for my ($k, $v)(@$headers){
                 $_[HEADER]{$k}=$v;
               }
-              return &$list_dir;
+              return $list_dir->(@_, $html_root, $p);
             }
-            next;
-            #################################################################
-            # elsif(!$entry){                                               #
-            #   # Normally dir listing and index is disabled.               #
-            #   # Return non found                                          #
-            #   #                                                           #
-            #   Log::OK::TRACE and log_trace "Static: NO DIR LISTING";      #
-            #   #$_[PAYLOAD]="";                                            #
-            #   #$_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error; #
-            #   #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;                   #
-            #   next;                                                       #
-            # }                                                             #
-            #################################################################
+
+            next unless $entry;
           }
 
           else {
@@ -718,7 +703,6 @@ sub uhm_static_root {
             $content_type=$mime->{$ext}//$default_mime;
 
 
-            #if($pre_encoded and ($_[REX][uSAC::HTTP::Rex::headers_]{"ACCEPT_ENCODING"}//"")=~/(gzip)/){
             if($pre_encoded and ($_[IN_HEADER]{"accept-encoding"}//"")=~/(gzip)/){
               # Attempt to find a pre encoded file when the client asks and if its enabled
               #
@@ -746,6 +730,7 @@ sub uhm_static_root {
               HTTP_CONTENT_TYPE, $content_type, 
               HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
                 CORE::gmtime($entry->[File::Meta::Cache::stat_][9])),
+              
               HTTP_ETAG, "\"$entry->[File::Meta::Cache::stat_][9]-$entry->[File::Meta::Cache::stat_][7]\"",
             ];
           }

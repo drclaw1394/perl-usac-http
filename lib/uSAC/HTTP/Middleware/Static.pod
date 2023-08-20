@@ -48,9 +48,9 @@ Generate a dir listing for paths that end in a slash, if the directory exists
 NOTE: If multiple static middlewares are chained together, the first one that
 matches the path will list its dir contents. Add multiple routes to fix this.
 
-=head3 indexes=>[list]
+=head3 index=>[list]
 
-  indexes=>["index.html", "index.htm"];
+  index=>["index.html", "index.htm"];
 
 Reference to an array of filenames to append to a dir path. If one is found it
 is served. Otherwise a dir listing is showing if enabled with C<list_dir>
@@ -68,6 +68,10 @@ site relative path for the route is used, if not a regex match.
 
   $site->add_route("/static/files" => uhm_static_root prefix=>"/files", "...");
   # prefix is "/files"
+
+=head3 roots=>[list]
+
+A list of paths to use sequentially as the root of the of static files
 
 
 =head3 filter=regex
