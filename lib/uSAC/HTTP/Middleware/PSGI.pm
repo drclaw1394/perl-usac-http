@@ -254,8 +254,6 @@ sub uhm_psgi {
         }
         my $_connection=$_[OUT_HEADER]{HTTP_CONNECTION()};
         $h{HTTP_CONNECTION()}=$_connection if $_connection;
-        #use Data::Dumper;
-        #say Dumper \%h;
         $res->[1]=\%h;
         $res->[1]{":status"}=$res->[0];
 

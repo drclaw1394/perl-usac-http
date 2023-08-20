@@ -26,68 +26,70 @@ use constant::more  READ_SIZE=>4096;
 
 
 
-sub _check_ranges{
-	my ($rex, $length)=@_;
-	#check for ranges in the header
-	my @ranges;
-  #for($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){
-	for($_[IN_HEADER]{range}){
-		if(!defined){
-			#this should be and error
-			#no ranges specified but create default
-			@ranges=([0,$length-1]);#$stat->[7]-1]);
-		}
-		else {
-			#check the If-Range
-      #my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF-RANGE"};
-			my $ifr=$_[IN_HEADER]{"if-range"};
-
-			#check range is present
-			#response code is then 206 partial
-			#
-			#Multiple ranges, we then return multipart doc
-			my $unit;
-			my $i=0;
-			my $pos;	
-			my $size=$length;
-			for(tr/ //dr){				#Remove whitespace
-				#exract unit
-				$pos=index $_, "=";
-				$unit= substr $_, 0, $pos++;
-				my $specs= substr $_,$pos;
-				
-				for my $spec (split(",",$specs)){
-					my ($start,$end)=split "-", $spec; #, substr($_, $pos, $pos2-$pos);
-					$end||=$size-1;	#No end specified. use entire length
-					unless(defined $start){
-						#no start specified. This a count, not index
-						$start=$size-$end;
-						$end=$size-1;
-					}
-
-					#validate range
-					if(
-						(0<=$start) and
-						($start<$size) and
-						(0<=$end) and
-						($end<$size) and
-						($start<=$end)
-					){
-						push @ranges, [$start,$end];
-					}
-					else {
-						#416 Range Not Satisfiable
-						@ranges=();
-					}
-
-				}
-
-			}
-		}
-	}
-	@ranges;
-}
-
+################################################################################################################
+# sub _check_ranges{                                                                                           #
+#         my ($rex, $length)=@_;                                                                               #
+#         #check for ranges in the header                                                                      #
+#         my @ranges;                                                                                          #
+#   #for($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){                                                            #
+#         for($_[IN_HEADER]{range}){                                                                           #
+#                 if(!defined){                                                                                #
+#                         #this should be and error                                                            #
+#                         #no ranges specified but create default                                              #
+#                         @ranges=([0,$length-1]);#$stat->[7]-1]);                                             #
+#                 }                                                                                            #
+#                 else {                                                                                       #
+#                         #check the If-Range                                                                  #
+#       #my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF-RANGE"};                                                #
+#                         my $ifr=$_[IN_HEADER]{"if-range"};                                                   #
+#                                                                                                              #
+#                         #check range is present                                                              #
+#                         #response code is then 206 partial                                                   #
+#                         #                                                                                    #
+#                         #Multiple ranges, we then return multipart doc                                       #
+#                         my $unit;                                                                            #
+#                         my $i=0;                                                                             #
+#                         my $pos;                                                                             #
+#                         my $size=$length;                                                                    #
+#                         for(tr/ //dr){                          #Remove whitespace                           #
+#                                 #exract unit                                                                 #
+#                                 $pos=index $_, "=";                                                          #
+#                                 $unit= substr $_, 0, $pos++;                                                 #
+#                                 my $specs= substr $_, $pos;                                                  #
+#                           say "specs input: $specs";                                                         #
+#                                 for my $spec (split(",",$specs)){                                            #
+#                                         my ($start, $end)=split "-", $spec; #, substr($_, $pos, $pos2-$pos); #
+#                                         $end||=$size-1; #No end specified. use entire length                 #
+#                                         unless(defined $start){                                              #
+#                                                 #no start specified. This a count, not index                 #
+#                                                 $start=$size-$end;                                           #
+#                                                 $end=$size-1;                                                #
+#                                         }                                                                    #
+#                                                                                                              #
+#                                         #validate range                                                      #
+#                                         if(                                                                  #
+#                                                 (0<=$start) and                                              #
+#                                                 ($start<$size) and                                           #
+#                                                 (0<=$end) and                                                #
+#                                                 ($end<$size) and                                             #
+#                                                 ($start<=$end)                                               #
+#                                         ){                                                                   #
+#                                                 push @ranges, [$start, $end];                                #
+#                                         }                                                                    #
+#                                         else {                                                               #
+#                                                 #416 Range Not Satisfiable                                   #
+#                                                 @ranges=();                                                  #
+#                                         }                                                                    #
+#                                                                                                              #
+#                                 }                                                                            #
+#                                                                                                              #
+#                         }                                                                                    #
+#                 }                                                                                            #
+#         }                                                                                                    #
+#         @ranges;                                                                                             #
+# }                                                                                                            #
+#                                                                                                              #
+################################################################################################################
 
 ## Performance enhancement for slow opens
 # Keeps the file handle open for other connections.
@@ -180,7 +182,54 @@ sub send_file_uri_norange {
 
   if(!$as_error and $headers->{range}){
     Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{range}";
-    @ranges=_check_ranges $rex, $content_length;
+    #@ranges=_check_ranges $rex, $content_length;
+
+    # parse ranges here
+    my $ifr=$_[IN_HEADER]{"if-range"};
+
+    #check range is present
+    #response code is then 206 partial
+    #
+    #Multiple ranges, we then return multipart doc
+    my $unit;
+    my $i=0;
+    my $pos;	
+    my $size=$content_length;
+    for($headers->{range}=~tr/ //dr){				#Remove whitespace
+      #exract unit
+      $pos=index $_, "=";
+      $unit= substr $_, 0, $pos++;
+      my $specs= substr $_, $pos;
+      for my $spec (split(",",$specs)){
+        my ($start, $end)=split "-", $spec; #, substr($_, $pos, $pos2-$pos);
+        $end||=$size-1;	#No end specified. use entire length
+        unless(defined $start){
+          #no start specified. This a count, not index
+          $start=$size-$end;
+          $end=$size-1;
+        }
+
+        #validate range
+        if(
+          (0<=$start) and
+          ($start<$size) and
+          (0<=$end) and
+          ($end<$size) and
+          ($start<=$end)
+        ){
+          push @ranges, [$start, $end];
+        }
+        else {
+          #416 Range Not Satisfiable
+          @ranges=();
+        }
+
+      }
+
+    }
+
+
+
     unless(@ranges){
       $out_headers->{":status"}=HTTP_RANGE_NOT_SATISFIABLE;
       $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
@@ -833,9 +882,6 @@ sub uhm_static_content {
               %$headers
             )
             { 
-              use Data::Dumper;
-              say $k;
-              say Dumper $v;
               $_[OUT_HEADER]{$k}=$v;
             }
             # Only set the payload when the out header is present (single shot)

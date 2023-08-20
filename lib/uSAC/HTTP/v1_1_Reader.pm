@@ -7,7 +7,6 @@ use EV;
 use Log::ger;
 use Log::OK;
 
-#use Data::Dumper;
 
 use Error::Show;
 use uSAC::HTTP::Rex;
