@@ -1,4 +1,6 @@
 package uSAC::Util;
+use strict;
+use warnings;
 # Utility functions
 
 #use File::Spec::Functions qw<catfile abs2rel rel2abs>;
@@ -8,6 +10,11 @@ use feature "say";
 
 use Export::These qw( cwd path decode_urlencoded_form);
 
+sub TEST {
+  say "IN TEST";
+  say $_[0];
+
+}
 sub cwd {
   my($dev, $inode)=stat ".";
   my ($odev, $oinode)=($dev, $inode);
@@ -28,12 +35,16 @@ sub cwd {
       ########################################################################
 
       opendir my $dir, ".";
-      while(readdir $dir){
+      my @list= readdir $dir;
+      closedir $dir;
+      
+      #while(readdir $dir){
+      for(@list){
         next if $_ eq "." or $_ eq "..";
         ($tdev, $tinode)=lstat;
         push @parts, $_ and last if($tdev == $dev and $tinode==$inode);
       }
-      closedir $dir;
+      #closedir $dir;
 
       $prev_dev=$dev;
       $prev_inode=$inode;
@@ -47,26 +58,73 @@ sub cwd {
 
 sub rel2abs {
   my $path=shift;
-  my $cwd=cwd;
-  $cwd."/".$path;
+  my $base=shift||cwd;
+  if($base !~ m|^/|){
+    $base=abs2rel $base;
+  }
+  $base."/".$path;
 
 }
 
 sub abs2rel {
   my $abs=shift;
-  my $cwd=cwd;
+  my $base=shift||cwd;
+  #say "input: $abs";
+  #say " base: $base";
 
-  my $index= index  $abs, $cwd;
-  my @items=split "/", substr $abs, $index+length($cwd)+1;
-  join "/", @items;
+  if($base !~ m|^/|){
+    $base=abs2rel $base;
+  }
+
+  #find longest prefix
+  my @base=split "/", $base;
+
+  my $longest="";
+  my $found=0;
+
+  for(0..$#base){
+    $longest=join "/", @base[0..$_];
+    last if index $abs, $longest;
+    $found++;
+  }
+  my $back_count=@base-$found;
+  ##say "longest: $longest";
+  #say "found: $found";
+
+  #strip off longest
+  
+  my $p=substr $abs,  length $longest;
+  $p=join "/", ("..")x$back_count, $p;
+  
+  my @abs=split "/", $p;
+
+  $p=substr $p, 1;
+  # Prepend backcount
+  #say "RELATIVE: $p";
+
+  #############################################################
+  # my $index= index  $abs, $base;                            #
+  #                                                           #
+  # my @items=split "/", substr $abs, $index+length($base)+1; #
+  # join "/", @items;                                         #
+  #############################################################
+  $p;
 
 }
 
 sub dirname {
   my $path=shift;
   my @items = split "/", $path;
-  pop @items;
-  join "/", @items;
+  my $p;
+  if(@items>1){
+    pop @items;
+    $p=join "/", @items;
+  }
+  else {
+    $p=".";# if @items == 1;
+  }
+  $p;
+  
 }
 
 
@@ -85,6 +143,7 @@ sub path {
   my $p;
   my $prefix;
   my $frame=$_[1]//[caller];
+
   
   my $cwd= cwd;#`realpath`;
   # Poor mans dirname
@@ -98,12 +157,20 @@ sub path {
   # $prefix=join "/", @items;                                #
   ############################################################
    
-  $prefix=dirname abs2rel rel2abs $frame->[1];
   
   if(ref($_[0]) eq "SCALAR" or !defined $_[0]){
+    ########################################################################
+    # say "FRAME: $frame->[1]";                                            #
+    # say "CWD: ".cwd;                                                     #
+    # say "rel2abs ". rel2abs $frame->[1];                                 #
+    # say "abs2rel rel2abs ". abs2rel rel2abs $frame->[1];                 #
+    # say "dirname abs2rel rel2abs ". dirname abs2rel rel2abs $frame->[1]; #
+    ########################################################################
+    $prefix=dirname abs2rel rel2abs $frame->[1];
     
     $p=$_[0]->$*;
     return $p if $p =~ m|^/|;
+
     #Create the rool as a relative path to current working dir
     if($p){
       #$p=catfile($prefix, $p);

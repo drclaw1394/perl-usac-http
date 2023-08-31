@@ -405,7 +405,7 @@ method _wrap_middleware {
       # Use postfix notation to access either a package or object method 
       #
       my $string;
-      $string="$_delegate->middleware_hook";
+      $string='$_delegate->middleware_hook';
       my $sub=eval $string;
       my @pre=$sub->($self) if $sub;
 
@@ -416,7 +416,8 @@ method _wrap_middleware {
       }
 
 
-      $string="$_delegate->".s/\$$//r;
+      $string='$_delegate->'.s/\$$//r;
+
       #$string="$_delegate->".$_;
       my @a=eval $string;
       die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
@@ -1036,19 +1037,17 @@ sub uhm_dead_horse_stripper {
 
 
 method parse_cli_options {
-  say "PARSE IN SITE: $_delegate";
   my $options=shift//[];
 
   try {
     $_delegate->parse_cli_options_hook->($self, $options);# if $_delegate;
   }
   catch($e){
-    say "$e";
+    warn "$e";
   }
 
   for my $r ($self->staged_routes->@*){
     if($r isa __PACKAGE__){
-      say 'call next site';
       $r->parse_cli_options($options);
     }
   }
