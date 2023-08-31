@@ -16,9 +16,8 @@ BEGIN {
 }
 
 #Create Enumerations 
-#use enum (map s/ |-|'/_/gr, @names);
 
 #Create constant strings of the form:
 #HTTP_GET=>"GET"
-use constant {map {(("HTTP_".uc $names[$_])=~s/ |-/_/gr, $names[$_])} 0..@names-1}; 
+use constant::more {map {(("HTTP_".uc $names[$_])=~s/ |-/_/gr, $names[$_])} 0..@names-1}; 
 1;

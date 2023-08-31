@@ -22,15 +22,19 @@ WriteMakefile(
 		"uSAC::MIME"	=> 0,         # MIME database
     "Sub::Middler"=>0,          # Subroutine middleware linking
     "File::Meta::Cache"=>0,     # Meta data and open file cache
-    "Export::These"=>0,         # Simpler export and reexport
-    "Import::These"=>0,
+    "Export::These"=>"v0.1.1",         # Simpler export and reexport
+    "Import::These"=>"v0.1.2",
+    "HTTP::State"=>"v0.1.1"
+    "constant::more"=> "v0.2.1",
+		"Log::OK"	=> "v0.2.1",
+		"Template::Plex"	=> "v0.6.1",
+
 
 		
     "Object::Pad"=> "0.78",
 		"Crypt::JWT"	=> 0,
 		"Log::ger"	=> 0,
 		"Log::ger::Output::Screen" => 0,
-		"Log::OK"	=> "v0.1.5",
 		"URI"		=> 0,
 		"URL::Encode"	=> 0,
 		"URL::Encode::XS" =>0,

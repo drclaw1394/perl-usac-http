@@ -24,109 +24,7 @@ use Errno qw<EAGAIN EINTR EBUSY>;
 
 use constant::more  READ_SIZE=>4096;
 
-
-
-################################################################################################################
-# sub _check_ranges{                                                                                           #
-#         my ($rex, $length)=@_;                                                                               #
-#         #check for ranges in the header                                                                      #
-#         my @ranges;                                                                                          #
-#   #for($rex->[uSAC::HTTP::Rex::headers_]{RANGE}){                                                            #
-#         for($_[IN_HEADER]{range}){                                                                           #
-#                 if(!defined){                                                                                #
-#                         #this should be and error                                                            #
-#                         #no ranges specified but create default                                              #
-#                         @ranges=([0,$length-1]);#$stat->[7]-1]);                                             #
-#                 }                                                                                            #
-#                 else {                                                                                       #
-#                         #check the If-Range                                                                  #
-#       #my $ifr=$rex->[uSAC::HTTP::Rex::headers_]{"IF-RANGE"};                                                #
-#                         my $ifr=$_[IN_HEADER]{"if-range"};                                                   #
-#                                                                                                              #
-#                         #check range is present                                                              #
-#                         #response code is then 206 partial                                                   #
-#                         #                                                                                    #
-#                         #Multiple ranges, we then return multipart doc                                       #
-#                         my $unit;                                                                            #
-#                         my $i=0;                                                                             #
-#                         my $pos;                                                                             #
-#                         my $size=$length;                                                                    #
-#                         for(tr/ //dr){                          #Remove whitespace                           #
-#                                 #exract unit                                                                 #
-#                                 $pos=index $_, "=";                                                          #
-#                                 $unit= substr $_, 0, $pos++;                                                 #
-#                                 my $specs= substr $_, $pos;                                                  #
-#                           say "specs input: $specs";                                                         #
-#                                 for my $spec (split(",",$specs)){                                            #
-#                                         my ($start, $end)=split "-", $spec; #, substr($_, $pos, $pos2-$pos); #
-#                                         $end||=$size-1; #No end specified. use entire length                 #
-#                                         unless(defined $start){                                              #
-#                                                 #no start specified. This a count, not index                 #
-#                                                 $start=$size-$end;                                           #
-#                                                 $end=$size-1;                                                #
-#                                         }                                                                    #
-#                                                                                                              #
-#                                         #validate range                                                      #
-#                                         if(                                                                  #
-#                                                 (0<=$start) and                                              #
-#                                                 ($start<$size) and                                           #
-#                                                 (0<=$end) and                                                #
-#                                                 ($end<$size) and                                             #
-#                                                 ($start<=$end)                                               #
-#                                         ){                                                                   #
-#                                                 push @ranges, [$start, $end];                                #
-#                                         }                                                                    #
-#                                         else {                                                               #
-#                                                 #416 Range Not Satisfiable                                   #
-#                                                 @ranges=();                                                  #
-#                                         }                                                                    #
-#                                                                                                              #
-#                                 }                                                                            #
-#                                                                                                              #
-#                         }                                                                                    #
-#                 }                                                                                            #
-#         }                                                                                                    #
-#         @ranges;                                                                                             #
-# }                                                                                                            #
-#                                                                                                              #
-################################################################################################################
-
-## Performance enhancement for slow opens
-# Keeps the file handle open for other connections.
-# The timer checks the ref count. When the ref count is 1, the hash is the
-# only structure referencing the fileglob. Larger then 1, other sub references are 
-# using it (ie reading from disk, and writing to socket)
-#
-# The entry is deleted if the ref count is 1. Meaning subsequent requests will cause a cache miss
-# and reopen the file.
-#
-# Pros:
-# Saves on file handles
-# Improves static file delevery ALOT (around 1.5x as fast)
-# Not complicated tracking of open files. Perl does it for you with ref counting
-#
-# Cons
-# Reading from file needs to seek, as each write updates the file position
-# Timer has small overhead.
-#
-# Random nature of hash keys means the whole set of file handles are tested, not just the first in the list.
-#
-# Optional sweep size to limit the time the function need to execute
-#
-# Gotchas:
-# 	unlinking a file on disk while the filehandle is open will not prevent read/write to the file
-# 	in this case when the file is close from it will finally be unlinked
-#
-# 	Moving a file ?
-# 	
-# 	Replacing a file?
-#
-
-
-
-#process without considering ranges
-#This is useful for constantly chaning files and remove overhead of rendering byte range headers
-sub send_file_uri_norange {
+sub send_file_uri {
   #return a sub with cache an sysroot aliased
   #use  integer;
 
@@ -152,7 +50,6 @@ sub send_file_uri_norange {
 
   # 
   my $as_error= $out_headers->{":as_error"};
-  #(HTTP_BAD_REQUEST<=($out_headers->{":status"}//HTTP_OK));
 
   #Ignore caching headers if we are processing as an error
   if(!$as_error){
@@ -794,7 +691,7 @@ sub uhm_static_root {
             $_[HEADER]{$k}=$v;
           }
 
-          return send_file_uri_norange(@_, $next, $read_size, $sendfile, $entry, $closer);
+          return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
 
         }
 

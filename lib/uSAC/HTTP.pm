@@ -50,7 +50,8 @@ sub _reexport {
   
 }
 
-__PACKAGE__;
+#__PACKAGE__;
+1;
 
 
 =head1 NAME

@@ -20,7 +20,6 @@ BEGIN {
 }
 
 #Create Enumerations 
-#use enum (map s/ |-|'/_/gr, @names);
 
 #Create constant strings of the form:
 #HTTP_GET=>"GET"

@@ -2,30 +2,17 @@ use strict;
 use warnings;
 use feature qw<state say>;
 
+use Log::ger::Output "Screen";
 
 use EV;
 use AnyEvent;
 
-use uSAC::HTTP;
-use uSAC::HTTP::Server;
-
-use uSAC::HTTP::Middleware::Log;
-use uSAC::HTTP::Middleware::Websocket;
-
-use Log::ger::Output "Screen";
+use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log Websocket>;
 
 my %clients;
 
-my $server=uSAC::HTTP::Server->new(mode=>0);
-
-#FIXME:
-#the listeners and hosts needs to be setup before adding routes
-
-$server->add_listeners( "127.0.0.1:9090");
-#$server->add_host("localhost:9090");
-$server->set_mime_default;
+my $server=uSAC::HTTP::Server->new(listeners=>"127.0.0.1:9090");
 $server->add_middleware(uhm_log);
-
 
 $server->add_route('GET'
   =>"/\$"

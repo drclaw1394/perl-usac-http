@@ -23,22 +23,19 @@ use uSAC::Util;
 #
 # Also  for client side has the serialised address, quest queue, idle pool and active count
 #
-use enum (
-  "HOST_TABLE=0",
-  qw<
-    HOST_TABLE_CACHE 
-    HOST_TABLE_DISPATCH 
-    ADDR
-    REQ_QUEUE 
-    IDLE_POOL
-    ACTIVE_COUNT
-  >);
-
+use constant::more {
+  "HOST_TABLE"=>0,
+    HOST_TABLE_CACHE=>1,
+    HOST_TABLE_DISPATCH=>2,
+    ADDR=>3,
+    REQ_QUEUE=>4,
+    IDLE_POO=>5,
+    ACTIVE_COUN=>6,
+  };
 
 use uSAC::HTTP::Constants;
 use uSAC::IO;
 
-use Error::Show;
 use Exception::Class::Base;
 
 use URI;
@@ -62,7 +59,7 @@ class uSAC::HTTP::Site;
 
 no warnings "experimental";
 #field $_server      :mutator :param=undef;
-field $_staged_routes   :mutator;
+field $_staged_routes :reader;
 field $_parent_site      :mutator :param=undef;
 field $_id          :mutator :param=undef;
 field $_prefix      :reader :param =undef;
@@ -408,8 +405,10 @@ method _wrap_middleware {
       # Use postfix notation to access either a package or object method 
       #
       my $string;
-      $string="$_delegate->_middleware";
-      my @pre=eval $string;
+      $string="$_delegate->middleware_hook";
+      my $sub=eval $string;
+      my @pre=$sub->($self) if $sub;
+
       #die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
       #unshift @pre if !$@ and @pre;  #Silently ignore any error calling the middleware function
       if($@){
@@ -800,7 +799,8 @@ method add_route {
   }
   catch($e){
     #my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
-    log_fatal context message=>$e, frames=>[$e->trace->frames];
+    require Error::Show;
+    log_fatal Error::Show::context(message=>$e, frames=>[$e->trace->frames]);
     exit;
     #$e->throw;
   }
@@ -837,11 +837,12 @@ method _delegate {
       #my $string;
       #$string="$_delegate->_auto";
       #eval "$string";
-      $_delegate->_auto($self);
+      $_delegate->auto_route_hook->($self);
   }
   catch($e){
     no strict "refs";
-    Exception::Class::Base->throw("Delegate  has no import $e");
+    warn "Delegate has no valid auto_route_hook. ignoring;"
+    #Exception::Class::Base->throw("Delegate  has no import $e");
   }
   $self;
 }
@@ -914,13 +915,14 @@ method add_host {
 #########################################################
 
 method add_middleware {
-	my %options=@_;
+  #my %options=@_;
   for my $mw (@_){
     \my (@inner, @outer, @error)=$self->_wrap_middleware($mw);
     push $_innerware->@*, @inner;
     push $_outerware->@*, @outer;
     push $_errorware->@*, @error;
   }
+  $self;
 }
 
 
@@ -1030,6 +1032,27 @@ sub uhm_dead_horse_stripper {
   };
 
   [$inner, $outer, $error];
+}
+
+
+method parse_cli_options {
+  say "PARSE IN SITE: $_delegate";
+  my $options=shift//[];
+
+  try {
+    $_delegate->parse_cli_options_hook->($self, $options);# if $_delegate;
+  }
+  catch($e){
+    say "$e";
+  }
+
+  for my $r ($self->staged_routes->@*){
+    if($r isa __PACKAGE__){
+      say 'call next site';
+      $r->parse_cli_options($options);
+    }
+  }
+  $self;
 }
 
 

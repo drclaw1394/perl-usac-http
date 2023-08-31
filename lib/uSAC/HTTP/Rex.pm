@@ -1,21 +1,20 @@
+use v5.36;
 package uSAC::HTTP::Rex;
-use warnings;
-use strict;
-use version; our $VERSION = version->declare('v0.1');
-use feature qw<current_sub say refaliasing state>;
+our $VERSION = 'v0.1';
+
+use feature qw<current_sub refaliasing state>;
 no warnings "experimental";
+
 our $UPLOAD_LIMIT=1000;
 our $PART_LIMIT=$UPLOAD_LIMIT;
-use Log::ger;
 
+use Log::ger;
 use Log::OK;
 
-#use Try::Catch;
-use Carp qw<carp>;
 use uSAC::HTTP::Code;
 use uSAC::HTTP::Header;
 use HTTP::State::Cookie qw<:constants :encode :decode>;
-#use HTTP::State;
+
 use uSAC::HTTP::Route;
 
 use uSAC::HTTP::Constants;
@@ -62,23 +61,23 @@ use Export::These qw<
 
 #Class attribute keys
 #ctx_ reqcount_ 
-use enum (
-  "session_",   # The established channel this rex is a part of 
-  "write_",     # Writer for above
-  "id_",        # ID/sequence of the rex object
-	"closeme_",   # Reference to closer in session
-	"dropper_",   # Reference to dropper in session
-	"server_",      # The server object
-	"in_progress_", # Flag indicating this rex is in progress. This is automatically set by serializer
+use constant::more {
+  "session_"=>0,   # The established channel this rex is a part of 
+  "write_"=>1,     # Writer for above
+  "id_"=>2,        # ID/sequence of the rex object
+	"closeme_"=>3,   # Reference to closer in session
+	"dropper_"=>4,   # Reference to dropper in session
+	"server_"=>5,      # The server object
+	"in_progress_"=>6, # Flag indicating this rex is in progress. This is automatically set by serializer
                   # However if middleware prevents synchronous call to serialize, then this needs
                   # manual setting. USe for debugging mainly
 
-  "out_headers_", # Glue to link out headers to input side of HTTP Client
+  "out_headers_"=>7, # Glue to link out headers to input side of HTTP Client
 
-	"recursion_count_",   # Sanity check against server loops
-	"peer_",        # The address structure of the other this connection
-  "route_",     #the route associated with this request
-);
+	"recursion_count_"=>8,   # Sanity check against server loops
+	"peer_"=>9,        # The address structure of the other this connection
+  "route_"=>10,     #the route associated with this request
+};
 
 		
 # TODO: rename this subroutine
@@ -441,7 +440,6 @@ sub rex_redirect_internal {
 
 	if(($rex->[recursion_count_]) > 10){
 		$rex->[recursion_count_]=0;
-		#carp "Redirections loop detected for $uri";
 		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
     $_[OUT_HEADER]{":status"}=HTTP_LOOP_DETECTED;
     $_[ROUTE][1][ROUTE_SERIALIZE]->&*;

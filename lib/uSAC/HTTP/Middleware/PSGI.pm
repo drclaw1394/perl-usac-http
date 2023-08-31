@@ -2,21 +2,18 @@ package uSAC::HTTP::Middleware::PSGI;
 use v5.36;
 
 #PSGI adaptor for uSAC::HTTP::Server
-use strict;
-use warnings;
 
 use feature qw<say refaliasing state>;
 no warnings "experimental";
 use Log::ger;
 use Log::OK;
-use Error::Show;
 
 
 
-#use Stream::Buffered::PerlIO;	#From PSGI distribution
-use Plack::TempBuffer;
+use Stream::Buffered;
 use uSAC::IO;
-use Import::These "uSAC::", "Util", "::HTTP::", qw<Rex Session Constants>;
+use Import::These "uSAC::", "Util", "::HTTP::", qw<Rex Session Constants Header>;
+
 use URL::Encode qw<url_decode_utf8 url_decode url_encode_utf8 url_encode>;
 use Encode qw<encode>;
 
@@ -88,12 +85,14 @@ sub uhm_psgi {
     # Assume a simple scalar or reference to one
 
     #assume a file path
-    my $path=uSAC::Util::path $app, [caller];
+    my $path=uSAC::Util::path($app, [caller]);
 
     Log::OK::INFO and log_info "Attempting to load psgi: $path";
 		$app=eval "require '$path'";
 
-    if(my $context=context){
+    unless($app){
+      require Error::Show;
+      my $context=Error::Show::context();
       log_error "Could not load PSGI file $path: $app";
       die "Could not load PSGI file $path $!";	
     }

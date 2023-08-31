@@ -1,0 +1,50 @@
+=head1 NAME
+  
+uSAC::HTTP::Site::Delegate - Site route delegation
+
+=head1 DESCRIPTION
+
+
+A site delegate provides an alternative way of grouping related functionallity
+across related routes, separating routing structure from application logic.
+
+B<IMPORTANT>
+
+A site delegate is B<ANY> package or object which respondes to the
+routines/methods documented here. As all calls to a delegate B<MUST> be
+performed with the '->' notation, it does not matter what the callee is.
+
+A hook must return either nothing or a sub reference. THe reference is actually called with the parameters to the hook core.
+  
+  First argument is the site object
+
+Delegates hooks are only consolted at configuration time, which is syncrhonous. This means the arguments to the routine/method 
+
+It essentially is another way of setting up middleware
+on a route.
+
+All middleware setup routines return a list of middlewares. The extra
+flexiblity a delegate provides is:
+
+=over
+
+=item  A subroutine or method name as a string
+
+The name is resolved via the package/object
+
+=item Automatic route addition
+
+If the delegate implements the auto function, any routes defined there will be
+automatically added to the site when the delegate is set.
+
+=item Implicit Path to Route mapping
+
+A string path has '/' replaced with '__' and this becomes the name a
+method/function to return middleware chain. This makes very consise routing file indeed.
+
+=item Common middleware
+
+A _middleware subroutine is called for any implicit paths/routes, prepending to the route.
+
+=back
+

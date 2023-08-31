@@ -95,7 +95,6 @@ BEGIN {
 	}
 	
 }
-use enum (map s/ |-|'/_/gr, @names);
 
 use constant::more \%const_names; #Direct constants to use
 use Export::These keys(%const_names);#,constants=>[keys %const_names];

@@ -7,8 +7,9 @@ use AnyEvent;
 use Log::ger::Output 'Screen';
 use Log::OK {opt=>"verbose"};
 
-use uSAC::HTTP::Server;
-use uSAC::HTTP::Site;
+use Import::These qw<uSAC::HTTP:: Server Site>;
+#use uSAC::HTTP::Server;
+#use uSAC::HTTP::Site;
 use uSAC::Util qw<path>;
 
 use Import::These qw<uSAC::HTTP::Middleware::
@@ -35,15 +36,15 @@ my $server=uSAC::HTTP::Server->new(
 
 
 my $delegate= require(path(\"delegate.pl"));
-  print $delegate;
-  print "\n";
 
+  my $site;
 $server
-->add_site(uSAC::HTTP::Site->new(
+->add_site($site=uSAC::HTTP::Site->new(
     id=>"blog",
     delegate=>$delegate
-  )
-  ->add_route(POST=>"/login")
+  ));
+  
+  $site->add_route(POST=>"/login")
   ->add_route("/login")
   ->add_route("/logout")
   ->add_route("/public")
@@ -75,8 +76,7 @@ $server
   )
 
 
-  ->set_error_page(404=>\"not_found")
+  ->set_error_page(404=>\"not_found");
   #->add_route(""=>sub { $_[PAYLOAD]="asdfasd default"})
-)
-->parse_cli_options
+$server->parse_cli_options
 ->run;

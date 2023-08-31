@@ -22,16 +22,16 @@ package uSAC::HTTP::Route;
 #  client mode, to the same host if any are queued
 #
 
-use enum qw<
-  ROUTE_SITE
-  ROUTE_INNER_HEAD
-  ROUTE_OUTER_HEAD
-  ROUTE_ERROR_HEAD
-  ROUTE_SERIALIZE
-  ROUTE_COUNTER
-  ROUTE_TABLE
-  ROUTE_PATH
-  >;
+use constant::more {
+  ROUTE_SITE=>0,
+  ROUTE_INNER_HEAD=>1,
+  ROUTE_OUTER_HEAD=>2,
+  ROUTE_ERROR_HEAD=>3,
+  ROUTE_SERIALIZE=>4,
+  ROUTE_COUNTER=>5,
+  ROUTE_TABLE=>6,
+  ROUTE_PATH=>7,
+};
 
 use Export::These qw<
   ROUTE_SITE

@@ -30,7 +30,24 @@ use Sub::Middler;
 use constant::more DEBUG => 1;
 
 
-use enum ( "id_=0" ,qw<writer_ maxframe_ mask_ ping_interval_ ping_id_ pinger_ state_ on_open_ on_message_ on_fragment_ on_close_ on_error_ PMD_ message_buf_ session_>);
+use constant::more {
+  "id_"=>0, 
+  writer_=>1,
+  maxframe_=>2,
+  mask_ =>3,
+  ping_interval_ =>4,
+  ping_id_ =>5,
+  pinger_ =>6,
+  state_ =>7,
+  on_open_ =>8,
+  on_message_ =>9,
+  on_fragment_ =>10,
+  on_close_ =>11,
+  on_error_ =>12,
+  PMD_ =>13,
+  message_buf_ =>14,
+  session_=>15,
+};
 
 #Add a mechanism for sub classing
 
@@ -56,7 +73,10 @@ use constant::more {
 		RSV3_FLAG=>0b00010000,
 	};
 
-use enum qw<STATE_HEADER STATE_BODY>;
+use constant::more {
+  STATE_HEADER=>0,
+  STATE_BODY=>1,
+};
 
 use constant::more HAS_QUAD=>1;
 

@@ -8,7 +8,6 @@ use Log::ger;
 use Log::OK;
 
 
-use Error::Show;
 use uSAC::HTTP::Rex;
 use Encode qw<find_encoding decode encode decode_utf8>;
 use URL::Encode::XS;
@@ -60,22 +59,21 @@ sub parse_form {
 #	-method could contain data => push a dedicated reader to the read stack
 #
 #
-use enum (qw<
-  MODE_RESPONSE
-  MODE_REQUEST
-  MODE_NONE
->);
+use constant::more {
+  MODE_RESPONSE=>0,
+  MODE_REQUEST=>1,
+  MODE_NONE=>2,
+};
 
-use enum (qw<
-  STATE_REQUEST
-  STATE_RESPONSE 
-  STATE_HEADERS 
-  STATE_BODY_CONTENT 
-  STATE_BODY_CHUNKED 
-  STATE_BODY_MULTIPART 
-  STATE_ERROR
->);
-
+use constant::more {
+  STATE_REQUEST=>0,
+  STATE_RESPONSE =>1,
+  STATE_HEADERS =>2,
+  STATE_BODY_CONTENT =>3,
+  STATE_BODY_CHUNKED =>4,
+  STATE_BODY_MULTIPART =>5,
+  STATE_ERROR=>6,
+};
 
 #make a reader which is bound to a session
 sub make_parser{
@@ -504,12 +502,14 @@ sub make_parser{
     catch($e){
       #If debugging is enabled. dump the stack trace?
 
+      require Error::Show;
+
       my $context;
       if(ref($e)){
-        $context=context message=>$e, frames=>[reverse $e->trace->frames];
+        $context=Error::Show::context(message=>$e, frames=>[reverse $e->trace->frames]);
       }
       else {
-        $context=context $e;
+        $context=Error::Show::context($e);
       }
       Log::OK::ERROR and log_error  $context;
 

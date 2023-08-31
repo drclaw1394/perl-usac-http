@@ -18,7 +18,6 @@ use Socket::More;         # Socket symbols and passive socket
 use IO::FD;               # IO
 use uSAC::IO;             # Readers/writers
 use uSAC::IO::Acceptor;   # Acceptors
-use Error::Show;          # Contentual Error presentation
 
 use uSAC::HTTP;           # uSAC::HTTP Core code
 use uSAC::HTTP::Session;  # 'session' stuff
@@ -47,7 +46,6 @@ no warnings "experimental";
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
-use Carp 'croak';
 
 
 
@@ -127,7 +125,7 @@ class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 no warnings "experimental";
 field $_host_tables :mutator;
 field $_cb;
-field $_listen :param=[];
+field $_listen :param=["po=5001,addr=::"];
 field $_listen_spec;
 field $_graceful;
 field $_aws;
@@ -199,7 +197,7 @@ BUILD {
 method _setup_dgram_passive {
 	my ($l)=@_;
 	#Create a socket from results from interface
-	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or Carp::croak "listen/socket: $!";
+	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or die "listen/socket: $!";
 
 	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
 	
@@ -212,7 +210,7 @@ method _setup_dgram_passive {
 	}
 
 	defined(IO::FD::bind $fh, $l->{addr})
-		or Carp::croak "listen/bind: $!";
+		or die "listen/bind: $!";
 
 	if($l->{family}== AF_UNIX){
 		chmod oct('0777'), $l->{path}
@@ -231,7 +229,7 @@ method _setup_stream_passive {
 	my ($l)=@_;
 
 	#Create a socket from results from interface
-	defined IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or Carp::croak "listen/socket: $!";
+	defined IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or die "listen/socket: $!";
 
 	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
 	
@@ -244,7 +242,7 @@ method _setup_stream_passive {
 
 
 	defined(IO::FD::bind $fh, $l->{addr})
-		or Carp::croak "listen/bind: $!";
+		or die "listen/bind: $!";
 	#Log::OK::INFO and log_info("Stream bind ok");
 	
 	if($l->{family} == AF_UNIX){
@@ -266,7 +264,7 @@ method _setup_stream_passive {
 	#Finally run the listener
 	for ( values  %$_fhs2 ) {
 		IO::FD::listen $_, $_backlog
-			or Carp::croak "listen/listen on ".( $_).": $!";
+			or die "listen/listen on ".( $_).": $!";
 	}
 }
 
@@ -771,13 +769,13 @@ method _add_listeners {
 
     my $ref=ref $spec;
     if($ref  and $ref ne "HASH"){
-      croak "Listener must be a HASH ref or a sockaddr_passive cli string";
+      die "Listener must be a HASH ref or a sockaddr_passive cli string";
 
     }
     elsif($ref eq ""){
       @spec=parse_passive_spec($spec);
       #use feature ":all";
-      croak  "could not parse listener specification" unless $spec;
+      die "could not parse listener specification" unless $spec;
     }
     else {
       #Hash
@@ -802,13 +800,15 @@ method application_parser :lvalue {
 }
 
 method parse_cli_options {
-  my @options=@_?@_:@ARGV;
+  my $options=@_?[@_]:\@ARGV;
 
   #Attempt to parse the CLI options
   require Getopt::Long;
   my %options;
-
-  Getopt::Long::GetOptionsFromArray(\@options, \%options,
+  my $parser=Getopt::Long::Parser->new;
+  $parser->configure("pass_through");
+  #Getopt::Long::GetOptionsFromArray
+  $parser->getoptionsfromarray($options, \%options,
     "workers=i",
     "listener=s@",
     "show:s@",
@@ -834,6 +834,16 @@ method parse_cli_options {
       #Unsupported option
     }
   }
+
+  # Process all sites
+  $self->SUPER::parse_cli_options($options);
+  #########################################
+  # for my $r ($self->staged_routes->@*){ #
+  #   if($r isa __PACKAGE__){             #
+  #     $r->parse_cli_options(@options);  #
+  #   }                                   #
+  # }                                     #
+  #########################################
   $self;
 }
 
@@ -890,7 +900,8 @@ method load {
     eval "require '$path'";
 
     if($@){
-      my $context=context;
+      require Error::Show;
+      my $context=Error::Show::context();
       log_error "Could not include file: $context";
       die "Could not include file $path";	
     }
