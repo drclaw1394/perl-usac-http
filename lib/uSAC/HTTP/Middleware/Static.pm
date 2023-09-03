@@ -466,10 +466,10 @@ sub uhm_static_root {
   $options{roots}->@* =
     map { m|/$| ? $_ : "$_/"; } # Ensure the dir ends with a slash
 
-    map {say $_; sleep 1; uSAC::Util::path $_, $frame} $options{roots}->@*;
+    map {uSAC::Util::path $_, $frame} $options{roots}->@*;
 
-  say "adjusted roots:";
-  say join ", ", $options{roots}->@*;
+  #say "adjusted roots:";
+  #say join ", ", $options{roots}->@*;
 
   my $headers=$options{headers}//[];
   my $read_size=$options{read_size}//READ_SIZE;

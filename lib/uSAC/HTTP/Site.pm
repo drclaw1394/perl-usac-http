@@ -16,7 +16,7 @@ use Object::Pad;
 # counter is hit counter
 # table is the host table associated with the route
 #
-use uSAC::HTTP::Route;
+use Import::These qw<uSAC::HTTP:: Route Constants>;
 use uSAC::Util;
 
 # Fields for a host structure. contains the lookup table (hustle::Table), the cache for the table, the dispatcher for the table.
@@ -24,16 +24,15 @@ use uSAC::Util;
 # Also  for client side has the serialised address, quest queue, idle pool and active count
 #
 use constant::more {
-  "HOST_TABLE"=>0,
-    HOST_TABLE_CACHE=>1,
-    HOST_TABLE_DISPATCH=>2,
-    ADDR=>3,
-    REQ_QUEUE=>4,
-    IDLE_POO=>5,
-    ACTIVE_COUN=>6,
-  };
+  HOST_TABLE=>0,            #Hustle::Table object
+  HOST_TABLE_CACHE=>1,      # Cache for table
+  HOST_TABLE_DISPATCH=>2,   # Dispatcher for table
+  ADDR=>3,                  # Address?
+  REQ_QUEUE=>4,             #Re
+  IDLE_POOL=>5,
+  ACTIVE_COUNT=>6,
+};
 
-use uSAC::HTTP::Constants;
 use uSAC::IO;
 
 use Exception::Class::Base;
@@ -110,6 +109,8 @@ my $id=0;
 BUILD{
   $_id//=$id++;
   $_prefix//="";
+
+  #If delegate was provided in constructor, we call it right away
   $self->_delegate($_delegate, caller) if $_delegate;
 
   if(defined($_host) and ref $_host ne "ARRAY"){
@@ -118,6 +119,7 @@ BUILD{
   else {
     $_host=[];
   }
+  $_staged_routes//=[];
 }
 
 method _inner_dispatch {
@@ -405,12 +407,20 @@ method _wrap_middleware {
       # Use postfix notation to access either a package or object method 
       #
       my $string;
-      $string='$_delegate->middleware_hook';
-      my $sub=eval $string;
-      my @pre=$sub->($self) if $sub;
+      my @pre;
+      my $hook;
+      try {
+        $hook=$_delegate->middleware_hook;
+      }
+      catch($e){
+        warn $e;
+      }
 
-      #die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
-      #unshift @pre if !$@ and @pre;  #Silently ignore any error calling the middleware function
+      if($hook){
+        die "middleware_hook must return a subroutine reference" unless ref $hook eq "CODE";
+        $hook->($self);
+      }
+
       if($@){
         Log::OK::TRACE and log_trace "No middleware method/sub in delegate... ignoring";
       }
@@ -418,7 +428,6 @@ method _wrap_middleware {
 
       $string='$_delegate->'.s/\$$//r;
 
-      #$string="$_delegate->".$_;
       my @a=eval $string;
       die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
       unshift @_, @pre, @a;
@@ -842,7 +851,7 @@ method _delegate {
   }
   catch($e){
     no strict "refs";
-    warn "Delegate has no valid auto_route_hook. ignoring;"
+    warn "Delegate has no valid auto_route_hook. ignoring; $e"
     #Exception::Class::Base->throw("Delegate  has no import $e");
   }
   $self;
@@ -1039,11 +1048,17 @@ sub uhm_dead_horse_stripper {
 method parse_cli_options {
   my $options=shift//[];
 
+  my $hook;
   try {
-    $_delegate->parse_cli_options_hook->($self, $options);# if $_delegate;
+    $hook=$_delegate->parse_cli_options_hook;
   }
   catch($e){
     warn "$e";
+  }
+
+  if($hook){
+    die "parse_cli_options_hook must return a subroutine reference"unless ref $hook eq "CODE";
+    $hook->($self, $options);# if $_delegate;
   }
 
   for my $r ($self->staged_routes->@*){

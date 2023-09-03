@@ -215,4 +215,6 @@ sub decode_urlencoded_form {
   }
   \%kv;
 }
+sub catfile {
+}
 1;
