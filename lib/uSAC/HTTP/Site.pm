@@ -111,7 +111,9 @@ BUILD{
   $_prefix//="";
 
   #If delegate was provided in constructor, we call it right away
-  $self->_delegate($_delegate, caller) if $_delegate;
+  #$self->_delegate($_delegate, caller) if $_delegate;
+  $self->add_delegate($_delegate) if $_delegate;
+  $_delegate=undef;
 
   if(defined($_host) and ref $_host ne "ARRAY"){
     $_host=[$_host];
@@ -137,11 +139,21 @@ method _error_dispatch {
 
 method rebuild_routes {
   my $result;
+  no strict "refs";
   for my $r ($_staged_routes->@*){
+    my $ref =ref $r;
+
     if($r isa __PACKAGE__){
       $r->rebuild_routes; # Recurse down
     }
+    elsif (($ref  ne "ARRAY" and $ref ne "HASH") or %{$r."::"}){
+      # Other object or namespace
+      say $r;
+      $_delegate=$r;    # update the active delegate for implicit routes
+      $self->_delegate($r);
+    }
     else {
+      # Assume "normal" route
       $result=$self->_add_route(@$r);
       die Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
     }
@@ -576,6 +588,7 @@ method add_site {
 }
 
 
+
 method child_site {
   my $root=$self->find_root;
   my $child=uSAC::HTTP::Site->new(server=> $root, mode=>$root->mode);
@@ -614,6 +627,17 @@ method _method_match_check{
     $result;
 }
 
+# Add a delegate. This inserts the delegate into the staged routes list.
+# At rebuild time, the route list is processed sequentially. So multiple delegates
+# can be added to a site.
+# The  LATEST delegate is used for implicit routing
+method add_delegate {
+  no strict "refs";
+  for(@_){
+    # Add the items as a delegate if it is a ref or the name space exists
+    push @$_staged_routes, $_ if ref $_ or  %{$_."::"}; # Copy to staging
+  }
+}
 
 method add_route {
   #my $result; 
