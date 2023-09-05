@@ -41,6 +41,7 @@ WriteMakefile(
     "Data::UUID"=>0,
     "Data::Dump"=>0,
     "Time::Local"=>0,
+    "Exception::Class::Base"=>0
 
 
 	},
