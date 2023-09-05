@@ -146,26 +146,8 @@ sub path {
 
   
   my $cwd= cwd;#`realpath`;
-  # Poor mans dirname
-  #my @items=split "/", abs2rel rel2abs($frame->[1]);
-
-  ############################################################
-  # my $abs=`realpath @{[$frame->[1]]}`;                     #
-  # my $index= index  $abs, $cwd;                            #
-  # my @items=split "/", substr $abs, $index+length($cwd)+1; #
-  # pop @items;                                              #
-  # $prefix=join "/", @items;                                #
-  ############################################################
-   
   
   if(ref($_[0]) eq "SCALAR" or !defined $_[0]){
-    ########################################################################
-    # say "FRAME: $frame->[1]";                                            #
-    # say "CWD: ".cwd;                                                     #
-    # say "rel2abs ". rel2abs $frame->[1];                                 #
-    # say "abs2rel rel2abs ". abs2rel rel2abs $frame->[1];                 #
-    # say "dirname abs2rel rel2abs ". dirname abs2rel rel2abs $frame->[1]; #
-    ########################################################################
     $prefix=dirname abs2rel rel2abs $frame->[1];
     
     $p=$_[0]->$*;
@@ -190,8 +172,14 @@ sub path {
   if($p=~m|^/|){
     # ABS path. No nothing
   }
+  elsif($p eq "."){
+    $p="./"
+  }
+  elsif($p eq ".."){
+    $p="../"
+  }
   elsif($p!~m|^\.+/|){
-    #relative path, but no leading do slash. Add one to help 'require'
+    #relative path, but no leading dot slash. Add one to help 'require'
     $p="./".$p;
   }
   $p;

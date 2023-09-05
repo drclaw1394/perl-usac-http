@@ -24,6 +24,13 @@ use Errno qw<EAGAIN EINTR EBUSY>;
 
 use constant::more  READ_SIZE=>4096;
 
+
+use Time::Local qw<timelocal_modern>;
+my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+my $i=0;
+my %months= map {$_,$i++} @months;
+
+
 sub send_file_uri {
   #return a sub with cache an sysroot aliased
   #use  integer;
@@ -63,8 +70,34 @@ sub send_file_uri {
     #TODO: needs testing
     for my $time ($headers->{"if-modified-since"}){
       $out_headers->{":status"}=HTTP_OK and last unless $time;
-      my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
-      $out_headers->{":status"}=HTTP_OK  and last if $mod_time>$tp->epoch;
+
+      for($time){
+        Log::OK::TRACE and log_trace " converting cookie expires from stamp to epoch";
+        my ($wday_key, $mday, $mon_key, $year, $hour, $min, $sec, $tz)=
+         /([^,]+), (\d+).([^-]{3}).(\d{4}) (\d+):(\d+):(\d+) (\w+)/;
+         #TODO support parsing of other deprecated data formats
+
+        if(70<=$year<=99){
+          $year+=1900;
+        }
+        elsif(0<=$year<=69){
+          $year+=2000;
+        }
+        else{
+          #year as is
+        }
+        #NOTE: timelocal_modern DOES NOT add/subtract time offset. Which is what we want
+        #as the time is already gmt
+        #
+        my $epoch = timelocal_modern($sec, $min, $hour, $mday, $months{$mon_key}, $year);
+        $out_headers->{":status"}=HTTP_OK  and last if $mod_time>$epoch;
+      }
+
+
+
+      #my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
+
+      #$out_headers->{":status"}=HTTP_OK  and last if $mod_time>$tp->epoch;
       $out_headers->{":status"}=HTTP_NOT_MODIFIED;	#no body to be sent
     }
   }
@@ -311,6 +344,10 @@ sub _html_dir_list {
 		my $entries=$_[2];
 		#TODO: add basic style to improve the look?
 		if($headers){
+      $_[0].='<!DOCTYPE html>
+      <html>
+      <body>
+      ';
 			$_[0].=
 			"<table>\n"
 			."    <tr>\n"
@@ -329,7 +366,10 @@ sub _html_dir_list {
 				;
 			}
 		}
-		$_[0].="</table>";
+		$_[0].="</table>
+    </body>
+
+    </html>";
 	}
 }
 
@@ -382,11 +422,10 @@ sub _make_list_dir {
 		my ($line, $rex, $in_header, $headers, undef, $next, $html_root, $uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
 
-		my $abs_path=$uri;#$html_root.$uri;
+		my $abs_path=$html_root.$uri;
 		stat $abs_path;
     Log::OK::TRACE and log_trace "DIR LISTING for $abs_path";
 		unless(-d _ and  -r _){
-
       Log::OK::TRACE and log_trace "No dir here $abs_path";
       $_[OUT_HEADER]{":status"}= HTTP_NOT_FOUND;
       $_[PAYLOAD]="";
@@ -397,7 +436,6 @@ sub _make_list_dir {
 		#build uri from sysroot
 		my @fs_paths;
 		if($abs_path eq "$html_root/"){
-
 			@fs_paths=<$abs_path*>;	
 		}
 		else{
@@ -468,8 +506,6 @@ sub uhm_static_root {
 
     map {uSAC::Util::path $_, $frame} $options{roots}->@*;
 
-  #say "adjusted roots:";
-  #say join ", ", $options{roots}->@*;
 
   my $headers=$options{headers}//[];
   my $read_size=$options{read_size}//READ_SIZE;
@@ -513,7 +549,7 @@ sub uhm_static_root {
 
   #TODO: Need to check only supported encodings are provided.
 
-  Log::OK::DEBUG and log_debug "Static files from: ",join ", ", $options{roots}->@*;
+  Log::OK::DEBUG and log_debug ("Static files from: ".join ", ", $options{roots}->@*);
   Log::OK::DEBUG and log_debug "DIR Listing: ".($do_dir?"yes":"no");
   Log::OK::DEBUG and log_debug "DIR index: ".(@indexes?join(", ", @indexes):"no");
   Log::OK::DEBUG and log_debug "Filename Allow Filter: ".($allow?$allow:"**NONE**");

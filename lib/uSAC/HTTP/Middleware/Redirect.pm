@@ -1,7 +1,7 @@
 package uSAC::HTTP::Middleware::Redirect;
+use v5.36;
 
-use uSAC::HTTP::Constants;
-use uSAC::HTTP::Rex;
+use Import::These qw<uSAC::HTTP:: Constants Rex Header>;
 
 
 use Export::These qw(
@@ -11,6 +11,7 @@ use Export::These qw(
   uhm_redirect_permanent
   uhm_redirect_internal
   uhm_error_not_found
+  uhm_redirect_application
 );
 
 
@@ -126,6 +127,52 @@ Wrapper around rex_error_not_found to be used as innerware directly.
 =cut
 sub uhm_error_not_found {
 	\&rex_error_not_found;
+}
+
+
+=head3 uhm_redirect_application
+
+  eq usac_route "path/to/nonslash" =>uhm_redirect_application;
+
+Cause the client to redirect to the same resource but with a trailing slash.
+This forces the client to have a different relative directory for more sane
+resource loading
+
+If the path DID end in a slash, then we rewrite the path to a particular index if enabled
+
+=cut
+
+sub uhm_redirect_application {
+  my %options=@_;
+  
+  my $ignore=$options{ignore}//qr|\.|;   # Default is any path with a dot (extension)
+  my $allow=$options{allow}//qr|.*|;
+
+  my $q;
+  [
+    sub {
+      my ($next,$index)=@_;
+      sub {
+
+        # Permanent redirect any url which do not end in a slash or have a file
+        # extension
+        #
+        say 'DOING APPLICATION';
+        for($_[IN_HEADER]{":path"}){
+
+          return &$next if(m|/$| or /$ignore/ or !/$allow/);
+
+          $q=$_[IN_HEADER]{":query"};
+
+          # Apply the query if it was present
+          $_[PAYLOAD]= $_."/". ($q? "?".$q : "");
+          say "DOING permanent redirect to $_[PAYLOAD]";
+          return &rex_redirect_permanent;
+
+        }
+      }
+    },
+  ]
 }
 
 1;

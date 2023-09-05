@@ -881,20 +881,22 @@ method _delegate {
   $self;
 }
 
-
-sub usac_id {
-        my $id=pop;
-        my %options=@_;
-        my $self=$options{parent}//$uSAC::HTTP::Site;
-        $self->id=$id;
-}
-
-sub usac_prefix {
-        my $prefix=pop;
-        my %options=@_;
-        my $self=$options{parent}//$uSAC::HTTP::Site;
-        $self->set_prefix(%options,$prefix);
-}
+#########################################################
+#                                                       #
+# sub usac_id {                                         #
+#         my $id=pop;                                   #
+#         my %options=@_;                               #
+#         my $self=$options{parent}//$uSAC::HTTP::Site; #
+#         $self->id=$id;                                #
+# }                                                     #
+#                                                       #
+# sub usac_prefix {                                     #
+#         my $prefix=pop;                               #
+#         my %options=@_;                               #
+#         my $self=$options{parent}//$uSAC::HTTP::Site; #
+#         $self->set_prefix(%options,$prefix);          #
+# }                                                     #
+#########################################################
 
 method set_prefix {
   my $prefix=pop;

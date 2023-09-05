@@ -24,7 +24,7 @@ WriteMakefile(
     "File::Meta::Cache"=>0,     # Meta data and open file cache
     "Export::These"=>"v0.1.1",         # Simpler export and reexport
     "Import::These"=>"v0.1.2",
-    "HTTP::State"=>"v0.1.1"
+    "HTTP::State"=>"v0.1.1",
     "constant::more"=> "v0.2.1",
 		"Log::OK"	=> "v0.2.1",
 		"Template::Plex"	=> "v0.6.1",
@@ -39,7 +39,8 @@ WriteMakefile(
 		"URL::Encode"	=> 0,
 		"URL::Encode::XS" =>0,
     "Data::UUID"=>0,
-    "Data::Dump"=>0
+    "Data::Dump"=>0,
+    "Time::Local"=>0,
 
 
 	},
