@@ -1079,7 +1079,7 @@ method parse_cli_options {
     $hook=$_delegate->parse_cli_options_hook;
   }
   catch($e){
-    warn "$e";
+    Log::OK::DEBUG and log_debug "$e";
   }
 
   if($hook){

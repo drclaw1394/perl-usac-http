@@ -18,8 +18,8 @@ use AnyEvent;
 use Import::These qw<uSAC:: Util ::HTTP:: Server ::Middleware:: Static Log>;
 
 
-use Getopt::Long;
-Getopt::Long::Configure("pass_through");
+use Getopt::Long::Complete;
+Getopt::Long::Complete::Configure("pass_through");
 
 my %options;
 my $verbose=0;
@@ -61,6 +61,8 @@ GetOptions \%options,
     Pod::Usage::pod2usage(verbose=>1);
   };
 
+  #say  "hello";
+  #exit;
 
 # default static files from the current directory
 $options{"www-root"}//=["."];
