@@ -28,14 +28,27 @@ $options{quiet}=sub { $verbose=0 };
 $options{verbose}=\$verbose;
 
 GetOptions \%options,
+  # Help
 	"help",
-	"host=s@",
+  
+  # Listener
 	"listen=s@",
-	"product=s",
-	"preclude=s@",
-	"postclude=s@",
+
+  # Static file options
 	"www-root=s@"	,	#serve files from this location
 	"list-dir",		#serve html rendered dir list from this location
+  "read-size=i",
+  "indexes=s@",
+
+  # Routes
+	"preclude=s@",
+	"postclude=s@",
+
+  # Log
+	"log",
+
+	"host=s@",
+	"product=s",
 	"ws=s%", 		#connect to uri (unix:// tcp:// udp:// ws:// file://) and just spit the information 
 
 	"mime-add=s%",		#Specifiy a mime type mapping for an extension, add to list
@@ -46,14 +59,6 @@ GetOptions \%options,
 	"quiet",		#quiet flag
 	"watch",		#watch changes to input files, and relauch
 	"verbose",
-	"log",
-
-	"interface=s@",
-	"group=s@",
-	"address=s@",
-  "read-size=i",
-  "indexes=s@"
-
 
 
 	or do {
@@ -61,8 +66,6 @@ GetOptions \%options,
     Pod::Usage::pod2usage(verbose=>1);
   };
 
-  #say  "hello";
-  #exit;
 
 # default static files from the current directory
 $options{"www-root"}//=["."];
@@ -74,42 +77,26 @@ if($options{help}){
   Pod::Usage::pod2usage(verbose=>2);
 }
 
-# TODO:
-#	--ws my/uri=file://file_to_watch
-#	--ws my/ws=unix://named_fifo
-#	--ws my/bridge=tcp://host:port
-#	--ws my/bridge=udp://host:port
-#	--ws my/bridge=http://host:port/path		#will hammer the destination if not long poll
-#
-#	--mqtt my/url=>mqtt://host:port/topic		#subscribes to a topic and pushes the newest
-#							#message out to incomming connections.
-#							#if accept is multipart then mutiple messages	
 
-# Currently Working on:
-#	--static-file /prefix=path_to_dir_with_static_files
-#	--static-dir /prefix=path_to_dir_list		#uses accepts to determing format
-#		
-#
-#create server instance;
-#load any config file specified
-
-#set default listener if non provided
-
-my $welcome=
-"uSAC HTTP Server $VERSION - Copyright 2023 Ruben Westerberg
+# Welcome
+my $welcome= "uSAC HTTP Server $VERSION - Copyright 2023 Ruben Westerberg
 ";
 Log::OK::INFO and log_info $welcome;
 
 
 
-my $server;
-$server=uSAC::HTTP::Server->new(listen=>$options{listen});
+# Create server
+#
+my $server=uSAC::HTTP::Server->new(listen=>$options{listen});
 
+
+# Inject logging if logging enabled
+#
 $server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
 
 
-
-#add additional files
+# Load routes
+#
 my $includes=$options{preclude};
 
 for my $include (@$includes){
@@ -119,13 +106,15 @@ for my $include (@$includes){
   $server->load($target);
 }
 
-my $site=uSAC::HTTP::Site->new(id=>"Static_files");
-$server->add_site($site);
-
-#add static file routes
+# Add static files if present
+#
 my $static=$options{"www-root"};
-
 if(@$static){
+  my $site=uSAC::HTTP::Site->new(id=>"Static_files");
+  $server->add_site($site);
+
+  #add static file routes
+
   $site->add_route("", uhm_static_root roots=>$static, 
         list_dir  =>  $options{"list-dir"},
         read_size =>  $options{"read-size"},
@@ -140,59 +129,11 @@ for my $include (@$includes){
   #convert to abs for intended behaviour	
   my $target=uSAC::Util::rel2abs($include, uSAC::Util::cwd);
   Log::OK::INFO and log_info "Loading from source: $target";
-  $site->load($target);
+  $server->load($target);
 }
 
+# Configure
 $server->parse_cli_options(@ARGV);
+
+# Run!
 $server->run();
-
-__END__
-
-
-=head1 TITLE
-
-usac -  HTTP Server
-
-=head1 SYNOPSIS
-
-	usac [options]
-
-
-=head1 DESCRIPTION
-
-usac is a HTTP server easiliy configured for serving static files. It is a
-application wrapper around uSAC::HTTP
-
-
-=head1 OPTIONS
-
-
-=over
-
-=item help
-
-Show detailed usage information
-
-=item host
-
-Virtual hosts server will respond to. Multiple accepted.
-
-=item listen
-
-Network interfaces to listen on. Multiple accepted.
-
-=item www-root
-
-Directory to serve files from. Multiple accepted.
-
-=item list-dir
-
-Allow listing of directories
-
-=item log
-
-Enable logging of requests
-
-
-=back
-

@@ -3,18 +3,11 @@ use strict;
 use warnings;
 # Utility functions
 
-#use File::Spec::Functions qw<catfile abs2rel rel2abs>;
-#use File::Basename qw<dirname>;
-use URL::Encode qw<url_decode_utf8>;
+#use URL::Encode qw<url_decode_utf8>;
 use feature "say";
 
-use Export::These qw( cwd path decode_urlencoded_form);
+use Export::These qw( cwd dirname basename path catfile abs2rel rel2abs need);# decode_urlencoded_form);
 
-sub TEST {
-  say "IN TEST";
-  say $_[0];
-
-}
 sub cwd {
   my($dev, $inode)=stat ".";
   my ($odev, $oinode)=($dev, $inode);
@@ -69,8 +62,6 @@ sub rel2abs {
 sub abs2rel {
   my $abs=shift;
   my $base=shift||cwd;
-  #say "input: $abs";
-  #say " base: $base";
 
   if($base !~ m|^/|){
     $base=abs2rel $base;
@@ -88,8 +79,6 @@ sub abs2rel {
     $found++;
   }
   my $back_count=@base-$found;
-  ##say "longest: $longest";
-  #say "found: $found";
 
   #strip off longest
   
@@ -100,7 +89,6 @@ sub abs2rel {
 
   $p=substr $p, 1;
   # Prepend backcount
-  #say "RELATIVE: $p";
 
   #############################################################
   # my $index= index  $abs, $base;                            #
@@ -110,6 +98,12 @@ sub abs2rel {
   #############################################################
   $p;
 
+}
+
+sub basename {
+  my $path=shift;
+  my @items = split "/", $path;
+  pop @items;
 }
 
 sub dirname {
@@ -187,22 +181,74 @@ sub path {
 
 *usac_path=\&path;
 
-sub decode_urlencoded_form {
-  my %kv;
-  for(split "&", url_decode_utf8 $_[0]){
-    my ($k, $v)=split "=", $_, 2;
-    if(!exists $kv{$k}){
-        $kv{$k}=$v;
+
+my %needed;
+sub need (*) {
+  my $input=shift;
+  my $frame=shift//[caller];
+
+  # Resolve any relative to caller file paths
+  # Wrapper around require. Exactly like require, exect the last value (the true value) is remembered
+  my $res;
+  my $key;
+
+  my $path=$input;
+  my $bare;
+  for($path){
+    # If the target contains :: or does not end with .pm, then 
+    # assume it was a 'bare word' module
+    if(!ref and (s|::|/|g or !/\.pm$|\.pl$/)){
+      # Convert module name to path
+      $key.=$_.".pm";
+      $bare=1;
     }
-    elsif(ref $kv{$k}){
-      push $kv{$k}->@*, $v; 
+    else{
+      # Input is treated as path
+      $key= path $input, $frame;
+    }
+  } 
+
+  # Check the needed hash for the filename
+  if(exists $needed{$key}){
+    $res=$needed{$key};
+  }
+  else{
+    if($bare){
+      local $@;
+      $res=eval "require $input";
+      die $@ if $@;
     }
     else {
-      $kv{$k}=[$kv{$k}, $v];
+      $res=require $key;
     }
+
+    $needed{$key}=$res;
   }
-  \%kv;
+  $res;
 }
+
+############################################
+# sub decode_urlencoded_form {             #
+#   my %kv;                                #
+#   for(split "&", url_decode_utf8 $_[0]){ #
+#     my ($k, $v)=split "=", $_, 2;        #
+#     if(!exists $kv{$k}){                 #
+#         $kv{$k}=$v;                      #
+#     }                                    #
+#     elsif(ref $kv{$k}){                  #
+#       push $kv{$k}->@*, $v;              #
+#     }                                    #
+#     else {                               #
+#       $kv{$k}=[$kv{$k}, $v];             #
+#     }                                    #
+#   }                                      #
+#   \%kv;                                  #
+# }                                        #
+############################################
+
 sub catfile {
+  # Make sure no trailing slashses on components, then join
+  join "/", map s|/$||, @_;
 }
+
 1;

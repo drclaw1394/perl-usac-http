@@ -16,8 +16,7 @@ use Object::Pad;
 # counter is hit counter
 # table is the host table associated with the route
 #
-use Import::These qw<uSAC::HTTP:: Route Constants>;
-use uSAC::Util;
+use Import::These qw<uSAC:: Util ::HTTP:: Route Constants>;
 
 # Fields for a host structure. contains the lookup table (hustle::Table), the cache for the table, the dispatcher for the table.
 #
@@ -148,7 +147,6 @@ method rebuild_routes {
     }
     elsif (($ref  ne "ARRAY" and $ref ne "HASH") or %{$r."::"}){
       # Other object or namespace
-      say $r;
       $_delegate=$r;    # update the active delegate for implicit routes
       $self->_delegate($r);
     }
@@ -631,6 +629,7 @@ method _method_match_check{
 # At rebuild time, the route list is processed sequentially. So multiple delegates
 # can be added to a site.
 # The  LATEST delegate is used for implicit routing
+#
 method add_delegate {
   no strict "refs";
   for(@_){
@@ -640,8 +639,6 @@ method add_delegate {
 }
 
 method add_route {
-  #my $result; 
-
   my $del_meth;
   try {
     if($_[0] isa uSAC::HTTP::Site){
@@ -664,7 +661,6 @@ method add_route {
       #unshift @_, $self->default_method;
       unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
       push @_, $del_meth;
-      #$result=$self->_add_route(@_);
       push @$_staged_routes, [@_]; # Copy to staging
     }
 
@@ -677,7 +673,6 @@ method add_route {
       for my ($k, $v)($_[1]->%*){
         # Recall this method with individual entries. Should allow string names
         # and implicit paths
-        #$result=$self->add_route($k,$path, @$v);
         push @$_staged_routes, [$k, $path, @$v]; # Copy to staging
       }
     }
@@ -693,7 +688,6 @@ method add_route {
 
         push @_, $del_meth;
         unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
-        #$result=$self->_add_route(@_);
         push @$_staged_routes, [@_]; # Copy to staging
     }
     
@@ -716,7 +710,6 @@ method add_route {
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
-        #$result=$self->_add_route(@_);
         push @$_staged_routes, [@_]; # Copy to staging
 
     }
@@ -742,7 +735,6 @@ method add_route {
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
-        #$result=$self->_add_route(@_);
         push @$_staged_routes, [@_]; # Copy to staging
     }
 
@@ -761,7 +753,6 @@ method add_route {
         # Sets the default for the host
         #
         shift; unshift @_, $self->any_method, undef;
-        #$result=$self->_add_route(@_);
         push @$_staged_routes, [@_]; # Copy to staging
       }
 
@@ -792,7 +783,6 @@ method add_route {
           push @_, $method;
         }
 
-        #$result=$self->_add_route(@_);
         push @$_staged_routes, [@_]; # Copy to staging
       }
 
@@ -800,31 +790,26 @@ method add_route {
       elsif(ref($_[0]) eq "Regexp"){
         if(@_>=3){
           #method and path matcher specified
-          #$result=$self->_add_route(@_);
           push @$_staged_routes, [@_]; # Copy to staging
         }
         else {
           #Path matcher is a regex
           unshift @_, "GET";
-          #$result=$self->_add_route(@_);
           push @$_staged_routes, [@_]; # Copy to staging
         }
       }
       elsif($_[0] eq ""){
         # Explicit matching for site prefix
         unshift @_, $self->default_method;
-        #$result=$self->_add_route(@_);
         push @$_staged_routes, [@_]; # Copy to staging
       }
       elsif($_[0]=~m|^/|){
         #starting with a slash, short cut for GET and head
         unshift @_, $self->default_method;
-        #$result=$self->_add_route(@_);
         push @$_staged_routes, [@_]; # Copy to staging
       }
       else{
         # method, url and middleware specified
-        #$result=$self->_add_route(@_);
         push @$_staged_routes, [@_]; # Copy to staging
       }
 
@@ -854,7 +839,7 @@ method _delegate {
   my $caller=$_[1]//[caller];
   if(ref $_delegate eq "SCALAR"){
     #resolve relative-to-caller- path
-    $_delegate=uSAC::Util::path $_delegate, $caller;
+    $_delegate=path $_delegate, $caller;
   }
     
   unless(ref $_delegate){
@@ -1095,5 +1080,45 @@ method parse_cli_options {
   $self;
 }
 
+method load {
+	my $path=pop;
+	my %options=@_;
+  $path=path $path, [caller];
+	
+	$options{package}//=(caller)[0];
+	
+	#recursivley include files
+	if(-d $path){
+		#Dir list and contin
+    my @files= <"${path}/*">;
+    
+    ###############################################################
+    # opendir(my $dir, $path);                                    #
+    # my @files= map "$path/$_" , grep !/^\.{1,2}/, readdir $dir; #
+    # #say "files: @files";                                       #
+    # closedir $dir;                                              #
+    ###############################################################
+
+		for my $file (@files){
+      local $uSAC::HTTP::Site=$self;
+			$self->load( %options, $file);
+		}
+	}
+	else{
+		#not a dir . do it
+		Log::OK::INFO and log_info "Including server script from $path";
+    #my $result=
+    #eval "require '$path'";
+    eval { need $path };
+
+    if($@){
+      require Error::Show;
+      my $context=Error::Show::context();
+      log_error "Could not include file: $context";
+      die "Could not include file $path";	
+    }
+	}
+  $self;
+}
 
 __PACKAGE__;

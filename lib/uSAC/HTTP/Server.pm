@@ -91,6 +91,7 @@ sub _reexport {
   #
   uSAC::HTTP->import;
   uSAC::HTTP::Site->import;
+  uSAC::Util->import;
 
 
   # Preload common middleware  if asked
@@ -99,12 +100,12 @@ sub _reexport {
     {
       {
         local $Exporter::ExportLevel=0;
-        require uSAC::HTTP::Middleware::Trace;
-        require uSAC::HTTP::Middleware::Static;
-        require uSAC::HTTP::Middleware::Slurp;
-        require uSAC::HTTP::Middleware::Redirect;
-        require uSAC::HTTP::Middleware::Log;
-        require uSAC::HTTP::Middleware::TemplatePlex;
+        need uSAC::HTTP::Middleware::Trace;
+        need uSAC::HTTP::Middleware::Static;
+        need uSAC::HTTP::Middleware::Slurp;
+        need uSAC::HTTP::Middleware::Redirect;
+        need uSAC::HTTP::Middleware::Log;
+        need uSAC::HTTP::Middleware::TemplatePlex;
       }
       uSAC::HTTP::Middleware::Trace->import;
       uSAC::HTTP::Middleware::Static->import;
@@ -379,7 +380,7 @@ method make_basic_client {
 
   my $session;
   unless($_application_parser){
-    require uSAC::HTTP::v1_1_Reader;
+    need uSAC::HTTP::v1_1_Reader;
     $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
   }
   
@@ -877,40 +878,6 @@ method do_stream_connect {
   $id;
 }
 
-method load {
-	my $path=pop;
-	my %options=@_;
-  $path=uSAC::Util::path $path, [caller];
-	
-	$options{package}//=(caller)[0];
-	
-	#recursivley include files
-	if(-d $path){
-		#Dir list and contin
-		my @files= <"${path}/*">;
-
-		for my $file (@files){
-      local $uSAC::HTTP::Site=$self;
-			$self->load( %options, $file);
-		}
-	}
-	else{
-		#not a dir . do it
-		Log::OK::INFO and log_info "Including server script from $path";
-    #my $result=
-    eval "require '$path'";
-
-    if($@){
-      require Error::Show;
-      my $context=Error::Show::context();
-      log_error "Could not include file: $context";
-      die "Could not include file $path";	
-    }
-
-	}
-
-  $self;
-}
 
 method worker_count {
   $_workers= pop;
