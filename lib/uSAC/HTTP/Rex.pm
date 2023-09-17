@@ -61,23 +61,21 @@ use Export::These qw<
 
 #Class attribute keys
 #ctx_ reqcount_ 
-use constant::more {
-  "session_"=>0,   # The established channel this rex is a part of 
-  "write_"=>1,     # Writer for above
-  "id_"=>2,        # ID/sequence of the rex object
-	"closeme_"=>3,   # Reference to closer in session
-	"dropper_"=>4,   # Reference to dropper in session
-	"server_"=>5,      # The server object
-	"in_progress_"=>6, # Flag indicating this rex is in progress. This is automatically set by serializer
-                  # However if middleware prevents synchronous call to serialize, then this needs
-                  # manual setting. USe for debugging mainly
+use constant::more qw<
+  session_=0
+  write_
+  id_
+	closeme_
+	dropper_
+	server_
+	in_progress_
+  out_headers_
 
-  "out_headers_"=>7, # Glue to link out headers to input side of HTTP Client
-
-	"recursion_count_"=>8,   # Sanity check against server loops
-	"peer_"=>9,        # The address structure of the other this connection
-  "route_"=>10,     #the route associated with this request
-};
+	recursion_count_
+	peer_
+  route_
+  >
+;
 
 		
 # TODO: rename this subroutine
@@ -532,7 +530,8 @@ sub new {
 	Log::OK::DEBUG and log_debug "+++++++Create rex: $id";
 
 
-	my $self=bless [], $_[0];
+  my $self=bless [], $_[0];
+  #my $self=[];
 
   $self->[session_]=$_[1];
   $self->[route_]=$_[2];

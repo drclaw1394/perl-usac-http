@@ -38,8 +38,7 @@ use constant::more {
 
 
 use feature qw<refaliasing say state current_sub>;
-use constant::more NAME=>"uSAC";
-use constant::more VERSION=>"v0.1.0";
+use constant::more NAME=>"uSAC", VERSION=>"v0.1.0";
 
 no warnings "experimental";
 
@@ -89,33 +88,16 @@ sub _reexport {
 
   # Re export to the caller package
   #
-  uSAC::HTTP->import;
-  uSAC::HTTP::Site->import;
-  uSAC::Util->import;
+  $_->import for (qw<uSAC::HTTP uSAC::HTTP::Site uSAC::Util>);
 
 
   # Preload common middleware  if asked
   #
   if(grep /:common/, @_){
-    {
-      {
-        local $Exporter::ExportLevel=0;
-        need uSAC::HTTP::Middleware::Trace;
-        need uSAC::HTTP::Middleware::Static;
-        need uSAC::HTTP::Middleware::Slurp;
-        need uSAC::HTTP::Middleware::Redirect;
-        need uSAC::HTTP::Middleware::Log;
-        need uSAC::HTTP::Middleware::TemplatePlex;
-      }
-      uSAC::HTTP::Middleware::Trace->import;
-      uSAC::HTTP::Middleware::Static->import;
-      uSAC::HTTP::Middleware::Slurp->import;
-      uSAC::HTTP::Middleware::Redirect->import;
-      uSAC::HTTP::Middleware::Log->import;
-      uSAC::HTTP::Middleware::TemplatePlex->import;
-
+    for(<uSAC::HTTP::Middleware::{Trace,Static,Slurp,Redirect,Log,TemplatePlex}>){
+      { local $Exporter::ExportLevel=0; need $_; }
+      $_->import;
     }
-    #require uSAC::HTTP::Middleware::WebSocket;
   }
 
 }
@@ -149,7 +131,7 @@ field $_sub_product :param="ductapeXchansaw";
 field $_workers :mutator :param=0;
 field $_cv;
 field $_options :reader;
-field $_application_parser;
+field $_application_parser :param=undef;
 field $_total_requests;
 field $_static_headers :mutator;
 field $_running_flag  :mutator;

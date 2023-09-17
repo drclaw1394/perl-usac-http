@@ -38,14 +38,9 @@ our $KEEP_ALIVE=1;
 
 #use Time::HiRes qw/gettimeofday/;
 
-#use uSAC::HTTP::Session;
-#use uSAC::HTTP::Rex;
-use uSAC::HTTP::Code;
-use uSAC::HTTP::Method;
-use uSAC::HTTP::Header;
+use Import::These qw<uSAC::HTTP:: Code Method Header>;
 
-use constant::more MAX_READ_SIZE => 128 * 1024;
-use constant::more CRLF2=>CRLF.CRLF;
+use constant::more MAX_READ_SIZE => 128 * 1024, CRLF2=>CRLF.CRLF;
 
 
 sub parse_form {
@@ -59,21 +54,13 @@ sub parse_form {
 #	-method could contain data => push a dedicated reader to the read stack
 #
 #
-use constant::more {
-  MODE_RESPONSE=>0,
-  MODE_REQUEST=>1,
-  MODE_NONE=>2,
-};
+use constant::more  qw<
+  MODE_RESPONSE=0
+  MODE_REQUEST
+  MODE_NONE
+  >;
 
-use constant::more {
-  STATE_REQUEST=>0,
-  STATE_RESPONSE =>1,
-  STATE_HEADERS =>2,
-  STATE_BODY_CONTENT =>3,
-  STATE_BODY_CHUNKED =>4,
-  STATE_BODY_MULTIPART =>5,
-  STATE_ERROR=>6,
-};
+use constant::more <STATE_{REQUEST=0,RESPONSE,HEADERS,BODY_CONTENT,BODY_CHUNKED,BODY_MULTIPART,ERROR}>;
 
 #make a reader which is bound to a session
 sub make_parser{
@@ -122,7 +109,6 @@ sub make_parser{
   
   #weaken $r;
 
-  #my $cb=$self->current_cb;	
   my ($state, $seq) = ($start_state, 0);
   my ($method, $uri, $version, $len, $pos, $req);
   my $line;

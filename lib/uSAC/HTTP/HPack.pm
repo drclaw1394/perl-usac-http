@@ -123,7 +123,7 @@ build_static
 	>;
   #our @EXPORT=@EXPORT_OK;
   #
-use enum ("size_limit_=0",qw<current_size_ dynamic_hash_ dynamic_array_>);
+use constant::more ("size_limit_=0",qw<current_size_ dynamic_hash_ dynamic_array_>);
 
 
 

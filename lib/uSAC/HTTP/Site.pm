@@ -4,7 +4,6 @@ use Log::ger;
 use Log::OK;
 
 
-use version; our $VERSION=version->declare("v0.0.1");
 use feature ":all";
 no warnings "experimental";
 
@@ -22,15 +21,15 @@ use Import::These qw<uSAC:: Util ::HTTP:: Route Constants>;
 #
 # Also  for client side has the serialised address, quest queue, idle pool and active count
 #
-use constant::more {
-  HOST_TABLE=>0,            #Hustle::Table object
-  HOST_TABLE_CACHE=>1,      # Cache for table
-  HOST_TABLE_DISPATCH=>2,   # Dispatcher for table
-  ADDR=>3,                  # Address?
-  REQ_QUEUE=>4,             #Re
-  IDLE_POOL=>5,
-  ACTIVE_COUNT=>6,
-};
+use constant::more qw<
+  HOST_TABLE=0
+  HOST_TABLE_CACHE
+  HOST_TABLE_DISPATCH
+  ADDR
+  REQ_QUEUE
+  IDLE_POOL
+  ACTIVE_COUNT
+  >;
 
 use uSAC::IO;
 

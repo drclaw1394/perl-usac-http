@@ -1,48 +1,24 @@
 package uSAC::HTTP::v2;
-use strict;
-use warnings;
+use v5.36;
+
 use feature qw<say refaliasing>;
 no warnings "experimental";
-my @frame_names=map "FRAME_$_", qw(
-  DATA
-  HEADERS
-  PRIORITY
-  RST_STREAM
-  SETTINGS
-  PUSH_PROMISE
-  PING
-  GOAWAY
-  WINDOW_UPDATE
-  CONTINUATION
-  )
-;
-my @flag_names=map "FLAG_$_", qw(
 
-  PING_ACK
-  END_STREAM	        
-  END_HEADERS
-  PADDED
-  PRIORITY 
-);
+my @frame_names;
+my @flag_names;
+
+BEGIN{
+  @frame_names=<FRAME_{DATA,HEADERS,PRIORITY,RST_STREAM,SETTINGS,PUSH_PROMISE,PING,GOAWAY,WINDOW_UPDATE,CONTINUATION}>,;
+  @flag_names=<FLAG_{PING_ACK,END_STREAM,END_HEADERS,PADDED,PRIORITY}>; 
+}
 
 
 my @decode_names=qw(
   parse_frames
 );
 
-######################
-# our @EXPORT_OK=(   #
-#   @frame_names,    #
-#   @flag_names,     #
-#   "encode_frames", #
-#   "decode_frames"  #
-#                    #
-# );                 #
-######################
+use constant::more "d=-1", @frame_names, "d=-1", @flag_names;
 
-#our @EXPORT=();
-
-#our %EXPORT_TAGS=(
 use Export::These
   @frame_names,
   @flag_names,
@@ -123,8 +99,7 @@ use constant::more {
 
 
 #Preface
-use constant::more CLIENT_PREFACE=>pack "H*","0x505249202a20485454502f322e300d0a0d0a534d0d0a0d0a";
-
+use constant::more CLIENT_PREFACE=>pack "H*","505249202a20485454502f322e300d0a0d0a534d0d0a0d0a";
 
 use constant::more STATIC_FRAME_PING=> pack "NCNa64",(8<<8)|FRAME_PING, 0, map int(rand(256)), 1..8;
 
@@ -265,7 +240,7 @@ sub encode_frames {
 }
 
 
-use enum ("PARSE_HEAD=0", "PARSE_PAYLOAD");
+use constant::more "PARSE_HEAD=0", "PARSE_PAYLOAD";
 my $state=PARSE_HEAD;
 my $offset=0;
 my $length;
@@ -423,37 +398,106 @@ sub decode_frames {
 }
 
 
-use enum qw<CON_STATE_DISCONNECTED CON_STATE_PREFACE CON_STATE_FRAMES>;
+use constant::more qw<CON_STATE_DISCONNECTED=0 CON_STATE_PREFACE CON_STATE_FRAMES>;
 #Create a reader for a session
 #
 sub server_reader {
   my $state;
+
   $state=CON_STATE_DISCONNECTED;
+  my @in_frames;
+  my @out_frames;
+
+  my %options=@_;
+  my $session=$options{session};    # 'Session' linking io to middlewares
+  my $mode=$options{mode};    # Client or server mode
+  my $cb=$options{callback};  # Callback for new rex  processing and route location
+  #my $psgi_compat=$options{psgi_compat}//$PSGI_COMPAT;
+  #my $keep_alive=$options{keep_alive}//$KEEP_ALIVE;
+  my $enable_pipeline=$options{enable_pipeline}//0;
+
+  # exports from underlying session
+  #
+  my $ex=$session->exports;
+  \my $closeme=$ex->[0];    # Session dropper variable
+  my $dropper=$ex->[1];     # callback to attempt to drop connection
+  \my $server=$ex->[2];     # The server object
+
+  my $rex_ref;
+  if($enable_pipeline){
+    # Expecting external middleware to pair up requests and responses with sequencing
+    $rex_ref=\undef;
+  }
+  else{
+    # Synchronous request response cycle. Outgoing rex is stored in session
+    $rex_ref=$ex->[3];
+  }
+  my $route;
+  \my $rex=$rex_ref;
+
+
   sub {
-    \my  $buf=$_[0];
+    say "IN SERVER PARSER";
+    \my  $buf=\$_[0];
     while($buf){
       if($state == CON_STATE_DISCONNECTED){
+        say "State disconnected";
         # Freshly connected tcp transport
         $state=CON_STATE_PREFACE;
       }
       elsif($state == CON_STATE_PREFACE){
-        # TCP transport is estabilished, 
-        # if(server ){
-        #  write settings frame
-        #  }
-        # else{
-        #    #client
-        #   write preface
-        #   write settings frame
-        #   $state= CON_STATE_FRAMES;
-        #
-        # }
+        say "State preface";
+        # For prior knowlege H2C connections
+        # Need 24 octets
+        return if length $buf < 24;
+        my $pre=substr($buf, 0, 24,"");
+        say unpack "H*", $pre;
+        say unpack "H*", CLIENT_PREFACE;
+        if(CLIENT_PREFACE eq $pre){
+            # Ready to process frames here 
+            push @in_frames, &decode_frames;
+            die "Expected settings frame" unless $in_frames[0][0] == FRAME_SETTINGS;
+            
+            # First frame is an settings frame
+            push @out_frames,[FRAME_SETTINGS, 0, 0];
+
+            $state=CON_STATE_FRAMES;
+        }
+        else {
+          die "PREFACE ERROR";
+        }
       }
       elsif($state == CON_STATE_FRAMES){
+        say "state frames";
+        push @in_frames, &decode_frames;
         #Decode frames incomming.
         #If new stream ids, create a new rex and add to context.
       }
+
+      # Process already parsed frames
+      my $f;
+      while(@in_frames){
+        $f=shift @in_frames;
+
+        if($f->[0] == FRAME_SETTINGS){
+          #Apply the settings and acknowlege
+          for my ($k, $v)($f->@[3..@$f-1]){
+            say "Key: $k, value $v";
+            if($k ==  SETTINGS_HEADER_TABLE_SIZE){
+              # update header table size;
+            }
+          }
+          # Acknowlege but sending a ack settings frame;
+          push @out_frames, [FRAME_SETTINGS, 1, 0];
+        }
+
+      }
+      my $data=encode_frames @out_frames;
+      
     }
+    # Process the output frames
+    my $out= encode_frames @out_frames;
+    #Write to connection
   };
 }
 1;

@@ -22,18 +22,9 @@ package uSAC::HTTP::Route;
 #  client mode, to the same host if any are queued
 #
 
-use constant::more {
-  ROUTE_SITE=>0,
-  ROUTE_INNER_HEAD=>1,
-  ROUTE_OUTER_HEAD=>2,
-  ROUTE_ERROR_HEAD=>3,
-  ROUTE_SERIALIZE=>4,
-  ROUTE_COUNTER=>5,
-  ROUTE_TABLE=>6,
-  ROUTE_PATH=>7,
-};
-
-use Export::These qw<
+my @names;
+BEGIN {
+  @names=qw<
   ROUTE_SITE
   ROUTE_INNER_HEAD
   ROUTE_OUTER_HEAD
@@ -42,7 +33,10 @@ use Export::These qw<
   ROUTE_COUNTER
   ROUTE_TABLE
   ROUTE_PATH
->;
+  >;
+}
 
+use constant::more ("Dummy=-1", @names);
+use Export::These @names;
 
 1;
