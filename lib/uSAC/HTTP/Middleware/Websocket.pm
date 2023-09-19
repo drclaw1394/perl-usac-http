@@ -116,7 +116,6 @@ sub websocket_client_out {
         #
         
         #Set the correct headers
-        #\my @header=$_[HEADER];
         #push @header, 
         for my ($k, $v)(
           HTTP_UPGRADE, "websocket",
@@ -128,7 +127,7 @@ sub websocket_client_out {
           HTTP_SEC_WEBSOCKET_ORIGIN, $origin,
           HTTP_CONTENT_LENGTH, 0
         ){
-          $_[HEADER]{$k}=$v;
+          $_[OUT_HEADER]{$k}=$v;
         }
         &$next;
     }

@@ -47,7 +47,7 @@ sub uhm_gzip{
 
           my $exe;
           my $ctx;
-          if($_[HEADER]){
+          if($_[OUT_HEADER]){
             no warnings "uninitialized";
             # Do next unless header is defined and contains gzip
             return &$next if 
@@ -73,8 +73,8 @@ sub uhm_gzip{
             Log::OK::TRACE  and log_trace "No bypass in headers";
 
 
-            delete $_[HEADER]{HTTP_CONTENT_LENGTH()};   # remove content length header
-            $_[HEADER]{HTTP_CONTENT_ENCODING()}="gzip"; # add encoding header
+            delete $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()};   # remove content length header
+            $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()}="gzip"; # add encoding header
 
 
             $ctx->[0]=(pop(@deflate_pool)//Compress::Raw::Zlib::_deflateInit(FLAG_APPEND|FLAG_CRC,

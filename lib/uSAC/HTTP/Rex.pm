@@ -187,7 +187,7 @@ sub rex_redirect_moved{
   my $url=$_[PAYLOAD];
   $_[OUT_HEADER]{":status"}=HTTP_MOVED_PERMANENTLY;
   for my ($k,$v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-    $_[HEADER]{$k}=$v;
+    $_[OUT_HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
   $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
@@ -213,7 +213,7 @@ sub rex_redirect_see_other{
   # full url
   $_[OUT_HEADER]{":status"}=HTTP_SEE_OTHER;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-    $_[HEADER]{$k}=$v;
+    $_[OUT_HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
   $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
@@ -236,7 +236,7 @@ sub rex_redirect_found {
   $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[OUT_HEADER]{":status"}=HTTP_FOUND;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-    $_[HEADER]{$k}=$v;
+    $_[OUT_HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
   $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
@@ -260,7 +260,7 @@ sub rex_redirect_temporary {
   $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[OUT_HEADER]{":status"}=HTTP_TEMPORARY_REDIRECT;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-    $_[HEADER]{$k}=$v;
+    $_[OUT_HEADER]{$k}=$v;
   }
 
   $_[PAYLOAD]="";
@@ -283,7 +283,7 @@ sub rex_redirect_permanent {
 
     $_[OUT_HEADER]{":status"}=HTTP_PERMANENT_REDIRECT;
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
-      $_[HEADER]{$k}=$v;
+      $_[OUT_HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
     $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
@@ -302,11 +302,6 @@ calling.
 sub rex_redirect_not_modified {
   #my $url=$_[PAYLOAD];
   $_[OUT_HEADER]{":status"}=HTTP_NOT_MODIFIED;
-  #################################################################
-  # for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){ #
-  #   $_[HEADER]{$k}=$v;                                          #
-  # }                                                             #
-  #################################################################
   $_[PAYLOAD]="";
   $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
   undef;
@@ -469,7 +464,7 @@ sub rex_reply_json {
   for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/json",
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
-    $_[HEADER]{$k}=$v;
+    $_[OUT_HEADER]{$k}=$v;
   }
   1;
 }
@@ -479,7 +474,7 @@ sub rex_reply_html {
   for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/html",
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
-    $_[HEADER]{$k}=$v;
+    $_[OUT_HEADER]{$k}=$v;
   }
   1;
 }
@@ -488,7 +483,7 @@ sub rex_reply_javascript {
   for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/javascript",
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
-    $_[HEADER]{$k}=$v;
+    $_[OUT_HEADER]{$k}=$v;
   }
   1;
 }
@@ -497,7 +492,7 @@ sub rex_reply_text {
   for my ($k, $v)(
 		HTTP_CONTENT_TYPE, "text/plain",
 		HTTP_CONTENT_LENGTH, length $_[PAYLOAD]){
-    $_[HEADER]{$k}=$v;
+    $_[OUT_HEADER]{$k}=$v;
   }
   1;
 }

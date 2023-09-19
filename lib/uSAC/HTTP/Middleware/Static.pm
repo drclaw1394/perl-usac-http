@@ -673,7 +673,7 @@ sub uhm_static_root {
               #Push any user static headers
               #
               for my ($k, $v)(@$headers){
-                $_[HEADER]{$k}=$v;
+                $_[OUT_HEADER]{$k}=$v;
               }
               return $list_dir->(@_, $html_root, $p);
             }
@@ -725,11 +725,11 @@ sub uhm_static_root {
           # Finally set the content encoding encountered along the way
           #
 
-          $_[HEADER]{HTTP_CONTENT_ENCODING()}=$enc if $enc;
+          $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()}=$enc if $enc;
           #Push any user static headers
           #
           for my ($k, $v)(@$headers){
-            $_[HEADER]{$k}=$v;
+            $_[OUT_HEADER]{$k}=$v;
           }
 
           return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);

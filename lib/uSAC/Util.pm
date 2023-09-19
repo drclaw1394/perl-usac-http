@@ -197,7 +197,7 @@ sub need (*) {
   for($path){
     # If the target contains :: or does not end with .pm, then 
     # assume it was a 'bare word' module
-    if(!ref and (s|::|/|g or !/\.pm$|\.pl$/)){
+    if(!ref and (s|::|/|g or !/\./)){
       # Convert module name to path
       $key.=$_.".pm";
       $bare=1;
@@ -215,13 +215,15 @@ sub need (*) {
   else{
     if($bare){
       local $@;
-      $res=eval "require $input";
+      say "BARE $input";
+      $res=eval "require $input;";
       die $@ if $@;
     }
     else {
-      $res=require $key;
+      $res=require ($key);
+      die "Could not require non bare word need" unless $res;
     }
-
+    say "AFTER";
     $needed{$key}=$res;
   }
   $res;

@@ -1099,7 +1099,7 @@ method load {
     ###############################################################
 
 		for my $file (@files){
-      local $uSAC::HTTP::Site=$self;
+      #local $uSAC::HTTP::Site=$self;
 			$self->load( %options, $file);
 		}
 	}
@@ -1108,16 +1108,25 @@ method load {
 		Log::OK::INFO and log_info "Including server script from $path";
     #my $result=
     #eval "require '$path'";
+    local $uSAC::HTTP::Site=$self;
+    local $@;
     eval { need $path };
 
     if($@){
       require Error::Show;
-      my $context=Error::Show::context();
-      log_error "Could not include file: $context";
+      my $context=Error::Show::context(undef);
+      log_error "Could not include file: $!";
       die "Could not include file $path";	
     }
 	}
   $self;
 }
 
+
+
+# Protocol support
+#
+method register_protocol {
+
+}
 __PACKAGE__;

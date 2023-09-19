@@ -571,7 +571,7 @@ sub make_serialize{
 
       # TODO: fix with multipart uploads? what is the content length
       #
-      if($_[PAYLOAD] and not exists($_[HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
+      if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
 
         $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
 
@@ -579,7 +579,6 @@ sub make_serialize{
         $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
       }
       elsif(!$_[PAYLOAD] and $code != HTTP_NOT_MODIFIED){
-        # and exists($_[HEADER]{HTTP_CONTENT_LENGTH()})){
 
         # No content but client might not have indicated a close. Force a content length of 0
         $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;

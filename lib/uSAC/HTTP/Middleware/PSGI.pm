@@ -112,7 +112,7 @@ sub uhm_psgi {
       my $ctx;
       my $env;
 
-      if($_[HEADER]){
+      if($_[OUT_HEADER]){
         my $session=$_[REX]->session;
         $env=$_[IN_HEADER];
 
@@ -137,7 +137,7 @@ sub uhm_psgi {
         if($env->{CONTENT_LENGTH}){
           #We have a body to process
           my $buffer=Stream::Buffered->new($env->{CONTENT_LENGTH});
-          $ctx=$ctx{$_[REX]}=[ $env, $buffer, $_[HEADER]];
+          $ctx=$ctx{$_[REX]}=[ $env, $buffer, $_[OUT_HEADER]];
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
 
           # the input stream.     Buffer?

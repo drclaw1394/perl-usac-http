@@ -59,36 +59,43 @@ sub uhm_slurp {
     my $last;
     sub {
         my $c=$ctx{$_[REX]};
+        my $payload=$_[PAYLOAD];
+        $_[PAYLOAD]="";
+
         unless($c){
+
           #first call, create a new context
           $c=$ctx{$_[REX]}=[];
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
 
+          my $cb=$_[CB];
+          # Check for Expect header and respond if needed to
+          if($_[IN_HEADER]{HTTP_EXPECT()}){
+            # Bypass and write a 100 reponse 
+            my $header=$_[OUT_HEADER];
+            $_[OUT_HEADER]{":status"}=HTTP_CONTINUE;
+            $_[CB]=$dummy_cb;
+            $_[ROUTE][1][ROUTE_OUTER_HEAD]->&*;
+            return unless $payload;
+          }
+          # Restore callback after CONTINUE
+          #
+          $_[CB]=$cb;
+
         }
 
-        my $payload=$_[PAYLOAD];
-        my $cb=$_[CB];
-        $_[PAYLOAD]="";
-        # Check for Expect header and respond if needed to
-        if($_[IN_HEADER]{HTTP_EXPECT()}){
-          # Bypass and write a 100 reponse 
-          my $header=$_[OUT_HEADER];
-          $_[OUT_HEADER]{":status"}=HTTP_CONTINUE;
-          $_[CB]=$dummy_cb;
-          $_[ROUTE][1][ROUTE_OUTER_HEAD]->&*;
-          return unless $payload;
-        }
 
-        # Restore callback after CONTINUE
-        #
-        $_[CB]=$cb;
 
+        use Data::Dump::Color;
         # Wrap payload if presenting as a normal body
         unless(ref $payload){
-
           # Reuse the head created of the first (and only) part if it exists
           my $head=@$c?$c->[0][0]:{};
+
+
+          # Response message
           for($_[IN_HEADER]{HTTP_CONTENT_DISPOSITION()}//()){
+            
             $head->{HTTP_CONTENT_DISPOSITION()}=$_;
             my @f=split ";", $_;
             shift @f;
@@ -101,6 +108,7 @@ sub uhm_slurp {
               $v=builtin::trim $v;
               $head->{"_$k"}=$v;
             }
+          say dd $head;
 
           }
           for($_[IN_HEADER]{HTTP_CONTENT_TYPE()}//()){
@@ -109,6 +117,7 @@ sub uhm_slurp {
           $head->{_filename}//="single_part";
           $payload=[$head, $payload];
         }
+
 
           #For each part (or partial part) we need to append to the right section
           #$c=$ctx{$_[REX]};
@@ -202,4 +211,4 @@ sub uhm_slurp {
 
   [$inner, $outer, $error];
 }
-
+1;
