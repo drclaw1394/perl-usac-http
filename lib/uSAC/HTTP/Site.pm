@@ -175,9 +175,15 @@ method _add_route {
 
   # Test we have a valid method matcher against supported methods
   #
+  my $org=$method_matcher;
   $method_matcher=$self->_method_match_check($method_matcher);
+  unless($method_matcher){
+    $method_matcher=$self->default_method;
+    $path_matcher=$org;
+    Log::OK::WARN and log_warn "Using \"$org\" as path, with ".$self->default_method. " as method";
 
-  return unless $method_matcher;
+  }
+  #return unless $method_matcher;
 
 
 
@@ -667,7 +673,7 @@ method add_route {
       # Two argument, path and anon hash
       # Hash keys are methods, values are expected to be a anon array of middlewares
       my $path= $_[0];
-      $path="/".$path if index $path, "/"; #TODO fix regex
+      #$path="/".$path unless index $path, "/"; #TODO fix regex
 
       for my ($k, $v)($_[1]->%*){
         # Recall this method with individual entries. Should allow string names
