@@ -3,7 +3,6 @@ use strict;
 use warnings;
 # Utility functions
 
-#use URL::Encode qw<url_decode_utf8>;
 use feature "say";
 
 use Export::These qw( cwd dirname basename path catfile abs2rel rel2abs need);# decode_urlencoded_form);
@@ -229,24 +228,6 @@ sub need (*) {
   $res;
 }
 
-############################################
-# sub decode_urlencoded_form {             #
-#   my %kv;                                #
-#   for(split "&", url_decode_utf8 $_[0]){ #
-#     my ($k, $v)=split "=", $_, 2;        #
-#     if(!exists $kv{$k}){                 #
-#         $kv{$k}=$v;                      #
-#     }                                    #
-#     elsif(ref $kv{$k}){                  #
-#       push $kv{$k}->@*, $v;              #
-#     }                                    #
-#     else {                               #
-#       $kv{$k}=[$kv{$k}, $v];             #
-#     }                                    #
-#   }                                      #
-#   \%kv;                                  #
-# }                                        #
-############################################
 
 sub catfile {
   # Make sure no trailing slashses on components, then join

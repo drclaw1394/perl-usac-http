@@ -1,0 +1,227 @@
+=head1 TITLE
+
+uSAC::HTTP::Middleware - HTTP Middleware System
+
+
+=head1 DESCRIPTION
+
+This document is a reference to the central concepts of the L<uSAC::HTTP>
+Middleware system and how to implement middleware to work with it.
+
+
+=head1 STRUCTURE
+
+Unlike other HTTP middleware (ie plack), there is no base class to inherit
+from.  This is because uSAC::HTTP middleware always is (or converted to)
+subroutine references.  This gives great flexibility to the author and also
+remove much of the unwanted runtime overhead associtated with Object oriented
+design.
+
+
+A middleware unit is an annoymous array of 3 phases as subroutine references:
+  
+  [innerware, outerware, errorware]
+
+
+Multiple middleware units are 'lexically linked' by linking the same phases
+together.
+
+
+=head1 PHASES
+
+Innerware and outerware are separated to aid in targeting in advanced
+configurations.
+
+=head2 Innerware
+
+Innerware is executed on the arrival (from the network) of a request on the
+server, OR the response on the client.
+
+On server the end of the Innerware chain is dispatched to the head of the
+outerware chain 
+
+Client side end of the Innerware chain is dispatched to the user
+callbackfunction
+
+=head2 Outerware
+
+Outerware is executed pritor to sending (to the network) a request on the
+client OR after processing innerware on the server.
+
+=head3 Errorware
+
+Provides a mechanism to reset middleware on parsing errors etc outside of the
+normal program flow. It improves performance and readability
+
+=head1 LEXICAL LINKING
+
+This is just a made up term but describes the  process accurately.
+
+The phases from a chain of middleware are combined in to lexically linked
+changes thanks to L<Sub::Middler>. While that module basically has no
+restrictions on the call format of arguments, L<uSAC::HTTP> does. With this it
+allow programing by convention and streamlining your code:
+
+=head2 Defining middleware
+
+
+
+
+=head1 WHAT IS MIDDLEWARE
+
+Middleware is a set of three subroutines, one for each group of Innerware,
+outerware and Errorware. Chains of one or more subroutines within a group which
+are'lexically' linked into a chain. This chain modifies the same 'message'
+(arguments) at each stage, with the last stage calling out.
+
+Middleware is present on the incomming and outgoing stages of a response and
+request (user agent). The middleware to use is based on uri route matching
+which is discussed elsewhere.
+
+
+
+=head2 Implicit middleware
+
+Implicit middleware is a 'short cut' form to give the user a very quick and easy  way to added arbirary innerware in a chain, without the need
+
+=head2 Explicite middleware
+
+=head2 PROCESS MESSAGE
+
+Middleware processing uses the positional parameters stored in the C<@_> array,
+and treads the whole array as a message. The message contains 
+
+  route rex in_header out_header payload callback
+
+
+The indexes are provided as constants C<ROUTE>, C<REX>, C<IN_HEADER>, C<OUT_HEADER>,
+C<PAYLOAD>, C<CB>.
+
+Route is the route object which matched the URL initally Rex is the request
+object containing incoming headers and other information
+
+In header is the headers parse from a byte stream. fields names are transformed to lower case.
+The status code is stored as a psuedo header for clients
+
+
+The Out header contains the headers to be serialised.  For servers the status
+is stored in the OUT_HEADER.
+
+It starts out as -1, which is an invalid HTTP response code. If this it hasn't
+explicitly been set to a valid code, it is set to 200 in the serialization
+stage.
+
+This give middleware a change to see if any processing has been performed.
+Static middelware chains for example will process if the code is -1 or 404 (non
+found).
+
+
+Clients store the :method, :path, etc headers in the  out_header, while the server stores these in the in header
+
+
+The payload is normally string data representing a chunk, part or read buffer. It can be partial or complete, or be anyother type. The only requirment is the next middleware in the chain know how to interpret the data.
+
+
+
+
+Callback is the optional code reference which will be called once the
+subsequent middleware deems it nessicary or once the data is serialised and
+written to the socket. If the value is undef, the session 'dropper' is used. This performs house keeping on the connection.
+If set to 0, then no callback is called at all. Only use this when you know another call is to be performed immediately.
+
+A non existent callback indcates the last write
+  
+
+
+
+
+
+=head2 PROCESS CHAIN
+      
+
+uSAC::HTTP middleware is modelled round the following:
+
+                CLIENT
+  Issue request
+      |
+      \/
+      Router                Termination
+      |                         /\
+      \/                        |
+      Outerware (head)      Innerware (head)
+      |                         /\
+      \/                        |
+      Serialize               Parser
+      |                         /\
+      \/                        |
+      Socket write          Socket read
+
+
+      |                         /\
+      \/                        |
+              SERVER
+
+    Socket_Reader             Socket_writer
+      |                           /\
+      \/                          |
+    Parser                    Serializer
+      |                           /\
+      \/                          |
+    Router                        |
+      |                           |
+      \/                          |
+    Innerware(head)           Outerware (head)
+      |                           /\
+      \/                          |
+            End Point (optional)
+
+
+
+
+=head1 Routing
+
+
+
+=head1 Single Code ref Middleware
+
+Acts as innerware.
+Return value of true indicates any following middlware is to be executed
+False prevents the chain from continuing
+
+=head1 Array Tuple
+
+An array ref of three entries. Each being a code ref. The first is innerware,
+the second is outerware.  If either is not defined or is not a code ref, it is
+converted into a null  operation.
+
+#
+# IMPORTANT 
+#
+# Middleware must pass 6 argument along the chain
+#
+#   route, rex, code, header, payload, cb
+#
+# As most of the uSAC api utiliseds the @_ array, it is very important to keep the count correct.
+#
+# route and rex must alway be defined and set by the parser at the start of the chain
+# 
+# code can be any non zero, valid http code for normal processing (a true value)
+# when code is false, it triggers a stack reset all the way down to the output writer
+#
+# header must be a has ref, even an empty one, for the start of a request. Middleware
+# further down the line will set this to undef when it has started its 'accumualted' output.
+# ie the serializer will do this, on the fly zip, gzip compression will also do this.
+#
+# payload is the data to send to the next middleware component. It is normally
+# string content, but does not have to be
+#
+# callback is the sub ref to call when the 'accumulator' has processed the data
+# chunk. When it is undef, in indicates the upstream middleware does not need
+# notifificaiton and has finished. This the instruct the acculuator to
+# performan any finishing work, and potentailly call futher middleware
+#
+# It is also important that each of the above are lvalues, not constants. This
+# is because middleware stages might write to the (aliased) variable which will
+# continue to be used for subsequent middleware. Of course you can compy the
+# arguments however that causes a performance hit
+#

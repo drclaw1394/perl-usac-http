@@ -1,0 +1,221 @@
+=head1 NAME
+
+uSAC::HTTP::Site -  Grouping of related routes and middleware
+
+=head1 SYNOPSIS
+
+  use uSAC::HTTP;
+  
+  my $site=uSAC::HTTP::Site->new(id=>STRING, prefix=>STRING);
+  $site->add_route(...);  #Add a route to $site
+
+  $site->add_to($parent); #Add a site to a parent site
+    # or
+  $parent->add_site($site);      
+
+
+=head1 DESCRIPTION
+
+Provides grouping facility of related routes within a C<uSAC::HTTP::Server>,
+C<uSAC::HTTP::Client> or C<uSAC::HTTP::Site> objects.  It does this by
+implementing a hierarchy or sites, with a server or client ( both subclass of
+this class) at the root.
+
+Each site can specify an id and a prefix, which is used in identifying and
+routing requests.
+
+
+
+=head2 Prefixing
+
+Each site may contain a prefix. The prefixes from parent sites are all
+concatinated together with the current site prefix to construct the the 'built
+prefix'.
+
+The literal concatination makes gives flexibility  and consistancy in path
+matching. For example, if the prefix ends in a '/' then it acts as a path
+component. It it doesn't then any futher prefixes are part of the same path
+component.
+
+
+B<NOTE:>The server 'site' is always the root of a server site site group
+hierarchy and always has a prefix of '/' set.
+
+
+
+=head1 ROUTING PROCESS
+
+Site are considered spectial routes,
+All added to staged list before being constructed just before run. (Allow linking etc)
+
+
+=head1 API
+
+=head2 Creating a site
+
+=head3 new
+
+
+  my $site=uSAC::HTTP::Site->new(...);
+
+Creates a new site object. Parameters accepted in the constructor inlude:
+
+=head4 prefix
+
+The the literal text which will be appended before each route path. This is
+combined with parent prefixes.
+
+=head4 id
+
+A label for the user to aid in identification of the site.
+
+
+=head2 Adding Route and Sites 
+
+
+=head3 add_route
+
+Specify criteria to match a route and what middleware to execute. There are
+numerous forms which are DWIM.
+
+B<Implicit delegate method forms:>
+
+  usac_route "";
+  usac_route $path;                         
+  usac_route $request_method=> $path;
+  usac_route $request_method_array=> $path;
+  usac_route $request_method_regex=> $path;
+  
+These all require a delegate to be associated with the site.  The C<$path> is
+converted into a method or subroutine name, which will be called on the
+delegate. The constructed name is the has the leading slash removed and all other slashes converted to underscores:
+
+    ie
+
+      "/login" becomes "login"
+      "/home/info" becomes "home_info";
+
+
+The first from matches anything including the site prefix (no slash)
+
+
+
+B<General Form:>
+
+  usac_route $path=> $middleware;
+  usac_route $request_method=> $path, $middleware, ...;
+  usac_route $request_method_array=> $path, $middleware, ...;
+  usac_route $request_method_regex=> $path, $middleware, ...;
+
+
+General form requires explicit middleware or delegate subroutine names after
+the path. If only two arguments are supplied the HTTP method is implicitly GET.
+
+B<Multimethod form>:
+
+  usac_route $path => {
+    METHOD=>[$middleware, ...],
+          ...
+  };
+
+In Multi-method form, the path is specified once, and separate method and
+middleware chains are given in as hash ref. Equivalent to calling in general
+form multiple times with combinations of the variables.
+
+
+B<Default Path (Catchall):>
+
+  usac_route undef, $middleware, ...;
+
+Adds a route to the containing site. The information from parents sites/groups
+is used to construct the route.
+
+In the first form (1), takes two or more arguments. If the first argument
+to the function is C<undef>, this overwrites the default matcher for any of the
+hosts this route will apply to. This is will be the route that will be used if
+no other routes match for a host. All methods match this route.
+
+
+The second form (2), takes two or more arguments. It is a short cut for
+specifying a GET request method. The first argument is a url path matching
+specification. This can be either a string, or a compiled regexp. Remaining
+arguments are middleware (including your 'end point'). If a string is used, it
+B<MUST> start with a '/', otherwise it will be interpreted as a method.
+
+The third form (3), takes three or more arguments. The first argument is the
+method specification. This can be a uppercase string for an individual method
+(ie GET or POST), or it can be regexp to match methods, or it can be an
+reference to an array, containing methods names/matchers. In this case, it is
+converted internally into a regexp with each item used as an alternative match
+(ie matcher1|matcher2|matcher3....)
+
+
+Its important to note, that if the method matching is specified as a regexp or
+converted internally to a regexp, then the path portion will also be treated as
+a regexp.
+
+
+The path/url argument is subject to the prefix of the enclosing site and the
+parent sites.  This prefix is automatically added to the url/path, and is
+ultimately what is used to match and dispatch incoming requests.
+
+  eg 
+      usac_site {
+        usac_prefix "AA";
+
+        usac_site {
+          usac_prefix "BB";
+
+          usac_route "foo", sub { $_[PAYLOAD]="GOT BAR" if $_[CODE]};
+
+        }
+
+In this example the route 'foo' will actual match a url path starting with
+/AA/BB/foo.
+
+=head2 Site Configuation
+
+=head3 usac_host
+
+  usac_host $string;    (1)
+  usac_host $array_ref; (2)
+
+Specifies the hosts to which this group/site will have its routes added to.
+
+
+In the first (1) form, a single host string can be specified. The second form
+(2) takes a reference to an array of host strings.
+
+B<NOTE:> the host stirng B<MUST> contain the port number to identify the host.
+
+  eg 
+    usac_host "localhost:8080";
+    usac_host [qw<localhost:8080 my_name:8080 localhost:443>];
+
+=head3 usac_prefix
+
+  usac_prefix  $string;
+
+Set the string prefix fragment to use at the current level in the site hierarchy.
+
+
+=head3 usac_delegate
+
+  usac_delegate $package_name;
+  usac_delegate $object;
+
+Set the delegate variable for the enclosing site. This is only needed if
+middleware is specified by name instead of CODE/ARRAY refs.
+
+=head3 usac_id 
+
+  usac_id $string;
+
+Set the id representing the site for listing and debugging purposes. Does not
+have to be unique.
+
+=head3 usac_middleware
+
+  usac_middleware $mw;
+
+  TODO: Fix this 

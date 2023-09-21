@@ -139,9 +139,11 @@ method rebuild_routes {
   my $result;
   no strict "refs";
   for my $r ($_staged_routes->@*){
+
     my $ref =ref $r;
 
     if($r isa __PACKAGE__){
+      say "SITE: ".$r->id;
       $r->rebuild_routes; # Recurse down
     }
     elsif (($ref  ne "ARRAY" and $ref ne "HASH") or %{$r."::"}){
@@ -173,17 +175,19 @@ method _add_route {
   my $path_matcher=shift;
 
 
-  # Test we have a valid method matcher against supported methods
-  #
-  my $org=$method_matcher;
-  $method_matcher=$self->_method_match_check($method_matcher);
-  unless($method_matcher){
-    $method_matcher=$self->default_method;
-    $path_matcher=$org;
-    Log::OK::WARN and log_warn "Using \"$org\" as path, with ".$self->default_method. " as method";
-
-  }
-  #return unless $method_matcher;
+  #####################################################################################################
+  # # Test we have a valid method matcher against supported methods                                   #
+  # #                                                                                                 #
+  # my $org=$method_matcher;                                                                          #
+  # $method_matcher=$self->_method_match_check($method_matcher);                                      #
+  # unless($method_matcher){                                                                          #
+  #   $method_matcher=$self->default_method;                                                          #
+  #   $path_matcher=$org;                                                                             #
+  #   Log::OK::WARN and log_warn "Using \"$org\" as path, with ".$self->default_method. " as method"; #
+  #                                                                                                   #
+  # }                                                                                                 #
+  #####################################################################################################
+  return unless $method_matcher;
 
 
 
@@ -645,42 +649,49 @@ method add_delegate {
 
 method add_route {
   my $del_meth;
+
+  my $ref=ref $_[0];
+
+  # Direct push if another site object
+  if($_[0] isa uSAC::HTTP::Site){
+    push @$_staged_routes, $_[0]; # Copy to staging
+    return $self;
+  }
+
+  # Otherwise we exect optional method, and path
+  die "Need a method, [methods], or qr/methods/ as first argument" unless $ref eq "Regexp" or $ref eq "" or $ref eq "ARRAY";
+
+  if(ref $_[0] eq ""){
+    # Inject default method immediately if no method provided
+    #
+      my $meth=$_[0];
+      unless(grep /$meth/, $self->supported_methods){
+        unshift @_, $self->default_method;
+      }
+  }
+  
+
   try {
-    if($_[0] isa uSAC::HTTP::Site){
-      push @$_staged_routes, $_[0]; # Copy to staging
-    }
     # Adjust for 1 and two argument short hand
     #
-    elsif(@_== 1 and ref($_[0]) eq ""){
+    if(@_== 2 and ref($_[1]) eq ""){
       #
       # Only 1 argument (path). Implict method and route to delegate
       #
       #single argument and its a scalar
       # Duplicate the argument as it will be the name of a method to call on the delegate
       #
-      $del_meth=$_[0];
+      $del_meth=$_[1];
       #$del_meth=~s|^/||;
       $del_meth=~s|/|__|g;
       $del_meth||="_empty";   # call the empty handler on emty string
 
       #unshift @_, $self->default_method;
-      unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
+      #unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
       push @_, $del_meth;
       push @$_staged_routes, [@_]; # Copy to staging
     }
 
-    elsif(@_ == 2 and ref($_[0]) eq "" and ref($_[1]) eq "HASH"){
-      # Two argument, path and anon hash
-      # Hash keys are methods, values are expected to be a anon array of middlewares
-      my $path= $_[0];
-      #$path="/".$path unless index $path, "/"; #TODO fix regex
-
-      for my ($k, $v)($_[1]->%*){
-        # Recall this method with individual entries. Should allow string names
-        # and implicit paths
-        push @$_staged_routes, [$k, $path, @$v]; # Copy to staging
-      }
-    }
 
     elsif(@_ == 2 and ref($_[0]) eq "" and ref($_[1]) eq ""){
         # Two argument , first string is method, second is path
@@ -808,11 +819,13 @@ method add_route {
         unshift @_, $self->default_method;
         push @$_staged_routes, [@_]; # Copy to staging
       }
-      elsif($_[0]=~m|^/|){
-        #starting with a slash, short cut for GET and head
-        unshift @_, $self->default_method;
-        push @$_staged_routes, [@_]; # Copy to staging
-      }
+      ########################################################
+      # elsif($_[0]=~m|^/|){                                 #
+      #   #starting with a slash, short cut for GET and head #
+      #   unshift @_, $self->default_method;                 #
+      #   push @$_staged_routes, [@_]; # Copy to staging     #
+      # }                                                    #
+      ########################################################
       else{
         # method, url and middleware specified
         push @$_staged_routes, [@_]; # Copy to staging
