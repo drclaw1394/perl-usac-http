@@ -597,14 +597,18 @@ sub uhm_static_root {
         # Path is either given with the rex object or passed in by the payload
         # middleware argument.
         #
-        $p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
+        #$p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
+        $p=$_[PAYLOAD]||$_[IN_HEADER]{":path"};
 
         #
         # Strip the prefix if its specified
         #
         $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
 
+        say "PREFIX FOR ROUTE PATH: $prefix";
+        say "P before : $p";
         $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
+        say "P after : $p";
         my $path;
 
         ROOTS:

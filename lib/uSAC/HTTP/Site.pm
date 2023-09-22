@@ -313,7 +313,16 @@ method _add_route {
     $route[ROUTE_SERIALIZE]=$serialize;
     $route[ROUTE_COUNTER]=0;
     $route[ROUTE_TABLE]=undef;
-    $route[ROUTE_PATH]=$path_matcher;
+
+    unless(ref $path_matcher){
+      # Allows middleware like static files serving to strip the entire prefix
+      # INCLUDING the last part of the route if it is a basic string
+      $route[ROUTE_PATH]=$self->built_prefix.$path_matcher;
+    }
+    else{
+      # Last part is a regex, so only include the prefix of the site. A  manual prefix 
+      $route[ROUTE_PATH]=$self->built_prefix;
+    }
 
     # Actually add the route to the server/client
     $self->find_root->add_host_end_point($host, $matcher, \@route, $type);
