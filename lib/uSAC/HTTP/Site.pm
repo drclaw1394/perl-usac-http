@@ -59,7 +59,7 @@ no warnings "experimental";
 field $_staged_routes :reader;
 field $_parent_site      :mutator :param=undef;
 field $_id          :mutator :param=undef;
-field $_prefix      :reader :param =undef;
+field $_prefix      :param =undef;
 field $_host        :reader :param =[];
 field $_error_uris  :param={};
 field $_delegate  :param=undef;
@@ -77,6 +77,7 @@ field $_cors;
 field $_unsupported;
 field $_built_prefix;
 field $_built_label;
+field $_label;
 
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE TRACE>;
@@ -491,13 +492,17 @@ method built_prefix {
 		$parent_prefix="";
 
 	}
-	$_built_prefix//($self->set_built_prefix($parent_prefix.$self->prefix));#$_[0][prefix_]);
+  #$_built_prefix//($self->set_built_prefix($parent_prefix.$self->prefix));#$_[0][prefix_]);
+
+  $parent_prefix.$_prefix;
 }
 
-method set_built_prefix {
-  $_built_prefix=$_[0];
-#$_[0][built_prefix_]=$_[1];
-}
+################################
+# method set_built_prefix {    #
+#   $_built_prefix=$_[0];      #
+# #$_[0][built_prefix_]=$_[1]; #
+# }                            #
+################################
 
 method build_hosts {
 	my $parent=$self;#$_[0];
@@ -552,7 +557,8 @@ method built_label {
 		$parent_label="";
 
 	}
-	$_built_label//($self->set_built_prefix($parent_label.$self->build_label));
+  #$_built_label//($self->set_built_prefix($parent_label.$self->build_label));
+  $parent_label.$_label;
 }
 
 #Resolves the ext to mime table the hierarchy. Checks self first, then parent
@@ -893,35 +899,30 @@ method _delegate {
   $self;
 }
 
-#########################################################
-#                                                       #
-# sub usac_id {                                         #
-#         my $id=pop;                                   #
-#         my %options=@_;                               #
-#         my $self=$options{parent}//$uSAC::HTTP::Site; #
-#         $self->id=$id;                                #
-# }                                                     #
-#                                                       #
-# sub usac_prefix {                                     #
-#         my $prefix=pop;                               #
-#         my %options=@_;                               #
-#         my $self=$options{parent}//$uSAC::HTTP::Site; #
-#         $self->set_prefix(%options,$prefix);          #
-# }                                                     #
-#########################################################
 
-method set_prefix {
-  my $prefix=pop;
-	my %options=@_;
-  return unless $prefix;
-	unless($prefix=~m|^/|){
-		log_info "Prefix '$prefix' needs to start with a '/'. Fixing it...";
-		$prefix="/".$prefix;
-	}
+########################################################################################
+# method set_prefix {                                                                  #
+#   my $prefix=pop;                                                                    #
+#         my %options=@_;                                                              #
+#   return unless $prefix;                                                             #
+#         unless($prefix=~m|^/|){                                                      #
+#                 log_info "Prefix '$prefix' needs to start with a '/'. Fixing it..."; #
+#                 $prefix="/".$prefix;                                                 #
+#         }                                                                            #
+#                                                                                      #
+#         $_prefix=$prefix;                                                            #
+#         $_built_prefix=undef;   #force rebuilding                                    #
+#         $self->built_prefix;            #build abs prefix                            #
+# }                                                                                    #
+########################################################################################
 
-	$_prefix=$prefix;
-	$_built_prefix=undef;	#force rebuilding
-	$self->built_prefix;		#build abs prefix
+method prefix :lvalue {
+  if(@_){
+    $_prefix=$_[0];
+    $_built_prefix=undef;
+  }
+
+  $_prefix;
 }
 
 
@@ -951,16 +952,6 @@ method add_host {
 }
 
 
-#########################################################
-# sub usac_middleware {                                 #
-#   #TODO: fix so specifid like a route                 #
-#         #my $self=$_;                                 #
-#         my $mw=pop;     #Content is the last item     #
-#         my %options=@_;                               #
-#         my $self=$options{parent}//$uSAC::HTTP::Site; #
-#         $self->add_middleware(%options, $mw);         #
-# }                                                     #
-#########################################################
 
 method add_middleware {
   #my %options=@_;

@@ -27,22 +27,64 @@ my $verbose=0;
 $options{quiet}=sub { $verbose=0 };
 $options{verbose}=\$verbose;
 
+
+# inject a site with prefix. any routes mounted after will use this prefix
+# --site
+# --site "prefix=0";
+# --site "id=df,prefix=23"
+
+sub parse_site_spec{
+  my $input=$_[0];
+  my @full=qw<id prefix>;
+  my %spec;
+  for my $field(split ",", $input){
+    unless($field=~/=/){
+      #Assume only a site name, with empty prefix
+      $spec{id}=$field;
+      next;
+    }
+    for my ($key,$value)(split "=", $field, 2){
+      #say $key;
+      #say $value;
+			$key=~s/ //g;
+			$value=~s/ //g;
+			my @val;
+
+			#Ensure only 0 or 1 keys match
+			die "Ambiguous field name: $key" if 2<=grep /^$key/i, @full;
+
+      # Find the first item that starts with the shorthand
+			($key)=grep /^$key/i, @full;
+      $spec{$key}=$value;
+    }
+  }
+  \%spec;
+}
+
+my @staging;
+
 GetOptions \%options,
   # Help
 	"help",
+  "site=s"=>sub { 
+    push @staging, parse_site_spec($_[1]);
+    
+  },
+
+  # Filter arguments, to push file names into staging
+  "<>"=>sub {
+  say join ", ", @_;
+      push @staging, $_[0];
+  },
   
   # Listener
 	"listen=s@",
 
   # Static file options
-	"www-root=s@"	,	#serve files from this location
-	"list-dir",		#serve html rendered dir list from this location
+	"list-dir!",		#serve html rendered dir list from this location
   "read-size=i",
   "indexes=s@",
 
-  # Routes
-	"preclude=s@",
-	"postclude=s@",
 
   # Log
 	"log",
@@ -54,8 +96,6 @@ GetOptions \%options,
 	"mime-add=s%",		#Specifiy a mime type mapping for an extension, add to list
 	"mime=s%",		#Specifiy a file containing a list of mime types
 				#on a websocket
-	"route=s%",		#url to named sub 		GET, URI, SUB
-	"route-do=s%",		#url to a single pl file	METHOD, URI, FILE
 	"quiet",		#quiet flag
 	"watch",		#watch changes to input files, and relauch
 	"verbose",
@@ -68,7 +108,6 @@ GetOptions \%options,
 
 
 # default static files from the current directory
-$options{"www-root"}//=["."];
 $options{"listen"}//=["[::]:8000"];
 
 
@@ -94,46 +133,64 @@ my $server=uSAC::HTTP::Server->new(listen=>$options{listen});
 #
 $server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
 
+my %sites;
+$sites{"/"}=$server;
 
-# Load routes
-#
-my $includes=$options{preclude};
+my $current=$server;
+say "staging";
+use Data::Dump::Color;
+for(@staging){
+  dd $_;
+  if(ref($_) eq "HASH"){
 
-for my $include (@$includes){
-  #convert to abs for intended behaviour	
-  my $target=uSAC::Util::rel2abs($include, uSAC::Util::cwd);
-  Log::OK::INFO and log_info "Loading from source:\n $target";
-  $server->load($target);
-}
+    # look up site spec by id, reuse site if found 
+    # otherwise new anonimous site added to current
+    my $new=$_->{id}?$sites{$_->{id}}:undef;
+    unless($new){
+      say "Id from spec: $_->{id}";
+      dd $_;
+      $sites{$_->{id}}=$new=uSAC::HTTP::Site->new($_->%*);
+      $current->add_site($new);
+    }
+    $current=$new;
+    say "id".$current->id;
+    say "prefix: ".$current->prefix;
+    say "built prefix: ".$current->built_prefix;
+  }
+  else {
+    # Treat as path to file or dir
+    #convert to abs for intended behaviour	
+    my $target=uSAC::Util::rel2abs($_, uSAC::Util::cwd);
 
-# Add static files if present
-#
-my $static=$options{"www-root"};
-if(@$static){
-  my $site=uSAC::HTTP::Site->new(id=>"Static_files");
-  $server->add_site($site);
-
-  #add static file routes
-
-  $site->add_route("", uhm_static_root roots=>$static, 
+    if(/\.psgi$/i){
+      # Add explicit PSGI middleware with path to application
+      # uses site prefix  for mounting
+      #
+      Log::OK::INFO and log_info "Loading PSGI from source:\n $target";
+      require uSAC::HTTP::Middleware::PSGI;
+      $current->add_route("", uSAC::HTTP::Middleware::PSGI::uhm_psgi($_));
+    }
+    elsif(/\.route$|\.pl$/){
+      Log::OK::INFO and log_info "Loading Routes from source:\n $target";
+      # perl script to run as  
+      $current->load($target);
+    }
+    else {
+      # Assume a dir for serving static files from
+      Log::OK::INFO and log_info "Serving static files from source:\n $target";
+      $current->add_route("", uhm_static_root roots=>[$_],
         list_dir  =>  $options{"list-dir"},
         read_size =>  $options{"read-size"},
         indexes   =>  $options{indexes},
       );
-}
-  
-#add additional files
-
-$includes=$options{postclude};
-for my $include (@$includes){
-  #convert to abs for intended behaviour	
-  my $target=uSAC::Util::rel2abs($include, uSAC::Util::cwd);
-  Log::OK::INFO and log_info "Loading from source: $target";
-  $server->load($target);
+    }
+  }
 }
 
 # Configure
-$server->parse_cli_options();
+my @options=@ARGV;
+push @options, "--show";
+$server->parse_cli_options(@options);
 
 # Run!
 $server->run();

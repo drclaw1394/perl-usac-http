@@ -144,7 +144,8 @@ BUILD {
 	$self->set_mime_db(uSAC::MIME->new); # set  and index
 	$self->set_mime_default("application/octet-stream");
 
-  $self->set_prefix("/");
+  $self->prefix("/");
+  $self->id="/";
 	$_host_tables={};
   $_zombies=[];
 	$_zombie_limit//=100;
