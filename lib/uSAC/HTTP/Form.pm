@@ -6,6 +6,7 @@ use URL::Encode qw<url_decode_utf8>;
 use Export::These qw<decode_urlencoded_form>;
 
 sub decode_urlencoded_form {
+  return undef unless $_[0];
   my %kv;
   for(split "&", url_decode_utf8 $_[0]){
     my ($k, $v)=split "=", $_, 2;

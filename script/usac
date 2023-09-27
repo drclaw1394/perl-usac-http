@@ -5,6 +5,16 @@ our $VERSION="v0.1.0";
 use feature qw<try>;
 no warnings "experimental";
 
+BEGIN{
+  # Before we even attempt setup, check if help is needed
+  if(grep /-{1,2}h/, @ARGV){
+    require uSAC::Util; # For path manipulation, relative to this file
+    require Pod::Usage;                    
+
+    Pod::Usage::pod2usage(verbose=>1, );
+  }
+}
+
 use Log::ger;
 use Log::ger::Output "Screen";
 use Log::OK {
@@ -17,15 +27,7 @@ use AnyEvent;
 
 use Import::These qw<uSAC:: Util ::HTTP:: Server ::Middleware:: Static Log>;
 
-
-use Getopt::Long;
-Getopt::Long::Configure("pass_through");
-
 my %options;
-my $verbose=0;
-
-$options{quiet}=sub { $verbose=0 };
-$options{verbose}=\$verbose;
 
 
 # inject a site with prefix. any routes mounted after will use this prefix
@@ -34,6 +36,7 @@ $options{verbose}=\$verbose;
 # --site "id=df,prefix=23"
 
 sub parse_site_spec{
+  no warnings "experimental";
   my $input=$_[0];
   my @full=qw<id prefix>;
   my %spec;
@@ -43,7 +46,7 @@ sub parse_site_spec{
       $spec{id}=$field;
       next;
     }
-    for my ($key,$value)(split "=", $field, 2){
+    for my ($key, $value)(split "=", $field, 2){
       #say $key;
       #say $value;
 			$key=~s/ //g;
@@ -63,59 +66,6 @@ sub parse_site_spec{
 
 my @staging;
 
-GetOptions \%options,
-  # Help
-	"help",
-  "site=s"=>sub { 
-    push @staging, parse_site_spec($_[1]);
-    
-  },
-
-  # Filter arguments, to push file names into staging
-  "<>"=>sub {
-  say join ", ", @_;
-      push @staging, $_[0];
-  },
-  
-  # Listener
-	"listen=s@",
-
-  # Static file options
-	"list-dir!",		#serve html rendered dir list from this location
-  "read-size=i",
-  "indexes=s@",
-
-
-  # Log
-	"log",
-
-	"host=s@",
-	"product=s",
-	"ws=s%", 		#connect to uri (unix:// tcp:// udp:// ws:// file://) and just spit the information 
-
-	"mime-add=s%",		#Specifiy a mime type mapping for an extension, add to list
-	"mime=s%",		#Specifiy a file containing a list of mime types
-				#on a websocket
-	"quiet",		#quiet flag
-	"watch",		#watch changes to input files, and relauch
-	"verbose",
-
-
-	or do {
-    require Pod::Usage;
-    Pod::Usage::pod2usage(verbose=>1);
-  };
-
-
-# default static files from the current directory
-$options{"listen"}//=["[::]:8000"];
-
-
-if($options{help}){
-  require Pod::Usage;
-  Pod::Usage::pod2usage(verbose=>2);
-}
-
 
 # Welcome
 my $welcome= "uSAC HTTP Server $VERSION - Copyright 2023 Ruben Westerberg
@@ -124,40 +74,49 @@ Log::OK::INFO and log_info $welcome;
 
 
 
-# Create server
-#
-my $server=uSAC::HTTP::Server->new(listen=>$options{listen});
-
-
-# Inject logging if logging enabled
-#
-$server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
-
 my %sites;
-$sites{"/"}=$server;
 
-my $current=$server;
-say "staging";
-use Data::Dump::Color;
-for(@staging){
-  dd $_;
-  if(ref($_) eq "HASH"){
+my $server_proxy=uSAC::HTTP::Site->new;
+$sites{"/"}=$server_proxy;
 
-    # look up site spec by id, reuse site if found 
-    # otherwise new anonimous site added to current
-    my $new=$_->{id}?$sites{$_->{id}}:undef;
+my $current=$server_proxy;
+my %cur_opts=(list_dir=>1);
+
+
+my @unkown;
+while(@ARGV){
+  $_=shift; # from @ARGV
+  if(/-{1,2}site/){
+    $_=shift;
+    my $spec= parse_site_spec($_);
+    my $new=$spec->{id}?$sites{$spec->{id}}:undef;
     unless($new){
-      say "Id from spec: $_->{id}";
-      dd $_;
-      $sites{$_->{id}}=$new=uSAC::HTTP::Site->new($_->%*);
+      $sites{$spec->{id}}=$new=uSAC::HTTP::Site->new($spec->%*);
       $current->add_site($new);
     }
     $current=$new;
-    say "id".$current->id;
-    say "prefix: ".$current->prefix;
-    say "built prefix: ".$current->built_prefix;
+    next;
   }
-  else {
+
+  elsif(/^-{1,2}listen/){
+
+    $options{listen}=shift;
+    die "Listen argument required" unless $options{listen};
+    #$options{"listen"}||=["[::]:8000"];                                                                                 #
+  }
+
+  elsif(/^-{1,2}(no-)?list-dir/){
+    $cur_opts{list_dir}=!$1;
+  }
+
+  elsif(/^-{1,2}(no-)?log/){
+    $cur_opts{log}=!$1;
+  }
+  elsif(/^--/){
+    # End processing of options  
+    last;
+  }
+  elsif(/^[^-]/){
     # Treat as path to file or dir
     #convert to abs for intended behaviour	
     my $target=uSAC::Util::rel2abs($_, uSAC::Util::cwd);
@@ -178,19 +137,120 @@ for(@staging){
     else {
       # Assume a dir for serving static files from
       Log::OK::INFO and log_info "Serving static files from source:\n $target";
-      $current->add_route("", uhm_static_root roots=>[$_],
-        list_dir  =>  $options{"list-dir"},
-        read_size =>  $options{"read-size"},
-        indexes   =>  $options{indexes},
-      );
+      $current->add_route("", uhm_static_root roots=>[$_], %cur_opts);
     }
   }
+  else {
+    # Known options
+  }
+
 }
 
+
+$options{"listen"}//=["[::]:8000"];
+# Create server
+#
+my $server=uSAC::HTTP::Server->new(listen=>$options{listen});
+
+
+# Inject logging if logging enabled
+#
+$server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
+$server->add_site($server_proxy);
 # Configure
-my @options=@ARGV;
-push @options, "--show";
+my @options=@unkown;
 $server->parse_cli_options(@options);
 
 # Run!
 $server->run();
+
+
+__END__
+
+=head1 TITLE
+
+usac -  Utility HTTP Server
+
+=head1 SYNOPSIS
+
+	usac --site id=ID,prefix=PREFIX --site routes
+
+
+=head1 DESCRIPTION
+
+usac is a HTTP for serving static files preconfigured routes and piping
+websockets from the command line. It is a application wrapper around
+uSAC::HTTP.
+
+It is flexible to allow constructing prefixed grouping of routes, mounting
+'applications' into different names spaces.
+
+
+Options and input files are interleved, and interact in a stateful manner.
+
+
+=head1 OPTIONS
+
+
+
+=over
+
+=item help
+
+Show detailed usage information
+
+=item listen
+
+Network interfaces to listen on. Multiple accepted.
+
+=item site
+
+    --site id=ID
+    --site ID
+
+Selects a existing site with id of ID.
+
+  --site id=id,prefix=>prefix
+
+Creates a new site with
+
+Add a group ( a "site") for the following routes/static files to be placed
+under. Useful  for defining a prefix and/or host specific routes.
+
+If the site id exists, the existing site is choosen and the newly specified
+prefix is ignored. Otherwise a new site is created and added as a sub site to
+the current site, with the prefix provided (if any)
+
+The top level site is "/" which is automatically selected.
+
+=item list-dir no-list-dir
+
+Enable/disable listing of directories for static file serving
+
+=item log
+
+Enable logging of requests
+
+
+=back
+
+# TODO:
+#	--site prefix=asdf --ws route_name --in file:// --out 
+# --site prefix=asdf --r route_name  --in file:// fd:// http://proxy
+
+#
+#	--mqtt my/url=>mqtt://host:port/topic		#subscribes to a topic and pushes the newest
+#							#message out to incomming connections.
+#							#if accept is multipart then mutiple messages	
+
+# Currently Working on:
+#	--static-file /prefix=path_to_dir_with_static_files
+#	--static-dir /prefix=path_to_dir_list		#uses accepts to determing format
+#		
+#
+#create server instance;
+#load any config file specified
+
+#set default listener if non provided
+
+

@@ -214,7 +214,6 @@ sub need (*) {
   else{
     if($bare){
       local $@;
-      say "BARE $input";
       $res=eval "require $input;";
       die $@ if $@;
     }
@@ -222,7 +221,6 @@ sub need (*) {
       $res=require ($key);
       die "Could not require non bare word need" unless $res;
     }
-    say "AFTER";
     $needed{$key}=$res;
   }
   $res;

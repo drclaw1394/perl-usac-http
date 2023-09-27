@@ -787,6 +787,7 @@ method application_parser :lvalue {
 method parse_cli_options {
   my $options=@_?[@_]:\@ARGV;
 
+
   #Attempt to parse the CLI options
   require Getopt::Long;
   my %options;

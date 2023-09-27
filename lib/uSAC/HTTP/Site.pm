@@ -144,7 +144,6 @@ method rebuild_routes {
     my $ref =ref $r;
 
     if($r isa __PACKAGE__){
-      say "SITE: ".$r->id;
       $r->rebuild_routes; # Recurse down
     }
     elsif (($ref  ne "ARRAY" and $ref ne "HASH") or %{$r."::"}){
@@ -318,7 +317,7 @@ method _add_route {
     unless(ref $path_matcher){
       # Allows middleware like static files serving to strip the entire prefix
       # INCLUDING the last part of the route if it is a basic string
-      $route[ROUTE_PATH]=$self->built_prefix.$path_matcher;
+      $route[ROUTE_PATH]=$self->built_prefix.($path_matcher//"");
     }
     else{
       # Last part is a regex, so only include the prefix of the site. A  manual prefix 
