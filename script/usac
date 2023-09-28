@@ -1,16 +1,14 @@
 #!/usr/bin/env perl
+#
 use v5.36;
 our $VERSION="v0.1.0";
 
-use feature qw<try>;
-no warnings "experimental";
+#no warnings "experimental";
 
 BEGIN{
   # Before we even attempt setup, check if help is needed
   if(grep /-{1,2}h/, @ARGV){
-    require uSAC::Util; # For path manipulation, relative to this file
     require Pod::Usage;                    
-
     Pod::Usage::pod2usage(verbose=>1, );
   }
 }
@@ -22,49 +20,67 @@ use Log::OK {
 	opt=>"verbose",
 };
 
-use EV;
-use AnyEvent;
 
+#use EV;
+use AnyEvent;
 use Import::These qw<uSAC:: Util ::HTTP:: Server ::Middleware:: Static Log>;
 
 my %options;
 
-
-# inject a site with prefix. any routes mounted after will use this prefix
-# --site
-# --site "prefix=0";
-# --site "id=df,prefix=23"
-
+# Parses a string into a site specification hash
+#
 sub parse_site_spec{
   no warnings "experimental";
-  my $input=$_[0];
+  use builtin <trim >;
   my @full=qw<id prefix>;
   my %spec;
+
+  $spec{id}=undef;        # Default id is  a new site
+  $spec{prefix}="";     # Default to no prefix
+
+  my $input=trim $_[0];
+  
   for my $field(split ",", $input){
+
     unless($field=~/=/){
-      #Assume only a site name, with empty prefix
-      $spec{id}=$field;
-      next;
+      # Not a key value pair
+      if($field=~ s/^#//){
+        say "ID";
+        #ID specificaiton
+        $spec{id}=$field;
+        #$spec{prefix}="";
+      }
+      else {
+        say "PREFIX";
+        #it looks like a normal prefix, so treat as such
+        #$spec{id}=undef;
+        $spec{prefix}=$field;
+      }
+      #Assume only a site PREFIX, with random id
+
     }
-    for my ($key, $value)(split "=", $field, 2){
-      #say $key;
-      #say $value;
-			$key=~s/ //g;
-			$value=~s/ //g;
-			my @val;
+    else {
+      # Key value pairs
+      for my ($key, $value)(split "=", $field, 2){
 
-			#Ensure only 0 or 1 keys match
-			die "Ambiguous field name: $key" if 2<=grep /^$key/i, @full;
+        $key=trim $key;
+        $value=trim $value;
 
-      # Find the first item that starts with the shorthand
-			($key)=grep /^$key/i, @full;
-      $spec{$key}=$value;
+        my @val;
+
+        #Ensure only 0 or 1 keys match
+        die "Ambiguous field name: $key" if 2<=grep /^$key/i, @full;
+
+        # Find the first item that starts with the shorthand
+        ($key)=grep /^$key/i, @full;
+        $spec{$key}=$value;
+      }
     }
   }
+
   \%spec;
 }
 
-my @staging;
 
 
 # Welcome
@@ -73,28 +89,52 @@ my $welcome= "uSAC HTTP Server $VERSION - Copyright 2023 Ruben Westerberg
 Log::OK::INFO and log_info $welcome;
 
 
-
+# Map of ID to sites
 my %sites;
 
-my $server_proxy=uSAC::HTTP::Site->new;
+# Simple wrapper containing all sub sites. This allows the server to be created
+# at the end and simply add this group
+#
+my $server_proxy=uSAC::HTTP::Site->new(id=>"/");
+
+# The top level server always has a prefix of "/". Add the  proxy so we can
+# find it again
 $sites{"/"}=$server_proxy;
+
+
+
 
 my $current=$server_proxy;
 my %cur_opts=(list_dir=>1);
 
 
+my $counter=0;
 my @unkown;
 while(@ARGV){
   $_=shift; # from @ARGV
   if(/-{1,2}site/){
     $_=shift;
     my $spec= parse_site_spec($_);
-    my $new=$spec->{id}?$sites{$spec->{id}}:undef;
-    unless($new){
-      $sites{$spec->{id}}=$new=uSAC::HTTP::Site->new($spec->%*);
-      $current->add_site($new);
+
+    # Create a new id if none specified
+    $spec->{id}//=$counter++;
+
+    if(exists($sites{$spec->{id}})){
+      my $found=$sites{$spec->{id}};
+
+      # an existing site
+      #warn "Site prefix changed from ".$found->id. "to $spec->{id}" if $found->id ne $spec->{id};
+      $current=$found; 
     }
-    $current=$new;
+    else {
+      # a new site
+
+      my $new=uSAC::HTTP::Site->new($spec->%*);
+      $sites{$spec->{id}}=$new;
+      $current->add_site($new);
+      $current=$new;
+    }
+
     next;
   }
 
@@ -157,6 +197,7 @@ my $server=uSAC::HTTP::Server->new(listen=>$options{listen});
 #
 $server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
 $server->add_site($server_proxy);
+
 # Configure
 my @options=@unkown;
 $server->parse_cli_options(@options);
@@ -173,8 +214,17 @@ usac -  Utility HTTP Server
 
 =head1 SYNOPSIS
 
-	usac --site id=ID,prefix=PREFIX --site routes
+  #mount psgi applications and serve static files
+	usac --site id=Admin,prefix=admin/ path/to/admin.psgi --site #User,user/ path/to/user.psgi  --site #/ path/to/static/dir
 
+  # /               
+  #   admin/
+  #      routes...
+  #
+  #   user/
+  #     routes....
+  #
+  # static files
 
 =head1 DESCRIPTION
 
