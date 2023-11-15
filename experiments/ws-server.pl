@@ -11,11 +11,11 @@ use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log Websocket>;
 
 my %clients;
 
-my $server=uSAC::HTTP::Server->new(listeners=>"127.0.0.1:9090");
+my $server=uSAC::HTTP::Server->new(listen=>"127.0.0.1:9090");
 $server->add_middleware(uhm_log);
 
 $server->add_route('GET'
-  =>"/\$"
+  =>'$'
   =>sub {
     local $/=undef; state $data; $data=<DATA> unless $data;	
     #TODO: bug. <> operator not working with state
@@ -24,8 +24,8 @@ $server->add_route('GET'
   }
 );
 
-$server->add_route(GET
-  =>"/ws"
+$server->add_route('GET'
+  =>'ws$'
   => uhm_websocket()
   =>sub{
 		my ($matcher, $rex, $in_headers, $headers, $ws)=@_;
@@ -61,6 +61,7 @@ $server->add_route(GET
       undef; #Needed to prevent calling of next
 	}
 );
+
 
 $server->parse_cli_options(@ARGV);
 $server->run;

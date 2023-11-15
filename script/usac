@@ -152,6 +152,67 @@ while(@ARGV){
   elsif(/^-{1,2}(no-)?log/){
     $cur_opts{log}=!$1;
   }
+  elsif(/^-{1,2}ws/){
+    require uSAC::HTTP::Middleware::WebSocket;
+    my $arg=shift;
+    # Test if arg is a number (fd),
+    # Test if stdin/stdout is not a terminal
+    #
+    
+    my $in_fd;
+    my $out_fd;
+
+    for($arg){
+      if(/^&/){
+        #FD number from exec 
+      }
+      elsif($_ eq "-"){
+        # use stdin stdout
+        $in_fd=fileno(STDIN);
+        $out_fd=fileno(STDOUT);
+      }
+
+      #Add http/ftp/other protocols
+      #elsif(){
+      #}
+
+      # Treat as a file path
+      else{
+         
+      }
+    }
+
+    my $reader=uSAC::IO::SReader->new(fd=>$in_fd);
+    my $writer=uSAC::IO::SWriter->new(fd=>$out_fd);
+
+    $current->add_route("",
+      uhm_websocket()=>
+      sub {
+        my $ws=$_[PAYLOAD];
+        $ws->on_open=sub {
+          say "opened";
+          $reader->start;
+          $reader->on_read=sub{
+              $ws->send_message($_[0]);
+          };
+          $writer->start;
+        };
+        $ws->on_message=sub {
+            say "GOT message: $_[1]";
+            $writer->write($_[1]);
+          };
+
+        $ws->on_error=sub {
+            say "GOT error$_[0]";
+          };
+
+        $ws->on_close=sub {
+            say "GOT close";
+        };
+        undef; #Needed to prevent calling of next
+      }
+    );
+  }
   elsif(/^--/){
     # End processing of options  
     last;

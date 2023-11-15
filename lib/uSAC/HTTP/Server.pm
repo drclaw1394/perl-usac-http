@@ -27,16 +27,6 @@ use Hustle::Table;		    # Fancy dispatching of endpoints
 
 
 
-use constant::more {
-	"CONFIG::set_no_delay"=> 1
-};
-
-use constant::more {
-	"CONFIG::single_process"=>1,
-	"CONFIG::kernel_loadbalancing"=>1,
-};
-
-
 use feature qw<refaliasing say state current_sub>;
 use constant::more NAME=>"uSAC", VERSION=>"v0.1.0";
 
@@ -117,7 +107,6 @@ field $_fhs2;
 field $_fhs3;
 field $_backlog;
 field $_read_size :mutator :param=4096;
-field $_upgraders;
 field $_sessions;
 field $_active_connections;
 field $_total_connections;
@@ -134,7 +123,6 @@ field $_options :reader;
 field $_application_parser :param=undef;
 field $_total_requests;
 field $_static_headers :mutator;
-field $_running_flag  :mutator;
 
 
 
@@ -144,7 +132,7 @@ BUILD {
 	$self->set_mime_db(uSAC::MIME->new); # set  and index
 	$self->set_mime_default("application/octet-stream");
 
-  $self->prefix("/");
+  $self->prefix="/";
   $self->id="/";
 	$_host_tables={};
   $_zombies=[];
@@ -333,7 +321,7 @@ method do_accept{
   #Accept is only for SOCK_STREAM 
   Log::OK::DEBUG and log_debug __PACKAGE__. " Accepting connections";
 
-  my $do_client=$self->make_basic_client;
+  my $do_client=$self->make_stream_accept;
 
   my @peers;
   my @afh;
@@ -357,15 +345,25 @@ sub make_do_dgram_client {
 #
 #Returns a sub for processing new TCP client connections
 #
-method make_basic_client {
+method make_stream_accept {
   \my @zombies=$_zombies;
   \my %sessions=$_sessions;
+
+
+  # TLS extensions...
+  # Server name indication...
+  #
+  #
+
+  # Application Layer Protocol Negotiation
+  #
 
   my $session;
   unless($_application_parser){
     need uSAC::HTTP::v1_1_Reader;
     $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
   }
+
   
   my $parser=$_application_parser; 
 
@@ -823,13 +821,6 @@ method parse_cli_options {
 
   # Process all sites
   $self->SUPER::parse_cli_options($options);
-  #########################################
-  # for my $r ($self->staged_routes->@*){ #
-  #   if($r isa __PACKAGE__){             #
-  #     $r->parse_cli_options(@options);  #
-  #   }                                   #
-  # }                                     #
-  #########################################
   $self;
 }
 

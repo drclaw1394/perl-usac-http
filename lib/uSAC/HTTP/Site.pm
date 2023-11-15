@@ -55,27 +55,23 @@ use Sub::Middler;
 class uSAC::HTTP::Site;
 
 no warnings "experimental";
-#field $_server      :mutator :param=undef;
-field $_staged_routes :reader;
-field $_parent_site      :mutator :param=undef;
-field $_id          :mutator :param=undef;
-field $_prefix      :param =undef;
-field $_host        :reader :param =[];
-field $_error_uris  :param={};
-field $_delegate  :param=undef;
-field $_innerware   :mutator :param=[];
-field $_outerware   :mutator :param=[];
-field $_errorware   :mutator :param=[];
-field $_mode      :mutator :param=0; #server false, client true
+field $_staged_routes     :reader;
+field $_parent_site       :mutator :param=undef;
+field $_id                :mutator :param=undef;
+field $_prefix            :mutator :param =undef;
+field $_host              :reader :param =[];
+field $_error_uris        :param={};
+field $_delegate          :param=undef;
+field $_innerware         :mutator :param=[];
+field $_outerware         :mutator :param=[];
+field $_errorware         :mutator :param=[];
+field $_mode              :mutator :param=0; #server false, client true
 
-field $_mime_default :mutator;  #Default mime type
-field $_mime_db     :mutator;   #the usac::mime object
-field $_mime_lookup :mutator;   # lookup table (hash) of 
+field $_mime_default      :mutator;  #Default mime type
+field $_mime_db           :mutator;   #the usac::mime object
+field $_mime_lookup       :mutator;   # lookup table (hash) of 
                                 # extension to mime type
-field $_mount;
-field $_cors;
 field $_unsupported;
-field $_built_prefix;
 field $_built_label;
 field $_label;
 
@@ -174,35 +170,17 @@ method _add_route {
   my $method_matcher=shift;
   my $path_matcher=shift;
 
-
-  #####################################################################################################
-  # # Test we have a valid method matcher against supported methods                                   #
-  # #                                                                                                 #
-  # my $org=$method_matcher;                                                                          #
-  # $method_matcher=$self->_method_match_check($method_matcher);                                      #
-  # unless($method_matcher){                                                                          #
-  #   $method_matcher=$self->default_method;                                                          #
-  #   $path_matcher=$org;                                                                             #
-  #   Log::OK::WARN and log_warn "Using \"$org\" as path, with ".$self->default_method. " as method"; #
-  #                                                                                                   #
-  # }                                                                                                 #
-  #####################################################################################################
   return unless $method_matcher;
-
-
 
   # Dead horse stripper is always the first
   #
   unshift @_, uhm_dead_horse_stripper(prefix=>$self->built_prefix);
 
 
-
   # Fix up and break out middleware
   #
   \my (@inner, @outer, @error)=$self->_wrap_middleware(@_);
   
-
-
 
   # Innerware run form parent to child to route in
   # the order of listing. Splice after dead horse
@@ -214,7 +192,6 @@ method _add_route {
   #unshift @outer, $self->construct_outerware;
   splice @outer, 1, 0, $self->construct_outerware;
   @outer=reverse @outer;
-
 
 
   #unshift @error, $self->construct_errorware;
@@ -441,11 +418,15 @@ method _wrap_middleware {
         $hook=$_delegate->middleware_hook;
       }
       catch($e){
-        warn $e;
+        Log::OK::WARN and log_warn $e;
       }
 
       if($hook){
-        die "middleware_hook must return a subroutine reference" unless ref $hook eq "CODE";
+        unless(ref $hook eq "CODE"){
+          my $msg="$_delegate->middleware_hook must return a subroutine reference";
+          log_fatal  $msg;
+          die $msg;
+        }
         $hook->($self);
       }
 
@@ -476,12 +457,11 @@ method _wrap_middleware {
 method site_url {
 	my $url=$self->built_prefix;
 	if($_[0]//""){
-		return "$url/$_[0]";
+		return "$url$_[0]";
 	}
 	$url
 }
 
-#returns (and builds if required), the prefixs for this sub site
 method built_prefix {
 	my $parent_prefix;
 	if($self->parent_site){
@@ -491,17 +471,10 @@ method built_prefix {
 		$parent_prefix="";
 
 	}
-  #$_built_prefix//($self->set_built_prefix($parent_prefix.$self->prefix));#$_[0][prefix_]);
 
   $parent_prefix.$_prefix;
 }
 
-################################
-# method set_built_prefix {    #
-#   $_built_prefix=$_[0];      #
-# #$_[0][built_prefix_]=$_[1]; #
-# }                            #
-################################
 
 method build_hosts {
 	my $parent=$self;#$_[0];
@@ -612,7 +585,7 @@ method add_site {
 
 method child_site {
   my $root=$self->find_root;
-  my $child=uSAC::HTTP::Site->new(server=> $root, mode=>$root->mode);
+  my $child=uSAC::HTTP::Site->new(parent_site=> $self);
 }
 
 method find_root {
@@ -896,40 +869,6 @@ method _delegate {
     #Exception::Class::Base->throw("Delegate  has no import $e");
   }
   $self;
-}
-
-
-########################################################################################
-# method set_prefix {                                                                  #
-#   my $prefix=pop;                                                                    #
-#         my %options=@_;                                                              #
-#   return unless $prefix;                                                             #
-#         unless($prefix=~m|^/|){                                                      #
-#                 log_info "Prefix '$prefix' needs to start with a '/'. Fixing it..."; #
-#                 $prefix="/".$prefix;                                                 #
-#         }                                                                            #
-#                                                                                      #
-#         $_prefix=$prefix;                                                            #
-#         $_built_prefix=undef;   #force rebuilding                                    #
-#         $self->built_prefix;            #build abs prefix                            #
-# }                                                                                    #
-########################################################################################
-
-method prefix :lvalue {
-  if(@_){
-    $_prefix=$_[0];
-    $_built_prefix=undef;
-  }
-
-  $_prefix;
-}
-
-
-sub usac_host {
-	my $host=pop;	#Content is the last item
-	my %options=@_;
-	my $self=$options{parent}//$uSAC::HTTP::Site;
-	$self->add_host(%options,$host);
 }
 
 #Options could include CA and server key paths
