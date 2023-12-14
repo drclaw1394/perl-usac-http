@@ -645,13 +645,13 @@ method add_route {
     return $self;
   }
 
-  # Otherwise we exect optional method, and path
-  die "Need a method, [methods], or qr/methods/ as first argument" unless $ref eq "Regexp" or $ref eq "" or $ref eq "ARRAY";
-
+  # If the first argument is a simple scalar, test if it is a method
+  # name. If it IS NOT a method name, we assume it it path and unshift
+  # the default method to the route
   if(ref $_[0] eq ""){
     # Inject default method immediately if no method provided
     #
-      my $meth=$_[0];
+      my $meth=$_[0]//"";
       unless(grep /$meth/, $self->supported_methods){
         unshift @_, $self->default_method;
       }

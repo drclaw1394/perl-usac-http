@@ -144,10 +144,10 @@ sub path {
     $prefix=dirname abs2rel rel2abs $frame->[1];
     
     $p=$_[0]->$*;
-    return $p if $p =~ m|^/|;
 
-    #Create the rool as a relative path to current working dir
+    #Create the root as a relative path to current working dir
     if($p){
+      return $p if $p =~ m|^/|;
       #$p=catfile($prefix, $p);
       $p="$prefix/$p";
     }
