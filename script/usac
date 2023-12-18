@@ -109,7 +109,7 @@ my %cur_opts=(list_dir=>1);
 
 
 my $counter=0;
-my @unkown;
+my @unknown;
 while(@ARGV){
   $_=shift; # from @ARGV
   if(/-{1,2}site/){
@@ -243,6 +243,7 @@ while(@ARGV){
   }
   else {
     # Known options
+    push @unknown, $_;
   }
 
 }
@@ -260,7 +261,7 @@ $server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
 $server->add_site($server_proxy);
 
 # Configure
-my @options=@unkown;
+my @options=@unknown;
 $server->parse_cli_options(@options);
 
 # Run!
