@@ -259,15 +259,19 @@ sub websocket_server_in {
 
       #for ($rex->[uSAC::HTTP::Rex::headers_]){
       for ($_[IN_HEADER]){
+      	my $has_proto=$_->{"sec-websocket-protocol"};
         if(
           $_->{connection} =~ /upgrade/ai	#required
             and  $_->{upgrade} =~ /websocket/ai	#required
             and  $_->{"sec-websocket-version"} ==13	#required
             and  exists $_->{"sec-websocket-key"}	#required
-            and  $_->{"sec-websocket-protocol"} =~ /.*/  #sub proto
+    #and  $_->{"sec-websocket-protocol"} =~ /.*/  #sub proto
         ){
+	
+	# TODO Check protocol type here...
 
-          my @subs=split ",", $_->{"sec-websocket-protocol"};
+          my @subs;
+	  @subs=split ",", $_->{"sec-websocket-protocol"} if $has_proto;
           #TODO:  origin testing, externsions,
           # mangle the key
           my $key=MIME::Base64::encode_base64 
@@ -281,7 +285,7 @@ sub websocket_server_in {
           .HTTP_CONNECTION.": Upgrade".CRLF
           .HTTP_UPGRADE.": websocket".CRLF
           .HTTP_SEC_WEBSOCKET_ACCEPT.": $key".CRLF
-          .HTTP_SEC_WEBSOCKET_PROTOCOL.": ". $subs[0].CRLF
+	  . ($has_proto?(HTTP_SEC_WEBSOCKET_PROTOCOL.": ". $subs[0].CRLF):"")
           ;
 
           #support the permessage deflate
