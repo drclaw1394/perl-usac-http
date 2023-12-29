@@ -1,18 +1,37 @@
 =head1 NAME
 
-uSAC::HTTP  - Event driven HTTP Server, Client and Middleware
+uSAC::HTTP  - Event driven HTTP Server/Client and Middleware
+
+=head1 SYNOPSIS
+
+  use AnyEvent; # Or any event system supported by uSAC::IO
+  use uSAC::HTTP::Server;
+
+  my $server=uSAC::HTTP::Server->new(listen=>"in=en0,po=8080");
+  my $site=$uSAC::HTTP::Site->new(id=>"a grouping or routes", prefix=>"some/prefix"); 
+  $site->add_to($server)
+    ->add_route("endpoint/a")
+    ->add_route(POST=>"endpoint/b", midddleware, sub {
+         $_[OUT_HEADER]{":status"}=HTTP_OK;
+         $_[OUT_HEADER]{HTTP_CONTENT_TYPE}="text/plain";
+         $_[PAYLOAD]="This is the result";
+         1;
+    }
+
+  $server->parse_cli_options;
+  $server->run;
 
 =head1 DESCRIPTION
 
 uSAC::HTTP is a web framework/web server currently implementing HTTP/1.1. It
 utilises persistant connections, a fast dispatching system and aliasing  to
-achieve solid performance.  
+achieve solid performance. 
 
 It's written to support multiple event systems, such as AnyEvent, IO Async, for
-flexibility in deplyment.
+flexibility in deployment.
 
-This is a very quick overview of basic concepts of the what, how and why of the
-system. Please refer to linked documents for details on  a topic.
+This docuemtn is a very quick overview of basic concepts of the what, how and
+whys of the system. Please refer to linked documents for details on  a topic.
 
 
 =head1 CORE CONCEPTS
@@ -23,14 +42,23 @@ system. Please refer to linked documents for details on  a topic.
 
 =item Perl is different from other languages
 
-So why not program to the benefits it can bring? Strong regex support is an
+So why not program to the benefits Perl can bring? Strong regex support is an
 obvious example of Perl power. However It also makes it straight foward to do
-functional-ish programming. This really make writing middleware a joy, without
-the forced object oriented convolution in almost every other framework.
+functional-ish programming. This really makes writing middleware a joy, without
+the forced object oriented convolution in other framework.
 
 =item Not everything needs to be an object
 
 and perl is great for that.
+
+=item Initialisation and Runtime separation
+
+Object orientation can help with management of code it done well. However it
+inccurs runtime overhead which is not required in programs that have mostly
+static types having the same interfaces called over an over.  As such the setup
+interfaces are object orientated, howver the processing chains of middle ware
+are not.
+
 
 =item Your keyboard enjoys terse code
 
@@ -49,8 +77,8 @@ together. Each middleware has inner, outer and error phases.
 
 =head2 Route
 
-A route links a target url to a chain of middleware. Routes are searched in
-order of addition and give the full power of perl regex if needed to match
+A route links a target URL to a chain of middleware. Routes are searched in
+order of addition and give the full power of Perl regexp if needed to match
 against HTTP method, path and also supports captures.
 
 
@@ -64,16 +92,18 @@ together prefixs so mounting sites within sites is very easy.
 =head2 Delegate
 
 A site my optionally have a Delegate, being an package name or object
-reference. This give extra flexibilty in separating routing and middleware
+reference. This gives extra flexibilty in separating routing and middleware
 chains across files and very quick creating of 'applications'.
+
+See L<uSAC::HTTP::Delegate> for more
 
 =head2 Separation of Concerns, Code across multiple files, or not
 
 How you structure your project is up to you. There is no 'template' to an
 application. The server for example can, load routes, sites and route from any
-file you like, which intern could have middleware defined in install packages,
-or locally, in other files.  The Delegate feature could be used, and more
-routes and middleware could also be stored there.
+file you like, which intern could have middleware defined in installed
+packages, or locally, in other files.  The Delegate feature could be used, and
+more routes and middleware could also be stored there.
 
 Or you could simply add everything to a single file. 
 

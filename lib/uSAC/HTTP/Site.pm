@@ -669,12 +669,9 @@ method add_route {
       # Duplicate the argument as it will be the name of a method to call on the delegate
       #
       $del_meth=$_[1];
-      #$del_meth=~s|^/||;
-      $del_meth=~s|/|__|g;
-      $del_meth||="_empty";   # call the empty handler on emty string
+      $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
 
-      #unshift @_, $self->default_method;
-      #unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
+
       push @_, $del_meth;
       push @$_staged_routes, [@_]; # Copy to staging
     }
@@ -685,9 +682,7 @@ method add_route {
         # implicit route to delegate
         #
         $del_meth=$_[1];
-        #$del_meth=~s|^/||;
-        $del_meth=~s|/|__|g;
-        $del_meth||="_empty";   # call the empty handler on emty string
+        $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
 
         push @_, $del_meth;
         unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
@@ -707,9 +702,7 @@ method add_route {
         $a=qr{$a};
         my $b=shift;
         $del_meth=$b;   # The path is the basis for implicit method
-        #$del_meth=~s|^/||;
-        $del_meth=~s|/|__|g;
-        $del_meth||="_empty";   # call the empty handler on emty string
+        $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
@@ -732,9 +725,7 @@ method add_route {
         my $b=shift;
 
         $del_meth=$b;   # The path is the basis for implicit method
-        #$del_meth=~s|^/||;
-        $del_meth=~s|/|__|g;
-        $del_meth||="_empty";   # call the empty handler on emty string
+        $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
@@ -806,13 +797,6 @@ method add_route {
         unshift @_, $self->default_method;
         push @$_staged_routes, [@_]; # Copy to staging
       }
-      ########################################################
-      # elsif($_[0]=~m|^/|){                                 #
-      #   #starting with a slash, short cut for GET and head #
-      #   unshift @_, $self->default_method;                 #
-      #   push @$_staged_routes, [@_]; # Copy to staging     #
-      # }                                                    #
-      ########################################################
       else{
         # method, url and middleware specified
         push @$_staged_routes, [@_]; # Copy to staging
