@@ -649,13 +649,15 @@ method add_route {
   # name. If it IS NOT a method name, we assume it it path and unshift
   # the default method to the route
   if(ref $_[0] eq ""){
+    say "Not a ref";
     # Inject default method immediately if no method provided
     #
       my $meth=$_[0]//"";
-      unless(grep /$meth/, $self->supported_methods){
+      unless($meth and grep /$meth/, $self->supported_methods){
         unshift @_, $self->default_method;
       }
   }
+
   
 
   try {
@@ -669,8 +671,12 @@ method add_route {
       # Duplicate the argument as it will be the name of a method to call on the delegate
       #
       $del_meth=$_[1];
-      $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
-
+      unless($del_meth){
+        $del_meth="__";
+      }
+      else {
+        $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
+      }
 
       push @_, $del_meth;
       push @$_staged_routes, [@_]; # Copy to staging
@@ -682,7 +688,13 @@ method add_route {
         # implicit route to delegate
         #
         $del_meth=$_[1];
-        $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
+        unless($del_meth){
+          $del_meth="__";
+        }
+        else {
+          $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
+        }
+        #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
 
         push @_, $del_meth;
         unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
@@ -702,7 +714,13 @@ method add_route {
         $a=qr{$a};
         my $b=shift;
         $del_meth=$b;   # The path is the basis for implicit method
-        $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
+        unless($del_meth){
+          $del_meth="__";
+        }
+        else {
+          $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
+        }
+        #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;
@@ -725,7 +743,13 @@ method add_route {
         my $b=shift;
 
         $del_meth=$b;   # The path is the basis for implicit method
-        $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
+        unless($del_meth){
+          $del_meth="__";
+        }
+        else {
+          $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
+        }
+        #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
 
         $b=qr{$b}; #if defined $b;
         unshift @_, $a, $b, $del_meth;

@@ -50,7 +50,8 @@ $server
   ->add_route("logout")
   ->add_route("public")
   ->add_route("home")
-  ->add_route("getme/($Comp)"
+  
+  ->add_route(qr|getme/(($Comp)/)*($Comp)|n
     =>sub {
       $_[PAYLOAD]=join ", ", $_[IN_HEADER]{":captures"}->@*;
       1;
@@ -62,22 +63,23 @@ $server
       $_[OUT_HEADER]{HTTP_LOCATION()}="http://localhost:8084/static/hot.txt";
     }
   )
-  
+
   ->add_route('static/hot.txt$'
     => uhm_static_file(
       #headers=>{"transfer-encoding"=>"chunked"},
       \"static/hot.txt")
   )
 
-  ->add_route('static'       
-    => uhm_static_root 
+  ->add_route('static'
+    => uhm_static_root
     #index=>["index.html"],
       list_dir=>1,
       roots=> [\"static", \"admin/static"]
   )
 
+  ->add_route($Any_Method, "");
 
-  ->set_error_page(404=>\"not_found");
+  #->set_error_page(404=>\"not_found");
   #->add_route(""=>sub { $_[PAYLOAD]="asdfasd default"})
 $server->parse_cli_options
 ->run;

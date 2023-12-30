@@ -1,6 +1,6 @@
 =head1 NAME
 
-uSAC::HTTP::Site -  Grouping of related routes and middleware
+uSAC::HTTP::Site -  Routes and Grouping of related Routes and middleware
 
 =head1 SYNOPSIS
 
@@ -78,6 +78,17 @@ A label for the user to aid in identification of the site.
 Specify criteria to match a route and what middleware to execute. There are
 numerous forms which are DWIM.
 
+B<General Form:>
+
+  usac_route $path=> $middleware;
+  usac_route $request_method=> $path, $middleware, ...;
+  usac_route $request_method_array=> $path, $middleware, ...;
+  usac_route $request_method_regex=> $path, $middleware, ...;
+
+General form requires explicit middleware or delegate subroutine names after
+the path. If only two arguments are supplied the HTTP method is implicitly GET.
+
+
 B<Implicit delegate method forms:>
 
   usac_route "";
@@ -88,28 +99,19 @@ B<Implicit delegate method forms:>
   
 These all require a delegate to be associated with the site.  The C<$path> is
 converted into a method or subroutine name, which will be called on the
-delegate. The constructed name is the has the leading slash removed and all other slashes converted to underscores:
+delegate. The constructed name is the has the leading slash removed and all
+other slashes converted to underscores:
 
     ie
 
-      "/login" becomes "login"
-      "/home/info" becomes "home_info";
+      "login" becomes "_login_"
+      "home/info" becomes "_home__info_";
 
 
 The first from matches anything including the site prefix (no slash)
 
 
 
-B<General Form:>
-
-  usac_route $path=> $middleware;
-  usac_route $request_method=> $path, $middleware, ...;
-  usac_route $request_method_array=> $path, $middleware, ...;
-  usac_route $request_method_regex=> $path, $middleware, ...;
-
-
-General form requires explicit middleware or delegate subroutine names after
-the path. If only two arguments are supplied the HTTP method is implicitly GET.
 
 B<Multimethod form>:
 
