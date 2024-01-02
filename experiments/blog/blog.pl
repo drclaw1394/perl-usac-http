@@ -19,8 +19,10 @@ use Import::These qw<uSAC::HTTP::Middleware::
   Redirect State
 >;
 
+my $delegate= require(path(\"delegate.pl"));
 
 my $server=uSAC::HTTP::Server->new(
+  delegate=>$delegate,
   sub_product=>"Testing",
   listen=> {
     address=>"::",
@@ -36,7 +38,6 @@ my $server=uSAC::HTTP::Server->new(
 );
 
 
-my $delegate= require(path(\"delegate.pl"));
 
   my $site;
 $server
@@ -81,5 +82,5 @@ $server
 
   #->set_error_page(404=>\"not_found");
   #->add_route(""=>sub { $_[PAYLOAD]="asdfasd default"})
-$server->parse_cli_options
+$server->process_cli_options
 ->run;

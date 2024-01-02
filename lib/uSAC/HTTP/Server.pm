@@ -719,10 +719,10 @@ method dump_routes {
         my @a;
 
         if($site){
-          $tab->load([$matcher, $entry->[2], $site->id, $site->prefix, join "\n",$host]);
+          $tab->load([$matcher, $entry->[2]//"regexp", $site->id, $site->prefix, join "\n",$host]);
         }
         else{
-          $tab->load([$matcher, $entry->[2], "na", "na", join "\n",$host]);
+          $tab->load([$matcher, $entry->[2]//"regexp", "na", "na", join "\n",$host]);
         }
       }
       Log::OK::INFO and log_info join "", $tab->table;
@@ -768,6 +768,7 @@ method _add_listeners {
     @addresses=sockaddr_passive(@spec);
     push @$_listen_spec, @addresses;
   }
+  say Dumper $_listen_spec;
   $self;
 }
 
@@ -782,7 +783,7 @@ method application_parser :lvalue {
     
 }
 
-method parse_cli_options {
+method process_cli_options{
   my $options=@_?[@_]:\@ARGV;
 
 
@@ -800,6 +801,7 @@ method parse_cli_options {
     
   ) or die "Invalid arguments";
 
+  say "parse in server";
   for my($key, $value)(%options){
     if($key eq "workers"){
       $self->workers=$value<0?undef:$value;
@@ -820,7 +822,7 @@ method parse_cli_options {
   }
 
   # Process all sites
-  $self->SUPER::parse_cli_options($options);
+  $self->SUPER::process_cli_options($options);
   $self;
 }
 

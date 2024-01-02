@@ -12,9 +12,9 @@ Middleware system and how to implement middleware to work with it.
 =head1 STRUCTURE
 
 Unlike other HTTP middleware (ie plack), there is no base class to inherit
-from.  This is because uSAC::HTTP middleware always is (or converted to)
+from.  This is because L<uSAC::HTTP> middleware is always (or converted to)
 subroutine references.  This gives great flexibility to the author and also
-remove much of the unwanted runtime overhead associtated with Object oriented
+remove much of the unwanted runtime overhead associtated with Object Oriented
 design.
 
 
@@ -45,8 +45,8 @@ callbackfunction
 
 =head2 Outerware
 
-Outerware is executed pritor to sending (to the network) a request on the
-client OR after processing innerware on the server.
+Outerware is executed prior to sending (to the network) a request on the client
+OR after processing innerware on the server.
 
 =head3 Errorware
 
@@ -58,9 +58,9 @@ normal program flow. It improves performance and readability
 This is just a made up term but describes the  process accurately.
 
 The phases from a chain of middleware are combined in to lexically linked
-changes thanks to L<Sub::Middler>. While that module basically has no
+chains thanks to L<Sub::Middler>. While that module basically has no
 restrictions on the call format of arguments, L<uSAC::HTTP> does. With this it
-allow programing by convention and streamlining your code:
+allows programing by convention and streamlining your code:
 
 =head2 Defining middleware
 

@@ -11,7 +11,8 @@ use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log Websocket>;
 
 my %clients;
 
-my $server=uSAC::HTTP::Server->new(listen=>"127.0.0.1:9090");
+my $server=uSAC::HTTP::Server->new(listen=>"interface=en0,f=INET\$,po=9090,s=stream");
+
 $server->add_middleware(uhm_log);
 
 $server->add_route('GET'

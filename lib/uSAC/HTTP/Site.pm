@@ -105,10 +105,10 @@ BUILD{
   $_id//=$id++;
   $_prefix//="";
 
-  #If delegate was provided in constructor, we call it right away
-  #$self->_delegate($_delegate, caller) if $_delegate;
+  $_staged_routes//=[];
+
   $self->add_delegate($_delegate) if $_delegate;
-  $_delegate=undef;
+  #$_delegate=undef;
 
   if(defined($_host) and ref $_host ne "ARRAY"){
     $_host=[$_host];
@@ -116,7 +116,6 @@ BUILD{
   else {
     $_host=[];
   }
-  $_staged_routes//=[];
 }
 
 method _inner_dispatch {
@@ -253,7 +252,7 @@ method _add_route {
   push @hosts, "*.*" unless @hosts;
 
 
-  Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
+  #Log::OK::DEBUG and log_debug __PACKAGE__. " Hosts for route ".join ", ", @hosts;
   my $pm;
 
   for my $uri (@hosts){
@@ -649,7 +648,6 @@ method add_route {
   # name. If it IS NOT a method name, we assume it it path and unshift
   # the default method to the route
   if(ref $_[0] eq ""){
-    say "Not a ref";
     # Inject default method immediately if no method provided
     #
       my $meth=$_[0]//"";
@@ -1020,9 +1018,9 @@ sub uhm_dead_horse_stripper {
 }
 
 
-method parse_cli_options {
+method process_cli_options{
   my $options=shift//[];
-
+  say "parse clie options in site";
   my $hook;
   try {
     $hook=$_delegate->parse_cli_options_hook;
@@ -1036,9 +1034,10 @@ method parse_cli_options {
     $hook->($self, $options);# if $_delegate;
   }
 
+  # Send message down the tree
   for my $r ($self->staged_routes->@*){
     if($r isa __PACKAGE__){
-      $r->parse_cli_options($options);
+      $r->process_cli_options($options);
     }
   }
   $self;
