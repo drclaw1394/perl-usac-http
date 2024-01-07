@@ -1,12 +1,112 @@
 =head1 NAME
 
-uSAC::HTTP::Route - Routes in uSAC::HTTP
+uSAC::HTTP::Route - uSAC::HTTP::Routing and end points
 
 
 =head1 DESCRIPTION
 
-=head1 Requirements
+Routing is the mechanism of mapping an end point url to a destination chain of
+middleware entry points.
 
-Captures
-  Must include the parenthasese for built in patterns
-  Paths must start with a leading slash if basic string
+Most of the heavy lifting is documented in L<uSAC::HTTP::Middleware> and in
+L<uSAC::HTTP::Delegate>, however this document covers some of the finer
+details.
+
+There is alot of small but important things happening under the hood in
+matching a requests url.  As sites can be prefixed and host scoped, theres more
+than just matching the url path.
+
+
+=head1 Route Prefixing
+
+A route definitions are relative and are prefixed with the site prefix. As
+sites contain sites, this prefix is accumulated at configuation time to
+construct the final absolute path. The server (also a site object) aways has a
+prefix of "/",
+
+  eg
+    server   (prefix "/") 
+      Site1 (prefix "a/"
+        Site2 (prefix "b/"
+          Route ("do_stuff");
+
+  # The absolute path for do_suff is "/a/b/do_stuff"
+
+
+A site can also have an empty prefix.  It is important to not the prefixes of
+parent sites are simply concatinated together
+
+
+
+
+=head2 Host Matching 
+
+Virtual hosts are supported at the site level. This means that a site can have
+a different set of virtual hosts than its parent site ( or server). Each host
+has its own 'table' of routes, even if the routes are otherwise the same across
+hosts. The host table used is determined by the presence and value of the Host
+http header.
+
+
+
+
+=head2 Method and Path
+
+The prefixed path is actually prefixed with the inteneded method name. This is
+actuall the matcher the backend L<Hustle::Table> object tests with. The
+incoming requst has the method prepened to the request URL path and then a
+match is attempted.
+
+
+Mutliple methods for a path can be added in duplicate, or using an array ref of
+methods, or a Regexp.
+
+
+=head2 Matching modes
+
+Default match mode for string routes is 'begin'. Than means if the route
+specification matches the start of the input it will match
+
+If the route string ends with a '$', it will force an extract string match on
+the input
+
+If the route path is a regex or a string that looks like a regex, it will
+perform a regex match.
+
+
+
+
+=head2 Route Path/Parameter Capture/Extraction
+
+Unlike other frameworks, there isn't a special syntax for to capture
+'parameters'. Perl Regexp are used directly as per L<Hustle::Table>.
+
+No named captures are directly supported currently.  The captured variables are
+B<NOT> accessible in the numeric variables $1, $2, etc.  They are accessible in
+the special ":captures" inheader variable.
+
+This is necessary due to the asynchronous nature or the L<uSAC::HTTP> system.
+There is no guarantee that the numeric variables will be valid when the stages
+of middleware are executed to process them.
+
+
+=head2 Querys in routes
+
+A route can contain a query string  however it is treated with the same rules
+already mentioned.
+
+If you want the parameters out of query, it is best parsed from the inheader "query string"
+
+
+
+=head1 Advanced Usage
+
+The route structure is passed through the middleware system. It contains the
+site, and known entry points to the middleware system, the host route table
+used 
+
+Internal redirect
+Counter stats
+Middleware entry
+Route path... built prefix, of the route, or partial for regex
+

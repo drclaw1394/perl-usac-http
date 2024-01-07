@@ -1020,17 +1020,17 @@ sub uhm_dead_horse_stripper {
 
 method process_cli_options{
   my $options=shift//[];
-  say "parse clie options in site";
+  say "process cli options in site";
   my $hook;
   try {
-    $hook=$_delegate->parse_cli_options_hook;
+    $hook=$_delegate->process_cli_options_hook;
   }
   catch($e){
     Log::OK::DEBUG and log_debug "$e";
   }
 
   if($hook){
-    die "parse_cli_options_hook must return a subroutine reference"unless ref $hook eq "CODE";
+    die "process_cli_options_hook must return a subroutine reference"unless ref $hook eq "CODE";
     $hook->($self, $options);# if $_delegate;
   }
 

@@ -514,6 +514,7 @@ sub uhm_static_root {
   my $open_modes=$options{open_flags}//0;
   my $allow=$options{allow};
   my $block=$options{block};
+  my $template=$options{template};
   my $no_encoding=$options{no_encoding}//"";
   my $do_dir=$options{list_dir}//$options{do_dir};
   my $pre_encoded=$options{pre_encoded}//{};
@@ -578,12 +579,15 @@ sub uhm_static_root {
 
   for my $html_root ($options{roots}->@*){
     die "Can not access dir $html_root to serve static files" unless -d $html_root;
+    $html_root=~s|/$||;   # ensure roots do not end in a slash
   }
+
   #check for mime type in parent 
   my $inner=sub {
     #create the sub to use the static files here
     my $next=shift;
     my $index=shift;
+    my $path_only;
     my %ropts=@_;
     my $site=$ropts{site};
     my $mime=$options{mime}=$site->resolve_mime_lookup;
@@ -605,11 +609,9 @@ sub uhm_static_root {
         # Strip the prefix if its specified
         #
         $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
-
-        say "PREFIX FOR ROUTE PATH: $prefix";
-        say "P before : $p";
+        #say "prefix is $prefix";
         $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
-        say "P after : $p";
+        #say "p is $p";
         my $path;
 
         ROOTS:
@@ -622,6 +624,7 @@ sub uhm_static_root {
 
 
           $path=$html_root.$p;
+          #say "path: $path";
           #
           # First this is to report not found  and call next middleware
           # if the allow doesn't match (if a ignore exists)
@@ -629,6 +632,8 @@ sub uhm_static_root {
           next if($allow and $path !~ /$allow/o);
 
           next if($block and $path =~ /$block/o);
+
+
 
 
           Log::OK::TRACE and log_trace "static: html_root: $html_root";
@@ -715,30 +720,42 @@ sub uhm_static_root {
             next unless($entry)
           }
 
-          # Setup meta cache fields if they don't exist
-          #
-          unless($entry->[File::Meta::Cache::user_]){
-            $entry->[File::Meta::Cache::user_]=[
-              HTTP_CONTENT_TYPE, $content_type, 
-              HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
-                CORE::gmtime($entry->[File::Meta::Cache::stat_][9])),
-              
-              HTTP_ETAG, "\"$entry->[File::Meta::Cache::stat_][9]-$entry->[File::Meta::Cache::stat_][7]\"",
-            ];
+          # Mark as path only if it looks like a template
+          $path_only=$path =~ /$template/o if $template;
+
+          unless($path_only){
+            # Setup meta cache fields if they don't exist
+            #
+            unless($entry->[File::Meta::Cache::user_]){
+              $entry->[File::Meta::Cache::user_]=[
+                HTTP_CONTENT_TYPE, $content_type, 
+                HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
+                  CORE::gmtime($entry->[File::Meta::Cache::stat_][9])),
+
+                HTTP_ETAG, "\"$entry->[File::Meta::Cache::stat_][9]-$entry->[File::Meta::Cache::stat_][7]\"",
+              ];
+            }
+
+            # Finally set the content encoding encountered along the way
+            #
+
+            $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()}=$enc if $enc;
+            #Push any user static headers
+            #
+            for my ($k, $v)(@$headers){
+              $_[OUT_HEADER]{$k}=$v;
+            }
+
+            return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
           }
-
-          # Finally set the content encoding encountered along the way
-          #
-
-          $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()}=$enc if $enc;
-          #Push any user static headers
-          #
-          for my ($k, $v)(@$headers){
-            $_[OUT_HEADER]{$k}=$v;
+          else {
+            # Return the path in the payload,
+            # Set the stats us undef, as the result needs to be rendered
+            $_[OUT_HEADER]{":status"}=undef;
+            $_[PAYLOAD]=$entry->[File::Meta::Cache::key_];
+            $closer->($entry);
+            return &$next;
           }
-
-          return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
-
         }
 
         # Didn't match anything in the roots.

@@ -768,7 +768,7 @@ method _add_listeners {
     @addresses=sockaddr_passive(@spec);
     push @$_listen_spec, @addresses;
   }
-  say Dumper $_listen_spec;
+  #say Dumper $_listen_spec;
   $self;
 }
 

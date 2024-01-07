@@ -16,6 +16,7 @@ use uSAC::HTTP::Form;
 use Import::These qw<uSAC::HTTP::Middleware::
   Static Log Deflate Log
   Gzip Slurp ScriptWrap
+  TemplatePlex2
   Redirect State
 >;
 
@@ -39,9 +40,9 @@ my $server=uSAC::HTTP::Server->new(
 
 
 
-  my $site;
+my $site;
 $server
-->add_site($site=uSAC::HTTP::Site->new(
+  ->add_site($site=uSAC::HTTP::Site->new(
     id=>"blog",
     delegate=>$delegate
   ));
@@ -51,7 +52,6 @@ $server
   ->add_route("logout")
   ->add_route("public")
   ->add_route("home")
-  
   ->add_route(qr|getme/(($Comp)/)*($Comp)|n
     =>sub {
       $_[PAYLOAD]=join ", ", $_[IN_HEADER]{":captures"}->@*;
@@ -72,10 +72,14 @@ $server
   )
 
   ->add_route('static'
-    => uhm_static_root
+    => uhm_static_root(
     #index=>["index.html"],
       list_dir=>1,
-      roots=> [\"static", \"admin/static"]
+      roots=> [\"static", \"admin/static"],
+      template=>qr/\.plex\./
+    )
+    => uhm_template_plex2
+
   )
 
   ->add_route($Any_Method, "");

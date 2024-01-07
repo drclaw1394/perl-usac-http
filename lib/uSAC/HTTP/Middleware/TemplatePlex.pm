@@ -1,4 +1,4 @@
-package uSAC::HTTP::Middleware::Trace;
+package uSAC::HTTP::Middleware::TemplatePlex;
 use strict;
 use warnings;
 use uSAC::HTTP;
@@ -33,7 +33,7 @@ sub uhm_template_plex {
     sub {
     #my %options=@_;
 
-    my ($next,$index)=@_;
+    my ($next, $index)=@_;
       sub {
         my $ctx;
         if($_[OUT_HEADER]){
@@ -58,9 +58,11 @@ sub uhm_template_plex {
         &$next;
       }
     },
+
     undef,
+
     sub {
-      my ($next,$index)=@_;
+      my ($next, $index)=@_;
       sub {
         #Force delete context
         delete $ctx{$_[REX]};
