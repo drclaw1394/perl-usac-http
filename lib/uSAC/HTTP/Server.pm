@@ -569,9 +569,9 @@ method rebuild_dispatch {
 
 
 method stop {
-  uSAC::IO::asap (sub {
+  uSAC::IO::asap(sub {
     $_cv->send;
-  })
+  });
 }
 
 method run {
