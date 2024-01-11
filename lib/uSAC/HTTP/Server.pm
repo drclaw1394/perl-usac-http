@@ -569,9 +569,9 @@ method rebuild_dispatch {
 
 
 method stop {
-  uSAC::IO::asap {
+  uSAC::IO::asap (sub {
     $_cv->send;
-  }
+  })
 }
 
 method run {
@@ -838,7 +838,8 @@ method do_stream_connect {
   my $id;
   my $socket;
 
-  $socket=uSAC::IO::socket(AF_INET, SOCK_STREAM, 0);
+  #$socket=uSAC::IO::socket(AF_INET, SOCK_STREAM, 0);
+  $socket=IO::FD::socket(AF_INET, SOCK_STREAM, 0);
 
   if( $entry=$_host_tables->{$host} and $entry->[uSAC::HTTP::Site::ADDR]){
 
@@ -849,7 +850,7 @@ method do_stream_connect {
     
   }
   else {
-    $id=uSAC::IO::connect($socket, $host, $port, $on_connect, $on_error);
+    $id=uSAC::IO::connect($socket, $host, $port, undef, $on_connect, $on_error);
 
   }
   $id;
