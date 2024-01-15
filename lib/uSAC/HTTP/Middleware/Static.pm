@@ -667,6 +667,7 @@ sub uhm_static_root {
                   my $index=rindex $_path, ".";
                   my $ext=substr $_path, $index+1;
                   $content_type=$mime->{$ext}//$default_mime;
+                  $path=$_path;
                   last;
                 }
                 else {
