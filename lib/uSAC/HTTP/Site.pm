@@ -1077,9 +1077,11 @@ method load {
     eval { need $path };
 
     if($@){
+      my $error=$@;
       require Error::Show;
-      my $context=Error::Show::context(undef);
-      log_error "Could not include file: $!";
+      my $context=Error::Show::context($error);
+      Log::OK::ERROR and log_error $context;
+      #log_error "Could not include file: $@";
       die "Could not include file $path";	
     }
 	}

@@ -609,7 +609,7 @@ sub uhm_static_root {
         # Strip the prefix if its specified
         #
         $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
-        say "prefix is $prefix";
+        #say "prefix is $prefix";
         if($prefix ne "/"){
           $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
         }
@@ -627,7 +627,7 @@ sub uhm_static_root {
 
 
           $path=$html_root.$p;
-          say "path: $path";
+          #say "path: $path";
           #
           # First this is to report not found  and call next middleware
           # if the allow doesn't match (if a ignore exists)

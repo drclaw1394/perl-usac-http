@@ -292,9 +292,9 @@ sub websocket_server_in {
           my $deflate_flag;
           for($_->{"sec-websocket-extensions"}){
             if(/permessage-deflate/){
-              $reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".CRLF;
-              Log::OK::DEBUG and log_debug(  __PACKAGE__." DEFLATE SUPPORTED");
-              $deflate_flag=1;
+              #$reply.= HTTP_SEC_WEBSOCKET_EXTENSIONS.": permessage-deflate".CRLF;
+              #Log::OK::DEBUG and log_debug(  __PACKAGE__." DEFLATE SUPPORTED");
+              #$deflate_flag=1;
 
             }
             else{
