@@ -284,7 +284,6 @@ method prepare {
 	#Timeout timer
 	#
   #$SIG{ALRM}=
-  #$_stream_timer=AE::timer 0, $interval,
   $_stream_timer=uSAC::IO::timer 0, $interval,
   
     sub {

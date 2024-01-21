@@ -6,6 +6,7 @@ use Log::ger::Output "Screen";
 
 use EV;
 use AnyEvent;
+use uSAC::IO;
 
 use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log Websocket>;
 
@@ -34,7 +35,8 @@ $server->add_route('GET'
 		my $timer;
     $ws->on_open=sub {
       $clients{$_[0]}=$_[0];
-      $timer=AE::timer 0, 1, sub {
+      $timer=uSAC::IO::timer 0, 1, sub {
+      say "TIMER IS: $timer";
        my $string="hello";
        utf8::encode $string;
        say "Sending $string";
@@ -57,14 +59,16 @@ $server->add_route('GET'
 
 		$ws->on_close=sub {
 				say "GOT close";
-				undef $timer;
+        #undef $timer;
+        say "CLOSE TIMER: $timer";
+        $timer and uSAC::IO::timer_cancel $timer;
 			};
       undef; #Needed to prevent calling of next
 	}
 );
 
 
-$server->parse_cli_options(@ARGV);
+$server->process_cli_options(@ARGV);
 $server->run;
 
 __DATA__

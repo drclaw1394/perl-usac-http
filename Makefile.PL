@@ -18,7 +18,7 @@ WriteMakefile(
 		"uSAC::IO"	=> 0,           # IO streaming abstraction
 		"IO::FD"	=> "0.3.0",       # pread/pwrite
     "Error::Show"=>"0.3.0",     # 0.3.0 for default import of 'context'
-		"Socket::More"	=> "0.4.3", # passive/listen socket specification
+		"Socket::More"	=> "0.5.1", # passive/listen socket specification
 		"uSAC::MIME"	=> 0,         # MIME database
     "Sub::Middler"=>0,          # Subroutine middleware linking
     "File::Meta::Cache"=>0,     # Meta data and open file cache
@@ -27,7 +27,7 @@ WriteMakefile(
     "HTTP::State"=>"v0.1.1",
     "constant::more"=> "v0.3.0",
 		"Log::OK"	=> "v0.2.1",
-		"Template::Plex"	=> "v0.6.1",
+		"Template::Plex"	=> "v0.7.0",
 
 
 		

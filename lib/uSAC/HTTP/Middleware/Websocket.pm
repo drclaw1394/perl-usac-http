@@ -1,10 +1,12 @@
 package uSAC::HTTP::Middleware::Websocket;
-use strict;
-use warnings;
-no warnings "experimental";
+use v5.36;
+
 use feature qw<bitwise state say refaliasing current_sub>;
 use Log::ger;
 use Log::OK;
+
+use uSAC::IO;
+use uSAC::HTTP;
 
 use MIME::Base64;		
 use Digest::SHA1;
@@ -14,18 +16,18 @@ use Compress::Raw::Zlib;
 
 use Export::These qw<uhm_websocket>;
 
-use AnyEvent;
-#use Config;
 
-use uSAC::HTTP::Rex;
-use uSAC::HTTP::Session;
-use uSAC::HTTP::Header;
-use uSAC::HTTP::Code;
-use uSAC::HTTP::Constants;
+##############################
+# use uSAC::HTTP::Rex;       #
+# use uSAC::HTTP::Header;    #
+# use uSAC::HTTP::Code;      #
+# use uSAC::HTTP::Constants; #
+##############################
 
 use Sub::Middler;
 
 
+no warnings "experimental";
 
 use constant::more DEBUG => 1;
 
@@ -87,7 +89,7 @@ sub  websocket_client {
 my %ctx;
 sub websocket_client_out {
   my %options=@_;
-  \my @sub_proto=($options{protocol}//['chat']);
+  \my @sub_proto=($options{protocol}//[]);
   my $origin=$options{origin}//"";
 
    sub {
@@ -169,7 +171,7 @@ sub websocket_client_in {
           # Create a websocket object
           my $ws=uSAC::HTTP::Middleware::Websocket->new($session, 1);
           $_[PAYLOAD]=$ws;
-          AnyEvent::postpone {
+          uSAC::IO::asap {
             $ws->[on_open_]->($ws)
           };
         }
@@ -304,7 +306,6 @@ sub websocket_server_in {
           #write reply	
           Log::OK::DEBUG and log_debug __PACKAGE__." setting in progress flag";
           local $/=", ";
-          #for($session->[uSAC::HTTP::Session::write_]){
 
 
           for($rex->[uSAC::HTTP::Rex::write_]){
@@ -332,7 +333,8 @@ sub websocket_server_in {
                 # defer the open callback to execute after the middlware has
                 # been called
                 #
-                AnyEvent::postpone {
+                #AnyEvent::postpone {
+                  uSAC::IO::asap {
                   $ws->[on_open_]->($ws)
                 };
 
@@ -510,7 +512,8 @@ sub  _make_websocket_server_reader {
 					_xor_mask(substr($buf, 0, $len, ''),$mask) if $mask;
 
 					#TODO: drop the session, undef any read/write subs
-					$self->[pinger_]=undef;
+          $self->[pinger_] and uSAC::IO::timer_cancel $self->[pinger_];
+          #$self->[pinger_]=undef;
 					$self->[on_close_]->($self);
           $session->closeme=1;
 					$session->dropper->(undef);
@@ -630,19 +633,21 @@ sub new {
 	$self->ping_interval($self->[ping_interval_]);
 
 	#override dropper
-	my $old_dropper=$session->dropper;#[uSAC::HTTP::Session::dropper_];
+	my $old_dropper=$session->dropper;
 	my $dropper=sub {
     say "WS dropper called from:";
     say caller;
-		$self->[pinger_]=undef;
+    $self->[pinger_] and uSAC::IO::timer_cancel $self->[pinger_];
+    #$self->[pinger_]=undef;
 		$self->[writer_]=sub {};
 
     # Calling old dropper without any arguments prevents the session from being reused.
     # 
 		$old_dropper->();
-		$self->[on_close_]->();
+    
+    # We only call the on_close the close state wasn't reached for some reason..
+		$self->[pinger_] and $self->[on_close_]->();
 	};
-	#$session->[uSAC::HTTP::Session::dropper_]=$dropper;
 	$session->dropper=$dropper;
 
 	return $self;
@@ -655,7 +660,7 @@ sub _decode_message {
 
 
 
-sub _xor_mask($$) {
+sub _xor_mask {
 	use integer;
 	return $_[0] unless $_[1];
 	$_[0] ^.
@@ -666,7 +671,7 @@ sub _xor_mask($$) {
 }
 
 
-sub _xor_mask_inplace($$) {
+sub _xor_mask_inplace {
 	return unless $_[1];
 	my ($a,$b)=(length($_[0]), length($_[1]));
 	$_[0] ^.=
@@ -705,7 +710,7 @@ sub send_text_message {
 }
 
 sub close {
-	my $self=splice @_,0, 1, FIN_FLAG|CLOSE;
+	my $self=splice @_, 0, 1, FIN_FLAG|CLOSE;
 	&{$self->[writer_]};
 }
 
@@ -737,10 +742,11 @@ sub ping_interval {
 	my ($self, $new)=@_;
 	return $self->[ping_interval_] unless defined $new;
 	
-	undef $self->[pinger_];
+  #undef $self->[pinger_];
+  $self->[pinger_] and uSAC::IO::timer_cancel $self->[pinger_];
   my $dummy=sub {say "pinger dummy"};
 	$self->[ping_interval_]=$new;
-	$self->[pinger_] = AE::timer(0, $self->[ping_interval_], sub {
+	$self->[pinger_] = uSAC::IO::timer(0, $self->[ping_interval_], sub {
 		$self->[ping_id_] = "ping...";	
 		$self->[writer_]->( FIN_FLAG | PING, $self->[ping_id_], $dummy); #no cb used->dropper defalt
 		#TODO: Add client ping support? (ie masking)
