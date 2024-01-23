@@ -405,7 +405,7 @@ method _wrap_middleware {
       # Scalar used as a method name. Call method on delegate
       # and unshift the result to be processed
       # TODO: need a iteration limit here...
-      die Exception::Class::Base->throw("No delegate set for site. Cannot call method by name")unless $_delegate;
+      die Exception::Class::Base->throw("No delegate set for site. Cannot call method by name: $_")unless $_delegate;
         
 
       # Use postfix notation to access either a package or object method 

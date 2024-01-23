@@ -213,7 +213,7 @@ while(@ARGV){
       }
     );
   }
-  elsif(/^--/){
+  elsif(/^--$/){
     # End processing of options  
     last;
   }
