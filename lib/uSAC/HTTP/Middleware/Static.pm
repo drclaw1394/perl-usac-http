@@ -610,9 +610,9 @@ sub uhm_static_root {
         #
         $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
         #say "prefix is $prefix";
-        if($prefix ne "/"){
-          $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
-        }
+	#if($prefix ne "/"){
+        $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
+	  #}
         #$p="/" unless $p; #ensure the path ends in a slash if it is root dir
         #say "p is $p";
         my $path;
@@ -626,7 +626,7 @@ sub uhm_static_root {
           return &$next unless($_[OUT_HEADER]{":status"}//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
 
 
-          $path=$html_root.$p;
+          $path=$html_root."/".$p;
           #say "path: $path";
           #
           # First this is to report not found  and call next middleware
