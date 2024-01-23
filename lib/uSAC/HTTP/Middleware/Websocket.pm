@@ -334,9 +334,7 @@ sub websocket_server_in {
                 # been called
                 #
                 #AnyEvent::postpone {
-                  uSAC::IO::asap {
-                  $ws->[on_open_]->($ws)
-                };
+                  uSAC::IO::asap(sub { $ws->[on_open_]->($ws) });
 
                 # We don't need this reader anymore.
                 $_=undef;

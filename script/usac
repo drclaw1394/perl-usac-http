@@ -262,7 +262,7 @@ $server->add_site($server_proxy);
 
 # Configure
 my @options=@unknown;
-$server->parse_cli_options(@options);
+$server->process_cli_options(@options);
 
 # Run!
 $server->run();
