@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 use v5.36;
 #
-use EV;
+#use EV;
 use AnyEvent;
 
 use Log::ger::Output 'Screen';
@@ -43,7 +43,7 @@ my $server=uSAC::HTTP::Server->new(
 my $site;
 $server
   ->add_middleware(uhm_state)
-  ->add_middleware(uhm_log dump_headers=>1)
+  #->add_middleware(uhm_log dump_headers=>1)
   ->add_site($site=uSAC::HTTP::Site->new(
     id=>"blog",
     delegate=>$delegate

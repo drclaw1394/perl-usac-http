@@ -615,16 +615,17 @@ sub make_serialize{
       }
 
 
-      foreach my ($k, $v)(%{$_[OUT_HEADER]}){
-        #Render anything that isn't a 'pseudo header'. and combine multiple
-        #header items onto one line
+      for my ($k, $v)(%{$_[OUT_HEADER]}){
+        # Render anything that isn't a 'pseudo header'. and combine multiple
+        # header items onto one line
         #
-        #say $k."  ".$v;
+        next if index($k, ":" )==0;
+
         unless(ref $v){
-          $reply.= $k.": ".$v.CRLF  unless index($k, ":" )==0
+          $reply.= $k.": ".$v.CRLF;#  unless index($k, ":" )==0
         }
         else{
-          $reply.=$k.": ". (join "; ", grep index($k, ":" )<0, @$v).CRLF;
+          $reply.=$k.": ". (join "; ", @$v).CRLF;
         }
       }
 

@@ -13,6 +13,7 @@ no warnings "experimental";
 
 use uSAC::HTTP::Code;# qw<:constants>;
 use uSAC::HTTP::Header;# qw<:constants>;
+
 use HTTP::State;
 use HTTP::State::Cookie qw<:all>;
 
@@ -42,7 +43,7 @@ sub uhm_state {
         if($_[OUT_HEADER]){  # and $_[IN_HEADER]{HTTP_COOKIE()}){
 
           # 
-          my $state=$_[IN_HEADER]{":state"}={};
+          my $state=$_[IN_HEADER]{":state"}//={};
 
           for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
             if(!exists $state->{$k}){
@@ -80,16 +81,12 @@ sub uhm_state {
       # in :state (output header) and serialize them into multiple head lines
       #
       sub {
-        for my $set ($_[OUT_HEADER]{HTTP_SET_COOKIE()}){
-          if(!defined $set){
-            $set=[];
-          }
-          elsif(! ref $set){
-            $set=[$set];
-          }
-          else {
-            # Already an array
-          }
+
+        # Only process with initial header call
+        # 
+        for my $set ($_[OUT_HEADER] and $_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[]){
+          $set=[$set] if(!ref $set);
+
           # Render the cookies into the next stage...?
           for my $cookie(($_[OUT_HEADER]{":state"}//=[])->@*){
             push @$set, encode_set_cookie $cookie;
