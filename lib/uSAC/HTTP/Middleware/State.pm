@@ -46,15 +46,15 @@ sub uhm_state {
 
           for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
             if(!exists $state->{$k}){
-              # First value 
+              # First value assigned to a key.
               $state->{$k}=$v;
             }
             elsif(ref $state->{$k}){
-              # Existing ref Multiple values here
+              # Existing key. ref Multiple values here
               push $state->{$k}->@*, $v; 
             }
             else{
-              # Existing value, but wasn't a ref, wrap it
+              # Existing key, but wasn't a ref, wrap it
               $state->{$k}=[$state->{$k}, $v];
             }
 

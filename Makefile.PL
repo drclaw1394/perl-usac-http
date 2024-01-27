@@ -12,11 +12,10 @@ WriteMakefile(
 		'Digest::SHA1' 	=> 0,
 		JSON		=> 0,
 		'Cpanel::JSON::XS'     	=> 0,
-		enum	    	=> 0,
 
 		"Hustle::Table" => "0.5.5",	# Bug fix for updating default matcher
 		"uSAC::IO"	=> 0,           # IO streaming abstraction
-		"IO::FD"	=> "0.3.0",       # pread/pwrite
+		"IO::FD"	=> "0.3.7",       # pread/pwrite
     "Error::Show"=>"0.3.0",     # 0.3.0 for default import of 'context'
 		"Socket::More"	=> "0.5.1", # passive/listen socket specification
 		"uSAC::MIME"	=> 0,         # MIME database
@@ -28,10 +27,11 @@ WriteMakefile(
     "constant::more"=> "v0.3.0",
 		"Log::OK"	=> "v0.2.1",
 		"Template::Plex"	=> "v0.7.0",
+    "Text::Table"=>0,
 
 
 		
-    "Object::Pad"=> "0.78",
+    "Object::Pad"=> "0.808",
 		"Crypt::JWT"	=> 0,
 		"Log::ger"	=> 0,
 		"Log::ger::Output::Screen" => 0,

@@ -42,7 +42,7 @@ sub uhm_log {
     my $res=require Data::Dump::Color;
     if($res){
       #Data::Dumper::Color->import;
-      $options{dd}=\&Data::Dump::Color::dd;
+      $options{dd}=\&Data::Dump::Color::dump;
     }
     else {
       Log::OK::WARN and log_warn "Please install Data::Dump::Color for colored log ouput";
@@ -50,7 +50,7 @@ sub uhm_log {
   }
   else {
     require Data::Dump;
-      $options{dd}=\&Data::Dump::dd;
+      $options{dd}=\&Data::Dump::dump;
     #Data::Dump->import;
   }
 
@@ -114,6 +114,7 @@ sub log_simple_out {
         push @out, "==Outgoing Headers==","";
         push @out, $dd->($_[OUT_HEADER]);
       }
+      push @out, "--->>>";
       say STDERR join "\n", @out;
 
 			&$outer_next;
