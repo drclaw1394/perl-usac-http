@@ -171,10 +171,9 @@ sub make_parser{
           $pos3=index $buf, CRLF, $ppos;
           $body_type=undef;	
           $body_len=undef;
-          #if($pos3>=0){
           if($pos3>=$ppos){
-            #($method, $uri, $version)=split " ", substr($buf, $ppos, $pos3);
-            ($method, $uri, $version)=split " ", substr($buf, $ppos, $pos3-$ppos);
+            ($method, $uri, $version)=split " ", substr($buf, $ppos, $pos3-$ppos), 3;
+            #$k=index substr($buf, $ppos, $pos3-$ppos), " ";
 
             if($uri and $version){
               #$uri=url_decode_utf8 $uri;
@@ -182,11 +181,9 @@ sub make_parser{
               #end of line found
               $state   = STATE_HEADERS;
               %h=();
-              $host=undef;
-              $connection="";
-              #++$seq;
+              #$host=undef;
+              #$connection="";
 
-              #$buf=substr $buf, $pos3+2;
               $ppos=$pos3+2;
             }
             else {
@@ -230,7 +227,8 @@ sub make_parser{
             ){
                $k=lc $k;
 
-              $val=builtin::trim $val;  #perl 5.36 required
+              ($val)=split(" ", $val, 1);
+              #$val=builtin::trim $val;  #perl 5.36 required
               #$val=~s/\A\s+//;#uo;
               #$val=~s/\s+\z//;#uo;
 
@@ -246,15 +244,17 @@ sub make_parser{
                 $e=[$e, $val];
               }
 
-              if($k eq "host"){
-                $host=$val;
-              }
-              elsif($k eq "content-length"){
-                $body_len= int $val;
-              }
-              elsif($k eq "connection"){
-                $connection=$val;
-              }
+              ##################################
+              # if($k eq "host"){              #
+              #   $host=$val;                  #
+              # }                              #
+              # elsif($k eq "content-length"){ #
+              #   $body_len= int $val;         #
+              # }                              #
+              # elsif($k eq "connection"){     #
+              #   $connection=$val;            #
+              # }                              #
+              ##################################
 
               # If the package variable for PSGI compatibility is set
               # we make sure our in header more like psgi environment
@@ -262,6 +262,10 @@ sub make_parser{
               #  combine multiple headers into a single comma separated list
               $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e if $psgi_compat;
           }
+          $host=$h{host};
+          $body_len=$h{"content-length"};
+          $connection=$h{"connection"};
+
           $ppos=0;
           $buf=substr($buf, $pos3+4);
 
@@ -274,7 +278,8 @@ sub make_parser{
           }
           else{
             # Explicit close
-            $closeme=($connection and $connection=~ /close/ai);
+            #$closeme=($connection and $connection=~ /close/ai);
+            $closeme=($connection and $connection eq "close");#=~ /close/ai);
           }
 
 
@@ -370,7 +375,7 @@ sub make_parser{
             # Fixed body length. Single part
               $state=STATE_BODY_CONTENT;
           }
-          elsif($h{"transfer-encoding"}//"" =~ /chunked/i){
+          elsif(index($h{"transfer-encoding"}//"", "chunked")>=0){
             # Ignore content length and treat as chunked
               $state=STATE_BODY_CHUNKED;
               $chunked_state=0;

@@ -532,9 +532,8 @@ method rebuild_dispatch {
     #my ($host, $input);
     
     # input is "method url"
-    
-    #$table=$lookup{$_[0]//""}//$any_host;
-    $table=$_host_tables->{$_[0]//""}//$any_host;
+    #$table=$_host_tables->{$_[0]//""}//$any_host;
+    $table=$_[0]?$_host_tables->{$_[0]}//$any_host : $any_host;
 
     #Log::OK::TRACE and  log_trace  join ", ",$table->@*;
     (my $route, my $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);

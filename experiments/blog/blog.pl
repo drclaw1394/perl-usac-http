@@ -42,7 +42,7 @@ my $server=uSAC::HTTP::Server->new(
 
 my $site;
 $server
-  ->add_middleware(uhm_state)
+#->add_middleware(uhm_state)
   #->add_middleware(uhm_log dump_headers=>1)
   ->add_site($site=uSAC::HTTP::Site->new(
     id=>"blog",
