@@ -834,10 +834,9 @@ method do_stream_connect {
 
 
   my $id;
-  my $socket;
 
   #$socket=uSAC::IO::socket(AF_INET, SOCK_STREAM, 0);
-  $socket=IO::FD::socket(AF_INET, SOCK_STREAM, 0);
+  IO::FD::socket(my $socket, AF_INET, SOCK_STREAM, 0);
 
   if( $entry=$_host_tables->{$host} and $entry->[uSAC::HTTP::Site::ADDR]){
 

@@ -3,12 +3,12 @@ use feature qw<state isa>;
 use Log::ger;
 use Object::Pad;
 
-use uSAC::HTTP::Constants;
-use uSAC::HTTP::Header ":constants";
-use uSAC::HTTP::Code ":constants";
-use uSAC::HTTP::Rex;
-use uSAC::HTTP::Route;
-use uSAC::HTTP::Session;
+use uSAC::HTTP;
+
+sub _reexport {
+  uSAC::HTTP->import;
+}
+
 use URI;
 
 class uSAC::HTTP::Client :isa(uSAC::HTTP::Server);
@@ -37,6 +37,7 @@ field $_total_request_count;
 
 field $_on_error :param=undef;
 field $_on_response :param=undef;
+field $_running_flag :mutator;
 
 BUILD {
   $self->mode=1;          # Set mode to client.
@@ -67,7 +68,7 @@ method _inner_dispatch :override {
               #  issue new queued request
             }
             elsif(300<=$_<400){
-              #Redirect. don't deque  just yet
+              #Redirect. don't dequequ  just yet
               Log::OK::INFO and log_info __PACKAGE__." redirect $_  location: $_[IN_HEADER]{location}";
               $self->_redirect_external(@_);
             }
@@ -128,7 +129,7 @@ method _error_dispatch :override {
 }
 
 method stop {
-  uSAC::IO::asap {
+  uSAC::IO::asap sub{
     $_cv->send;
   }
 }
@@ -140,6 +141,7 @@ method run {
       $sig=undef;
   });
 
+  $self->rebuild_routes;
 	$self->rebuild_dispatch;
 
   if($self->options->{show_routes}){
@@ -311,7 +313,7 @@ method __request {
   my $peers;
   my $i;
   
-  uSAC::IO::asap {
+  uSAC::IO::asap sub {
 
     my $host=$details->[0];
     my $method=$details->[1];
