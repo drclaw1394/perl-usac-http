@@ -117,12 +117,14 @@ sub make_parser{
 
   #Temp variables
   my $host;
+  my $_i;
   my $connection;
   my $tmp;
   my $pos3;
   my $ppos=0;
   my $k;
   my $val;
+  my $rest;
   my $code=-1;
   my $payload="";
 
@@ -167,110 +169,73 @@ sub make_parser{
         #	$url=> status code
         #	$version => comment
         #
-        if ($state == STATE_REQUEST or $state== STATE_RESPONSE) {
-          $pos3=index $buf, CRLF, $ppos;
-          $body_type=undef;	
-          $body_len=undef;
-          if($pos3>=$ppos){
-            ($method, $uri, $version)=split " ", substr($buf, $ppos, $pos3-$ppos), 3;
-            #$k=index substr($buf, $ppos, $pos3-$ppos), " ";
-
-            if($uri and $version){
-              #$uri=url_decode_utf8 $uri;
-              #
-              #end of line found
-              $state   = STATE_HEADERS;
-              %h=();
-              #$host=undef;
-              #$connection="";
-
-              $ppos=$pos3+2;
-            }
-            else {
-              $state= STATE_ERROR; 
-            }
-
-            redo;
-          }
-          else {
-            #Exit the loop as we nee more data pushed in
+        if ($state== STATE_RESPONSE or $state == STATE_REQUEST) {
+          $pos3=index $buf, CRLF2;#, $ppos;
+          %h=();
+          # Header is not complete. need more
+          return if($pos3<=0);
+          #$pos3+=4;
+          
+            # Header is complete
             #
-            if( length($buf) >MAX_READ_SIZE){
-              #TODO: create a rex a respond with bad request
+            $body_type=undef;	
+            $body_len=undef;
+            
+            #($method, $uri, $version, $buf)=split " ", substr($buf, $ppos, $pos3-$ppos), 4;
+            # Parse out the first line, with remaining content assigned to buf
+            ($method, $uri, $version, $buf)=split " ", $buf, 4;
+            
+            #say "method $method, uri $uri, version $version";
+          my $k;
+          my $val;
+          #my $ki;
+          my $vi;
 
-              $state=STATE_ERROR;
-              redo;
-
-            }
-            last;
-          }
-        }
-
-        elsif ($state == STATE_HEADERS) {
-          my $pos3=index $buf, CRLF2, $ppos;
-
-
-          if ($pos3>MAX_READ_SIZE) {
-            $state=STATE_ERROR;
-            redo;
-          }
-          elsif($pos3< $ppos){
-            #Not enough
-            warn "not enough";
-            return;
-          }
-        
-
-          for my ($k, $val)(
-            map split(":", $_, 2) ,
-              split("\015\012", substr($buf, $ppos, $pos3-$ppos))
-            ){
-               $k=lc $k;
-
-              ($val)=split(" ", $val, 1);
-              #$val=builtin::trim $val;  #perl 5.36 required
-              #$val=~s/\A\s+//;#uo;
-              #$val=~s/\s+\z//;#uo;
-
+          #$ki=index($buf, ":")+1;
+          #while($ki>1){
+          $vi=index $buf, "\015\012";
+          while($vi>2){
+            #            $vi=index $buf, "\015\012", $ki;
+            #            $k=lc substr($buf,  0, ($ki-1));
+            #            ($val)=split(" ", substr($buf,  $ki),2);
+            #
+            #            $buf=substr($buf, $vi+2);#$ppos);
+            #            $ki=index($buf, ":")+1;
+            #
+            
+            ($k, $val)=split(": ",  substr($buf, 0, $vi), 2);
+            $k=lc $k;
+            #($val)=split  " ", $val;
+            $buf=substr $buf, $vi+2;
+            $vi=index $buf, "\015\012";
+            
             
               \my $e=\$h{$k};
-              if(!defined $e){
-                $e=$val;
-              }
-              elsif(ref $e){
-                push @$e, $val;
-              }
-              else{
-                $e=[$e, $val];
-              }
 
-              ##################################
-              # if($k eq "host"){              #
-              #   $host=$val;                  #
-              # }                              #
-              # elsif($k eq "content-length"){ #
-              #   $body_len= int $val;         #
-              # }                              #
-              # elsif($k eq "connection"){     #
-              #   $connection=$val;            #
-              # }                              #
-              ##################################
+              $e= (!defined $e)? $val : ref $e ? [@$e, $val] :[$e, $val];
+              #if(!defined $e){
+              #  $e=$val;
+              #}
+              #elsif(ref $e){
+              #  push @$e, $val;
+              #}
+              #else{
+              #  $e=[$e, $val];
+              #}
+
 
               # If the package variable for PSGI compatibility is set
               # we make sure our in header more like psgi environment
               #  Upper case headers sent from the client
               #  combine multiple headers into a single comma separated list
               $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e if $psgi_compat;
+
           }
+          $buf=substr($buf, 2);#$vi+4);
+
           $host=$h{host};
           $body_len=$h{"content-length"};
           $connection=$h{"connection"};
-
-          $ppos=0;
-          $buf=substr($buf, $pos3+4);
-
-        
-
 
           if( $version eq "HTTP/1.0"){
             # Explicit keep alive
@@ -278,8 +243,7 @@ sub make_parser{
           }
           else{
             # Explicit close
-            #$closeme=($connection and $connection=~ /close/ai);
-            $closeme=($connection and $connection eq "close");#=~ /close/ai);
+            $closeme=($connection and $connection=~ /close/ai);
           }
 
 
@@ -302,13 +266,7 @@ sub make_parser{
             
             ## psudeo psudeo headers
             $h{":protocol"}=$version;
-            my $_i;
-            #################################
-            # $h{":query"}=                 #
-            #   (($_i=index($uri, "?"))>=0) #
-            #     ?substr($uri, $_i+1)      #
-            #     :"";                      #
-            #################################
+
             $_i=index $uri, "?"; 
             if($_i>=0){
               $h{":query"}=substr($uri, $_i+1);
@@ -321,7 +279,7 @@ sub make_parser{
             # In server mode, the route need needs to be matched for incomming
             # processing and a rex needs to be created
             #
-            ($route, $h{":captures"})=$cb->($host, "$method $uri");
+            ($route, $h{":captures"}) = $cb->($host, "$method $uri");
             $rex=uSAC::HTTP::Rex->new($r, $ex, $route);
 
             # Work around for HTTP/1.0
