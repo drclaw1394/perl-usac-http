@@ -31,9 +31,9 @@ field $_sessions;
 field $_read_size;
 
 field $_zombies;
-field $_zombie_limit;
 field $_application_parser;
 field $_total_request_count;
+#field $_host
 
 field $_on_error :param=undef;
 field $_on_response :param=undef;
@@ -41,7 +41,7 @@ field $_running_flag :mutator;
 
 BUILD {
   $self->mode=1;          # Set mode to client.
-  $_host_pool_limit//=5;  # limit to 5 concurrent connections by default
+  $_host_pool_limit//=4;  # limit to 5 concurrent connections by default
   $_zombies=[];
 }
 
@@ -83,6 +83,8 @@ method _inner_dispatch :override {
         # and attempt get the next item in the requst queue for the host
         #
         my ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+        $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+        $_total_request_count--;
         $self->_request($entry, $session);
 
         # User agent should already know about this response
@@ -155,7 +157,8 @@ method run {
 
   #Trigger any queued requests
   for my ($k,$v)($self->host_tables->%*){
-    $self->_request($v);
+    while($self->_request($v)){
+    }
   }
 
   require AnyEvent;
@@ -211,18 +214,17 @@ method _request {
   #
   my ($table, $session)=@_;
 
+  #my $limit =2;
+  my $count=$table->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
+  
+  return if($table->[uSAC::HTTP::Site::ACTIVE_COUNT] >= $_host_pool_limit or $count == 0);
+
+
   my $details=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
 
   # If a session is supplied reuse it if possible
   #
   if($session){
-    $session->closeme=1;
-    $session->drop;
-    Log::OK::INFO and log_info "Session reuse attempted";
-      $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-      $_total_request_count--;
-      $_on_response and $_on_response->();
-
       unless($details){
         # No more work to do so add the session to the idle pool
         #
@@ -232,7 +234,9 @@ method _request {
       }
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
       $_total_request_count++;
-      return $self->__request($table, $session, $details) 
+      __request($table, $session, $details);
+
+      return $table->[uSAC::HTTP::Site::ACTIVE_COUNT] < $_host_pool_limit ;
   }
   
   return unless $details;
@@ -243,15 +247,9 @@ method _request {
   my ($__host, $port)=split ":", $host; 
   $port//=80;
 
-  my $limit =10;
-  if( 
-    ($limit<=0 or $table->[uSAC::HTTP::Site::ACTIVE_COUNT] < $limit)  # Check limit
-
-    ){
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
       $_total_request_count++;
 
-      #Create another connection so long as it is doesn't exceed the limit
       $self->do_stream_connect($__host, $port, sub {
         my ($socket, $addr)=@_;
         $table->[uSAC::HTTP::Site::ADDR]=$addr;
@@ -272,35 +270,32 @@ method _request {
         $_sessions->{ $session_id } = $session;
 
         $session_id++;
-        $self->__request($table, $session, $details);
+        __request($table, $session, $details);
       },
 
       sub {
         # connection error
         #
-        $table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-        $_total_request_count--;
+        #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+        #$_total_request_count--;
         say "error callback for stream connect: $_[1]";
         IO::FD::close $_[0]; # Close the socket
         my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($details->[1]." ".$details->[2]);
 
         die "No route found for $host" unless $route;
 
+        # call error middleware
         $route->[1][ROUTE_ERROR_HEAD]->($route);
       }
-    )
-  }
-  else{
-    # Sit tight.. a connection will become available soon.. hopefully!
-    Log::OK::TRACE and log_trace __PACKAGE__. " request queued but waiting for in flight to finish";
-  }
+    );
+  return $table->[uSAC::HTTP::Site::ACTIVE_COUNT] < $_host_pool_limit ;
 }
 
 
 
 #  Push a request to the request queue
 #
-method __request {
+sub __request {
 
   my ($table, $session, $details)=@_;
 
@@ -333,9 +328,6 @@ method __request {
 
     #  Obtain session or create new. Update with the filehandle
     my %in_header=();
-
-    #$in_header{":method"}=$method;
-    #$in_header{":path"}=$path;
 
     $out_header->{":method"}=$method;
     $out_header->{":path"}=$path;

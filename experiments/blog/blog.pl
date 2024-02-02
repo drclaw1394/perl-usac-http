@@ -60,6 +60,35 @@ $server
       1;
     }
   )
+  ->add_route("delay", 
+    [
+      sub {
+        my $next=shift;
+        sub{
+          use Time::HiRes "time";
+          state $counter=0;
+          state $prev_counter=0;
+          state $timer=uSAC::IO::timer 0, 2, sub {
+            
+            say "Rate = @{[($counter-$prev_counter)/(2)]}";
+            $prev_counter=$counter;
+          };
+
+
+          $counter++;
+          ##############################
+          # my @msg=@_;                #
+          # uSAC::IO::timer 2,0, sub { #
+          #     $msg[PAYLOAD]=time;    #
+          #     $next->(@msg);         #
+          # };                         #
+          ##############################
+          $_[PAYLOAD]=time;
+          &$next;
+      }
+    }
+  ] 
+)
   ->add_route("redirect"
     =>sub {
       $_[OUT_HEADER]{":status"}=301;

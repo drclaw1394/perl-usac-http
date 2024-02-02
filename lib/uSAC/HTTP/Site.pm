@@ -963,10 +963,14 @@ sub uhm_dead_horse_stripper {
       Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
 
       if($_[OUT_HEADER]){
-        $_[IN_HEADER]{":path_stripped"}=
-          $len
-          ?substr($_[IN_HEADER]{":path"}, $len)
-          : $_[IN_HEADER]{":path"};
+        ###########################################
+        # use Data::Dump::Color;                  #
+        # dd $_[OUT_HEADER];                      #
+        # $_[IN_HEADER]{":path_stripped"}=        #
+        #   $len                                  #
+        #   ?substr($_[IN_HEADER]{":path"}, $len) #
+        #   : $_[IN_HEADER]{":path"};             #
+        ###########################################
       }
       
       &$inner_next; #call the next

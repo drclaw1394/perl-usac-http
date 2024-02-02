@@ -2,7 +2,6 @@ package uSAC::HTTP::Middleware::Slurp;
 use warnings;
 use strict;
 use feature qw<current_sub say refaliasing state>;
-no warnings "experimental";
 
 our $UPLOAD_LIMIT=1_000_000;
 our $PART_LIMIT=$UPLOAD_LIMIT;
@@ -22,6 +21,7 @@ use IO::FD;
 use Fcntl qw<O_CREAT O_RDWR>;
 use File::Spec::Functions qw<catfile>;
 
+no warnings "experimental";
 
 #use URL::Encode::XS;
 #use URL::Encode qw<url_decode_utf8>;
