@@ -210,28 +210,27 @@ sub make_parser{
             $vi=index $buf, "\015\012";
             
             
-              \my $e=\$h{$k};
+            #\my $e=\$h{$k};
 
+            #$e= (!defined $e)? $val : ref $e ? [@$e, $val] :[$e, $val];
+            
+            for my $e ($h{$k}){
               $e= (!defined $e)? $val : ref $e ? [@$e, $val] :[$e, $val];
-              #if(!defined $e){
-              #  $e=$val;
-              #}
-              #elsif(ref $e){
-              #  push @$e, $val;
-              #}
-              #else{
-              #  $e=[$e, $val];
-              #}
-
-
-              # If the package variable for PSGI compatibility is set
-              # we make sure our in header more like psgi environment
-              #  Upper case headers sent from the client
-              #  combine multiple headers into a single comma separated list
-              $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e if $psgi_compat;
-
+            }
           }
-          $buf=substr($buf, 2);#$vi+4);
+
+          $buf=substr($buf, 2);
+
+          if($psgi_compat){
+
+            # If the package variable for PSGI compatibility is set
+            # we make sure our in header more like psgi environment
+            #  Upper case headers sent from the client
+            #  combine multiple headers into a single comma separated list
+            for my ($k, $e)(%h){
+              $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e;
+            }
+          }
 
           $host=$h{host};
           $body_len=$h{"content-length"};
@@ -309,9 +308,10 @@ sub make_parser{
               #Session stores the outgoing rex for clients 
               $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
               $route=$rex->[uSAC::HTTP::Rex::route_];
-              $rex=uSAC::HTTP::Rex->new($r, $ex);
-              $rex->[uSAC::HTTP::Rex::out_headers_]=$out_header;
-              $rex->[uSAC::HTTP::Rex::route_]=$route;
+              
+              #$rex=uSAC::HTTP::Rex->new($r, $ex);
+              #$rex->[uSAC::HTTP::Rex::out_headers_]=$out_header;
+              #$rex->[uSAC::HTTP::Rex::route_]=$route;
             }
           }
           else {
@@ -385,20 +385,13 @@ sub make_parser{
           #CHUNKED
           #If transfer encoding is chunked, then we process as a series of chunks
           #Again, an undef callback indicats a final write
-
-          
           #my $lengh=
           if($chunked_state == 0){
             #Size line
             my $index = index $buf, CRLF;
             my $index2= index $buf, CRLF, $index+2;
 
-            #TODO Look into actual limitaiton of chunk size
-            #
-            my $val=substr($buf,0, $index);
-            my $pad=8-length($val);
-            $val="0"x$pad.$val if $pad>0;
-            my $size=unpack "I>*", pack "H*", $val;#substr($buf, 0, $index);
+            my $size=hex substr($buf, 0, $index);
 
             if(($index2-$index)==2){
               #Last one
