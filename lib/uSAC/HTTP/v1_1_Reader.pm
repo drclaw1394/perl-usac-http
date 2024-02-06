@@ -215,12 +215,27 @@ sub make_parser{
             #$e= (!defined $e)? $val : ref $e ? [@$e, $val] :[$e, $val];
             
             for my $e ($h{$k}){
-              $e= (!defined $e)? $val : ref $e ? [@$e, $val] :[$e, $val];
+              if($k eq "coookie"){
+                $e.= defined($e)?"; $val":$val;
+              }
+              elsif($k  eq "set-cookie"){
+                if(defined($e)){
+                    push @$e, $val;
+                }
+                else {
+                    $e=[$val];
+                }
+              }
+              else {
+                $e.= defined($e)?", $val":$val;
+              }
+                #$e= (!defined $e)? $val : ref $e ? [@$e, $val] :[$e, $val];
             }
           }
 
           $buf=substr($buf, 2);
-
+          #use Data::Dumper;
+          #say Dumper \%h;
           if($psgi_compat){
 
             # If the package variable for PSGI compatibility is set
@@ -563,6 +578,9 @@ sub make_serialize{
       
       # Special handling of set cookie header for multiple values
       my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
+
+      #RFC 6265 -> duplicate cookies with the same name not permitted in same response
+      #
       unless(ref $v){
         $reply.= HTTP_SET_COOKIE().": ".$v.CRLF if defined $v;
       }
@@ -575,14 +593,18 @@ sub make_serialize{
         # Render anything that isn't a 'pseudo header'. and combine multiple
         # header items onto one line
         #
+        
         next if index($k, ":" )==0;
 
-        unless(ref $v){
-          $reply.= $k.": ".$v.CRLF;#  unless index($k, ":" )==0
-        }
-        else{
-          $reply.=$k.": ". (join "; ", @$v).CRLF;
-        }
+        $reply.= $k.": ".$v.CRLF;
+        ###########################################################
+        # unless(ref $v){                                         #
+        #   $reply.= $k.": ".$v.CRLF;#  unless index($k, ":" )==0 #
+        # }                                                       #
+        # else{                                                   #
+        #   $reply.=$k.": ". (join "; ", @$v).CRLF;               #
+        # }                                                       #
+        ###########################################################
       }
 
       $reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;

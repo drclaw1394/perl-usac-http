@@ -46,6 +46,7 @@ sub uhm_state {
           my $state=$_[IN_HEADER]{":state"}//={};
 
           for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
+            say "K $k V $v";
             if(!exists $state->{$k}){
               # First value assigned to a key.
               $state->{$k}=$v;
@@ -85,7 +86,7 @@ sub uhm_state {
         # Only process with initial header call
         # 
         for my $set ($_[OUT_HEADER] and $_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[]){
-          $set=[$set] if(!ref $set);
+          #$set=[$set] if(!ref $set); #Set cookie is assumed a list
 
           # Render the cookies into the next stage...?
           for my $cookie(($_[OUT_HEADER]{":state"}//=[])->@*){

@@ -74,6 +74,15 @@ use constant::more qw<
 	recursion_count_
 	peer_
   route_
+  
+  METHOD
+  SCHEME
+  AUTHORITY
+  PROTOCOL
+  QUERY
+  PATH
+  CAPTURES
+
   >
 ;
 
