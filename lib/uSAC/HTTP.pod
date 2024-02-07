@@ -12,7 +12,7 @@ uSAC::HTTP  - Event driven HTTP Server/Client and Middleware
   $site->add_to($server)
     ->add_route("endpoint/a")
     ->add_route(POST=>"endpoint/b", midddleware, sub {
-         $_[OUT_HEADER]{":status"}=HTTP_OK;
+         $_[REX][STATUS]=HTTP_OK;
          $_[OUT_HEADER]{HTTP_CONTENT_TYPE}="text/plain";
          $_[PAYLOAD]="This is the result";
          1;

@@ -83,7 +83,9 @@ $server
           #     $next->(@msg);         #
           # };                         #
           ##############################
+          
           $_[PAYLOAD]=time;
+          #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $_[PAYLOAD];
           &$next;
       }
     }
@@ -91,7 +93,7 @@ $server
 )
   ->add_route("redirect"
     =>sub {
-      $_[OUT_HEADER]{":status"}=301;
+      $_[REX][STATUS]=301;
       $_[OUT_HEADER]{HTTP_LOCATION()}="http://localhost:8084/static/hot.txt";
     }
   )

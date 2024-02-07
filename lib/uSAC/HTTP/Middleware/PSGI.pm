@@ -254,7 +254,8 @@ sub uhm_psgi {
         my $_connection=$_[OUT_HEADER]{HTTP_CONNECTION()};
         $h{HTTP_CONNECTION()}=$_connection if $_connection;
         $res->[1]=\%h;
-        $res->[1]{":status"}=$res->[0];
+        #$res->[1]{":status"}=$res->[0];
+        $rex->[STATUS]=$rex->[0];
 
         if($_ eq "ARRAY"){
           Log::OK::TRACE and log_trace "IN DO ARRAY";
@@ -294,7 +295,6 @@ sub do_glob {
 
 	my ($code, $psgi_headers, $psgi_body)=@$res;
 
-  #$psgi_headers->{":status"}=$code;
 
 	#setup headers
 

@@ -64,13 +64,18 @@ sub send_file_uri {
     #TODO: needs testing
     for my $t ($headers->{"if-none-match"}){
       #HTTP_IF_NONE_MATCH){
-      $out_headers->{":status"}=HTTP_OK and last unless $t;
-      $out_headers->{":status"}=HTTP_NOT_MODIFIED and last;	#no body to be sent
+      #
+      #$out_headers->{":status"}=HTTP_OK and last unless $t;
+      $rex->[STATUS]=HTTP_OK and last unless $t;
+
+      #$out_headers->{":status"}=HTTP_NOT_MODIFIED and last;	#no body to be sent
+      $rex->[STATUS]=HTTP_NOT_MODIFIED and last;
     }
 
     #TODO: needs testing
     for my $time ($headers->{"if-modified-since"}){
-      $out_headers->{":status"}=HTTP_OK and last unless $time;
+      #$out_headers->{":status"}=HTTP_OK and last unless $time;
+      $rex->[STATUS]=HTTP_OK and last unless $time;
 
       for($time){
         Log::OK::TRACE and log_trace " converting cookie expires from stamp to epoch";
@@ -91,15 +96,17 @@ sub send_file_uri {
         #as the time is already gmt
         #
         my $epoch = timelocal_modern($sec, $min, $hour, $mday, $months{$mon_key}, $year);
-        $out_headers->{":status"}=HTTP_OK  and last if $mod_time>$epoch;
+        #$out_headers->{":status"}=HTTP_OK  and last if $mod_time>$epoch;
+        $rex->[STATUS]=HTTP_OK and last if $mod_time>$epoch;
+
       }
 
 
 
       #my $tp=Time::Piece->strptime($time, "%a, %d %b %Y %T GMT");
 
-      #$out_headers->{":status"}=HTTP_OK  and last if $mod_time>$tp->epoch;
-      $out_headers->{":status"}=HTTP_NOT_MODIFIED;	#no body to be sent
+      #$out_headers->{":status"}=HTTP_NOT_MODIFIED;	#no body to be sent
+      $rex->[STATUS]=HTTP_NOT_MODIFIED;
     }
   }
 
@@ -162,14 +169,18 @@ sub send_file_uri {
 
 
     unless(@ranges){
-      $out_headers->{":status"}=HTTP_RANGE_NOT_SATISFIABLE;
+      #$out_headers->{":status"}=HTTP_RANGE_NOT_SATISFIABLE;
+      $rex->[STATUS]=HTTP_RANGE_NOT_SATISFIABLE;
+
       $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
 
       $next->($matcher, $rex, $in_header, $out_headers, "");
       return;
     }
     elsif(@ranges==1){
-      $out_headers->{":status"}=HTTP_PARTIAL_CONTENT;
+      #$out_headers->{":status"}=HTTP_PARTIAL_CONTENT;
+      $rex->[STATUS]=HTTP_PARTIAL_CONTENT;
+
       my $total_length=0;
       $total_length+=($_->[1]-$_->[0]+1) for @ranges;
       
@@ -197,7 +208,9 @@ sub send_file_uri {
 
   $next->($matcher, $rex, $in_header, $out_headers, "" ) and return
   if($in_header->{":method"} eq "HEAD" 
-      or $out_headers->{":status"}==HTTP_NOT_MODIFIED);
+    #or $out_headers->{":status"}==HTTP_NOT_MODIFIED);
+      or $rex->[STATUS]==HTTP_NOT_MODIFIED);
+
 
   # Send file
   # We only use send file if content length is larger than $sendfile
@@ -428,7 +441,9 @@ sub _make_list_dir {
     Log::OK::TRACE and log_trace "DIR LISTING for $abs_path";
 		unless(-d _ and  -r _){
       Log::OK::TRACE and log_trace "No dir here $abs_path";
-      $_[OUT_HEADER]{":status"}= HTTP_NOT_FOUND;
+      #$_[OUT_HEADER]{":status"}= HTTP_NOT_FOUND;
+      $_[REX][STATUS]=HTTP_NOT_FOUND;
+
       $_[PAYLOAD]="";
       $_[CB]=undef;
 			return &$next;
@@ -458,7 +473,9 @@ sub _make_list_dir {
 		$ren->($data, $labels, \@results);	#Render to output
 
     # Set status if not already set
-    $_[OUT_HEADER]{":status"}=HTTP_OK; 
+    #$_[OUT_HEADER]{":status"}=HTTP_OK; 
+    $_[REX][STATUS]=HTTP_OK;
+
     $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $data;
 
     for my ($k,$v)(@type){
@@ -623,7 +640,8 @@ sub uhm_static_root {
           # Previous middleware did not find anything, or we don't have a
           # response just yet
           #
-          return &$next unless($_[OUT_HEADER]{":status"}//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
+          #return &$next unless($_[OUT_HEADER]{":status"}//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
+          return &$next unless($_[REX][STATUS]//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
 
 
           $path=$html_root."/".$p;
@@ -755,7 +773,8 @@ sub uhm_static_root {
           else {
             # Return the path in the payload,
             # Set the stats us undef, as the result needs to be rendered
-            $_[OUT_HEADER]{":status"}=undef;
+            #$_[OUT_HEADER]{":status"}=undef;
+            $_[REX][STATUS]=undef;
             $_[PAYLOAD]=$entry->[File::Meta::Cache::key_];
             $closer->($entry);
             return &$next;
@@ -764,7 +783,9 @@ sub uhm_static_root {
 
         # Didn't match anything in the roots.
         $_[PAYLOAD]="";
-        $_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
+        #$_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND unless $as_error;
+        $_[REX][STATUS]=HTTP_NOT_FOUND unless $as_error;
+
         $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
         &$next;
       }

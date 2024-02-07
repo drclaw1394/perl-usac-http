@@ -156,7 +156,8 @@ sub websocket_client_in {
         my $expected_key=builtin::trim MIME::Base64::encode_base64
             Digest::SHA1::sha1($key."258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
         if(
-              $_[OUT_HEADER]{":status"}==HTTP_SWITCHING_PROTOCOLS
+              #$_[OUT_HEADER]{":status"}==HTTP_SWITCHING_PROTOCOLS
+              $_[REX][STATUS]==HTTP_SWITCHING_PROTOCOLS
           and $headers{connection} eq "Upgrade"    
           and $headers{upgrade} eq "websocket"
           and $headers{"sec-websocket-accept"} eq $expected_key
@@ -316,7 +317,9 @@ sub websocket_server_in {
 
                 $_[ROUTE]=$line;
                 $_[REX]=$rex;
-                $headers->{":status"}= HTTP_SWITCHING_PROTOCOLS;
+                #$headers->{":status"}= HTTP_SWITCHING_PROTOCOLS;
+                $_[REX][STATUS]=HTTP_SWITCHING_PROTOCOLS;
+
                 $_[OUT_HEADER]=$headers;
                 $_[PAYLOAD]=$ws;
                 $_[CB]=undef;

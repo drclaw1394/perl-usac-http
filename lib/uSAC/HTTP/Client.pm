@@ -63,7 +63,8 @@ method _inner_dispatch :override {
         #say STDERR __PACKAGE__." NO CALLBACK, no more data from parser expected. Return to pool";
 
         #TODO: Check status code
-        for($_[IN_HEADER]{":status"}){
+        #for($_[IN_HEADER]{":status"}){
+        for($_[REX][STATUS]){
             if($_==HTTP_OK){
               #  issue new queued request
             }
@@ -329,8 +330,8 @@ sub __request {
     #  Obtain session or create new. Update with the filehandle
     my %in_header=();
 
-    $out_header->{":method"}=$method;
-    $out_header->{":path"}=$path;
+    #$out_header->{":method"}=$method;
+    #$out_header->{":path"}=$path;
 
 
 
@@ -345,6 +346,8 @@ sub __request {
     $rex->[uSAC::HTTP::Rex::route_]=$route;
     
 
+    $rex->[METHOD]=$method;
+    $rex->[PATH]=$path;
     # Set the current rex and route for the session.
     # This is needed for the parser in client mode. It makes the route known
     # ahead of time.
@@ -412,7 +415,8 @@ method _redirect_external {
     my $hp=($uri->host_port);#//$_[OUT_HEADER]{":authority"};
     my $header={};
     $header->{HTTP_HOST()}=$uri->host_port;
-    $self->request($hp, $_[OUT_HEADER]{":method"}, $uri->path, $header, "", 1);
+    #$self->request($hp, $_[OUT_HEADER]{":method"}, $uri->path, $header, "", 1);
+    $self->request($hp, $_[REX][METHOD], $uri->path, $header, "", 1);
 }
 
 1;

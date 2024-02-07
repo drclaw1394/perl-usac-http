@@ -133,7 +133,7 @@ sub make_parser{
   my $multi_state=0;
   my $chunked_state=0;
   my $first=1;
-  my $out_header;#={":status"=> -1 };
+  my $out_header;
   my $dummy_cb=sub {};
 
   #TODO: this needs to be an argument supplied by the server
@@ -171,71 +171,36 @@ sub make_parser{
         #
         if ($state== STATE_RESPONSE or $state == STATE_REQUEST) {
           $pos3=index $buf, CRLF2;#, $ppos;
-          %h=();
           # Header is not complete. need more
           return if($pos3<=0);
-          #$pos3+=4;
           
-            # Header is complete
-            #
-            $body_type=undef;	
-            $body_len=undef;
+          # Header is received completely
+          #
+          %h=();
+          $body_type=undef;	
+          $body_len=undef;
             
-            #($method, $uri, $version, $buf)=split " ", substr($buf, $ppos, $pos3-$ppos), 4;
-            # Parse out the first line, with remaining content assigned to buf
-            ($method, $uri, $version, $buf)=split " ", $buf, 4;
-            
-            #say "method $method, uri $uri, version $version";
-          my $k;
-          my $val;
-          #my $ki;
-          my $vi;
-
-          #$ki=index($buf, ":")+1;
-          #while($ki>1){
-          $vi=index $buf, "\015\012";
-          while($vi>2){
-            #            $vi=index $buf, "\015\012", $ki;
-            #            $k=lc substr($buf,  0, ($ki-1));
-            #            ($val)=split(" ", substr($buf,  $ki),2);
-            #
-            #            $buf=substr($buf, $vi+2);#$ppos);
-            #            $ki=index($buf, ":")+1;
-            #
-            
-            ($k, $val)=split(": ",  substr($buf, 0, $vi), 2);
+          my $vi =index $buf, CRLF;
+          
+          ($method, $uri, $version)=split " ", substr $buf, 0, $vi;
+          
+          for my ($k, $val)(map split(":", $_, 2), split("\015\012", substr($buf, $vi+2, ($pos3-$vi)-2))){
+            $val=~s/^\s+//;
+            $val=~s/\s+$//;
             $k=lc $k;
-            #($val)=split  " ", $val;
-            $buf=substr $buf, $vi+2;
-            $vi=index $buf, "\015\012";
-            
-            
-            #\my $e=\$h{$k};
-
-            #$e= (!defined $e)? $val : ref $e ? [@$e, $val] :[$e, $val];
-            
-            for my $e ($h{$k}){
-              if($k eq "coookie"){
-                $e.= defined($e)?"; $val":$val;
-              }
-              elsif($k  eq "set-cookie"){
-                if(defined($e)){
-                    push @$e, $val;
-                }
-                else {
-                    $e=[$val];
-                }
-              }
-              else {
-                $e.= defined($e)?", $val":$val;
-              }
-                #$e= (!defined $e)? $val : ref $e ? [@$e, $val] :[$e, $val];
+            if($k eq "set-cookie"){
+              # Set-Cookie could occur multiple times and is not listable.
+              # Special case
+              push @$_, $val; # auto viv?
             }
+            else {
+              # RFC 6265 Cookie SHOULD NOT occur more than once. So treat as 'listable'
+              $_ = defined $_ ? $_.",".$val : $val for $h{lc $k};
+            }
+
           }
 
-          $buf=substr($buf, 2);
-          #use Data::Dumper;
-          #say Dumper \%h;
+          $buf=substr $buf, $pos3+4;
           if($psgi_compat){
 
             # If the package variable for PSGI compatibility is set
@@ -244,6 +209,7 @@ sub make_parser{
             #  combine multiple headers into a single comma separated list
             for my ($k, $e)(%h){
               $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e;
+
             }
           }
 
@@ -271,29 +237,41 @@ sub make_parser{
           
           if($mode==MODE_RESPONSE){
 
-            ##$out_header={":status" => -1};
             $out_header={};
-            $h{":method"}=$method;
-            $h{":scheme"}="http";
-            $h{":authority"}=$host;
+            #$h{":method"}=$method;
+            $_[REX][METHOD]=$method;
+
+            #$h{":scheme"}="http";
+            $_[REX][SCHEME]="http";
+
+            #$h{":authority"}=$host;
+            $_[REX][AUTHORITY]=$host;
+
             #$h{":path"}=$uri;
             
             ## psudeo psudeo headers
-            $h{":protocol"}=$version;
+            #$h{":protocol"}=$version;
+            $_[REX][PROTOCOL]=$version;
 
             $_i=index $uri, "?"; 
             if($_i>=0){
-              $h{":query"}=substr($uri, $_i+1);
-              $uri=$h{":path"}=substr($uri, 0, $_i);
+              #$h{":query"}=substr($uri, $_i+1);
+              $_[REX][QUERY]=substr($uri, $_i+1);
+
+              #$uri=$h{":path"}=substr($uri, 0, $_i);
+              $uri=$_[REX][PATH]=substr($uri, 0, $_i);
             }
             else {
-              $h{":path"}=$uri;
+              #$h{":path"}=$uri;
+              $uri=$_[REX][PATH]=$uri;
             }
 
             # In server mode, the route need needs to be matched for incomming
             # processing and a rex needs to be created
             #
-            ($route, $h{":captures"}) = $cb->($host, "$method $uri");
+            #($route, $h{":captures"}) = $cb->($host, "$method $uri");
+            ($route, $_[REX][CAPTURES]) = $cb->($host, "$method $uri");
+
             $rex=uSAC::HTTP::Rex->new($r, $ex, $route);
 
             # Work around for HTTP/1.0
@@ -313,8 +291,9 @@ sub make_parser{
             #$rex->[uSAC::HTTP::Rex::headers_]=\%h;
             $code=$uri; # NOTE: variable is called $uri, but doubles as code in client mode
 
-            # Set the status in the innerware
-            $h{":status"}=$code;
+            # Set the status in the innerware on the existing rex
+            #$h{":status"}=$code;
+            $rex->[STATUS]=$code;
 
             # Loopback the output headers to the input side of the chain.
             # 
@@ -360,7 +339,6 @@ sub make_parser{
             $payload="";
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
 
-            #$out_header={":status"=> -1};
           }
           #$state=$start_state;
         }
@@ -538,24 +516,9 @@ sub make_serialize{
 
       # If no valid code is set then set default 200
       #
-      my $code=(delete $_[OUT_HEADER]{":status"})//HTTP_OK;
+      #my $code=(delete $_[OUT_HEADER]{":status"})//HTTP_OK;
+      my $code= $_[REX][STATUS]//HTTP_OK;
 
-      # TODO: fix with multipart uploads? what is the content length
-      #
-      if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
-
-        $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
-
-        $ctx=1; #Mark as needing chunked
-        $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
-      }
-      elsif(!$_[PAYLOAD] and $code != HTTP_NOT_MODIFIED){
-
-        # No content but client might not have indicated a close. Force a content length of 0
-        $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
-      }
-
-      #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
 
 
       if($mode == MODE_RESPONSE){
@@ -566,7 +529,8 @@ sub make_serialize{
 
         # serialize in client mode is a request
         #
-        $reply="$_[OUT_HEADER]{':method'} $_[OUT_HEADER]{':path'} $protocol".CRLF;
+        #$reply="$_[OUT_HEADER]{':method'} $_[OUT_HEADER]{':path'} $protocol".CRLF;
+        $reply="$_[REX][METHOD] $_[REX][PATH] $protocol".CRLF;
       }
       else {
         # Mode none
@@ -575,6 +539,25 @@ sub make_serialize{
 
       # Render headers
       #
+      
+      # TODO: fix with multipart uploads? what is the content length
+      #
+      if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
+
+        # force 
+        # $reply.= HTTP_TRANSFER_ENCODING.": chunked".CRLF;
+        # Only set if
+        $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
+        $ctx=1; #Mark as needing chunked
+        $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
+      }
+      elsif(!$_[PAYLOAD] and $code != HTTP_NOT_MODIFIED){
+
+        # No content but client might not have indicated a close. Force a content length of 0
+        $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
+      }
+
+      #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
       
       # Special handling of set cookie header for multiple values
       my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
@@ -594,7 +577,7 @@ sub make_serialize{
         # header items onto one line
         #
         
-        next if index($k, ":" )==0;
+        #next if index($k, ":" )==0;
 
         $reply.= $k.": ".$v.CRLF;
         ###########################################################
