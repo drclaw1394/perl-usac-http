@@ -60,6 +60,8 @@ use Export::These qw<
   QUERY
   PATH
   CAPTURES
+  STATE
+  SCRATCH
 
 >;
 
@@ -93,6 +95,8 @@ use constant::more qw<
   QUERY
   PATH
   CAPTURES
+  STATE
+  SCRATCH
 
   >
 ;
@@ -205,7 +209,6 @@ calling.
 =cut
 sub rex_redirect_moved{
   my $url=$_[PAYLOAD];
-  #$_[OUT_HEADER]{":status"}=HTTP_MOVED_PERMANENTLY;
   $_[REX][STATUS]=HTTP_MOVED_PERMANENTLY;
   for my ($k,$v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
     $_[OUT_HEADER]{$k}=$v;
@@ -232,7 +235,6 @@ sub rex_redirect_see_other{
   # If url is string and relative, relative to server root
   # if ref to stirng and relative, relative to site
   # full url
-  #$_[OUT_HEADER]{":status"}=HTTP_SEE_OTHER;
   $_[REX][STATUS]=HTTP_SEE_OTHER;
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
     $_[OUT_HEADER]{$k}=$v;
@@ -256,7 +258,6 @@ calling.
 sub rex_redirect_found {
   my $url=$_[PAYLOAD];
   $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
-  #$_[OUT_HEADER]{":status"}=HTTP_FOUND;
   $_[REX][STATUS]=HTTP_FOUND;
 
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
@@ -282,7 +283,6 @@ calling.
 sub rex_redirect_temporary {
   my $url=$_[PAYLOAD];
   $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
-  #$_[OUT_HEADER]{":status"}=HTTP_TEMPORARY_REDIRECT;
   $_[REX][STATUS]=HTTP_TEMPORARY_REDIRECT;
 
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
@@ -307,7 +307,6 @@ sub rex_redirect_permanent {
     my $url=$_[PAYLOAD];
     $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
 
-    #$_[OUT_HEADER]{":status"}=HTTP_PERMANENT_REDIRECT;
     $_[REX][STATUS]=HTTP_PERMANENT_REDIRECT;
 
     for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
@@ -329,8 +328,7 @@ calling.
 =cut
 sub rex_redirect_not_modified {
   #my $url=$_[PAYLOAD];
-  #$_[OUT_HEADER]{":status"}=HTTP_NOT_MODIFIED;
-  $_[REX][STATUS]=HTTP_NOT_FOUND;
+  $_[REX][STATUS]=HTTP_NOT_MODIFIED;
 
   $_[PAYLOAD]="";
   $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
@@ -364,7 +362,6 @@ sub rex_error {
 
   #Locate applicable site urls to handle the error
 
-  #for($site->error_uris->{$_[OUT_HEADER]{":status"}}//()){
   for($site->error_uris->{$_[REX][STATUS]}//()){
       $_[PAYLOAD]=my $a=$_;
       $_[OUT_HEADER]{":as_error"}=1;
@@ -389,7 +386,6 @@ sub rex_error {
 Immediately renders a NOT FOUND error 
 =cut
 sub rex_error_not_found {
-  #$_[OUT_HEADER]{":status"}=HTTP_NOT_FOUND;
   $_[REX][STATUS]=HTTP_NOT_FOUND;
 	&rex_error;
 }
@@ -402,7 +398,6 @@ Immediately renders a NOT FOUND error
 =cut
 
 sub rex_error_forbidden {
-  #$_[OUT_HEADER]{":status"}= HTTP_FORBIDDEN;
   $_[REX][STATUS]=HTTP_FORBIDDEN;
 
 	&rex_error;
@@ -415,7 +410,6 @@ sub rex_error_forbidden {
 Immediately renders a NOT FOUND error 
 =cut
 sub rex_error_unsupported_media_type {
-  #$_[OUT_HEADER]{":status"}= HTTP_UNSUPPORTED_MEDIA_TYPE;
   $_[REX][STATUS]=HTTP_UNSUPPORTED_MEDIA_TYPE;
 	&rex_error;
 }
@@ -427,7 +421,6 @@ sub rex_error_unsupported_media_type {
 Immediately renders a NOT FOUND error 
 =cut
 sub rex_error_internal_server_error {
-  #$_[OUT_HEADER]{":status"}=HTTP_INTERNAL_SERVER_ERROR;
   $_[REX][STATUS]=HTTP_INTERNAL_SERVER_ERROR;
 
   &rex_error;
@@ -471,7 +464,6 @@ sub rex_redirect_internal {
 	if(($rex->[recursion_count_]) > 10){
 		$rex->[recursion_count_]=0;
 		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
-    #$_[OUT_HEADER]{":status"}=HTTP_LOOP_DETECTED;
     $_[REX][STATUS]=HTTP_LOOP_DETECTED;
     $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
 		return;

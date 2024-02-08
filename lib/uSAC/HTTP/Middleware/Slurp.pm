@@ -78,7 +78,6 @@ sub uhm_slurp {
           if($_[IN_HEADER]{HTTP_EXPECT()}){
             # Bypass and write a 100 reponse 
             my $header=$_[OUT_HEADER];
-            #$_[OUT_HEADER]{":status"}=HTTP_CONTINUE;
             $_[REX][STATUS]=HTTP_CONTINUE;
             $_[CB]=$dummy_cb;
             $_[ROUTE][1][ROUTE_OUTER_HEAD]->&*;

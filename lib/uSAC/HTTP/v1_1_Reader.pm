@@ -292,7 +292,6 @@ sub make_parser{
             $code=$uri; # NOTE: variable is called $uri, but doubles as code in client mode
 
             # Set the status in the innerware on the existing rex
-            #$h{":status"}=$code;
             $rex->[STATUS]=$code;
 
             # Loopback the output headers to the input side of the chain.
@@ -516,7 +515,6 @@ sub make_serialize{
 
       # If no valid code is set then set default 200
       #
-      #my $code=(delete $_[OUT_HEADER]{":status"})//HTTP_OK;
       my $code= $_[REX][STATUS]//HTTP_OK;
 
 
@@ -559,17 +557,11 @@ sub make_serialize{
 
       #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
       
+      #RFC 6265 -> duplicate cookies with the same name not permitted in same
+      #response
       # Special handling of set cookie header for multiple values
       my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
-
-      #RFC 6265 -> duplicate cookies with the same name not permitted in same response
-      #
-      unless(ref $v){
-        $reply.= HTTP_SET_COOKIE().": ".$v.CRLF if defined $v;
-      }
-      else{
-        $reply.= HTTP_SET_COOKIE().": ".$_.CRLF  for @$v;
-      }
+      $reply.= HTTP_SET_COOKIE().": ".$_.CRLF  for @$v;
 
 
       for my ($k, $v)(%{$_[OUT_HEADER]}){
@@ -580,14 +572,6 @@ sub make_serialize{
         #next if index($k, ":" )==0;
 
         $reply.= $k.": ".$v.CRLF;
-        ###########################################################
-        # unless(ref $v){                                         #
-        #   $reply.= $k.": ".$v.CRLF;#  unless index($k, ":" )==0 #
-        # }                                                       #
-        # else{                                                   #
-        #   $reply.=$k.": ". (join "; ", @$v).CRLF;               #
-        # }                                                       #
-        ###########################################################
       }
 
       $reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;

@@ -74,7 +74,7 @@ my $server; $server=usac_server {
     usac_error_route "/error/404" => sub {
                         say "ERROR FOR BLOG admin";
                         $_[PAYLOAD]="";#:"asdf";
-      $_[OUT_HEADER]{":status"}=404;
+      $_[REX][STATUS]=404;
       1;
                 };
 

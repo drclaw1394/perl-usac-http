@@ -29,6 +29,7 @@ sub uhm_state {
 
     my ($next, $index)=(shift, shift);
     my %options=@_;
+
     if($options{site}->mode){
       # True. client, want to process set-cookie headers into cookie jar
       Log::OK::TRACE and log_trace " HTTP State middleware configured for CLIENT";
@@ -40,30 +41,12 @@ sub uhm_state {
       
       sub {
         Log::OK::TRACE and log_trace " Server side state management";
-        if($_[OUT_HEADER]){  # and $_[IN_HEADER]{HTTP_COOKIE()}){
+        return &$next unless $_[OUT_HEADER];
 
-          # 
-          my $state=$_[IN_HEADER]{":state"}//={};
-
-          for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
-            say "K $k V $v";
-            if(!exists $state->{$k}){
-              # First value assigned to a key.
-              $state->{$k}=$v;
-            }
-            elsif(ref $state->{$k}){
-              # Existing key. ref Multiple values here
-              push $state->{$k}->@*, $v; 
-            }
-            else{
-              # Existing key, but wasn't a ref, wrap it
-              $state->{$k}=[$state->{$k}, $v];
-            }
-
-          }
-
-          # Define state for later middleware
-          $_[OUT_HEADER]{":state"}//=[];
+        my $state=$_[REX][STATE]//={};
+        for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
+          #say "K $k V $v";
+          push $state->{$k}->@*, $v;
         }
         &$next;
       }
@@ -74,7 +57,9 @@ sub uhm_state {
     my ($next, $index)=(shift,shift);
     my %options=@_;
     if($options{site}->mode){
-      # true is client mode
+      # true is client mode.  Th
+      # The REX STATE variable is used as a place holder to store the cookies retrieved from the cookie jar
+      #$_[OUT_HEADER]{HTTP_COOKIE()}=encode_cookie
     }
     else{
       # 
@@ -82,15 +67,13 @@ sub uhm_state {
       # in :state (output header) and serialize them into multiple head lines
       #
       sub {
+        return &$next unless $_[OUT_HEADER];
 
-        # Only process with initial header call
-        # 
-        for my $set ($_[OUT_HEADER] and $_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[]){
-          #$set=[$set] if(!ref $set); #Set cookie is assumed a list
 
-          # Render the cookies into the next stage...?
-          for my $cookie(($_[OUT_HEADER]{":state"}//=[])->@*){
-            push @$set, encode_set_cookie $cookie;
+        #Convert any cookie structures to strings for direct rendering in output
+        for my $set ($_[OUT_HEADER]{HTTP_SET_COOKIE()}//()){
+          for my $cookie (@$set){
+            $cookie=encode_set_cookie $cookie if ref $cookie;
           }
         }
         &$next;

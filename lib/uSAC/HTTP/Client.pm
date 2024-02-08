@@ -63,7 +63,6 @@ method _inner_dispatch :override {
         #say STDERR __PACKAGE__." NO CALLBACK, no more data from parser expected. Return to pool";
 
         #TODO: Check status code
-        #for($_[IN_HEADER]{":status"}){
         for($_[REX][STATUS]){
             if($_==HTTP_OK){
               #  issue new queued request
@@ -357,7 +356,6 @@ sub __request {
 
     # Call the head of the outerware function
     #
-    ##$out_header->{":status"}=-1;
     $route->[1][ROUTE_OUTER_HEAD]($route, $rex, \%in_header, $out_header, $payload, undef);
   };
 }
