@@ -351,7 +351,6 @@ sub __request {
     # This is needed for the parser in client mode. It makes the route known
     # ahead of time.
     $ex->[3]->$*=$rex;
-    #$ex->[7]->$*=$route;
 
 
     # Call the head of the outerware function
