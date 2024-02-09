@@ -135,6 +135,7 @@ sub make_parser{
   my $first=1;
   my $out_header;
   my $dummy_cb=sub {};
+  my @lines;
 
   #TODO: this needs to be an argument supplied by the server
   # Currently set from the PSGI middleware
@@ -180,11 +181,15 @@ sub make_parser{
           $body_type=undef;	
           $body_len=undef;
             
-          my $vi =index $buf, CRLF;
+          #my $vi =index $buf, CRLF;
+          @lines=split "\015\12", substr($buf,0, $pos3);
           
-          ($method, $uri, $version)=split " ", substr $buf, 0, $vi;
+          #($method, $uri, $version)=split " ", substr $buf, 0, $vi;
+          ($method, $uri, $version)=split " ", shift @lines; #substr $buf, 0, $vi;
           
-          for my ($k, $val)(map split(":", $_, 2), split("\015\012", substr($buf, $vi+2, ($pos3-$vi)-2))){
+          #for my ($k, $val)(map split(":", $_, 2), split("\015\012", substr($buf, $vi+2, ($pos3-$vi)-2))){
+
+          for my ($k, $val)(map split(":", $_, 2), @lines){
             $val=~s/^\s+//;
             $val=~s/\s+$//;
             $k=lc $k;
@@ -201,6 +206,7 @@ sub make_parser{
           }
 
           $buf=substr $buf, $pos3+4;
+
           if($psgi_compat){
 
             # If the package variable for PSGI compatibility is set
@@ -448,10 +454,12 @@ sub make_parser{
       Log::OK::ERROR and log_error  $context;
 
       if(Log::OK::DEBUG){
-        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context, HTTP__STATUS()=>500} ,my $c=$context, my $d=undef);
+        $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
+        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
       }
       else {
-        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0, HTTP__STATUS()=>500}, my $c="", my $d=undef);
+        $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
+        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0}, my $c="", my $d=undef);
       }
     }
   };

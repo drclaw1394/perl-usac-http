@@ -571,6 +571,7 @@ sub new {
 	$self[recursion_count_]=0;
   $self[in_progress_]=undef;
   $self[id_]=$id++;
+  $self[STATE]={};
   #$self;
   \@self;
 }

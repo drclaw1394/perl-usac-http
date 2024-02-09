@@ -43,8 +43,8 @@ my $server=uSAC::HTTP::Server->new(
 
 my $site;
 $server
-->add_middleware(uhm_state)
-  ->add_middleware(uhm_log dump_headers=>1)
+#->add_middleware(uhm_state)
+#->add_middleware(uhm_log dump_headers=>1)
   ->add_site($site=uSAC::HTTP::Site->new(
     id=>"blog",
     delegate=>$delegate
@@ -87,19 +87,14 @@ $server
           
           $_[PAYLOAD]=time;
 
-          if($_[REX][STATE]{key}){
-
+          if($_[REX][STATE]->%*){
+            use Data::Dumper;
+            say Dumper $_[REX][STATE];
+            \my @sc=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
+            push @sc, cookie_struct "sid1"=>"asdf";
+            push @sc, cookie_struct "sid2", "value1";
           }
 
-          \my @sc=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//[];
-          
-          push @sc, cookie_struct "asdfasd"=>"asdf";
-          
-
-          #push $_[OH]{HTTP_SET_COOKIE()}->@*, 
-          push $_[OUT_HEADER]{HTTP_SET_COOKIE()}->@*, cookie_struct "test1", "value1";
-
-          #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $_[PAYLOAD];
           &$next;
       }
     }
