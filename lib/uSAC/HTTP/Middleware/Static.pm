@@ -455,7 +455,8 @@ sub _make_list_dir {
         s|^$html_root/||;                       #strip out html_root
         my $base=(split "/")[-1].($isDir? "/":"");
 
-        ["$_[IN_HEADER]{':path'}$base", $base, stat _]
+        #["$_[IN_HEADER]{':path'}$base", $base, stat _]
+        ["$_[REX][PATH]$base", $base, stat _]
       }
       @fs_paths;
 		my $ren=$renderer//&_html_dir_list;
@@ -501,7 +502,7 @@ sub uhm_static_root {
     # Odd number of arguments assume last item is html root
     my $tmp=pop;
     %options=@_;
-    unshift $options{roots}->@*, $tmp;#uSAC::Util::path $tmp, $frame;
+    unshift $options{roots}->@*, $tmp;
   }
   else {
     # Even or zero arguments
@@ -610,13 +611,12 @@ sub uhm_static_root {
         # middleware argument.
         #
         #$p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
-        $p=$_[PAYLOAD]||$_[IN_HEADER]{":path"};
+        $p=$_[PAYLOAD]||$_[REX][PATH];
 
         #
         # Strip the prefix if its specified
         #
         $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
-        #say "prefix is $prefix";
 	#if($prefix ne "/"){
         $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
 	  #}

@@ -329,8 +329,6 @@ sub __request {
     #  Obtain session or create new. Update with the filehandle
     my %in_header=();
 
-    #$out_header->{":method"}=$method;
-    #$out_header->{":path"}=$path;
 
 
 

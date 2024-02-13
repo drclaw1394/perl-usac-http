@@ -994,7 +994,40 @@ sub uhm_dead_horse_stripper {
 
   my $outer=sub {
     my ($next ,$index, %options)=@_;
-    $next;
+      # This is now the pipeline sequencer
+      sub {
+      #my $session=$_[REX][uSAC::HTTP::Rex::session_];
+        my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];#$session->sequence;
+        my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];#$session->rex;
+
+        #say "Session $session";
+        #say "seq: $seq";
+        #say "Pipeline $pipeline";
+
+        # Save the arguments into partition sequence
+        if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){
+          push $seq->{$_[REX][uSAC::HTTP::Rex::id_]}->@*, \@_;
+
+
+          # Use the first rex as key and call middleware
+          my $rex=$pipeline->[0];
+          my $args=shift $seq->{$rex->[uSAC::HTTP::Rex::id_]}->@*;
+          $next->(@$args);
+
+          # If the CB was not set, then that was the end
+          # of the rex so shift it off
+          unless ($args->[CB]){
+            shift @$pipeline;
+            delete $seq->{$rex->[uSAC::HTTP::Rex::id_]};
+          }
+        }
+        else {
+          # short cut.
+          shift @$pipeline unless ($_[CB]);
+          &$next;
+        }
+
+      }
   };
 
   my $error=sub {

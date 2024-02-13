@@ -12,12 +12,6 @@ use uSAC::IO::SReader;
 use uSAC::IO::SWriter;
 use IO::FD;
 
-
-#require uSAC::HTTP::Server;
-use EV;
-use AnyEvent;
-#use uSAC::HTTP::Server;
-
 use Errno qw(EAGAIN EINTR);
 
 use constant::more MAX_READ_SIZE => 4096*16;
@@ -44,7 +38,8 @@ field @_write_stack;
 field $_current_reader;
 field $_read_cache;
 field $_writer_cached;
-field $_rex;
+field $_rex       :reader;        # Incoming stack/pipeline
+field $_sequence  :reader;   # Outgoing reordering
 field $_dropper;
 field $_write_queue;
 field $_sr;
@@ -64,7 +59,8 @@ method init {
   $_time=$Time;   #Copy value of clock to time
   ($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme, $_peer, $_read_size)=@_;
   \my @zombies= $zombies;
-
+  $_rex=[];
+  $_sequence={};
   #make reader
   my $s=sub {
     #Close causes stack reset
@@ -175,7 +171,9 @@ method revive {
 	$_scheme=$_[2];
 	$_peer=$_[3];
 
-  $_rex=undef;
+  @$_rex=();#undef;
+  %$_sequence=();
+
   $_route=undef;
 	@_write_stack=();
 	$_closeme=undef;
@@ -261,7 +259,7 @@ our $timer=uSAC::IO::timer 0,1, sub {
 #Return an array of references to variables which are publically editable
 #Bypasses method calls for accessors
 method exports {
-	[\$_closeme, $_dropper, \$_server, \$_rex, \$_in_progress, $_write, $_peer];#, \$_route];
+	[\$_closeme, $_dropper, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence];#, \$_route];
 
 }
 ##################################################################################

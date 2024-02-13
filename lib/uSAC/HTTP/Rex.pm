@@ -86,6 +86,8 @@ use constant::more qw<
 	recursion_count_
 	peer_
   route_
+  pipeline_
+  sequence_
 
   STATUS  
   METHOD
@@ -470,8 +472,10 @@ sub rex_redirect_internal {
 	}
 
   $rex->[in_progress_]=undef;
-  $_[IN_HEADER]{":path"}=$uri;
-  $_[IN_HEADER]{":path_stripped"}=$uri;
+  #$_[IN_HEADER]{":path"}=$uri;
+  $_[REX][PATH]=$uri;
+  #$_[IN_HEADER]{":path_stripped"}=$uri;
+  #
   #Here we reenter the main processing chain with a  new url, potential
   #undef $_[0];
   $rex->[recursion_count_]++;
@@ -562,11 +566,10 @@ sub new {
 
 
   $self[session_]=$_[1];
-  #$self->[route_]=$_[2];
 
 	#NOTE: A single call to Session export. give references to important variables
 	
-	($self[closeme_], $self[dropper_], \$self[server_], undef, undef, $self[write_], $self[peer_])= $_[2]->@*;
+	($self[closeme_], $self[dropper_], \$self[server_], $self[pipeline_], undef, $self[write_], $self[peer_], $self[sequence_])= $_[2]->@*;
 
 	$self[recursion_count_]=0;
   $self[in_progress_]=undef;

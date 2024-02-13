@@ -69,9 +69,6 @@ sub make_parser{
   # mode is server or  client
   # route_callback is the interace to call to return a route/capture for the url and host
   #
-  #my $r=shift;    
-  #my $mode=shift; #Client or server
-  #my $cb=shift;
 
   my %options=@_;
 
@@ -84,30 +81,17 @@ sub make_parser{
 
   my $psgi_compat=$options{psgi_compat}//$PSGI_COMPAT;
   my $keep_alive=$options{keep_alive}//$KEEP_ALIVE;
-  my $enable_pipeline=$options{enable_pipeline}//0;
 
   my $ex=$r->exports;
 
   \my $closeme=$ex->[0];
   my $dropper=$ex->[1];
   \my $self=$ex->[2];
-  my $rex_ref;
-  if($enable_pipeline){
-    # Expecting external middleware to pair up requests and responses with sequencing
-    $rex_ref=\undef;
-  }
-  else{
-    # Synchronous request response cycle. Outgoing rex is stored in session
-    $rex_ref=$ex->[3];
-  }
 
-  #\my $rex=$ex->[3];
-  #\my $route=$ex->[7];
   my $route;
 
-  \my $rex=$rex_ref;
+  my $pipeline=$ex->[3];
   
-  #weaken $r;
 
   my ($state, $seq) = ($start_state, 0);
   my ($method, $uri, $version, $len, $pos, $req);
@@ -142,6 +126,7 @@ sub make_parser{
 
   sub {
     my $processed=0;
+    my $rex=$pipeline->[$pipeline->@*-1];
 
     # Set default HTTP code
     $code=-1;
@@ -170,7 +155,8 @@ sub make_parser{
         #	$url=> status code
         #	$version => comment
         #
-        if ($state== STATE_RESPONSE or $state == STATE_REQUEST) {
+        #if ($state== STATE_RESPONSE or $state == STATE_REQUEST) {
+        if ($state < STATE_HEADERS) {
           $pos3=index $buf, CRLF2;#, $ppos;
           # Header is not complete. need more
           return if($pos3<=0);
@@ -190,8 +176,9 @@ sub make_parser{
           #for my ($k, $val)(map split(":", $_, 2), split("\015\012", substr($buf, $vi+2, ($pos3-$vi)-2))){
 
           for my ($k, $val)(map split(":", $_, 2), @lines){
-            $val=~s/^\s+//;
-            $val=~s/\s+$//;
+            #$val=~s/^\s+//;
+            #$val=~s/\s+$//;
+            ($val)=split " ",$val;
             $k=lc $k;
             if($k eq "set-cookie"){
               # Set-Cookie could occur multiple times and is not listable.
@@ -243,42 +230,36 @@ sub make_parser{
           
           if($mode==MODE_RESPONSE){
 
+            $rex=uSAC::HTTP::Rex->new($r, $ex);#, $route);
+            push @$pipeline, $rex;
             $out_header={};
-            #$h{":method"}=$method;
-            $_[REX][METHOD]=$method;
+            $rex->[METHOD]=$method;
 
-            #$h{":scheme"}="http";
-            $_[REX][SCHEME]="http";
+            $rex->[SCHEME]="http";
 
-            #$h{":authority"}=$host;
-            $_[REX][AUTHORITY]=$host;
+            $rex->[AUTHORITY]=$host;
 
-            #$h{":path"}=$uri;
             
-            ## psudeo psudeo headers
-            #$h{":protocol"}=$version;
-            $_[REX][PROTOCOL]=$version;
+            $rex->[PROTOCOL]=$version;
 
             $_i=index $uri, "?"; 
             if($_i>=0){
-              #$h{":query"}=substr($uri, $_i+1);
-              $_[REX][QUERY]=substr($uri, $_i+1);
+              $rex->[QUERY]=substr($uri, $_i+1);
 
-              #$uri=$h{":path"}=substr($uri, 0, $_i);
-              $uri=$_[REX][PATH]=substr($uri, 0, $_i);
+              $uri=$rex->[PATH]=substr($uri, 0, $_i);
             }
             else {
-              #$h{":path"}=$uri;
-              $uri=$_[REX][PATH]=$uri;
+              $uri=$rex->[PATH]=$uri;
             }
 
             # In server mode, the route need needs to be matched for incomming
             # processing and a rex needs to be created
             #
             #($route, $h{":captures"}) = $cb->($host, "$method $uri");
-            ($route, $_[REX][CAPTURES]) = $cb->($host, "$method $uri");
+            ($route, $rex->[CAPTURES]) = $cb->($host, "$method $uri");
 
-            $rex=uSAC::HTTP::Rex->new($r, $ex, $route);
+            #say "parse Session $r";
+            #say "parse Pipeline $pipeline";
 
             # Work around for HTTP/1.0
             if($closeme){
@@ -302,16 +283,14 @@ sub make_parser{
 
             # Loopback the output headers to the input side of the chain.
             # 
-            #$out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
-            unless($enable_pipeline){
-              #Session stores the outgoing rex for clients 
-              $out_header=$rex->[uSAC::HTTP::Rex::out_headers_];
-              $route=$rex->[uSAC::HTTP::Rex::route_];
-              
-              #$rex=uSAC::HTTP::Rex->new($r, $ex);
-              #$rex->[uSAC::HTTP::Rex::out_headers_]=$out_header;
-              #$rex->[uSAC::HTTP::Rex::route_]=$route;
-            }
+            ########################################################
+            # unless($enable_pipeline){                            #
+            #   #Session stores the outgoing rex for clients       #
+            #   $out_header=$rex->[uSAC::HTTP::Rex::out_headers_]; #
+            #   $route=$rex->[uSAC::HTTP::Rex::route_];            #
+            #                                                      #
+            # }                                                    #
+            ########################################################
           }
           else {
             #MODE_NONE
@@ -464,6 +443,7 @@ sub make_parser{
     }
   };
 }
+
 
 my %out_ctx;
 

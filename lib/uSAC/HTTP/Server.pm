@@ -223,7 +223,7 @@ method _setup_stream_passive {
 			or warn "chmod $l->{path} failed: $!";
 	}
 	else {
-		IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
+    #IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
 	}
 
 	my $flags=IO::FD::fcntl $fh, F_GETFL, 0;
@@ -387,7 +387,7 @@ method make_stream_accept {
       }
 
       $i++;
-      $sessions{ $session_id } = $session;
+      $sessions{$session_id} = $session;
 
       $session_id++;
     }

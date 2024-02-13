@@ -157,9 +157,11 @@ sub uhm_redirect_application {
         # Permanent redirect any url which do not end in a slash or have a file
         # extension
         #
-        for($_[IN_HEADER]{":path"}){
+        #for($_[IN_HEADER]{":path"}){
+        for($_[REX][PATH]){
           return &$next if(m|/$| or /$ignore/ or !/$allow/);
-          $q=$_[IN_HEADER]{":query"};
+          #$q=$_[IN_HEADER]{":query"};
+          $q=$_[REX][QUERY];
 
           # Apply the query if it was present
           $_[PAYLOAD]= $_."/". ($q? "?".$q : "");
