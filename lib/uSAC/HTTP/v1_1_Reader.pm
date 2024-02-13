@@ -472,8 +472,32 @@ sub make_serialize{
 
 
   sub {
-  #Log::OK::TRACE and log_trace "Main serialiser called from: ".  join  " ", caller;
-    #Log::OK::TRACE and log_trace join ", ", @_;
+
+        my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];
+        my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
+
+        if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){
+          push $seq->{$_[REX][uSAC::HTTP::Rex::id_]}->@*, \@_;
+
+
+          # Use the first rex as key and call middleware
+          my $rex=$pipeline->[0];
+          my $args=shift $seq->{$rex->[uSAC::HTTP::Rex::id_]}->@*;
+          @_=@$args;
+
+          # If the CB was not set, then that was the end
+          # of the rex so shift it off
+          unless ($args->[CB]){
+            shift @$pipeline;
+            delete $seq->{$rex->[uSAC::HTTP::Rex::id_]};
+          }
+        }
+        else {
+          # short cut.
+          shift @$pipeline unless ($_[CB]);
+        }
+
+
 
     $ctx=undef;
 
@@ -525,7 +549,7 @@ sub make_serialize{
 
       # Render headers
       #
-      
+
       # TODO: fix with multipart uploads? what is the content length
       #
       if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
@@ -544,7 +568,7 @@ sub make_serialize{
       }
 
       #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
-      
+
       #RFC 6265 -> duplicate cookies with the same name not permitted in same
       #response
       # Special handling of set cookie header for multiple values
@@ -556,7 +580,7 @@ sub make_serialize{
         # Render anything that isn't a 'pseudo header'. and combine multiple
         # header items onto one line
         #
-        
+
         #next if index($k, ":" )==0;
 
         $reply.= $k.": ".$v.CRLF;

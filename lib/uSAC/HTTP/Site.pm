@@ -124,7 +124,8 @@ method _inner_dispatch {
     # This gives an opertunity to to set some important values particular to server side
     #
     Log::OK::TRACE and log_trace __PACKAGE__. " end is server ".join ", ", caller;
-    \&rex_write;
+    #\&rex_write;
+    undef;
 }
 
 method _error_dispatch {
@@ -201,6 +202,7 @@ method _add_route {
   my $static_headers=$self->find_root->static_headers;
 
   #TODO: Need to rework this for other HTTP versions
+  #       SHOULD use the parse/serialize stored in the session
 
   my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$static_headers;
 
@@ -225,7 +227,8 @@ method _add_route {
     for(@inner){
       $middler->register($_);
     }
-    $inner_head=$middler->link($end, site=>$self);
+    #$inner_head=$middler->link($end, site=>$self);
+    $inner_head=$middler->link($end//$outer_head, site=>$self);
   }
   else{
     $inner_head=$end;
@@ -959,75 +962,81 @@ sub uhm_dead_horse_stripper {
 		my $inner_next=shift;
     my $index=shift;
     my %options=@_;
-		sub {
-      Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";
-
-      if($_[OUT_HEADER]){
-        ###########################################
-        # use Data::Dump::Color;                  #
-        # dd $_[OUT_HEADER];                      #
-        # $_[IN_HEADER]{":path_stripped"}=        #
-        #   $len                                  #
-        #   ?substr($_[IN_HEADER]{":path"}, $len) #
-        #   : $_[IN_HEADER]{":path"};             #
-        ###########################################
-      }
-      
-      &$inner_next; #call the next
-
-      #Check the inprogress flag
-      #here we force write unless the rex is in progress
-      #Log::OK::WARN and log_warn "REX in progress flag not set!";
-      #####################################################################################
-      # unless($_[REX][uSAC::HTTP::Rex::in_progress_]){                                   #
-      #   Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef"; #
-      #   $_[CB]=undef;                                                                   #
-      #   return &rex_write;                                                              #
-      # }                                                                                 #
-      #####################################################################################
-
-      Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";
-      undef;
-    },
+    $inner_next;
+    ###########################################################################################
+    #             sub {                                                                       #
+    #   Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";                               #
+    #                                                                                         #
+    #   if($_[OUT_HEADER]){                                                                   #
+    #     ###########################################                                         #
+    #     # use Data::Dump::Color;                  #                                         #
+    #     # dd $_[OUT_HEADER];                      #                                         #
+    #     # $_[IN_HEADER]{":path_stripped"}=        #                                         #
+    #     #   $len                                  #                                         #
+    #     #   ?substr($_[IN_HEADER]{":path"}, $len) #                                         #
+    #     #   : $_[IN_HEADER]{":path"};             #                                         #
+    #     ###########################################                                         #
+    #   }                                                                                     #
+    #                                                                                         #
+    #   &$inner_next; #call the next                                                          #
+    #                                                                                         #
+    #   #Check the inprogress flag                                                            #
+    #   #here we force write unless the rex is in progress                                    #
+    #   #Log::OK::WARN and log_warn "REX in progress flag not set!";                          #
+    #   ##################################################################################### #
+    #   # unless($_[REX][uSAC::HTTP::Rex::in_progress_]){                                   # #
+    #   #   Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef"; # #
+    #   #   $_[CB]=undef;                                                                   # #
+    #   #   return &rex_write;                                                              # #
+    #   # }                                                                                 # #
+    #   ##################################################################################### #
+    #                                                                                         #
+    #   Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";                         #
+    #   undef;                                                                                #
+    # },                                                                                      #
+    ###########################################################################################
 
 	};
 
   my $outer=sub {
     my ($next ,$index, %options)=@_;
       # This is now the pipeline sequencer
-      sub {
-      #my $session=$_[REX][uSAC::HTTP::Rex::session_];
-        my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];#$session->sequence;
-        my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];#$session->rex;
-
-        #say "Session $session";
-        #say "seq: $seq";
-        #say "Pipeline $pipeline";
-
-        # Save the arguments into partition sequence
-        if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){
-          push $seq->{$_[REX][uSAC::HTTP::Rex::id_]}->@*, \@_;
-
-
-          # Use the first rex as key and call middleware
-          my $rex=$pipeline->[0];
-          my $args=shift $seq->{$rex->[uSAC::HTTP::Rex::id_]}->@*;
-          $next->(@$args);
-
-          # If the CB was not set, then that was the end
-          # of the rex so shift it off
-          unless ($args->[CB]){
-            shift @$pipeline;
-            delete $seq->{$rex->[uSAC::HTTP::Rex::id_]};
-          }
-        }
-        else {
-          # short cut.
-          shift @$pipeline unless ($_[CB]);
-          &$next;
-        }
-
-      }
+      $next
+      ######################################################################
+      # sub {                                                              #
+      # #my $session=$_[REX][uSAC::HTTP::Rex::session_];                   #
+      #   my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];#$session->sequence; #
+      #   my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];#$session->rex; #
+      #                                                                    #
+      #   #say "Session $session";                                         #
+      #   #say "seq: $seq";                                                #
+      #   #say "Pipeline $pipeline";                                       #
+      #                                                                    #
+      #   # Save the arguments into partition sequence                     #
+      #   if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){                       #
+      #     push $seq->{$_[REX][uSAC::HTTP::Rex::id_]}->@*, \@_;           #
+      #                                                                    #
+      #                                                                    #
+      #     # Use the first rex as key and call middleware                 #
+      #     my $rex=$pipeline->[0];                                        #
+      #     my $args=shift $seq->{$rex->[uSAC::HTTP::Rex::id_]}->@*;       #
+      #     $next->(@$args);                                               #
+      #                                                                    #
+      #     # If the CB was not set, then that was the end                 #
+      #     # of the rex so shift it off                                   #
+      #     unless ($args->[CB]){                                          #
+      #       shift @$pipeline;                                            #
+      #       delete $seq->{$rex->[uSAC::HTTP::Rex::id_]};                 #
+      #     }                                                              #
+      #   }                                                                #
+      #   else {                                                           #
+      #     # short cut.                                                   #
+      #     shift @$pipeline unless ($_[CB]);                              #
+      #     &$next;                                                        #
+      #   }                                                                #
+      #                                                                    #
+      # }                                                                  #
+      ######################################################################
   };
 
   my $error=sub {

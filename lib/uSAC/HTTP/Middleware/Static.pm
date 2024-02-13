@@ -605,7 +605,7 @@ sub uhm_static_root {
     my $as_error;
     sub {
       if($_[OUT_HEADER]){
-        $as_error=$_[OUT_HEADER]{":as_error"};
+        $as_error=$_[REX][AS_ERROR];#$_[OUT_HEADER]{":as_error"};
         # 
         # Path is either given with the rex object or passed in by the payload
         # middleware argument.

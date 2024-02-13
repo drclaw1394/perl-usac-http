@@ -62,6 +62,7 @@ use Export::These qw<
   CAPTURES
   STATE
   SCRATCH
+  AS_ERROR
 
 >;
 
@@ -99,6 +100,7 @@ use constant::more qw<
   CAPTURES
   STATE
   SCRATCH
+  AS_ERROR
 
   >
 ;
@@ -359,14 +361,14 @@ this.
 sub rex_error {
   my $site=$_[ROUTE][1][ROUTE_SITE];
   $_[CB]=undef;
-  $_[IN_HEADER]{":method"}="GET";
+  $_[REX][METHOD]="GET";
   $_[REX][in_progress_]=1;
 
   #Locate applicable site urls to handle the error
 
   for($site->error_uris->{$_[REX][STATUS]}//()){
       $_[PAYLOAD]=my $a=$_;
-      $_[OUT_HEADER]{":as_error"}=1;
+      $_[REX][AS_ERROR]=1;
       return &rex_redirect_internal
   }
 
@@ -472,21 +474,19 @@ sub rex_redirect_internal {
 	}
 
   $rex->[in_progress_]=undef;
-  #$_[IN_HEADER]{":path"}=$uri;
   $_[REX][PATH]=$uri;
-  #$_[IN_HEADER]{":path_stripped"}=$uri;
   #
   #Here we reenter the main processing chain with a  new url, potential
   #undef $_[0];
   $rex->[recursion_count_]++;
   #Log::OK::DEBUG and  log_debug "Redirecting internal to host: $rex->[host_]";
   my $route;
-  ($route, $_[IN_HEADER]{":captures"})=$rex->[server_]->current_cb->(
+  ($route, $rex->[CAPTURES])=$rex->[server_]->current_cb->(
     $_[IN_HEADER]{host},
-    join(" ", $_[IN_HEADER]{":method"}, $_[IN_HEADER]{":path"}),#New method and url
+    join(" ", $rex->[METHOD], $rex->[PATH]),#New method and url
   );
   
-  $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header,my $a="",my $b=undef);
+  $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header, my $a="", my $b=undef);
   undef;
 }
 

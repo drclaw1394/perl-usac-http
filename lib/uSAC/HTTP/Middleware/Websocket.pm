@@ -282,8 +282,7 @@ sub websocket_server_in {
           #
           #reply
           my $reply=
-          #"$rex->[uSAC::HTTP::Rex::version_] ".HTTP_SWITCHING_PROTOCOLS." ".$uSAC::HTTP::Code::code_to_name[HTTP_SWITCHING_PROTOCOLS].CRLF
-          "$in_headers->{':protocol'} ".HTTP_SWITCHING_PROTOCOLS." ".$uSAC::HTTP::Code::code_to_name[HTTP_SWITCHING_PROTOCOLS].CRLF
+          "$rex->[PROTOCOL] ".HTTP_SWITCHING_PROTOCOLS." ".$uSAC::HTTP::Code::code_to_name[HTTP_SWITCHING_PROTOCOLS].CRLF
           .HTTP_CONNECTION.": Upgrade".CRLF
           .HTTP_UPGRADE.": websocket".CRLF
           .HTTP_SEC_WEBSOCKET_ACCEPT.": $key".CRLF
