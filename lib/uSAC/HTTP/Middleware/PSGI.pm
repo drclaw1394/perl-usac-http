@@ -113,22 +113,22 @@ sub uhm_psgi {
       my $env;
 
       if($_[OUT_HEADER]){
-        my $session=$_[REX]->session;
+        my $session=$_[REX][uSAC::HTTP::Rex::session_];
         $env=$_[IN_HEADER];
 
         # Convert / create he environmen variables which
         # did not originate from the client or have special meaning
         #
-        $env->{'psgi.url_scheme'}=	$env->{":scheme"};
-        $env->{REQUEST_METHOD}=	$env->{":method"};
+        $env->{'psgi.url_scheme'}=	$_[REX][SCHEME];#[$env->{":scheme"};
+        $env->{REQUEST_METHOD}=	$_[REX][METHOD];#$env->{":method"};
 
-        $env->{REQUEST_URI}=$env->{":path"};
+        $env->{REQUEST_URI}=$_[REX][PATH];#$env->{":path"};
 
-        $env->{PATH_INFO}=url_decode($env->{":path"});
+        $env->{PATH_INFO}=url_decode($_[REX][PATH]);#$env->{":path"});
 
-        $env->{SERVER_PROTOCOL}=$env->{":protocol"};
-        $env->{QUERY_STRING}=	$env->{":query"};	
-        ($env->{SERVER_NAME}, $env->{SERVER_PORT})=split ":", $env->{":authority"};
+        $env->{SERVER_PROTOCOL}=$_[REX][PROTOCOL];#$env->{":protocol"};
+        $env->{QUERY_STRING}=	$_[REX][QUERY];#$env->{":query"};	
+        ($env->{SERVER_NAME}, $env->{SERVER_PORT})=split ":", $_[REX][AUTHORITY];#$env->{":authority"};
 
         $env->{CONTENT_TYPE}//=delete $env->{HTTP_CONTENT_TYPE};
         $env->{CONTENT_LENGTH}//=delete $env->{HTTP_CONTENT_LENGTH};
@@ -216,19 +216,20 @@ sub uhm_psgi {
             my $_connection=$_[OUT_HEADER]{HTTP_CONNECTION()};
             $h{HTTP_CONNECTION()}=$_connection if $_connection;
             $res->[1]=\%h;
-            $res->[1]{":status"}=$res->[0];
+            #$res->[1]{":status"}=$res->[0];
+            $rex->[STATUS]=$res->[0];
 
             if(@$res==3){
               Log::OK::TRACE and log_trace "PSGI CODE response->call is 3 element (delayed)";
               #DELAYED RESPONSE IS A 3 elemement response
-              #$res->[1]{":status"}=$res->[0];
-              $next->($usac, $rex, $in_header, $res->[1], join "", $res->[2]->@*);
+              #$next->($usac, $rex, $in_header, $res->[1], join "", $res->[2]->@*);
+              $next->($usac, $rex, $in_header, \%h, join "", $res->[2]->@*);
               return;
             }
             Log::OK::TRACE and log_trace "PSGI CODE response->call is 2 element (stream)";
 
             #or it is streaming. return writer
-            my ($code, $psgi_headers, $psgi_body)=@$res;
+            my ($code, $psgi_headers)=@$res;
             return uSAC::HTTP::Middleware::PSGI::Writer->new(
               %options,
               in_header=>$in_header,
@@ -243,7 +244,8 @@ sub uhm_psgi {
 
       my %h;
       for(ref($res->[2])){
-        #Convert array of headers to hash. Join multiple headers
+        # Body is array of scalars
+        # Convert array of headers to hash. Join multiple headers
         # NOTE This does not work for SET-COOKIE
         for my ($k, $v)($res->[1]->@*){
           \my $e=\$h{$k};
@@ -251,19 +253,20 @@ sub uhm_psgi {
             ?join ", ", $e, $v
             : $v;
         }
+
         my $_connection=$_[OUT_HEADER]{HTTP_CONNECTION()};
         $h{HTTP_CONNECTION()}=$_connection if $_connection;
-        $res->[1]=\%h;
-        #$res->[1]{":status"}=$res->[0];
-        $rex->[STATUS]=$rex->[0];
+        $rex->[STATUS]=$res->[0];
 
         if($_ eq "ARRAY"){
           Log::OK::TRACE and log_trace "IN DO ARRAY";
           #do_array($usac, $rex, $res);
-          $next->($usac, $rex, $in_header, $res->[1], join("", $res->[2]->@*), undef);
+          #$next->($usac, $rex, $in_header, $res->[1], join("", $res->[2]->@*), undef);
+          $next->($usac, $rex, $in_header, \%h, join("", $res->[2]->@*), undef);
         }
         else{
           Log::OK::TRACE and log_trace "DOING GLOB";
+          $res->[1]=\%h;
           do_glob($usac, $rex, $env, $res, $next);
           delete $ctx{$_[REX]} if $ctx;
         }

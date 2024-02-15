@@ -1,9 +1,9 @@
 use v5.36;
+use EV;
+use AnyEvent;
 use Log::ger::Output 'Screen';
 use Log::OK;
 
-use EV;
-use AnyEvent;
 use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log PSGI>;
 
 my $app3=sub {
@@ -32,7 +32,7 @@ my $app4=sub {
 
 my $server;
 $server=uSAC::HTTP::Server->new(listener=>"a=0.0.0.0,po=8081,t=stream");
-$server->add_route("/app3" =>uhm_psgi $app3);
+$server->add_route("app3" =>uhm_psgi $app3);
 
 use Plack::Builder;
 
@@ -46,7 +46,9 @@ builder {
     $app2;
 };
 
-$server->add_route("/app2" =>uhm_psgi $app2)
-  ->add_route("/app0" =>uhm_psgi(\"test.psgi"))
-  ->add_route("/app4" =>uhm_psgi $app4)
+$server->add_route("app2" =>uhm_psgi $app2)
+  ->add_route("app0" =>uhm_psgi(\"test.psgi"))
+  ->add_route("app4" =>uhm_psgi $app4);
+
+$server->process_cli_options
   ->run;
