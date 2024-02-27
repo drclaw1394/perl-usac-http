@@ -581,8 +581,10 @@ sub uhm_static_root {
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
   my $sweeper=$fmc->sweeper;
+  $fmc->disable;
 
-  state $timer=uSAC::IO::timer 0, 10, $sweeper;
+  state $timer=uSAC::IO::timer 0, 1, $sweeper;
+  
   my $list_dir=_make_list_dir(%options);
 
   for my $html_root ($options{roots}->@*){

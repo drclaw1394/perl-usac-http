@@ -10,6 +10,7 @@ BEGIN {
 	@uSAC::HTTP::Server::Subproducts=("testing/1.2");
 }
 
+use EV;
 use AnyEvent;
 
 use uSAC::HTTP::Server;

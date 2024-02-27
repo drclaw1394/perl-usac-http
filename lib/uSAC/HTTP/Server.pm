@@ -139,7 +139,7 @@ BUILD {
 	$_zombie_limit//=100;
 	$_static_headers={};#STATIC_HEADERS;
 
-  $self->mode//=0; #Only set to server mode if it hasn't been defined.
+  $self->mode//=1; #Only set to server mode if it hasn't been defined.
 
   # Add the wildcard host, incase no sites or route are added. Gives at least
   # one table with rebuilding the routes/dispatch
@@ -297,7 +297,7 @@ method prepare {
         if(($_server_clock-$session->time)> $timeout){
           Log::OK::DEBUG and log_debug "DROPPING ID: $_";
           $session->closeme=1;
-          $session->drop;
+          $session->drop(1);
         }
       }
       
@@ -383,7 +383,7 @@ method make_stream_accept {
       else {
         $session=uSAC::HTTP::Session->new;
         $session->init($session_id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
-        $session->push_reader($parser->(session=>$session, mode=>0, callback=>$self->current_cb));
+        $session->push_reader($parser->(session=>$session, mode=>1, callback=>$self->current_cb));
       }
 
       $i++;
@@ -799,7 +799,6 @@ method process_cli_options{
     
   ) or die "Invalid arguments";
 
-  say "parse in server";
   for my($key, $value)(%options){
     if($key eq "workers"){
       $self->workers=$value<0?undef:$value;

@@ -40,7 +40,7 @@ field $_on_response :param=undef;
 field $_running_flag :mutator;
 
 BUILD {
-  $self->mode=1;          # Set mode to client.
+  $self->mode=2;          # Set mode to client.
   $_host_pool_limit//=4;  # limit to 5 concurrent connections by default
   $_zombies=[];
 }
@@ -266,7 +266,7 @@ method _request {
           $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
         }
 
-        $session->push_reader($_application_parser->(session=>$session, mode=>1, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
+        $session->push_reader($_application_parser->(session=>$session, mode=>2, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
         $_sessions->{ $session_id } = $session;
 
         $session_id++;

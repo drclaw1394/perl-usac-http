@@ -98,10 +98,9 @@ method init {
   #if a false or non existent value is present, session is closed
   $_dropper=sub {
     Log::OK::DEBUG and log_debug "Session: Dropper start";
-    Log::OK::DEBUG and log_debug "Session: args: @_";
+    #Log::OK::DEBUG and log_debug "Session: args: @_";
     Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";
     Log::OK::DEBUG and log_debug join ", " , caller;
-
 
     $_fh or return;	#don't drop if already dropped
     return unless $_closeme or !@_;	#IF no error or closeme then return

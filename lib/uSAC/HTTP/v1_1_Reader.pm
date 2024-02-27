@@ -27,7 +27,7 @@ use Export::These qw<
 
 #make_form_data_reader
 ##		make_form_urlencoded_reader
-#		make_socket_writer
+#		make_socket_writep
 
 #Package global for decoding utf8. Faster than using decode_utf8 function.
 our $UTF_8=find_encoding "utf-8";
@@ -55,9 +55,9 @@ sub parse_form {
 #
 #
 use constant::more  qw<
-  MODE_RESPONSE=0
+  MODE_NONE=0
+  MODE_RESPONSE
   MODE_REQUEST
-  MODE_NONE
   >;
 
 use constant::more <STATE_{REQUEST=0,RESPONSE,HEADERS,BODY_CONTENT,BODY_CHUNKED,BODY_MULTIPART,ERROR}>;
@@ -66,21 +66,22 @@ use constant::more <STATE_{REQUEST=0,RESPONSE,HEADERS,BODY_CONTENT,BODY_CHUNKED,
 sub make_parser{
   # Session, MODE, route_callback;
   # session and alias the variables to lexicals
-  # mode is server or  client
+  # mode is server or  client  or other for supported protocols (LSP)
   # route_callback is the interace to call to return a route/capture for the url and host
   #
 
   my %options=@_;
 
   my $r=$options{session};    # 'Session' linking io to middlewares
-  my $mode=$options{mode};    # Client or server mode
+  my $mode=$options{mode}//MODE_RESPONSE;    # Client or server mode (server default);
   my $cb=$options{callback};  # Callback for new rex  processing and route location
 
   #default is server mode to handle client requests
-  my $start_state = $mode == MODE_REQUEST? STATE_RESPONSE : STATE_REQUEST;
+  my $start_state = 0;#$mode == MODE_REQUEST? STATE_RESPONSE : STATE_REQUEST;
 
   my $psgi_compat=$options{psgi_compat}//$PSGI_COMPAT;
   my $keep_alive=$options{keep_alive}//$KEEP_ALIVE;
+  my $force_first_line=$options{first_line}//"";
 
   my $ex=$r->exports;
 
@@ -167,18 +168,18 @@ sub make_parser{
           $body_type=undef;	
           $body_len=undef;
             
-          #my $vi =index $buf, CRLF;
           @lines=split "\015\12", substr($buf,0, $pos3);
           
-          #($method, $uri, $version)=split " ", substr $buf, 0, $vi;
-          ($method, $uri, $version)=split " ", shift @lines; #substr $buf, 0, $vi;
+          # If static first line is specified, use.  For LSP support:
+          if($mode){
+            ($method, $uri, $version)=split " ", shift @lines; #substr $buf, 0, $vi;
+          }
+          else {
+              ($method, $uri, $version)=split " ", $force_first_line;
+          }
           
-          #for my ($k, $val)(map split(":", $_, 2), split("\015\012", substr($buf, $vi+2, ($pos3-$vi)-2))){
 
-          for my ($k, $val)(map split(":", $_, 2), @lines){
-            #$val=~s/^\s+//;
-            #$val=~s/\s+$//;
-            ($val)=split " ",$val;
+          for my ($k, $val)(map split(": ", $_, 2), @lines){
             $k=lc $k;
             if($k eq "set-cookie"){
               # Set-Cookie could occur multiple times and is not listable.
@@ -520,7 +521,7 @@ sub make_serialize{
     # for HTTP/1.0 dropper is called on close anyhow.
     # saves call
     #
-    my $cb=$_[CB]//$_[REX][uSAC::HTTP::Rex::dropper_];
+    my $cb=$_[CB];#//$_[REX][uSAC::HTTP::Rex::dropper_];
 
     my $reply="";
     if($_[OUT_HEADER]){

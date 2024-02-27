@@ -65,7 +65,7 @@ field $_delegate          :param=undef;
 field $_innerware         :mutator :param=[];
 field $_outerware         :mutator :param=[];
 field $_errorware         :mutator :param=[];
-field $_mode              :mutator :param=0; #server false, client true
+field $_mode              :mutator :param=1; #none 0, server 1, client 2,
 
 field $_mime_default      :mutator;  #Default mime type
 field $_mime_db           :mutator;   #the usac::mime object
