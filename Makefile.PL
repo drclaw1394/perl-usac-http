@@ -4,7 +4,7 @@ WriteMakefile(
 	NAME              => 'uSAC::HTTP',
 	VERSION_FROM      => 'lib/uSAC/HTTP.pm',
 	MIN_PERL_VERSION  => '5.36.0',		
-	EXE_FILES	=> ['script/usac'],
+	EXE_FILES	=> ['script/usac-http-server'],
 	
 	PREREQ_PM         => {
 		EV		=> 0,
@@ -40,6 +40,7 @@ WriteMakefile(
 		"URL::Encode::XS" =>0,
     "Data::UUID"=>0,
     "Data::Dump"=>0,
+    "Data::Dump::Color"=>0,
     "Time::Local"=>0,
     "Exception::Class::Base"=>0
 

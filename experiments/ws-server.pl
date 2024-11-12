@@ -4,8 +4,6 @@ use feature qw<state say>;
 
 use Log::ger::Output "Screen";
 
-use EV;
-use AnyEvent;
 use uSAC::IO;
 
 use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log Websocket>;

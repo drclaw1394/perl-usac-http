@@ -131,9 +131,9 @@ method _error_dispatch :override {
 }
 
 method stop {
-  uSAC::IO::asap sub{
-    $_cv->send;
-  }
+  uSAC::IO::asap(sub{
+      exit;
+  });
 }
 
 method run {
@@ -161,9 +161,9 @@ method run {
     }
   }
 
-  require AnyEvent;
-	$_cv=AE::cv;
-	$_cv->recv();
+  #require AnyEvent;
+  #$_cv=AE::cv;
+  #$_cv->recv();
 }
 
 
@@ -308,7 +308,7 @@ sub __request {
   my $peers;
   my $i;
   
-  uSAC::IO::asap sub {
+  uSAC::IO::asap(sub {
 
     my $host=$details->[0];
     my $method=$details->[1];
@@ -354,7 +354,7 @@ sub __request {
     # Call the head of the outerware function
     #
     $route->[1][ROUTE_OUTER_HEAD]($route, $rex, \%in_header, $out_header, $payload, undef);
-  };
+  });
 }
 
 

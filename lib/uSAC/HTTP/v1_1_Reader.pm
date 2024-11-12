@@ -655,4 +655,10 @@ sub make_error {
   }
 }
 
+#sub protocol_id { "http/1.1" }
+
+sub protocols {
+  "http/1.1"=>[\&make_parser, \&make_serialize, \&make_error]
+}
+
 1;

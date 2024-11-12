@@ -29,9 +29,12 @@ use constant::more qw<
   REQ_QUEUE
   IDLE_POOL
   ACTIVE_COUNT
+
+  TLS_INFO
   >;
 
 use uSAC::IO;
+use uSAC::TLS ":all";
 
 use Exception::Class::Base;
 
@@ -46,7 +49,7 @@ use Export::These qw(
 );
 
 
-use Import::These qw<uSAC::HTTP:: Code Method Header Constants Rex>;
+use Import::These qw<uSAC::HTTP:: Code Method Header Rex Constants>;
 
 use uSAC::HTTP::v1_1_Reader;      #TODO: this will be dynamically linked in
 use Sub::Middler;
@@ -75,6 +78,10 @@ field $_unsupported;
 field $_built_label;
 field $_label;
 
+#field $_protocols;      # Hash of Proto name to API
+
+field $_secrets        :mutator; # Hash table of host(no port num) to tls structures
+
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE TRACE>;
 
@@ -102,20 +109,35 @@ my $id=0;
 
 
 BUILD{
+  # Ensure a site ID
   $_id//=$id++;
+
+  # ... and a prefix
   $_prefix//="";
 
+  # No staged routes at this point
   $_staged_routes//=[];
 
+  # Only add delegate if specified
   $self->add_delegate($_delegate) if $_delegate;
-  #$_delegate=undef;
 
+  # Normalize host
   if(defined($_host) and ref $_host ne "ARRAY"){
     $_host=[$_host];
   }
   else {
     $_host=[];
   }
+
+  ####################################################################
+  # $_protocols//={};                                                #
+  # # Add default protocol if no protocol namespace/object specified #
+  # unless(%$_protocols) {                                           #
+  #    $self->add_protocol("uSAC::HTTP::v1_1_Reader");               #
+  # }                                                                #
+  ####################################################################
+
+
 }
 
 method _inner_dispatch {
@@ -880,7 +902,11 @@ method _delegate {
   $self;
 }
 
-#Options could include CA and server key paths
+# Options could include CA and server key paths
+# Host here include the port number for direct matching in http
+# However host certificates do not refernce port number. Certs and keys are then
+# located in another structure?
+#
 method add_host {
 	my $host=pop;	#Content is the last item
 	my %options=@_;
@@ -896,6 +922,33 @@ method add_host {
 		die "Error parsing hosts: $_ " unless ref;
 	}
 	push $_host->@*, @uri;
+}
+
+# Certificates, keys, ca
+method add_secret {
+  my $host=URI->new(shift);
+  my @entries;
+
+  for(@_){
+    if(ref  eq "ARRAY"){
+      #kv pairs. Assume correct structure
+      push @entries, $_;
+    }
+    else {
+      # hash. convert into structure
+      for my($k,$v) (%$_){
+      
+      }
+      #push @entries, $_;
+    }
+  }
+
+  #Process entries
+  for(@entries){
+    say $host->host;
+    $_->[TLS_INFO_HOST]=$host->host;
+    $_secrets->{$host}=$_
+  }
 }
 
 
@@ -1136,9 +1189,35 @@ method load {
 
 
 
-# Protocol support
+#########################################################################
+# # Protocol support                                                    #
+# #                                                                     #
+# method add_protocol {                                                 #
+#   # key value pair to look up protocol parsing and serializing        #
+#   # makers. Associates a namepspace or object and which provides:     #
+#   #   protocol_id   =>  return the name/id of the protocol            #
+#   #   make_parser   =>  returns a sub which makes a new parser        #
+#   #   make_serialize  =>  returns a sub which maskes a new serializer #
+#   #   make_error    =>    returns a sub which makes a new error sub   #
+#   #                                                                   #
+#   # Default is http/1.1                                               #
+#   my $ns=shift;                                                       #
+#   my $id=$ns->protocol_id;                                            #
+#   Log::OK::INFO and log_info "Loading protocol $ns";                  #
+#   $_protocols->{$id}=$ns;                                             #
+#                                                                       #
+# }                                                                     #
+#                                                                       #
+#########################################################################
+# TLS HTTP/1.1 h2
+#   Use ALNP for proto selection
 #
-method register_protocol {
-
-}
+# HTTP/1.1 h2c
+#   HTTP Upgrade mech
+#   Must start connection with 1.1
+#
+# Prior knowlege connection
+#   h2c 
+#   must start connection with h2c
+#
 __PACKAGE__;

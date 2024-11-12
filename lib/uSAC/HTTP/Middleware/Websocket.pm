@@ -6,6 +6,7 @@ use Log::ger;
 use Log::OK;
 
 use uSAC::IO;
+use uSAC::HTTP::Constants;
 use uSAC::HTTP;
 
 use MIME::Base64;		
@@ -15,7 +16,6 @@ use Encode qw<decode encode>;
 use Compress::Raw::Zlib;
 
 use Export::These qw<uhm_websocket>;
-
 
 ##############################
 # use uSAC::HTTP::Rex;       #
@@ -110,6 +110,8 @@ sub websocket_client_out {
 
         # TODO This is context
         $key=builtin::trim MIME::Base64::encode_base64 $key;
+        say "SETTING KEY ON THE WAY OUT:", $_[REX];
+        say $key;
         $ctx{$_[REX]}=$key;
        
         Log::OK::TRACE and log_trace $key;
@@ -153,6 +155,8 @@ sub websocket_client_in {
         my $key=delete $ctx{$_[REX]}; #TODO this is context
 
         # this is the exepected value
+        say "GETTING KEY ON THE WAY IN:", $_[REX];
+        say $key;
         my $expected_key=builtin::trim MIME::Base64::encode_base64
             Digest::SHA1::sha1($key."258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
         if(
@@ -176,6 +180,7 @@ sub websocket_client_in {
           };
         }
         else {
+          say "FAILED";
           # Handshake failed
           Log::OK::TRACE and log_trace __PACKAGE__. " Handshake failed to websocket server";
         }
@@ -194,18 +199,18 @@ sub  uhm_websocket {
 sub websocket_in {
   sub {
     my ($next, $index, %options)=@_;
-    say "site is: ".$options{site};
-    say "mode is: ".$options{site}->mode;
     my $out;
-    if($options{site}->mode){
+    if($options{site}->mode() == MODE_CLIENT){
       # This is a client site. 
       Log::OK::TRACE and log_trace __PACKAGE__. " websocket innerware will be for client";
       $out=&{websocket_client_in()};
     }
-    else {
+    elsif($options{site}->mode() == MODE_SERVER) {
       # Server site
       Log::OK::TRACE and log_trace __PACKAGE__. " websocket innerware will be for server";
       $out=&{websocket_server_in()};
+    }
+    else {
     }
     $out;
   }
@@ -217,15 +222,17 @@ sub websocket_out {
   sub {
     my (undef, undef, %options)=@_;
     my $out;
-    if($options{site}->mode){
+    if($options{site}->mode()==MODE_CLIENT){
       Log::OK::TRACE and log_trace __PACKAGE__. " websocket outerware will be for client";
       # This is a client site. 
       $out=&{websocket_client_out()};
     }
-    else {
+    elsif($options{site}->mode() == MODE_SERVER) {
       Log::OK::TRACE and log_trace __PACKAGE__. " websocket outerware will be for server";
       # Server site
       $out=&{websocket_server_out()}
+    }
+    else {
     }
     $out;
   }

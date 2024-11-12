@@ -9,7 +9,7 @@ use Export::These qw( cwd dirname basename path catfile abs2rel rel2abs need);# 
 
 sub cwd {
   my($dev, $inode)=stat ".";
-  my ($odev, $oinode)=($dev, $inode);
+  #my ($odev, $oinode)=($dev, $inode);
 
   my($prev_dev, $prev_inode)=(-1,-1);
   my @parts;

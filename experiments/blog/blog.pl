@@ -32,14 +32,45 @@ my $server=uSAC::HTTP::Server->new(
     port=>[8084],
     family=>["AF_INET6"],
     type=>"SOCK_STREAM",
-    data=> {
-            hosts=>"dfs"
-    }
+    data=> "tls"
+      
   },
-  workers=>0
+  workers=>0,
+  tls=>{
+    key=>"",    # Path or filehandle to private key
+    cert=>"",
+    ca=>"",
+    psk=>""
+  }
 );
 
+# Secrets are stored in an array per listener tag
+# That means each listener group can be configured (ie multiple ports and interfaces)
+# to use a set of secrets
+$server->add_secret("http://192.168.0.2:9090", [key=>"asdf"]);
 
+
+# Protocols are stored in an array per listener tag.
+# That means each listener group can be configured to use a particular protocol
+#$server->add_protocol(
+
+#$listener_db={
+# listener_tag=>{       # Unique tag identifying this listener group
+#   fds=>[fd],          # Array of file descriptors in this group
+#   secrets=>{          # Secrets indentifying hosts, eg cert, key 
+#       host=>{
+#         cert=>.pem,
+#         key=>.pem
+#
+#         }
+#   },
+#
+#   protocol=>{         # Protocol names resolving to subs  or sub names
+#     name=>sub...
+#
+#   }
+# }
+#}
 
 my $site;
 $server

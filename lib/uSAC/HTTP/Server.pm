@@ -16,7 +16,7 @@ use Socket::More;         # Socket symbols and passive socket
 
 
 use IO::FD;               # IO
-use uSAC::IO;             # Readers/writers
+#use uSAC::IO;             # Readers/writers
 use uSAC::IO::Acceptor;   # Acceptors
 
 use uSAC::HTTP;           # uSAC::HTTP Core code
@@ -99,7 +99,26 @@ no warnings "experimental";
 field $_host_tables :mutator;
 field $_cb;
 field $_listen :param=["po=5001,addr=::"];
-field $_listen_spec;
+field $_listen_spec;    # The array listeners
+
+field $_group_table; # Named groups of
+                        # Default tag names could be (tls, http
+                        #eg $_group_table->{tag}={
+                        #   secrets=>{ host=> TLS_INFO },
+                        #   protocols=>{
+                        #       name_label=>[creater_sub, options]
+                        #       ...
+                        #   },
+                        #   specifications=>[...],
+                        #   default_label=>...
+                        # }
+                        #
+
+field $_fd_table;       # Reverse Mapping of fds from specifications to tagged entry
+                        # On accept/setup of socket, the listening/original fd
+                        # is used as a key to lookup the structure, which then
+                        # contains all secrets/protocols etc supported
+
 field $_graceful;
 field $_aws;
 field $_aws2;
@@ -118,7 +137,7 @@ field $_server_clock;
 field $_mime;
 field $_sub_product :param="ductapeXchansaw";
 field $_workers :mutator :param=0;
-field $_cv;
+#field $_cv;
 field $_options :reader;
 field $_application_parser :param=undef;
 field $_total_requests;
@@ -155,6 +174,31 @@ BUILD {
 
   ];
 
+  # Setup passive socket database and configuration
+  $_group_table={};
+  
+  $_group_table->{tls}={
+    # Default tls group entry
+  };
+
+  $_group_table->{default}={
+    # Default non tls group entry
+    secrets=>{
+      # host=> TLS_INFO stuct
+    },
+    handlers=>{
+      # name=> [[creater_subs], options]
+      uSAC::HTTP::v1_1_Reader->protocols()
+      # Add 'raw' SIO here, solves linking issue.
+      # Readers are wire to data/middleware
+      # Writers are middleware to data/wire
+      # ie raw reader has null reader (as is event driven)
+      
+    },
+    specifications=>[],
+    default_label=>"http/1.1"
+  };
+
 	$_backlog=4096;
 	$_read_size=4096;
   $_options={};
@@ -170,7 +214,7 @@ BUILD {
 method _setup_dgram_passive {
 	my ($l)=@_;
 	#Create a socket from results from interface
-	IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or die "listen/socket: $!";
+	IO::FD::socket my $fh, $l->{family}, $l->{socktype}, $l->{protocol} or die "listen/socket: $!";
 
 	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
 	
@@ -198,14 +242,18 @@ method _setup_dgram_passive {
 }
 
 
+# Setup Stream based socket. Bind address and build group/fd table
 method _setup_stream_passive {
 	my ($l)=@_;
 
-	#Create a socket from results from interface
-	defined IO::FD::socket my $fh, $l->{family}, $l->{type}, $l->{protocol} or die "listen/socket: $!";
+	#Create a socket from specification  
+	defined IO::FD::socket my $fh, $l->{family}, $l->{socktype}, $l->{protocol} or die "listen/socket: $!";
 
+  # Allow address reuse
 	IO::FD::setsockopt($fh, SOL_SOCKET, SO_REUSEADDR, pack "i", 1);
 	
+
+  # Allow port reuse or unlink unix
 	if($l->{family}== AF_UNIX){
 		unlink $l->{path};
 	}
@@ -214,6 +262,8 @@ method _setup_stream_passive {
 	}
 
 
+  # Attempt to bind
+  #
 	defined(IO::FD::bind $fh, $l->{addr})
 		or die "listen/bind: $!";
 	#Log::OK::INFO and log_info("Stream bind ok");
@@ -226,19 +276,29 @@ method _setup_stream_passive {
     #IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
 	}
 
+
+  # Force non blocking
+  #
 	my $flags=IO::FD::fcntl $fh, F_GETFL, 0;
 	$flags|=O_NONBLOCK;
 
 	defined IO::FD::fcntl $fh, F_SETFL, $flags or die "COULD NOT SET NON BLOCK on $fh: $!";
 
+  # store the file descriptor
+  #
 	$_fhs2->{$fh} = $fh;
 
+  # Build grouping/proto/handlers
+  #
+  # Create an entry and specification array if needed. push entry
+  my $entry=$_group_table->{$l->{tag}}//{};
+  push $entry->{specifications}->@*, $l;
 
-	#Finally run the listener
-	for ( values  %$_fhs2 ) {
-		IO::FD::listen $_, $_backlog
-			or die "listen/listen on ".( $_).": $!";
-	}
+  # Add fd of entry to fd table.
+  $_fd_table->{$l->{fd}}=$entry;          # Map fd to entry
+
+  # From here the fd_table can be queried directly with fd for acceptor 
+  # From there the default_label/handler is used as the callback from the acceptor.
 }
 
 
@@ -249,15 +309,36 @@ method do_passive {
 	die "No listeners could be found" unless @$_listen_spec;
 	for my $l (@$_listen_spec){
 		#Need to associate user protocol handler to listener type... how?
-		if($l->{type}==SOCK_STREAM){
+    
+    # Set groups based on port number. ie if tls or not. Only set if no data is
+    # currently set
+    #
+    for($l->{port}){
+      if($_ == 443){
+        $l->{data}//="tls";
+      }
+      else {
+        $l->{data}//="default";
+      }
+    }
+
+    # Do a bind or passive setup 
+    #
+		if($l->{socktype}==SOCK_STREAM){
 			$self->_setup_stream_passive($l);
 		}
-		elsif($l->{type}==SOCK_DGRAM){
+		elsif($l->{socktype}==SOCK_DGRAM){
 			$self->_setup_dgram_passive($l);
 		}
 		else {
 			die "Unsupported socket type";
 		}
+	}
+
+	#Finally run the listeners
+	for ( values  %$_fhs2 ) {
+		IO::FD::listen $_, $_backlog
+			or die "listen/listen on ".( $_).": $!";
 	}
 
 }
@@ -322,13 +403,18 @@ method do_accept{
 
   my $do_client=$self->make_stream_accept;
 
-  my @peers;
-  my @afh;
+
+  # Setup acceptor on stream sockets
   for my $fl ( values %$_fhs2 ) {
+    # Look up tag from passive stream listeners, find matching entry
     #
     # Create an acceptor here but we start it later
     #
-    #
+    my $label=$_fd_table->{$fl}{default_label};
+    my $handler=$_fd_table->{$fl}{protocols}{label};
+    
+    # Set the handler in the acceptor
+    #$_aws->{ $fl } =my $acceptor=uSAC::IO::Acceptor->create(fh=>$fl, on_accept=>$handler, on_error=>sub {});
     $_aws->{ $fl } =my $acceptor=uSAC::IO::Acceptor->create(fh=>$fl, on_accept=>$do_client, on_error=>sub {});
   }
   Log::OK::TRACE and log_trace "Setup of stream passive socket complete";
@@ -367,7 +453,7 @@ method make_stream_accept {
   my $parser=$_application_parser; 
 
   sub {
-    my ($fhs, $peers)=@_;
+    my ($fhs, $peers, $passive_fd)=@_;
     my $i=0;
     for my $fh(@$fhs){
       # TCP_NODELY etc here?
@@ -424,7 +510,7 @@ method add_host_end_point{
       Hustle::Table->new($dummy_default), # Table
       {},                                  # Table cache
       undef,                              #  dispatcher
-      "",
+      "", 
       [],
       [],
       0
@@ -568,8 +654,13 @@ method rebuild_dispatch {
 
 method stop {
   uSAC::IO::asap(sub {
-    $_cv->send;
+      exit;
+      #$_cv->send;
   });
+}
+
+method start {
+  $self->run;
 }
 
 method run {
@@ -639,9 +730,6 @@ method run {
         $self->prepare;
   }
 
-  require AnyEvent;
-	$_cv=AE::cv;
-	$_cv->recv();
   $self;
 }
 
@@ -660,7 +748,7 @@ method dump_listeners {
 				$_->{group},
 				$_->{port},
 				$_->{path},
-				sock_to_string($_->{type}),
+				sock_to_string($_->{socktype}),
 
 				])
 			for @$_listen_spec;
@@ -740,6 +828,8 @@ method dump_routes {
 
 
 
+# Adds passive socket specifications. Either string that needs parsing or hash ref
+#
 method _add_listeners {
   #my $site=shift;
   for my $spec(@_){
@@ -763,6 +853,7 @@ method _add_listeners {
       @spec=($spec);
     }
 
+    # Execute specification and build reifed data 
     @addresses=sockaddr_passive(@spec);
     push @$_listen_spec, @addresses;
   }
@@ -846,7 +937,7 @@ method do_stream_connect {
     
   }
   else {
-    $id=uSAC::IO::connect($socket, $host, $port, undef, $on_connect, $on_error);
+    $id=uSAC::IO::connect $socket, {address=>$host, port=>$port, data=>{ on_connect=>$on_connect, on_error=>$on_error}};
 
   }
   $id;

@@ -11,7 +11,6 @@ use File::Meta::Cache;
 use POSIX;
 
 use IO::FD;
-use uSAC::IO;
 
 use Import::These qw<uSAC:: Util ::HTTP:: Code Header Rex Constants Route>;
 
