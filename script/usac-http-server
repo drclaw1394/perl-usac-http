@@ -1,4 +1,4 @@
-#!/usr/bin/env usac --backend AnyEvent
+#!/usr/bin/env -S usac --backend AnyEvent
 #
 use v5.36;
 our $VERSION="v0.1.0";
@@ -6,7 +6,7 @@ our $VERSION="v0.1.0";
 #no warnings "experimental";
 
 BEGIN{
-  # Before we even attempt setup, check if help is needed
+  # Before we even attempt setup, check if help is needed.
   if(grep /-{1,2}h/, @ARGV){
     require Pod::Usage;                    
     Pod::Usage::pod2usage(verbose=>1, );
@@ -84,8 +84,7 @@ sub parse_site_spec{
 
 
 # Welcome
-my $welcome= "uSAC HTTP Server $VERSION - Copyright 2023 Ruben Westerberg
-";
+my $welcome= "uSAC HTTP Server $VERSION - Copyright 2024 Ruben Westerberg";
 Log::OK::INFO and log_info $welcome;
 
 
@@ -272,12 +271,12 @@ __END__
 
 =head1 TITLE
 
-usac -  Utility HTTP Server
+usac-http-server -  General Purpose HTTP Server
 
 =head1 SYNOPSIS
 
   #mount psgi applications and serve static files
-	usac --site id=Admin,prefix=admin/ path/to/admin.psgi --site #User,user/ path/to/user.psgi  --site #/ path/to/static/dir
+	usac-http-server --site id=Admin,prefix=admin/ path/to/admin.psgi --site #User,user/ path/to/user.psgi  --site #/ path/to/static/dir
 
   # /               
   #   admin/
@@ -290,12 +289,12 @@ usac -  Utility HTTP Server
 
 =head1 DESCRIPTION
 
-usac is a HTTP for serving static files preconfigured routes and piping
-websockets from the command line. It is a application wrapper around
-uSAC::HTTP.
+usac-http-server is a HTTP server for serving static files and directories,
+preconfigured routes and piping websockets from the command line. It is a
+application wrapper around L<uSAC::HTTP::Server>.
 
-It is flexible to allow constructing prefixed grouping of routes, mounting
-'applications' into different names spaces.
+It has great flexible and allows constructing prefixed grouping of routes,
+mounting 'applications' into different names spaces.
 
 
 Options and input files are interleved, and interact in a stateful manner.

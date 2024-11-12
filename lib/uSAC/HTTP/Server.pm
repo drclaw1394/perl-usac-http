@@ -287,7 +287,7 @@ method _setup_stream_passive {
   # store the file descriptor
   #
 	$_fhs2->{$fh} = $fh;
-
+	$l->{fd}=$fh;	
   # Build grouping/proto/handlers
   #
   # Create an entry and specification array if needed. push entry
@@ -321,6 +321,7 @@ method do_passive {
         $l->{data}//="default";
       }
     }
+    $l->{tag}//=""; # Set tag to empty string
 
     # Do a bind or passive setup 
     #

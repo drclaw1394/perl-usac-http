@@ -946,7 +946,8 @@ method add_secret {
   #Process entries
   for(@entries){
     say $host->host;
-    $_->[TLS_INFO_HOST]=$host->host;
+    #$_->[TLS_INFO_HOST]=$host->host;
+    $_->[TLS_INFO]=$host->host;
     $_secrets->{$host}=$_
   }
 }
@@ -1119,7 +1120,6 @@ sub uhm_dead_horse_stripper {
 
 method process_cli_options{
   my $options=shift//[];
-  say "process cli options in site";
   my $hook;
   try {
     $hook=$_delegate->process_cli_options_hook;
