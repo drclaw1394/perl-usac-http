@@ -872,6 +872,9 @@ method add_listeners {
 
     # Execute specification and build reifed data 
     @addresses=sockaddr_passive(@spec);
+    unless (@addresses){
+	    die "Invalid listener specification";
+    }
     push @$_listen_spec, @addresses;
   }
   #say Dumper $_listen_spec;
