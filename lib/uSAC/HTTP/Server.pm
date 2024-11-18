@@ -924,6 +924,10 @@ method process_cli_options{
     elsif($key eq "show"){
       #$_options->{show_routes}//=[];
       say STDERR "VALUE IS $value";
+      for my $v (@$value){
+	      
+      	$v=".*" unless $v;	# Force match anything if nothing set
+      }
       $_options->{show_routes}= $value;
     }
     elsif($key eq "read-size"){
