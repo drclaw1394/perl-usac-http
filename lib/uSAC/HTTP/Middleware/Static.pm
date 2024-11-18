@@ -402,7 +402,7 @@ sub _json_dir_list {
 sub _make_list_dir {
 
   my %options=@_;
-	\my $html_root=\$options{html_root};
+  #\my $html_root=\$options{html_root};
 	my $renderer=$options{renderer};
 	my @type;
 	#resolve renderer
@@ -426,10 +426,14 @@ sub _make_list_dir {
 	sub{
 		my ($line, $rex, $in_header, $headers, undef, $next, $html_root, $uri)=@_;
 		my $session=$rex->[uSAC::HTTP::Rex::session_];
+    
+    # Ensure html root has trailing slash
+    $html_root.="/" unless $html_root=~m|/$|;
 
 		my $abs_path=$html_root.$uri;
 		stat $abs_path;
     Log::OK::TRACE and log_trace "DIR LISTING for $abs_path";
+    Log::OK::TRACE and log_trace "HTML ROOT is $html_root";
 		unless(-d _ and  -r _){
       Log::OK::TRACE and log_trace "No dir here $abs_path";
       $_[REX][STATUS]=HTTP_NOT_FOUND;
@@ -441,7 +445,7 @@ sub _make_list_dir {
 
 		#build uri from sysroot
 		my @fs_paths;
-		if($abs_path eq "$html_root/"){
+		if($abs_path eq $html_root){
 			@fs_paths=<$abs_path*>;	
 		}
 		else{
@@ -451,7 +455,7 @@ sub _make_list_dir {
 		my @results
       =map {
         my $isDir= -d;
-        s|^$html_root/||;                       #strip out html_root
+        s|^$html_root||;                       #strip out html_root
         my $base=(split "/")[-1].($isDir? "/":"");
 
         #["$_[IN_HEADER]{':path'}$base", $base, stat _]
@@ -471,7 +475,7 @@ sub _make_list_dir {
     for my ($k,$v)(@type){
       $_[OUT_HEADER]{$k}=$v;
     }
-		if($in_header->{":method"} eq "HEAD"){
+		if($_[REX][METHOD] eq "HEAD"){
 			$next->($line, $rex, $in_header, $headers , "", my $cb=undef);
 
 		}
@@ -622,7 +626,6 @@ sub uhm_static_root {
         $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
 	  #}
         #$p="/" unless $p; #ensure the path ends in a slash if it is root dir
-        #say "p is $p";
         my $path;
 
         ROOTS:
@@ -635,7 +638,6 @@ sub uhm_static_root {
 
 
           $path=$html_root."/".$p;
-          #say "path: $path";
           #
           # First this is to report not found  and call next middleware
           # if the allow doesn't match (if a ignore exists)
@@ -657,7 +659,6 @@ sub uhm_static_root {
 
 
           my $entry;
-          #my $path=$html_root.$p;
           my $enc="";
           my $content_type;
 

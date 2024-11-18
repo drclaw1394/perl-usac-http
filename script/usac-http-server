@@ -1,17 +1,11 @@
 #!/usr/bin/env -S usac --backend AnyEvent
 #
 use v5.36;
+no warnings "experimental";
 our $VERSION="v0.1.0";
 
 #no warnings "experimental";
 
-BEGIN{
-  # Before we even attempt setup, check if help is needed.
-  if(grep /-{1,2}h/, @ARGV){
-    require Pod::Usage;                    
-    Pod::Usage::pod2usage(verbose=>1, );
-  }
-}
 
 use Log::ger;
 use Log::ger::Output "Screen";
@@ -21,8 +15,6 @@ use Log::OK {
 };
 
 
-#use EV;
-#use AnyEvent;
 use Import::These qw<uSAC:: Util ::HTTP:: Server ::Middleware:: Static Log>;
 
 my %options;
@@ -48,8 +40,13 @@ sub parse_site_spec{
         say "ID";
         #ID specificaiton
         $spec{id}=$field;
-        #$spec{prefix}="";
       }
+      ##########################
+      # elsif($field=~s/^@//){ #
+      #   #Host specificaiton  #
+      #   #$spec{host}=$field; #
+      # }                      #
+      ##########################
       else {
         say "PREFIX";
         #it looks like a normal prefix, so treat as such
@@ -83,189 +80,213 @@ sub parse_site_spec{
 
 
 
-# Welcome
-my $welcome= "uSAC HTTP Server $VERSION - Copyright 2024 Ruben Westerberg";
-Log::OK::INFO and log_info $welcome;
+
+# Before we even attempt setup, check if help is needed.
+if(grep /-{1,2}h/, @ARGV){
+  help();
+}
+else {
+  run(@ARGV);
+}
 
 
-# Map of ID to sites
-my %sites;
+sub help {
+  require Pod::Usage;                    
+  Pod::Usage::pod2usage(verbose=>1, );
+  CORE::exit;
 
-# Simple wrapper containing all sub sites. This allows the server to be created
-# at the end and simply add this group
-#
-my $server_proxy=uSAC::HTTP::Site->new(id=>"/");
+}
 
-# The top level server always has a prefix of "/". Add the  proxy so we can
-# find it again
-$sites{"/"}=$server_proxy;
+sub run {
+  # Welcome
+  my $welcome= "uSAC HTTP Server $VERSION - Copyright 2024 Ruben Westerberg";
+  Log::OK::INFO and log_info $welcome;
+
+  # Map of ID to sites
+  my %sites;
+
+  # Simple wrapper containing all sub sites. This allows the server to be created
+  # at the end and simply add this group
+  #
+  my $server_proxy=uSAC::HTTP::Site->new(id=>"/");
+
+  # The top level server always has a prefix of "/". Add the  proxy so we can
+  # find it again
+  $sites{"/"}=$server_proxy;
 
 
+  # Create server
+  #
+  say STDERR "BEFORE new server";
+  my $server=uSAC::HTTP::Server->new();
+
+  # Configure Server. Gets first dibs on cli arguments
+  say STDERR "BEFORE CLI";
+  $server->process_cli_options(\@_);
+  say STDERR "AFTER CLI: @_";
 
 
-my $current=$server_proxy;
-my %cur_opts=(list_dir=>1);
+  my $current=$server_proxy;
+  my %cur_opts=(list_dir=>1);
 
 
-my $counter=0;
-my @unknown;
-while(@ARGV){
-  $_=shift; # from @ARGV
-  if(/-{1,2}site/){
-    $_=shift;
-    my $spec= parse_site_spec($_);
+  my $counter=0;
+  my @unknown;
+  say STDERR "STACK IS @_";
+  while(@_){
+      say STDERR "STACK @_";
 
-    # Create a new id if none specified
-    $spec->{id}//=$counter++;
+    $_=shift; # from @ARGV
+    if(/-{1,2}site/){
+      $_=shift;
+      my $spec= parse_site_spec($_);
 
-    if(exists($sites{$spec->{id}})){
-      my $found=$sites{$spec->{id}};
+      # Create a new id if none specified
+      $spec->{id}//=$counter++;
 
-      # an existing site
-      #warn "Site prefix changed from ".$found->id. "to $spec->{id}" if $found->id ne $spec->{id};
-      $current=$found; 
-    }
-    else {
-      # a new site
+      if(exists($sites{$spec->{id}})){
+        my $found=$sites{$spec->{id}};
 
-      my $new=uSAC::HTTP::Site->new($spec->%*);
-      $sites{$spec->{id}}=$new;
-      $current->add_site($new);
-      $current=$new;
-    }
-
-    next;
-  }
-
-  elsif(/^-{1,2}listen/){
-
-    $options{listen}=shift;
-    die "Listen argument required" unless $options{listen};
-    #$options{"listen"}||=["[::]:8000"];                                                                                 #
-  }
-
-  elsif(/^-{1,2}(no-)?list-dir/){
-    $cur_opts{list_dir}=!$1;
-  }
-
-  elsif(/^-{1,2}(no-)?log/){
-    $cur_opts{log}=!$1;
-  }
-  elsif(/^-{1,2}ws/){
-    require uSAC::HTTP::Middleware::WebSocket;
-    my $arg=shift;
-    # Test if arg is a number (fd),
-    # Test if stdin/stdout is not a terminal
-    #
-    
-    my $in_fd;
-    my $out_fd;
-
-    for($arg){
-      if(/^&/){
-        #FD number from exec 
+        # an existing site
+        #warn "Site prefix changed from ".$found->id. "to $spec->{id}" if $found->id ne $spec->{id};
+        $current=$found; 
       }
-      elsif($_ eq "-"){
-        # use stdin stdout
-        $in_fd=fileno(STDIN);
-        $out_fd=fileno(STDOUT);
+      else {
+        # a new site
+
+        my $new=uSAC::HTTP::Site->new($spec->%*);
+        $sites{$spec->{id}}=$new;
+        $current->add_site($new);
+        $current=$new;
       }
 
-      #Add http/ftp/other protocols
-      #elsif(){
-      #}
-
-      # Treat as a file path
-      else{
-         
-      }
+      next;
     }
 
-    my $reader=uSAC::IO::SReader->new(fd=>$in_fd);
-    my $writer=uSAC::IO::SWriter->new(fd=>$out_fd);
+    ############################################################################################################################
+    # elsif(/^-{1,2}listen/){                                                                                                  #
+    #                                                                                                                          #
+    #   $options{listen}=shift;                                                                                                #
+    #   die "Listen argument required" unless $options{listen};                                                                #
+    #   #$options{"listen"}||=["[::]:8000"];                                                                                 # #
+    # }                                                                                                                        #
+    ############################################################################################################################
 
-    $current->add_route("",
-      uhm_websocket()=>
-      sub {
-        my $ws=$_[PAYLOAD];
-        $ws->on_open=sub {
-          say "opened";
-          $reader->start;
-          $reader->on_read=sub{
+    elsif(/^-{1,2}(no-)?list-dir/){
+      $cur_opts{list_dir}=!$1;
+    }
+
+    elsif(/^-{1,2}(no-)?log/){
+      $cur_opts{log}=!$1;
+    }
+    elsif(/^-{1,2}ws/){
+      require uSAC::HTTP::Middleware::WebSocket;
+      my $arg=shift;
+      # Test if arg is a number (fd),
+      # Test if stdin/stdout is not a terminal
+      #
+
+      my $in_fd;
+      my $out_fd;
+
+      for($arg){
+        if(/^&/){
+          #FD number from exec 
+        }
+        elsif($_ eq "-"){
+          # use stdin stdout
+          $in_fd=fileno(STDIN);
+          $out_fd=fileno(STDOUT);
+        }
+
+        #Add http/ftp/other protocols
+        #elsif(){
+        #}
+
+        # Treat as a file path
+        else{
+
+        }
+      }
+
+      my $reader=uSAC::IO::SReader->new(fd=>$in_fd);
+      my $writer=uSAC::IO::SWriter->new(fd=>$out_fd);
+
+      $current->add_route("",
+        uhm_websocket()=>
+        sub {
+          my $ws=$_[PAYLOAD];
+          $ws->on_open=sub {
+            say "opened";
+            $reader->start;
+            $reader->on_read=sub{
               $ws->send_message($_[0]);
+            };
+            $writer->start;
           };
-          $writer->start;
-        };
-        $ws->on_message=sub {
+          $ws->on_message=sub {
             say "GOT message: $_[1]";
             $writer->write($_[1]);
           };
 
-        $ws->on_error=sub {
+          $ws->on_error=sub {
             say "GOT error$_[0]";
           };
 
-        $ws->on_close=sub {
+          $ws->on_close=sub {
             say "GOT close";
-        };
-        undef; #Needed to prevent calling of next
-      }
-    );
-  }
-  elsif(/^--$/){
-    # End processing of options  
-    last;
-  }
-  elsif(/^[^-]/){
-    # Treat as path to file or dir
-    #convert to abs for intended behaviour	
-    my $target=uSAC::Util::rel2abs($_, uSAC::Util::cwd);
-
-    if(/\.psgi$/i){
-      # Add explicit PSGI middleware with path to application
-      # uses site prefix  for mounting
-      #
-      Log::OK::INFO and log_info "Loading PSGI from source:\n $target";
-      require uSAC::HTTP::Middleware::PSGI;
-      $current->add_route("", uSAC::HTTP::Middleware::PSGI::uhm_psgi($_));
+          };
+          undef; #Needed to prevent calling of next
+        }
+      );
     }
-    elsif(/\.route$|\.pl$/){
-      Log::OK::INFO and log_info "Loading Routes from source:\n $target";
-      # perl script to run as  
-      $current->load($target);
+    elsif(/^--$/){
+      # End processing of options  
+      last;
+    }
+    elsif(/^[^-]/){
+      # Treat as path to file or dir
+      #convert to abs for intended behaviour	
+      my $target=uSAC::Util::rel2abs($_, uSAC::Util::cwd);
+
+      if(/\.psgi$/i){
+        # Add explicit PSGI middleware with path to application
+        # uses site prefix  for mounting
+        #
+        Log::OK::INFO and log_info "Loading PSGI from source:\n $target";
+        require uSAC::HTTP::Middleware::PSGI;
+        $current->add_route("", uSAC::HTTP::Middleware::PSGI::uhm_psgi($_));
+      }
+      elsif(/\.route$|\.pl$/){
+        Log::OK::INFO and log_info "Loading Routes from source:\n $target";
+        # perl script to run as  
+        $current->load($target);
+      }
+      else {
+        # Assume a dir for serving static files from
+        Log::OK::INFO and log_info "Serving static files from source:\n $target";
+        $current->add_route("", uhm_static_root roots=>[$_], %cur_opts);
+      }
     }
     else {
-      # Assume a dir for serving static files from
-      Log::OK::INFO and log_info "Serving static files from source:\n $target";
-      $current->add_route("", uhm_static_root roots=>[$_], %cur_opts);
+      # Known options
+      say "UNKOWN";
+      push @unknown, $_;
     }
-  }
-  else {
-    # Known options
-    push @unknown, $_;
+
   }
 
+
+  # Inject logging if logging enabled
+  #
+  $server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
+  $server->add_site($server_proxy);
+  say $server_proxy;
+
+
+  # Run!
+  $server->run(@ARGV);
 }
-
-
-$options{"listen"}//=["[::]:8000"];
-# Create server
-#
-my $server=uSAC::HTTP::Server->new(listen=>$options{listen});
-
-
-# Inject logging if logging enabled
-#
-$server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
-$server->add_site($server_proxy);
-
-# Configure
-my @options=@unknown;
-$server->process_cli_options(@options);
-
-# Run!
-$server->run();
-
 
 __END__
 
@@ -289,44 +310,68 @@ usac-http-server -  General Purpose HTTP Server
 
 =head1 DESCRIPTION
 
-usac-http-server is a HTTP server for serving static files and directories,
-preconfigured routes and piping websockets from the command line. It is a
+L<usac-http-server> is a HTTP server for serving static files and directories,
+preconfigured routes, piping websockets and psgi from the command line. It is a
 application wrapper around L<uSAC::HTTP::Server>.
 
-It has great flexible and allows constructing prefixed grouping of routes,
-mounting 'applications' into different names spaces.
+
+=head1 USAGE
+
+From the command line, arguments influence the server configration and what to serve.
+
+=head2 Server Configuration Options
+
+=over
+ 
+=item workers
+
+  --workers COUNT
+
+The number of worker processes to respond to requests is set to COUNT
+
+=item listener
 
 
-Options and input files are interleved, and interact in a stateful manner.
+  --listener SPEC
+
+A listener specification SPEC is added to the server (see L<uSAC::IO> for
+details). This is a short hand to specifiy multiple interfaces
+
+  eg 
+    --listener in=en0,fam=inet$,type=stream
+    # this will create listening sockets for all INET addresses on the en0 interface. Stream only
+
+=item show 
+
+  --show HOST
 
 
-=head1 OPTIONS
+=item read-size
 
+  --read-size LIMIT
+
+Sets the read size for the server to LIMIT. Useful  in keeping memory usage low
+
+=back
+
+=head2 Site/Content Configuration Options
 
 
 =over
 
-=item help
-
-Show detailed usage information
-
-=item listen
-
-Network interfaces to listen on. Multiple accepted.
-
 =item site
 
-    --site id=ID
-    --site ID
+    --site #ID        ...
+    --site PREFIX     ...
+    --site @HOST      ...
 
-Selects a existing site with id of ID.
+    --set #ID,PREFIX  ...
 
-  --site id=id,prefix=>prefix
+    --site id=ID,prefix=PREFIX  ...
 
-Creates a new site with
 
-Add a group ( a "site") for the following routes/static files to be placed
-under. Useful  for defining a prefix and/or host specific routes.
+Add or select a group ( a "site") for the following routes/static files to be
+placed under. Useful for defining a prefix and/or host specific routes.
 
 If the site id exists, the existing site is choosen and the newly specified
 prefix is ignored. Otherwise a new site is created and added as a sub site to
@@ -334,7 +379,27 @@ the current site, with the prefix provided (if any)
 
 The top level site is "/" which is automatically selected.
 
+
+A prefix is literally astring which is stripped from the incomming url before
+matching is attempted. It allows providing a path to a dir in simple terms
+
+  --set prefix=test/  lib 
+  --set prefix=test lib
+
+These mactch different things. The first one probably what you want
+
+Remaining arguments are the root dirs to serve files from. Their CONTENTS, are effectivly mounted onto the prefix.
+
+If prefix was  test/123/ and the lib dir had a dir called data, then 
+
+  --site prefix=test/123/ lib
+
+would give a match to the url /test/123/data
+
 =item list-dir no-list-dir
+
+  --list-dir
+  --no-list-dir
 
 Enable/disable listing of directories for static file serving
 

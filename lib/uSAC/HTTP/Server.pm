@@ -204,8 +204,8 @@ BUILD {
   $_options={};
 
 	$_sessions={};
-
-  $self->_add_listeners(ref($_listen) eq "ARRAY"?@$_listen:$_listen);
+  $_listen_spec=[];
+  #$self->add_listeners(ref($_listen) eq "ARRAY"?@$_listen:$_listen);
 
 	$self->static_headers={
 	  HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $_sub_product) )};
@@ -682,6 +682,11 @@ method run {
     #return;
   }
 	Log::OK::TRACE and log_trace(__PACKAGE__. " starting server...");
+
+  unless(@$_listen_spec){
+    # Set default if no listeners specified 
+    $self->add_listeners(ref($_listen) eq "ARRAY"?@$_listen:$_listen);
+  }
   
 	$self->do_passive;
 	$self->do_accept;
@@ -780,11 +785,18 @@ method dump_routes {
   try {
     require Text::Table;
     for my $host (sort keys $_host_tables->%*){
+      say "HOST TABLE $host";
       my $table= $_host_tables->{$host};
       my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
       #
       # table is hustle table and cache entry
       # 
+
+      say STDERR "Current $_";
+      say STDERR "shows ", $_options->{show_routes};
+      use Data::Dumper;
+      say STDERR Dumper $_options;
+      say STDERR "host ", $host;
 
       # Only dump the host routes if the route spec
       last unless $_options->{show_routes};
@@ -828,10 +840,14 @@ method dump_routes {
 }
 
 
+method clear_listeners {
+  $_listen_spec=[];
+  $self;
+}
 
 # Adds passive socket specifications. Either string that needs parsing or hash ref
 #
-method _add_listeners {
+method add_listeners {
   #my $site=shift;
   for my $spec(@_){
     #my %options=@_;
@@ -873,15 +889,20 @@ method application_parser :lvalue {
     
 }
 
+# Expect a array ref
 method process_cli_options{
-  my $options=@_?[@_]:\@ARGV;
+  my $options=shift;
+  $options//=\@ARGV;
 
 
   #Attempt to parse the CLI options
   require Getopt::Long;
   my %options;
+  say STDERR "Before parser";
   my $parser=Getopt::Long::Parser->new;
   $parser->configure("pass_through");
+
+  say STDERR  "about to call super @$options";
   #Getopt::Long::GetOptionsFromArray
   $parser->getoptionsfromarray($options, \%options,
     "workers=i",
@@ -891,15 +912,19 @@ method process_cli_options{
     
   ) or die "Invalid arguments";
 
+  say STDERR  " after options from array";
+
   for my($key, $value)(%options){
     if($key eq "workers"){
       $self->workers=$value<0?undef:$value;
     }
     elsif($key eq "listener"){
-      $self->_add_listeners($_) for(@$value);
+      $self->add_listeners($_) for(@$value);
     }
     elsif($key eq "show"){
-      $_options->{show_routes}=$value||".*";
+      #$_options->{show_routes}//=[];
+      say STDERR "VALUE IS $value";
+      $_options->{show_routes}= $value;
     }
     elsif($key eq "read-size"){
       $_read_size=$value;
@@ -910,6 +935,7 @@ method process_cli_options{
     }
   }
 
+  say STDERR  "about to call super";
   # Process all sites
   $self->SUPER::process_cli_options($options);
   $self;
@@ -949,4 +975,5 @@ method worker_count {
   $_workers= pop;
   $self;
 }
+
 1; 

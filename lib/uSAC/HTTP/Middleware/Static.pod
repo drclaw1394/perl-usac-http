@@ -60,7 +60,7 @@ is served. Otherwise a dir listing is showing if enabled with C<list_dir>
 
   prefix=>'/public/'
 
-A string to strip from the end of the the requested url. If not specified, the
+A string to strip from the start of the the requested url. If not specified, the
 site relative path for the route is used, if not a regex match.
 
   $site->add_route("/static/files" => uhm_static_root "...");
@@ -68,6 +68,10 @@ site relative path for the route is used, if not a regex match.
 
   $site->add_route("/static/files" => uhm_static_root prefix=>"/files", "...");
   # prefix is "/files"
+
+A prefix is not limited to directory structure! If you want a partial dir name
+in the prefix it's allowed!
+
 
 =head3 roots=>[list]
 
