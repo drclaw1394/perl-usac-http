@@ -1,12 +1,9 @@
 package Plack::Handler::uSAC::HTTP::Server;
-use strict;
-use warnings;
+use v5.36;
 use feature qw<say refaliasing>;
 use Log::ger;
 use Log::ger::Output "Screen";
 
-use uSAC::IO;
-use uSAC::Main;
 
 
 
@@ -25,19 +22,23 @@ sub run{
   my $backend=$self->{backend};
   $backend//="AnyEvent"; 
 
-
+  say STDERR $backend;
   my $level=$self->{verbose}//"info";
   die $@ unless eval "
   use Log::OK {
-  lvl=>\"$level\",
+    lvl=>\"$level\",
   };
   use $backend;
+
+  use uSAC::IO;
+  use uSAC::Main;
+
   use uSAC::HTTP::Server;
   use uSAC::HTTP::Middleware::PSGI;
   1;
   ";
 
-  uSAC::Main::_main sub{
+  uSAC::Main::_main( sub{
 
     #
     # This tricky bit of code is needed to allow the log level from Log::OK to be
@@ -89,7 +90,7 @@ sub run{
 
 
     $self
-  }
+  });
 }
 
 1;

@@ -901,11 +901,11 @@ method process_cli_options{
   #Attempt to parse the CLI options
   require Getopt::Long;
   my %options;
-  say STDERR "Before parser";
+  #say STDERR "Before parser";
   my $parser=Getopt::Long::Parser->new;
   $parser->configure("pass_through");
 
-  say STDERR  "about to call super @$options";
+  #say STDERR  "about to call super @$options";
   #Getopt::Long::GetOptionsFromArray
   $parser->getoptionsfromarray($options, \%options,
     "workers=i",
