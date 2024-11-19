@@ -1,6 +1,7 @@
 package Plack::Handler::uSAC::HTTP::Server;
 use v5.36;
-use feature qw<say refaliasing>;
+use feature qw<say refaliasing try>;
+no warnings "experimental";
 use Log::ger;
 use Log::ger::Output "Screen";
 
@@ -22,7 +23,6 @@ sub run{
   my $backend=$self->{backend};
   $backend//="AnyEvent"; 
 
-  say STDERR $backend;
   my $level=$self->{verbose}//"info";
   die $@ unless eval "
   use Log::OK {
@@ -52,7 +52,7 @@ sub run{
     # 
     # Set the default route in the default 'host table' to the PSGI application
     #
-    say "ADDING ROUTE";
+    #say "ADDING ROUTE";
     #sleep 1;
     $server->add_route(undef, uSAC::HTTP::Middleware::PSGI::uhm_psgi($app));
 
@@ -60,22 +60,27 @@ sub run{
     #
     # Setup one or more listeners from  a --listen argument
     #
-    $server->add_listeners($_) for $self->{listen}->@*;
+    $server->add_listeners("$_,t=stream") for $self->{listen}->@*;
+
 
     # Create a listener form the --port and --host options, only if
     # --listen is not specified. This required for loading via loader
     # NOTE IPv6 support is busteed 
 
-    unless($self->{listen}->@*){
-
-      my $port=$self->{port};#//5000; #default port
-      my $host=$self->{host};
-      say STDERR "Port $port and host $host";
-      if(defined($host) and defined($port)){
-        $server->add_listeners("a=$host,po=$port,t=stream");
-      }
-
-    }
+    #########################################################
+    # unless($self->{listen}->@*){                          #
+    #                                                       #
+    #   my $port=$self->{port};#//5000; #default port       #
+    #   my $host=$self->{host};                             #
+    #   say STDERR "Port $port and host $host";             #
+    #   if(defined($host) and defined($port)){              #
+    #     my $t="";                                         #
+    #     $t.="a=$host," if $host;                          #
+    #     $server->add_listeners("a=$t,po=$port,t=stream"); #
+    #   }                                                   #
+    #                                                       #
+    # }                                                     #
+    #########################################################
 
 
     #
@@ -86,7 +91,14 @@ sub run{
     # 
     # RUN IT!
     #
-    $server->run;
+    #
+    try {
+     $server->run;
+    }
+    catch($e){
+      say STDERR $e;
+      exit -1;
+    }
 
 
     $self
