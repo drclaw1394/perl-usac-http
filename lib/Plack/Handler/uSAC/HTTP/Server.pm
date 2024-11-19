@@ -5,78 +5,91 @@ use feature qw<say refaliasing>;
 use Log::ger;
 use Log::ger::Output "Screen";
 
-#use uSAC::HTTP;
-#use uSAC::HTTP::Server;
+use uSAC::IO;
+use uSAC::Main;
 
-#use Log::ger;
 
 
 sub new {
 	my ($class, %options)=@_;
+
 	bless \%options, $class;
 }
 
+# Run...
+#
+# Loads the usac runloop 
 sub run{
-	my ($self, $app)=@_;
+  my ($self, $app)=@_;
 
-  #
-  # This tricky bit of code is needed to allow the log level from Log::OK to be
-  # set from the command line. Normally this is handled automatically, but plackup 
-  # consumes the command line options and spits them back out as a hash (self).
-  #
+  my $backend=$self->{backend};
+  $backend//="AnyEvent"; 
+
+
   my $level=$self->{verbose}//"info";
   die $@ unless eval "
   use Log::OK {
-    lvl=>\"$level\",
+  lvl=>\"$level\",
   };
+  use $backend;
   use uSAC::HTTP::Server;
   use uSAC::HTTP::Middleware::PSGI;
   1;
   ";
 
-	my $server=uSAC::HTTP::Server->new;
+  uSAC::Main::_main sub{
 
-  # 
-  # Set the default route in the default 'host table' to the PSGI application
-  #
-  say "ADDING ROUTE";
-  #sleep 1;
-  $server->add_route(undef, uSAC::HTTP::Middleware::PSGI::uhm_psgi($app));
+    #
+    # This tricky bit of code is needed to allow the log level from Log::OK to be
+    # set from the command line. Normally this is handled automatically, but plackup 
+    # consumes the command line options and spits them back out as a hash (self).
+    #
+
+    my $server=uSAC::HTTP::Server->new;
+    $server->process_cli_options([$self->%*]);
+
+    # 
+    # Set the default route in the default 'host table' to the PSGI application
+    #
+    say "ADDING ROUTE";
+    #sleep 1;
+    $server->add_route(undef, uSAC::HTTP::Middleware::PSGI::uhm_psgi($app));
 
 
-  #
-  # Setup one or more listeners from  a --listen argument
-  #
-  $server->add_listeners($_) for $self->{listen}->@*;
+    #
+    # Setup one or more listeners from  a --listen argument
+    #
+    $server->add_listeners($_) for $self->{listen}->@*;
 
-  # Create a listener form the --port and --host options, only if
-  # --listen is not specified. This required for loading via loader
-  # NOTE IPv6 support is busteed 
+    # Create a listener form the --port and --host options, only if
+    # --listen is not specified. This required for loading via loader
+    # NOTE IPv6 support is busteed 
 
-  unless($self->{listen}->@*){
+    unless($self->{listen}->@*){
 
-    my $port=$self->{port};#//5000; #default port
-    my $host=$self->{host};
-    say STDERR "Port $port and host $host";
-    if(defined($host) and defined($port)){
-          $server->add_listeners("a=$host,po=$port,t=stream");
+      my $port=$self->{port};#//5000; #default port
+      my $host=$self->{host};
+      say STDERR "Port $port and host $host";
+      if(defined($host) and defined($port)){
+        $server->add_listeners("a=$host,po=$port,t=stream");
+      }
+
     }
 
+
+    #
+    # Configure the number of worker child processes to execute
+    #
+    $server->workers=$self->{workers}//$self->{max_workers} if defined($self->{workers}) or defined($self->{max_workers});
+
+    # 
+    # RUN IT!
+    #
+    $server->run;
+
+
+    $self
   }
-
-
-  #
-  # Configure the number of worker child processes to execute
-  #
-  $server->workers=$self->{workers}//$self->{max_workers} if defined($self->{workers}) or defined($self->{max_workers});
-
-  # 
-  # RUN IT!
-  #
-	$server->run;
-
-
-	$self
 }
 
 1;
@@ -88,7 +101,7 @@ Plack::Handler::uSAC::HTTP::Server - Plack handler for uSAC HTTP Server
 
 =head1 SYNOPSIS
 
-  plackup -s uSAC::HTTP::Server [options] app_path.psgi
+plackup -s uSAC::HTTP::Server [options] app_path.psgi
 
 =head1 DESCRIPTION
 
@@ -102,10 +115,10 @@ be run from L<plackup>.
 
 Accepts "host:port" strings with literal IPv4 and IPv6 addresses. Examples include:
 
-  0.0.0.0:8080    #Listen on all IPv4 interfaces on port 8080
-  [::]:8080       #Listen on all IPv6 and IPv4 interfaces on port 8080
-  :8080           #Same as above
-  0.0.0.0         #Listen on all IPv4 interfaces on default port 5000
+0.0.0.0:8080    #Listen on all IPv4 interfaces on port 8080
+[::]:8080       #Listen on all IPv6 and IPv4 interfaces on port 8080
+:8080           #Same as above
+0.0.0.0         #Listen on all IPv4 interfaces on default port 5000
 
 
 =head3 --host and --port (via --listen)
@@ -115,7 +128,7 @@ When using a --host or --port switch, plackup combines them into an equivilant
 so this handler B<only> looks at the --listen switch, B<not> --host and --port
 directly
 
-  
+
 =head2 Addtional Options
 
 =head3 --workers --max-workers

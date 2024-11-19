@@ -26,7 +26,6 @@ use uSAC::Util;           # Auxillary functions
 use Hustle::Table;		    # Fancy dispatching of endpoints
 
 
-
 use feature qw<refaliasing say state current_sub>;
 use constant::more NAME=>"uSAC", VERSION=>"v0.1.0";
 
@@ -666,7 +665,8 @@ method start {
 
 method run {
   #my $self=shift;
-  my $sig; $sig=AE::signal(INT=>sub {
+  #my $sig; $sig=AE::signal(INT=>sub {
+  my $sig;$sig=uSAC::IO::signal(INT=>sub {
           $self->stop;
           $sig=undef;
   });

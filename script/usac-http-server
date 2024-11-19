@@ -121,9 +121,7 @@ sub run {
   my $server=uSAC::HTTP::Server->new();
 
   # Configure Server. Gets first dibs on cli arguments
-  say STDERR "BEFORE CLI";
   $server->process_cli_options(\@_);
-  say STDERR "AFTER CLI: @_";
 
 
   my $current=$server_proxy;
@@ -132,9 +130,7 @@ sub run {
 
   my $counter=0;
   my @unknown;
-  say STDERR "STACK IS @_";
   while(@_){
-      say STDERR "STACK @_";
 
     $_=shift; # from @ARGV
     if(/-{1,2}site/){
