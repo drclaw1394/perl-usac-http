@@ -97,7 +97,7 @@ class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 no warnings "experimental";
 field $_host_tables :mutator;
 field $_cb;
-field $_listen :param=["po=5001,addr=::"];
+field $_listen :param=["po=5001,addr=::,t=stream"];
 field $_listen_spec;    # The array listeners
 
 field $_group_table; # Named groups of

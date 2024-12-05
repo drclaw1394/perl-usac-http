@@ -37,7 +37,7 @@ sub parse_site_spec{
     unless($field=~/=/){
       # Not a key value pair
       if($field=~ s/^#//){
-        say "ID";
+        say STDERR "ID";
         #ID specificaiton
         $spec{id}=$field;
       }
@@ -48,7 +48,7 @@ sub parse_site_spec{
       # }                      #
       ##########################
       else {
-        say "PREFIX";
+        say STDERR "PREFIX";
         #it looks like a normal prefix, so treat as such
         #$spec{id}=undef;
         $spec{prefix}=$field;
@@ -117,7 +117,6 @@ sub run {
 
   # Create server
   #
-  say STDERR "BEFORE new server";
   my $server=uSAC::HTTP::Server->new();
 
   # Configure Server. Gets first dibs on cli arguments
@@ -213,7 +212,7 @@ sub run {
         sub {
           my $ws=$_[PAYLOAD];
           $ws->on_open=sub {
-            say "opened";
+            say STDERR "opened";
             $reader->start;
             $reader->on_read=sub{
               $ws->send_message($_[0]);
@@ -221,16 +220,16 @@ sub run {
             $writer->start;
           };
           $ws->on_message=sub {
-            say "GOT message: $_[1]";
+            say STDERR "GOT message: $_[1]";
             $writer->write($_[1]);
           };
 
           $ws->on_error=sub {
-            say "GOT error$_[0]";
+            say STDERR "GOT error$_[0]";
           };
 
           $ws->on_close=sub {
-            say "GOT close";
+            say STDERR "GOT close";
           };
           undef; #Needed to prevent calling of next
         }
@@ -266,7 +265,7 @@ sub run {
     }
     else {
       # Known options
-      say "UNKOWN";
+      say STDERR "UNKOWN";
       push @unknown, $_;
     }
 
@@ -277,7 +276,6 @@ sub run {
   #
   $server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
   $server->add_site($server_proxy);
-  say $server_proxy;
 
 
   # Run!

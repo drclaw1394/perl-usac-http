@@ -26,6 +26,7 @@ my $delegate= require(path(\"delegate.pl"));
 my $server=uSAC::HTTP::Server->new(
   delegate=>$delegate,
   sub_product=>"Testing",
+
   listen=> {
     address=>"::",
     interface=>["en"],
@@ -35,7 +36,9 @@ my $server=uSAC::HTTP::Server->new(
     data=> "tls"
       
   },
+
   workers=>0,
+
   tls=>{
     key=>"",    # Path or filehandle to private key
     cert=>"",
