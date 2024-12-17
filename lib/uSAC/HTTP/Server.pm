@@ -142,16 +142,24 @@ field $_application_parser :param=undef;
 field $_total_requests;
 field $_static_headers :mutator;
 
+field $_sites :reader;   # Hash of unique sites (shared accros hosts)
+                         # Route files can query if a site exits
+
 
 
 BUILD {
   
+  # Hash of all sites on this server (indexed by id)
+  $_sites={}; 
+
   # server is top level, set  default mime
 	$self->set_mime_db(uSAC::MIME->new); # set  and index
 	$self->set_mime_default("application/octet-stream");
 
   $self->prefix="/";
   $self->id="/";
+
+  $_sites->{"/"}=$self; # Add top level (server to the sites)
 	$_host_tables={};
   $_zombies=[];
 	$_zombie_limit//=100;
@@ -838,6 +846,44 @@ method dump_routes {
 	#sort by group by method
 
 }
+
+method site_for_id {
+  my $id=shift;
+  return $_sites->{$id};
+}
+###################################################################
+# # Returns unique sites from the route table.                    #
+# # Matches with ID with regexp, or returns all with no argument  #
+# # NOTE: Sites are shared across hosts,                          #
+# #                                                               #
+# method sites {                                                  #
+#                                                                 #
+#     my $filter=shift;                                           #
+#     my @output;                                                 #
+#     for my $host (sort keys $_host_tables->%*){                 #
+#       my $table= $_host_tables->{$host};                        #
+#       for my $entry ($table->[0]->@*){                          #
+#         my $site=$entry->[1][ROUTE_SITE];                       #
+#                                                                 #
+#         #say "site: ".$site->id;                                #
+#                                                                 #
+#         # Only add to output, in unique fashion                 #
+#         push @output, $site unless @output;                     #
+#         push @output, $site unless grep { $site == $_} @output; #
+#         #say "OUTPUT @output";                                  #
+#       }                                                         #
+#                                                                 #
+#     }                                                           #
+#                                                                 #
+#     # Filter to match any specified ids                         #
+#     if($filter){                                                #
+#                                                                 #
+#       @output=grep $_->id=~$filter, @output;                    #
+#                                                                 #
+#     }                                                           #
+#     return @output;                                             #
+# }                                                               #
+###################################################################
 
 
 method clear_listeners {

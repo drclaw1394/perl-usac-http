@@ -586,10 +586,16 @@ method resolve_mime_default {
 # Add a the callee to the supplied object
 method add_to {
   my $parent=pop;
-	my $root=$self->find_root;
-  $self->mode=$root->mode;
   $self->parent_site=$parent;
+	my $root=$self->find_root;
+  if( exists $root->sites->{$self->id}){
+    die "Duplicate site id not allowed: @{[$self->id]}";
+  }
+  say STDERR "ROOT IS A ". $root;
+  say STDERR $root->id;
+  $self->mode=$root->mode;
   $parent->add_route($self);
+  $root->sites->{$self->id}=$self;
   $self;
 
 }
@@ -598,6 +604,10 @@ method add_to {
 method add_site {
   for my $site(@_){
     my $root=$self->find_root;
+    if( exists $root->sites->{$site->id}){
+      die "Duplicate site id not allowed: @{[$site->id]}";
+    }
+    $root->sites->{$site->id}=$site;
     $site->mode=$root->mode;
     $site->parent_site=$self;
     $self->add_route($site);
@@ -610,6 +620,8 @@ method add_site {
 method child_site {
   my $root=$self->find_root;
   my $child=uSAC::HTTP::Site->new(parent_site=> $self);
+  $root->sites->{$child->id}=$child;
+  $child;
 }
 
 method find_root {
