@@ -140,7 +140,7 @@ sub make_parser{
         $processed=0;
         return;
       }
-      \my $buf=\$_[0];
+      \my $buf=\$_[0][0];
 
       #while ( $len=length $buf) {
       while ($buf) {
@@ -610,7 +610,7 @@ sub make_serialize{
         $reply.=$_[PAYLOAD];
       }
 
-      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      $_[REX][uSAC::HTTP::Rex::write_]([$reply], $cb);
     }
     else{
       # No header specified. Just a body
@@ -624,11 +624,11 @@ sub make_serialize{
           delete $out_ctx{$_[REX]};
         }
 
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]([$reply], $cb);
       }
       else{
         # not chunked, so just write
-        $_[REX][uSAC::HTTP::Rex::write_]($_[PAYLOAD], $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb);
       }
 
     }

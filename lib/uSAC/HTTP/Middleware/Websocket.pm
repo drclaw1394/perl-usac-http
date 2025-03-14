@@ -517,7 +517,7 @@ sub  _make_websocket_server_reader {
 					_xor_mask(substr($buf, 0, $len, ''),$mask) if $mask;
 
 					#TODO: drop the session, undef any read/write subs
-          $self->[pinger_] and uSAC::IO::timer_cancel $self->[pinger_];
+          $self->[pinger_] and uSAC::IO::cancel $self->[pinger_];
           #$self->[pinger_]=undef;
 					$self->[on_close_]->($self);
           $session->closeme=1;
@@ -602,7 +602,7 @@ sub _make_websocket_server_writer {
 
       # Payload
       $frame .= $payload;
-      $next->($frame, $cb, $arg);
+      $next->([$frame], $cb, $arg);
       return;
     }
   };
@@ -642,7 +642,7 @@ sub new {
 	my $dropper=sub {
     say "WS dropper called from:";
     say caller;
-    $self->[pinger_] and uSAC::IO::timer_cancel $self->[pinger_];
+    $self->[pinger_] and uSAC::IO::cancel $self->[pinger_];
     #$self->[pinger_]=undef;
 		$self->[writer_]=sub {};
 
@@ -748,7 +748,7 @@ sub ping_interval {
 	return $self->[ping_interval_] unless defined $new;
 	
   #undef $self->[pinger_];
-  $self->[pinger_] and uSAC::IO::timer_cancel $self->[pinger_];
+  $self->[pinger_] and uSAC::IO::cancel $self->[pinger_];
   my $dummy=sub {say "pinger dummy"};
 	$self->[ping_interval_]=$new;
 	$self->[pinger_] = uSAC::IO::timer(0, $self->[ping_interval_], sub {

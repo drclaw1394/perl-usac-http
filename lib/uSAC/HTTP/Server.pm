@@ -16,7 +16,7 @@ use Socket::More;         # Socket symbols and passive socket
 
 
 use IO::FD;               # IO
-#use uSAC::IO;             # Readers/writers
+use uSAC::IO;             # Readers/writers
 use uSAC::IO::Acceptor;   # Acceptors
 
 use uSAC::HTTP;           # uSAC::HTTP Core code
@@ -372,10 +372,14 @@ method prepare {
 
 	#Timeout timer
 	#
-  #$SIG{ALRM}=
+
+  my $do_shutdown;
+  usac_listen(undef,"server/shutdown/graceful", sub { $do_shutdown=1; });
+
   $_stream_timer=uSAC::IO::timer 0, $interval,
   
     sub {
+      say "TIMER IN PID: $$";
       #iterate through all connections and check the difference between the last update
       $_server_clock+=$interval;
       #and the current tick
@@ -388,6 +392,11 @@ method prepare {
           $session->closeme=1;
           $session->drop(1);
         }
+      }
+
+      if(!$_sessions->%* and $do_shutdown){
+        say STDERR 'SERVER GRACEFULL SHUTDOWN IN stream timer';
+        uSAC::IO::timer_cancel $_stream_timer;
       }
       
       #alarm	 $interval;# if $self->[sessions_]->%*; #only start interval if something to watch?
@@ -451,6 +460,7 @@ method make_stream_accept {
   # Application Layer Protocol Negotiation
   #
 
+  say STDERR "stream accept on pid $$";
   my $session;
   unless($_application_parser){
     need uSAC::HTTP::v1_1_Reader;
@@ -661,10 +671,20 @@ method rebuild_dispatch {
 
 
 method stop {
+
+  # Stop all listeners...
+  $_->pause for(values $_aws->%*);
+
+  # Message rest of program we are doing a gracefull shutdown.
+  # Give a change for timers, and streams to shutdown
+  usac_broadcast undef, "server/shutdown/graceful", "yes";
+
+  # Do a force here somehow?
   uSAC::IO::asap(sub {
-      exit;
-      #$_cv->send;
+        #sleep 2;
+        #exit;
   });
+
 }
 
 method start {
@@ -672,8 +692,6 @@ method start {
 }
 
 method run {
-  #my $self=shift;
-  #my $sig; $sig=AE::signal(INT=>sub {
   my $sig;$sig=uSAC::IO::signal(INT=>sub {
           $self->stop;
           $sig=undef;

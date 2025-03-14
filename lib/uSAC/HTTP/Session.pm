@@ -245,7 +245,7 @@ method pump_reader {
 #timer for generating timestamps. 1 second resolution for HTTP date
 my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
-our $timer=uSAC::IO::timer 0,1, sub {
+my $timer=uSAC::IO::timer 0, 1, sub {
 	my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = gmtime($Time=time);
 	#export to globally available time?
 	#
@@ -253,6 +253,10 @@ our $timer=uSAC::IO::timer 0,1, sub {
 	#TODO: 0 padding of hour min sec
 	$Date="$days[$wday], $mday $months[$mon] ".($year+1900).sprintf(" %02d:%02d:%02d",$hour, $min, $sec)." GMT";
 };
+usac_listen(undef,"server/shutdown/graceful", sub {
+    say STDERR 'SERVER GRACEFULL SHUTDOWN IN SESSION';
+    uSAC::IO::cancel $timer;
+});
 
 
 #Return an array of references to variables which are publically editable

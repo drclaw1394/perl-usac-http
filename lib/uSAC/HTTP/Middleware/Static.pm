@@ -7,6 +7,8 @@ no warnings "experimental";
 use Log::ger;
 use Log::OK;
 
+use uSAC::IO;
+
 use File::Meta::Cache;
 use POSIX;
 
@@ -586,7 +588,15 @@ sub uhm_static_root {
   my $sweeper=$fmc->sweeper;
   $fmc->disable;
 
-  state $timer=uSAC::IO::timer 0, 1, $sweeper;
+  my $timer=uSAC::IO::timer 0, 1, $sweeper;
+
+  # Register for gracefull shutdown. No new connections should be accepted
+
+  #say STDERR "REGISTET gracefull shutdown======";
+  usac_listen(undef,"server/shutdown/graceful", sub {
+      say STDERR 'SERVER GRACEFULL SHUTDOWN IN STATIC';
+      uSAC::IO::timer_cancel $timer;
+  });
   
   my $list_dir=_make_list_dir(%options);
 
