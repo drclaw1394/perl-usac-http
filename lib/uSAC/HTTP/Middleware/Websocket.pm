@@ -315,7 +315,7 @@ sub websocket_server_in {
 
 
           for($rex->[uSAC::HTTP::Rex::write_]){
-            $_->($reply.CRLF , sub {
+            $_->([$reply.CRLF] , sub {
                 my $ws=uSAC::HTTP::Middleware::Websocket->new($session);
                 #$ws->[PMD_]=$deflate_flag;
                 $ws->[PMD_]=Compress::Raw::Zlib::Deflate->new(AppendOutput=>1, MemLevel=>8, WindowBits=>-15,ADLER32=>1) if $deflate_flag;
@@ -385,7 +385,7 @@ sub  _make_websocket_server_reader {
 
 	sub {
     Log::OK::TRACE and log_trace __PACKAGE__." Websocket reader sub";
-		\my $buf=\$_[0];
+		\my $buf=\$_[0][0];
 		state $do_deflate=0;
 		#do the frame parsing here
 		while($buf){
@@ -757,6 +757,11 @@ sub ping_interval {
 		#TODO: Add client ping support? (ie masking)
 
 	} ) if $self->[ping_interval_] > 0;
+
+  usac_listen(undef,"server/shutdown/graceful", sub {
+      say STDERR 'SERVER GRACEFULL SHUTDOWN IN WEBSOCKET';
+      uSAC::IO::cancel $self->[ping_interval_];
+  });
 	return $self->[ping_interval_];
 }
 
