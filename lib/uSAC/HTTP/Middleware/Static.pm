@@ -25,7 +25,7 @@ use Export::These (
 
 use Errno qw<EAGAIN EINTR EBUSY>;
 
-use constant::more  READ_SIZE=>4096;
+use constant::more  READ_SIZE=>4096*32;
 
 
 use Time::Local qw<timelocal_modern>;
@@ -587,9 +587,9 @@ sub uhm_static_root {
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
   my $sweeper=$fmc->sweeper;
-  $fmc->disable;
+  #$fmc->disable;
 
-  my $timer=uSAC::IO::timer 0, 1, $sweeper;
+  my $timer=uSAC::IO::timer 0, 10, sub { $sweeper->() };
 
   # Register for gracefull shutdown. No new connections should be accepted
 
@@ -731,14 +731,19 @@ sub uhm_static_root {
               my $enc_ext=$pre_encoded->{$1};
               $entry=$opener->($path.$enc_ext, $open_modes) if $enc_ext;
               unless($entry){
+		Log::OK::TRACE and log_trace "NO Existing entry for opening file!";
                 $entry=$opener->($path, $open_modes);
                 $enc=($no_encoding and $ext=~/$no_encoding/)?"identity":"";
 
               }
+	      else {
+		      Log::OK::TRACE and log_trace "Existing entry for opening file!";
+	      }
             }
             else{
               # No preencoded files enabled
               $entry=$opener->($path, $open_modes);
+		Log::OK::TRACE and log_trace "Same entry? : ".$entry;
             }
 
             next unless($entry)
