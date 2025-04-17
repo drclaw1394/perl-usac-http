@@ -6,6 +6,7 @@ our $VERSION="v0.1.0";
 
 #no warnings "experimental";
 
+use Data::Dumper;
 
 use Log::ger;
 use Log::ger::Output "Screen";
@@ -15,7 +16,7 @@ use Log::OK {
 };
 
 
-use Import::These qw<uSAC:: Util ::HTTP:: Server ::Middleware:: Static Log>;
+use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Static Log>;
 
 my %options;
 
@@ -108,11 +109,11 @@ sub run {
   # Simple wrapper containing all sub sites. This allows the server to be created
   # at the end and simply add this group
   #
-  my $server_proxy=uSAC::HTTP::Site->new(id=>"/");
+  #my $server_proxy=uSAC::HTTP::Site->new(id=>"/");
 
   # The top level server always has a prefix of "/". Add the  proxy so we can
   # find it again
-  $sites{"/"}=$server_proxy;
+  #$sites{"/"}=$server_proxy;
 
 
   # Create server
@@ -122,28 +123,39 @@ sub run {
   # Configure Server. Gets first dibs on cli arguments
   $server->process_cli_options(\@_);
 
-
+  # Get proxy?
+  my $server_proxy=$server->sites->{"/"};
+  $sites{"/"}=$server_proxy;
   my $current=$server_proxy;
   my %cur_opts=(list_dir=>1);
 
 
   my $counter=0;
   my @unknown;
+  my @roots;
+
   while(@_){
 
     $_=shift; # from @ARGV
     if(/-{1,2}site/){
+
+      # process any existing static file service location 
+      #
+      $current->add_route("", uhm_static_root roots=>[@roots], %cur_opts) if @roots;
+      @roots=(); # Reset roots
+
       $_=shift;
       my $spec= parse_site_spec($_);
 
       # Create a new id if none specified
       $spec->{id}//=$counter++;
+      say Dumper $spec;
 
       if(exists($sites{$spec->{id}})){
         my $found=$sites{$spec->{id}};
 
         # an existing site
-        #warn "Site prefix changed from ".$found->id. "to $spec->{id}" if $found->id ne $spec->{id};
+        warn "Site prefix changed from ".$found->id. "to $spec->{id}" if $found->id ne $spec->{id};
         $current=$found; 
       }
       else {
@@ -235,6 +247,26 @@ sub run {
         }
       );
     }
+    elsif(/-{1,2}r/){
+      say "PROCESS RouTE";
+      # Manually specifiy a route and content combination for to add to the current site
+      # Need to parse the matcher and the content
+      # matcher=sdfsdf, content='dfsdfsdf'
+      # Content is evaled. If content is a string, used as direct content. If its a sub reference, it is converted into middleware
+      $_=shift;
+      my @parts=split /,/, $_;
+      say "PArts @parts";
+      my @middle;
+      for(@parts){
+        push @middle, eval $_;
+      }
+      say "middle", Dumper @middle;
+      $current->add_route(@middle);
+
+      
+     next; 
+
+    }
     elsif(/^--$/){
       # End processing of options  
       last;
@@ -260,7 +292,8 @@ sub run {
       else {
         # Assume a dir for serving static files from
         Log::OK::INFO and log_info "Serving static files from source:\n $target";
-        $current->add_route("", uhm_static_root roots=>[$_], %cur_opts);
+        push @roots, $_;
+        #$current->add_route("", uhm_static_root roots=>[$_], %cur_opts);
       }
     }
     else {
@@ -271,11 +304,15 @@ sub run {
 
   }
 
+  # process any remaining static file service location 
+  #
+  $current->add_route("", uhm_static_root roots=>[@roots], %cur_opts) if @roots;
+  @roots=(); # Reset roots
+
 
   # Inject logging if logging enabled
   #
   $server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
-  $server->add_site($server_proxy);
 
 
   # Run!
@@ -291,7 +328,7 @@ usac-http-server -  General Purpose HTTP Server
 =head1 SYNOPSIS
 
   #mount psgi applications and serve static files
-	usac-http-server --site id=Admin,prefix=admin/ path/to/admin.psgi --site #User,user/ path/to/user.psgi  --site #/ path/to/static/dir
+	usac-http-server --site id=ID,prefix=PREFIX/ static_root, static_root ...
 
   # /               
   #   admin/
@@ -304,9 +341,19 @@ usac-http-server -  General Purpose HTTP Server
 
 =head1 DESCRIPTION
 
-L<usac-http-server> is a HTTP server for serving static files and directories,
-preconfigured routes, piping websockets and psgi from the command line. It is a
-application wrapper around L<uSAC::HTTP::Server>.
+L<usac-http-server> is a standalone HTTP server for serving static files and
+directories, preconfigured routes, piping websockets and psgi from the command
+line. It is a application wrapper around L<uSAC::HTTP::Server>.
+
+The server always consists of at least a single 'site', then root site. Sites
+are groupings of routes to help facilitate related routes. 
+
+Static files are served by simply giving the path to the dir. Multiple paths
+can be give to add multiple 'search paths' for requested files.
+
+In general the options provided apply to the currently selected site. Each time
+a site is created/selected, it is added to the current site, and then becomes
+the current site
 
 
 =head1 USAGE
@@ -348,7 +395,7 @@ Sets the read size for the server to LIMIT. Useful  in keeping memory usage low
 
 =back
 
-=head2 Site/Content Configuration Options
+=head2 Site Content and Configuration Options
 
 
 =over
@@ -382,13 +429,14 @@ matching is attempted. It allows providing a path to a dir in simple terms
 
 These mactch different things. The first one probably what you want
 
-Remaining arguments are the root dirs to serve files from. Their CONTENTS, are effectivly mounted onto the prefix.
+Remaining arguments are the root dirs to serve files from. Their CONTENTS, are
+effectivly mounted onto the prefix.
 
-If prefix was  test/123/ and the lib dir had a dir called data, then 
+If prefix was  C<test/123/> and the lib dir had a dir called data, then 
 
   --site prefix=test/123/ lib
 
-would give a match to the url /test/123/data
+would give a match to the url C</test/123/data>
 
 =item list-dir no-list-dir
 

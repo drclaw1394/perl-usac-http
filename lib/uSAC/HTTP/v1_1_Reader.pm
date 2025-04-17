@@ -223,7 +223,7 @@ sub make_parser{
 
           $closeme=(!$keep_alive or $closeme);
 
-          Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: $closeme";
+          Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
           Log::OK::DEBUG and log_debug "URI/Code: $uri";
           Log::OK::DEBUG and log_debug "verison/description: $version";
 
@@ -592,7 +592,7 @@ sub make_serialize{
       $reply.=CRLF;
 
       Log::OK::DEBUG and log_debug "->Serialize: headers:";
-      Log::OK::DEBUG and log_debug $reply;
+      #Log::OK::DEBUG and log_debug $reply;
 
       # mark headers as done, if not informational
       #

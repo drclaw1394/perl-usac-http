@@ -253,7 +253,7 @@ my $timer=uSAC::IO::timer 0, 1, sub {
 	#TODO: 0 padding of hour min sec
 	$Date="$days[$wday], $mday $months[$mon] ".($year+1900).sprintf(" %02d:%02d:%02d",$hour, $min, $sec)." GMT";
 };
-usac_listen(undef,"server/shutdown/graceful", sub {
+uSAC::Main::usac_listen("server/shutdown/graceful", sub {
     say STDERR 'SERVER GRACEFULL SHUTDOWN IN SESSION';
     uSAC::IO::cancel $timer;
 });

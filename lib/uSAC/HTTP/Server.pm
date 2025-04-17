@@ -24,6 +24,7 @@ use uSAC::HTTP::Session;  # 'session' stuff
 use uSAC::Util;           # Auxillary functions
 
 use Hustle::Table;		    # Fancy dispatching of endpoints
+use uSAC::FastPack::Broker;
 
 
 use feature qw<refaliasing say state current_sub>;
@@ -374,7 +375,7 @@ method prepare {
 	#
 
   my $do_shutdown;
-  usac_listen(undef,"server/shutdown/graceful", sub { $do_shutdown=1; });
+  uSAC::Main::usac_listen("server/shutdown/graceful", sub { $do_shutdown=1; });
 
   $_stream_timer=uSAC::IO::timer 0, $interval,
   
@@ -677,7 +678,7 @@ method stop {
 
   # Message rest of program we are doing a gracefull shutdown.
   # Give a change for timers, and streams to shutdown
-  usac_broadcast undef, "server/shutdown/graceful", "yes";
+  uSAC::Main::usac_broadcast "server/shutdown/graceful", "yes";
 
   # Do a force here somehow?
   uSAC::IO::asap(sub {

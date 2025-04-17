@@ -15,6 +15,7 @@ use Encode qw<decode encode>;
 
 use Compress::Raw::Zlib;
 
+use uSAC::FastPack::Broker;
 use Export::These qw<uhm_websocket>;
 
 ##############################
@@ -758,7 +759,7 @@ sub ping_interval {
 
 	} ) if $self->[ping_interval_] > 0;
 
-  usac_listen(undef,"server/shutdown/graceful", sub {
+  uSAC::Main::usac_listen("server/shutdown/graceful", sub {
       say STDERR 'SERVER GRACEFULL SHUTDOWN IN WEBSOCKET';
       uSAC::IO::cancel $self->[ping_interval_];
   });
