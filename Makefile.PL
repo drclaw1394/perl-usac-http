@@ -22,11 +22,12 @@ WriteMakefile(
     "Sub::Middler"=>0,          # Subroutine middleware linking
     "File::Meta::Cache"=>0,     # Meta data and open file cache
     "Export::These"=>"v0.1.1",         # Simpler export and reexport
-    "Import::These"=>"v0.1.2",
-    "HTTP::State"=>"v0.1.1",
+    "Import::These"=>"v0.1.2",  
+    "HTTP::State"=>"v0.1.1",    # Cookies
     "constant::more"=> "v0.3.0",
 		"Log::OK"	=> "v0.2.1",
 		"Template::Plex"	=> "v0.7.0",
+    "uSAC::FastPack" => 0,      # Message brokering
     "Text::Table"=>0,
 
 
