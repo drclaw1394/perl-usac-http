@@ -2,8 +2,7 @@ package Plack::Handler::uSAC::HTTP::Server;
 use v5.36;
 use feature qw<say refaliasing try>;
 no warnings "experimental";
-use Log::ger;
-use Log::ger::Output "Screen";
+use uSAC::Log;
 
 
 
@@ -175,7 +174,6 @@ Forces single process mode
 =head2 --verbose
 
 Sets the logging level of the server internals. Levels are based on C<Log::OK>
-and with C<Log::ger>
 
   eg
   --verbose info

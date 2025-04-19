@@ -3,7 +3,8 @@ use Object::Pad;
 class uSAC::HTTP::Session;
 use feature qw<say state refaliasing>;
 no warnings "experimental";
-use Log::ger;
+
+use uSAC::Log;
 use Log::OK;
 
 

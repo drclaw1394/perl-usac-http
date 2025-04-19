@@ -8,8 +8,9 @@ use feature "try";
 #
 
 use Object::Pad;          # Class
-use Log::ger;             # Log system
-use Log::OK { lvl=>"info" };  # CLI control of log system
+use uSAC::Log;
+#use Log::OK { lvl=>"info" };  # CLI control of log system
+use Log::OK;
 
 # Socket::More also exports Socket Symbols
 use Socket::More;         # Socket symbols and passive socket
@@ -281,7 +282,7 @@ method _setup_stream_passive {
 			or warn "chmod $l->{path} failed: $!";
 	}
 	else {
-    #IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
+    IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
 	}
 
 

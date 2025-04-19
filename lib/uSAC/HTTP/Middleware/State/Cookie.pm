@@ -4,7 +4,7 @@ use warnings;
 use feature "try";
 
 use uSAC::HTTP;
-use Log::ger;
+use uSAC::Log;
 
 use Log::OK;
 

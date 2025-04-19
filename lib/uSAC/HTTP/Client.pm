@@ -1,6 +1,6 @@
 package uSAC::HTTP::Client;
 use feature qw<state isa>;
-use Log::ger;
+use uSAC::Log;
 use Object::Pad;
 
 use uSAC::HTTP;

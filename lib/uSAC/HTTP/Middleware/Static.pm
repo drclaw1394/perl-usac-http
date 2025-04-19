@@ -4,7 +4,7 @@ use warnings;
 use feature qw<say  refaliasing state current_sub>;
 no warnings "experimental";
 
-use Log::ger;
+use uSAC::Log;
 use Log::OK;
 
 use uSAC::IO;
@@ -166,6 +166,7 @@ sub send_file_uri {
 
 
     unless(@ranges){
+      Log::OK::TRACE and log_trace "Range not satisfiable";
       $rex->[STATUS]=HTTP_RANGE_NOT_SATISFIABLE;
 
       $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
@@ -174,11 +175,15 @@ sub send_file_uri {
       return;
     }
     elsif(@ranges==1){
+      Log::OK::TRACE and log_trace "Range Single";
+      use Data::Dumper;
+      Log::OK::TRACE and log_trace Dumper @ranges;
       $rex->[STATUS]=HTTP_PARTIAL_CONTENT;
 
       my $total_length=0;
       $total_length+=($_->[1]-$_->[0]+1) for @ranges;
       
+
       for my($k, $v)(
         HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
         HTTP_CONTENT_LENGTH, $total_length
@@ -188,9 +193,11 @@ sub send_file_uri {
 
       $content_length=$total_length;
       $offset= $ranges[0][0];
+      Log::OK::TRACE and log_trace "Content length for single range: $content_length, offset $offset";
       shift @ranges;
     }
     else{
+      Log::OK::TRACE and log_trace "Range multiple .. not implemented";
 
     }
   }
@@ -201,9 +208,12 @@ sub send_file_uri {
 
   Log::OK::TRACE and log_trace join ", ", %$out_headers;
 
-  $next->($matcher, $rex, $in_header, $out_headers, "" ) and return
-  if($rex->[METHOD] eq "HEAD" 
-      or $rex->[STATUS]==HTTP_NOT_MODIFIED);
+  if(($rex->[METHOD] eq "HEAD" or $rex->[STATUS]==HTTP_NOT_MODIFIED)){
+    Log::OK::TRACE and log_trace "Range was head request";
+    $closer->($entry);
+    $next->($matcher, $rex, $in_header, $out_headers, "" );
+    return;
+  }
 
 
   # Send file
@@ -272,9 +282,10 @@ sub send_file_uri {
     #
     # the normal copy and write
     #
+    Log::OK::TRACE and log_trace  'Normal file read/copy/write';
     
     #Clamp the readsize to the file size if its smaller
-    $read_size=$content_length if $content_length < $read_size;
+    #$read_size=$content_length if $content_length < $read_size;
 
     my $t;
     my $count=0;
@@ -284,6 +295,8 @@ sub send_file_uri {
         #if no arguments an error occured
         unless(@_){
           #undef $sub;
+          Log::OK::TRACE and log_trace "Handing error in normal file read/copy/write";
+          $closer->($entry);
           $rex->[uSAC::HTTP::Rex::dropper_]->(1);
           undef $rex;
           return;
@@ -299,11 +312,14 @@ sub send_file_uri {
         $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
         $offset+=$rc;
 
+        Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}";
         #non zero read length.. do the write
 
         #When we have read the required amount of data
         if($total==$content_length){
+          Log::OK::TRACE and log_trace "Full file content read";
           if(@ranges){
+            Log::OK::TRACE and log_trace "Ranges to send still";
             return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {
                 unless(@_){
                   return $sub->();
@@ -320,13 +336,15 @@ sub send_file_uri {
               })
           }
           else{
-
+            Log::OK::TRACE and log_trace "No more ranges to send";
             $closer->($entry);
             return $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
           }
         }
 
-        #Data read by more to do
+        Log::OK::TRACE and log_trace "File content still remains to be sent";
+
+        #Data read but more to do
         $rc and	($rex
           ?return $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__)
           :return undef $sub);
@@ -587,7 +605,7 @@ sub uhm_static_root {
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
   my $sweeper=$fmc->sweeper;
-  #$fmc->disable;
+  $fmc->disable;
 
   my $timer=uSAC::IO::timer 0, 10, sub { $sweeper->() };
 

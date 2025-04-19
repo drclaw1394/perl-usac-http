@@ -2,7 +2,7 @@ package uSAC::HTTP::Middleware::State;
 use strict;
 use warnings;
 
-use Log::ger;
+use uSAC::Log;
 use Log::OK;
 
 use uSAC::HTTP;

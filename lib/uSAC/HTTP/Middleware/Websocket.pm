@@ -2,7 +2,7 @@ package uSAC::HTTP::Middleware::Websocket;
 use v5.36;
 
 use feature qw<bitwise state say refaliasing current_sub>;
-use Log::ger;
+use uSAC::Log;
 use Log::OK;
 
 use uSAC::IO;
@@ -781,7 +781,7 @@ uSAC::HTTP::Middleware::Websocket - Websocket Client and Server
 
   usac_server { 
     ...
-    usac_route GET=>"/path_to_url"=>websocket=>sub {
+      usac_route GET=>"/path_to_url"=>websocket=>sub {
         my $ws=$_[PAYLOAD];
         $ws->on_open(...);
         $ws->on_close(...);

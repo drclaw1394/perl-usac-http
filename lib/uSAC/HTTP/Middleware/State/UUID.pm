@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 
-use Log::ger;
+use uSAC::Log;
 use Log::OK;
 
 use Exporter 'import';

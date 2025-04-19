@@ -8,7 +8,7 @@ no warnings "experimental";
 our $UPLOAD_LIMIT=1000;
 our $PART_LIMIT=$UPLOAD_LIMIT;
 
-use Log::ger;
+use uSAC::Log;
 use Log::OK;
 
 use uSAC::HTTP::Code;

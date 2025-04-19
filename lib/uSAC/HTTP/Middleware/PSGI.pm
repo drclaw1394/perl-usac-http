@@ -5,7 +5,7 @@ use v5.36;
 
 use feature qw<say refaliasing state>;
 no warnings "experimental";
-use Log::ger;
+use uSAC::Log;
 use Log::OK;
 
 
@@ -31,7 +31,7 @@ package uSAC::HTTP::Middleware::PSGI::Writer {
   no warnings "experimental";
 
   use Import::These qw<uSAC::HTTP:: Rex Constants>;
-  use Log::ger;
+  use uSAC::Log;
   use Log::OK;
 
   #simple class to wrap the push write of the session

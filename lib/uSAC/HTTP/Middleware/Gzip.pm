@@ -2,7 +2,7 @@ package uSAC::HTTP::Middleware::Gzip;
 use strict;
 use warnings;
 
-use Log::ger;
+use uSAC::Log; 
 use Log::OK;
 
 

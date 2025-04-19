@@ -1,6 +1,6 @@
 package uSAC::HTTP::Site;
 use v5.36;
-use Log::ger;
+use uSAC::Log;
 use Log::OK;
 
 

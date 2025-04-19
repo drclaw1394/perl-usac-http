@@ -3,8 +3,8 @@ use feature qw<fc current_sub refaliasing say state try>;
 use strict;
 use warnings;
 no warnings "experimental";
-use EV;
-use Log::ger;
+#use EV;
+use uSAC::Log;
 use Log::OK;
 
 
@@ -609,10 +609,12 @@ sub make_serialize{
       else {
         $reply.=$_[PAYLOAD];
       }
+      Log::OK::TRACE and log_trace "HEADER AND BODY in serialize length: ". length $reply;
 
       $_[REX][uSAC::HTTP::Rex::write_]([$reply], $cb);
     }
     else{
+      Log::OK::TRACE and log_trace "BODYONLY in serialize. length: ". length $_[PAYLOAD];
       # No header specified. Just a body
       #
       if($ctx//=$out_ctx{$_[REX]}){

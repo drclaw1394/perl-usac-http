@@ -5,7 +5,7 @@ use feature qw<current_sub say refaliasing state>;
 
 our $UPLOAD_LIMIT=1_000_000;
 our $PART_LIMIT=$UPLOAD_LIMIT;
-use Log::ger;
+use uSAC::Log;
 
 use Log::OK;
 ##############################
