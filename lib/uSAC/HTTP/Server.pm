@@ -381,7 +381,7 @@ method prepare {
   $_stream_timer=uSAC::IO::timer 0, $interval,
   
     sub {
-      say "TIMER IN PID: $$";
+      #say "TIMER IN PID: $$";
       #iterate through all connections and check the difference between the last update
       $_server_clock+=$interval;
       #and the current tick

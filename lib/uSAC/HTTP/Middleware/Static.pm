@@ -33,6 +33,7 @@ my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 my $i=0;
 my %months= map {$_,$i++} @months;
 
+my %ctx;
 
 sub send_file_uri {
   #return a sub with cache an sysroot aliased
@@ -210,7 +211,8 @@ sub send_file_uri {
 
   if(($rex->[METHOD] eq "HEAD" or $rex->[STATUS]==HTTP_NOT_MODIFIED)){
     Log::OK::TRACE and log_trace "Range was head request";
-    $closer->($entry);
+    #$closer->($entry);
+    $closer->(delete $ctx{$rex});
     $next->($matcher, $rex, $in_header, $out_headers, "" );
     return;
   }
@@ -296,7 +298,8 @@ sub send_file_uri {
         unless(@_){
           #undef $sub;
           Log::OK::TRACE and log_trace "Handing error in normal file read/copy/write";
-          $closer->($entry);
+          #$closer->($entry);
+          #$closer->(delete $ctx{$rex});
           $rex->[uSAC::HTTP::Rex::dropper_]->(1);
           undef $rex;
           return;
@@ -337,7 +340,8 @@ sub send_file_uri {
           }
           else{
             Log::OK::TRACE and log_trace "No more ranges to send";
-            $closer->($entry);
+            #$closer->($entry);
+            $closer->(delete $ctx{$rex});
             return $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
           }
         }
@@ -354,7 +358,8 @@ sub send_file_uri {
         if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
           log_error "Static files: READ ERROR from file";
           log_error "Error: $!";
-          $closer->($entry);
+          #$closer->($entry);
+          $closer->(delete $ctx{$rex});
           $rex->[uSAC::HTTP::Rex::dropper_]->(1);
           undef $sub;
         }
@@ -605,7 +610,7 @@ sub uhm_static_root {
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
   my $sweeper=$fmc->sweeper;
-  $fmc->disable;
+  #$fmc->disable;
 
   my $timer=uSAC::IO::timer 0, 10, sub { $sweeper->() };
 
@@ -623,6 +628,7 @@ sub uhm_static_root {
     die "Can not access dir $html_root to serve static files" unless -d $html_root;
     $html_root=~s|/$||;   # ensure roots do not end in a slash
   }
+
 
   #check for mime type in parent 
   my $inner=sub {
@@ -793,6 +799,8 @@ sub uhm_static_root {
               $_[OUT_HEADER]{$k}=$v;
             }
 
+            $ctx{$_[REX]}=$entry; # Save this for error processing
+
             return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
           }
           else {
@@ -823,9 +831,20 @@ sub uhm_static_root {
     my $next=shift;
   };
 
-  [$inner, $outer];
+
+  my $error =sub {
+    my $next=shift;
+    sub {
+      #
+      $closer->(delete $ctx{$_[REX]}) if $_[REX];
+      &$next;
+    }
+  };
+
+  [$inner, $outer, $error];
   #[$outer, $inner];
 }
+
 
 
 sub uhm_static_file {
