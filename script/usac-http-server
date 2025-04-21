@@ -19,6 +19,7 @@ use Log::OK {
 use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Static Log>;
 
 my %options;
+my @static_headers;
 
 # Parses a string into a site specification hash
 #
@@ -127,7 +128,10 @@ sub run {
   my $server_proxy=$server->sites->{"/"};
   $sites{"/"}=$server_proxy;
   my $current=$server_proxy;
-  my %cur_opts=(list_dir=>1);
+  my %cur_opts=(
+    list_dir=>1,
+    headers=>\@static_headers
+  );
 
 
   my $counter=0;
@@ -167,6 +171,14 @@ sub run {
         $current=$new;
       }
 
+      next;
+    }
+
+    elsif(/^-{1,2}H/){
+      # A header field  like  NAME: VALUE
+      my $t=shift;
+      my ($k,$v)=split  ":", $t, 2;
+      push @static_headers, $k, $v;
       next;
     }
 
@@ -303,7 +315,6 @@ sub run {
     }
 
   }
-
   # process any remaining static file service location 
   #
   $current->add_route("", uhm_static_root roots=>[@roots], %cur_opts) if @roots;

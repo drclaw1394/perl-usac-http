@@ -462,7 +462,7 @@ method make_stream_accept {
   # Application Layer Protocol Negotiation
   #
 
-  say STDERR "stream accept on pid $$";
+  #say STDERR "stream accept on pid $$";
   my $session;
   unless($_application_parser){
     need uSAC::HTTP::v1_1_Reader;
@@ -820,11 +820,13 @@ method dump_routes {
       # table is hustle table and cache entry
       # 
 
-      say STDERR "Current $_";
-      say STDERR "shows ", $_options->{show_routes};
-      use Data::Dumper;
-      say STDERR Dumper $_options;
-      say STDERR "host ", $host;
+      ##################################################
+      # say STDERR "Current $_";                       #
+      # say STDERR "shows ", $_options->{show_routes}; #
+      # use Data::Dumper;                              #
+      # say STDERR Dumper $_options;                   #
+      # say STDERR "host ", $host;                     #
+      ##################################################
 
       # Only dump the host routes if the route spec
       last unless $_options->{show_routes};
@@ -967,11 +969,9 @@ method process_cli_options{
   #Attempt to parse the CLI options
   require Getopt::Long;
   my %options;
-  #say STDERR "Before parser";
   my $parser=Getopt::Long::Parser->new;
   $parser->configure("pass_through");
 
-  #say STDERR  "about to call super @$options";
   #Getopt::Long::GetOptionsFromArray
   $parser->getoptionsfromarray($options, \%options,
     "workers=i",
@@ -981,7 +981,6 @@ method process_cli_options{
     
   ) or die "Invalid arguments";
 
-  say STDERR  " after options from array";
 
   for my($key, $value)(%options){
     if($key eq "workers"){
@@ -992,7 +991,6 @@ method process_cli_options{
     }
     elsif($key eq "show"){
       #$_options->{show_routes}//=[];
-      say STDERR "VALUE IS $value";
       for my $v (@$value){
 	      
       	$v=".*" unless $v;	# Force match anything if nothing set
@@ -1008,7 +1006,6 @@ method process_cli_options{
     }
   }
 
-  say STDERR  "about to call super";
   # Process all sites
   $self->SUPER::process_cli_options($options);
   $self;

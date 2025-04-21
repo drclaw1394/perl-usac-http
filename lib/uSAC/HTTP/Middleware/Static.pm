@@ -10,7 +10,7 @@ use Log::OK;
 use uSAC::IO;
 
 use File::Meta::Cache;
-use POSIX;
+use POSIX ();
 
 use IO::FD;
 use uSAC::FastPack::Broker;
@@ -312,8 +312,11 @@ sub send_file_uri {
         #
         my $sz=($content_length-$total);
         $sz=$read_size if $sz>$read_size;
+        use Data::Dumper;
+        use feature "say";
         $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
         $offset+=$rc;
+        say "Cached file entry : ".Dumper $entry unless defined $rc;
 
         Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}";
         #non zero read length.. do the write
