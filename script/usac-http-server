@@ -4,16 +4,9 @@ use v5.36;
 no warnings "experimental";
 our $VERSION="v0.1.0";
 
-#no warnings "experimental";
 
-use Data::Dumper;
-
-use Log::ger;
-use Log::ger::Output "Screen";
-use Log::OK {
-	lvl=>"info",
-	opt=>"verbose",
-};
+use uSAC::Log;
+use Log::OK;
 
 
 use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Static Log>;
@@ -39,7 +32,6 @@ sub parse_site_spec{
     unless($field=~/=/){
       # Not a key value pair
       if($field=~ s/^#//){
-        say STDERR "ID";
         #ID specificaiton
         $spec{id}=$field;
       }
@@ -50,7 +42,6 @@ sub parse_site_spec{
       # }                      #
       ##########################
       else {
-        say STDERR "PREFIX";
         #it looks like a normal prefix, so treat as such
         #$spec{id}=undef;
         $spec{prefix}=$field;
@@ -101,7 +92,7 @@ sub help {
 
 sub run {
   # Welcome
-  my $welcome= "uSAC HTTP Server $VERSION - Copyright 2024 Ruben Westerberg";
+  my $welcome= "uSAC HTTP Server $VERSION - Copyright 2025 Ruben Westerberg";
   Log::OK::INFO and log_info $welcome;
 
   # Map of ID to sites
@@ -153,13 +144,12 @@ sub run {
 
       # Create a new id if none specified
       $spec->{id}//=$counter++;
-      say Dumper $spec;
 
       if(exists($sites{$spec->{id}})){
         my $found=$sites{$spec->{id}};
 
         # an existing site
-        warn "Site prefix changed from ".$found->id. "to $spec->{id}" if $found->id ne $spec->{id};
+        Log::OK::WARN and log_warn "Site prefix changed from ".$found->id. "to $spec->{id}" if $found->id ne $spec->{id};
         $current=$found; 
       }
       else {
@@ -236,7 +226,7 @@ sub run {
         sub {
           my $ws=$_[PAYLOAD];
           $ws->on_open=sub {
-            say STDERR "opened";
+            #say STDERR "opened";
             $reader->start;
             $reader->on_read=sub{
               $ws->send_message($_[0]);
@@ -244,35 +234,33 @@ sub run {
             $writer->start;
           };
           $ws->on_message=sub {
-            say STDERR "GOT message: $_[1]";
+            #say STDERR "GOT message: $_[1]";
             $writer->write($_[1]);
           };
 
           $ws->on_error=sub {
-            say STDERR "GOT error$_[0]";
+            #say STDERR "GOT error$_[0]";
           };
 
           $ws->on_close=sub {
-            say STDERR "GOT close";
+            #say STDERR "GOT close";
           };
           undef; #Needed to prevent calling of next
         }
       );
     }
     elsif(/-{1,2}r/){
-      say "PROCESS RouTE";
       # Manually specifiy a route and content combination for to add to the current site
       # Need to parse the matcher and the content
       # matcher=sdfsdf, content='dfsdfsdf'
       # Content is evaled. If content is a string, used as direct content. If its a sub reference, it is converted into middleware
       $_=shift;
       my @parts=split /,/, $_;
-      say "PArts @parts";
       my @middle;
       for(@parts){
-        push @middle, eval $_;
+        my $e=eval $_;
+        push @middle, $e?$e:$_;
       }
-      say "middle", Dumper @middle;
       $current->add_route(@middle);
 
       
@@ -310,7 +298,7 @@ sub run {
     }
     else {
       # Known options
-      say STDERR "UNKOWN";
+      Log::OK::WARN and log_warn "UNKOWN options $_";
       push @unknown, $_;
     }
 

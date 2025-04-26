@@ -397,7 +397,7 @@ method prepare {
       }
 
       if(!$_sessions->%* and $do_shutdown){
-        say STDERR 'SERVER GRACEFULL SHUTDOWN IN stream timer';
+        Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN stream timer';
         uSAC::IO::timer_cancel $_stream_timer;
       }
       

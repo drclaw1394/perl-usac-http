@@ -760,7 +760,7 @@ sub ping_interval {
 	} ) if $self->[ping_interval_] > 0;
 
   uSAC::Main::usac_listen("server/shutdown/graceful", sub {
-      say STDERR 'SERVER GRACEFULL SHUTDOWN IN WEBSOCKET';
+      Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN WEBSOCKET';
       uSAC::IO::cancel $self->[ping_interval_];
   });
 	return $self->[ping_interval_];

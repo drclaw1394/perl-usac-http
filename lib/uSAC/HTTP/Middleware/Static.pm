@@ -621,7 +621,7 @@ sub uhm_static_root {
 
   #say STDERR "REGISTET gracefull shutdown======";
   uSAC::Main::usac_listen("server/shutdown/graceful", sub {
-      say STDERR 'SERVER GRACEFULL SHUTDOWN IN STATIC';
+      Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN STATIC';
       uSAC::IO::timer_cancel $timer;
   });
   
