@@ -3,7 +3,7 @@ use v5.36;
 
 #PSGI adaptor for uSAC::HTTP::Server
 
-use feature qw<say refaliasing state>;
+use feature qw<refaliasing state>;
 no warnings "experimental";
 use uSAC::Log;
 use Log::OK;
@@ -317,7 +317,6 @@ sub do_glob {
 	my $data;
 	my $do_it;
   $do_it=sub{
-  #say "DO IT";
     unless (@_){
       Log::OK::TRACE and log_trace "ERROR CB";
       #callback error. Close file

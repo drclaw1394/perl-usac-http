@@ -8,7 +8,7 @@ use uSAC::Log;
 use Log::OK;
 
 use Exporter 'import';
-use feature qw<refaliasing say state>;
+use feature qw<refaliasing state>;
 no warnings "experimental";
 
 #no feature "indirect";

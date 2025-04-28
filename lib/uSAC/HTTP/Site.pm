@@ -591,8 +591,6 @@ method add_to {
   if( exists $root->sites->{$self->id}){
     die "Duplicate site id not allowed: @{[$self->id]}";
   }
-  say STDERR "ROOT IS A ". $root;
-  say STDERR $root->id;
   $self->mode=$root->mode;
   $parent->add_route($self);
   $root->sites->{$self->id}=$self;
@@ -957,7 +955,6 @@ method add_secret {
 
   #Process entries
   for(@entries){
-    say $host->host;
     #$_->[TLS_INFO_HOST]=$host->host;
     $_->[TLS_INFO]=$host->host;
     $_secrets->{$host}=$_
@@ -1074,9 +1071,6 @@ sub uhm_dead_horse_stripper {
       #   my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];#$session->sequence; #
       #   my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];#$session->rex; #
       #                                                                    #
-      #   #say "Session $session";                                         #
-      #   #say "seq: $seq";                                                #
-      #   #say "Pipeline $pipeline";                                       #
       #                                                                    #
       #   # Save the arguments into partition sequence                     #
       #   if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){                       #
@@ -1116,8 +1110,6 @@ sub uhm_dead_horse_stripper {
     }
     else {
       sub {
-      #say "CLIENT error dead horse";
-        #say $_[ROUTE][1][ROUTE_TABLE][uSAC::HTTP::Site::ACTIVE_COUNT]--;
         #my($route, $captures)=$entry->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]("$method $uri");
 
 
@@ -1169,7 +1161,6 @@ method load {
     ###############################################################
     # opendir(my $dir, $path);                                    #
     # my @files= map "$path/$_" , grep !/^\.{1,2}/, readdir $dir; #
-    # #say "files: @files";                                       #
     # closedir $dir;                                              #
     ###############################################################
 

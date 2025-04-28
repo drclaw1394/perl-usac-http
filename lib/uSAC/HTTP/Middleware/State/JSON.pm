@@ -3,7 +3,7 @@ package uSAC::HTTP::Middleware::State::JSON;
 use strict;
 use warnings;
 use Exporter 'import';
-use feature qw<refaliasing say state current_sub>;
+use feature qw<refaliasing state current_sub>;
 no warnings "experimental";
 no feature "indirect";
 

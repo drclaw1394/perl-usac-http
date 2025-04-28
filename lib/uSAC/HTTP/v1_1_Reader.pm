@@ -1,5 +1,5 @@
 package uSAC::HTTP::v1_1_Reader;
-use feature qw<fc current_sub refaliasing say state try>;
+use feature qw<fc current_sub refaliasing state try>;
 use strict;
 use warnings;
 no warnings "experimental";
@@ -145,7 +145,6 @@ sub make_parser{
 
       #while ( $len=length $buf) {
       while ($buf) {
-        #say "____HTTP PARSER_LOOP:". join ", ", @_;
         #Dual mode variables:
         #	server:
         #	$method => method
@@ -260,8 +259,6 @@ sub make_parser{
             #($route, $h{":captures"}) = $cb->($host, "$method $uri");
             ($route, $rex->[CAPTURES]) = $cb->($host, "$method $uri");
 
-            #say "parse Session $r";
-            #say "parse Pipeline $pipeline";
 
             # Work around for HTTP/1.0
             if($closeme){
@@ -411,7 +408,6 @@ sub make_parser{
 
         }
         elsif($state==STATE_ERROR){
-          #say  "______ERROR STATE IN PARSER";
           $body_len=0;
           last;
         }

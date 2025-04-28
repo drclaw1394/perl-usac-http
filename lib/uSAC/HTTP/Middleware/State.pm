@@ -6,7 +6,7 @@ use uSAC::Log;
 use Log::OK;
 
 use uSAC::HTTP;
-use feature qw<refaliasing say state current_sub>;
+use feature qw<refaliasing state current_sub>;
 no feature "indirect";
 no warnings "experimental";
 
@@ -45,7 +45,6 @@ sub uhm_state {
 
         my $state=$_[REX][STATE]//={};
         for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
-          #say "K $k V $v";
           push $state->{$k}->@*, $v;
         }
         &$next;

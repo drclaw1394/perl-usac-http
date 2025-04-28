@@ -1,4 +1,3 @@
-use feature "say";
 use strict;
 use warnings;
 package uSAC::HTTP::Constants;

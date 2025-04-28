@@ -2,7 +2,7 @@ package uSAC::HTTP::Middleware::Log;
 use strict;
 use warnings;
 
-use feature qw<refaliasing say state>;
+use feature qw<refaliasing state>;
 no warnings "experimental";
 
 #no feature "indirect";
@@ -90,7 +90,7 @@ sub log_simple_in {
       }
 
       push @out, "";
-      say STDERR join "\n", @out;
+      Log::OK::INFO and log_info join "\n", @out;
 
 			&$inner_next;		#alway call next. this is just logging
 		}
@@ -115,7 +115,7 @@ sub log_simple_out {
         push @out, $dd->($_[OUT_HEADER]);
       }
       push @out, "--->>>";
-      say STDERR join "\n", @out;
+      Log::OK::INFO and log_info join "\n", @out;
 
 			&$outer_next;
 		}

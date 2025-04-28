@@ -1,7 +1,7 @@
 package uSAC::HTTP::v2;
 use v5.36;
 
-use feature qw<say refaliasing>;
+use feature qw<refaliasing>;
 no warnings "experimental";
 
 my @frame_names;
@@ -115,7 +115,6 @@ sub encode_frames {
   for \my @f(@_){
     if($f[0] == FRAME_DATA){
       $pad=($f[1]&FLAG_PADDED);
-      say "PAD: $pad, padded flag:".FLAG_PADDED;
       $len=length($f[4]) + ($pad && ($f[3]+1));
       $out.=pack "NCN", ($len<<8)|FRAME_DATA, $f[1], 0x7FFFFFFF & $f[2];
       if($pad){
@@ -126,16 +125,13 @@ sub encode_frames {
       else{
         $out.=$f[4];
       }
-      say join ", ",@f;
       sleep 1;
     }
 
     elsif($f[0] == FRAME_HEADERS){
       $pad=($f[1]&FLAG_PADDED);
       $priority=($f[1]&FLAG_PRIORITY);
-      say ("Pad : $pad, priority: ".($priority&&(5)));
       $len=(length($f[7])+($pad&&($f[3]+1))+($priority&&5));
-      say "LENGTH $len";
 
       $out.=pack "NCN",
       ($len<<8)|FRAME_HEADERS,  #length (including padding) and type
@@ -261,7 +257,6 @@ sub decode_frames {
       $length>>=8;
       $stream_id&=0x7FFFFFFF;
 
-      say "length $length, type: $type, flags $flags, stream $stream_id";
       $state=PARSE_PAYLOAD;
     }
 
@@ -336,7 +331,6 @@ sub decode_frames {
 
       }
       elsif($type == FRAME_SETTINGS){
-        say "Settings";
         my @kv=unpack "(nN)*", substr $buf, 0, $length, "";
         push @frame, @kv;
         push @frames, \@frame;
@@ -387,7 +381,6 @@ sub decode_frames {
         push @frames, \@frame;
       }
       else {
-        say "NO SUCH FRAME";
       }
 
       # Set state to header parsing
@@ -437,22 +430,17 @@ sub server_reader {
 
 
   sub {
-    say "IN SERVER PARSER";
     \my  $buf=\$_[0];
     while($buf){
       if($state == CON_STATE_DISCONNECTED){
-        say "State disconnected";
         # Freshly connected tcp transport
         $state=CON_STATE_PREFACE;
       }
       elsif($state == CON_STATE_PREFACE){
-        say "State preface";
         # For prior knowlege H2C connections
         # Need 24 octets
         return if length $buf < 24;
         my $pre=substr($buf, 0, 24,"");
-        say unpack "H*", $pre;
-        say unpack "H*", CLIENT_PREFACE;
         if(CLIENT_PREFACE eq $pre){
             # Ready to process frames here 
             push @in_frames, &decode_frames;
@@ -468,7 +456,6 @@ sub server_reader {
         }
       }
       elsif($state == CON_STATE_FRAMES){
-        say "state frames";
         push @in_frames, &decode_frames;
         #Decode frames incomming.
         #If new stream ids, create a new rex and add to context.
@@ -482,7 +469,6 @@ sub server_reader {
         if($f->[0] == FRAME_SETTINGS){
           #Apply the settings and acknowlege
           for my ($k, $v)($f->@[3..@$f-1]){
-            say "Key: $k, value $v";
             if($k ==  SETTINGS_HEADER_TABLE_SIZE){
               # update header table size;
             }

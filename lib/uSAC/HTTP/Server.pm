@@ -28,7 +28,7 @@ use Hustle::Table;		    # Fancy dispatching of endpoints
 use uSAC::FastPack::Broker;
 
 
-use feature qw<refaliasing say state current_sub>;
+use feature qw<refaliasing state current_sub>;
 use constant::more NAME=>"uSAC", VERSION=>"v0.1.0";
 
 no warnings "experimental";
@@ -381,7 +381,6 @@ method prepare {
   $_stream_timer=uSAC::IO::timer 0, $interval,
   
     sub {
-      #say "TIMER IN PID: $$";
       #iterate through all connections and check the difference between the last update
       $_server_clock+=$interval;
       #and the current tick
@@ -462,7 +461,6 @@ method make_stream_accept {
   # Application Layer Protocol Negotiation
   #
 
-  #say STDERR "stream accept on pid $$";
   my $session;
   unless($_application_parser){
     need uSAC::HTTP::v1_1_Reader;
@@ -592,7 +590,6 @@ method rebuild_dispatch {
     for(values $_host_tables->%*){
       Log::OK::TRACE and log_trace __PACKAGE__." processing table entry for rebuild";
       $_->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]=$_->[uSAC::HTTP::Site::HOST_TABLE]->prepare_dispatcher(cache=>$_->[uSAC::HTTP::Site::HOST_TABLE_CACHE]);
-      #say join ", ", @$_;
     } 
 
 
@@ -813,20 +810,11 @@ method dump_routes {
   try {
     require Text::Table;
     for my $host (sort keys $_host_tables->%*){
-      say "HOST TABLE $host";
       my $table= $_host_tables->{$host};
       my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
       #
       # table is hustle table and cache entry
       # 
-
-      ##################################################
-      # say STDERR "Current $_";                       #
-      # say STDERR "shows ", $_options->{show_routes}; #
-      # use Data::Dumper;                              #
-      # say STDERR Dumper $_options;                   #
-      # say STDERR "host ", $host;                     #
-      ##################################################
 
       # Only dump the host routes if the route spec
       last unless $_options->{show_routes};
@@ -887,12 +875,10 @@ method site_for_id {
 #       for my $entry ($table->[0]->@*){                          #
 #         my $site=$entry->[1][ROUTE_SITE];                       #
 #                                                                 #
-#         #say "site: ".$site->id;                                #
 #                                                                 #
 #         # Only add to output, in unique fashion                 #
 #         push @output, $site unless @output;                     #
 #         push @output, $site unless grep { $site == $_} @output; #
-#         #say "OUTPUT @output";                                  #
 #       }                                                         #
 #                                                                 #
 #     }                                                           #
@@ -945,7 +931,6 @@ method add_listeners {
     }
     push @$_listen_spec, @addresses;
   }
-  #say Dumper $_listen_spec;
   $self;
 }
 

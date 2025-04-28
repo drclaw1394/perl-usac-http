@@ -1,7 +1,7 @@
 package uSAC::HTTP::Session;
 use Object::Pad;
 class uSAC::HTTP::Session;
-use feature qw<say state refaliasing>;
+use feature qw<state refaliasing>;
 no warnings "experimental";
 
 use uSAC::Log;

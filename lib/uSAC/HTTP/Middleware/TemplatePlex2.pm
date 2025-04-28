@@ -37,7 +37,6 @@ sub uhm_template_plex2 {
           #Update variables
           $vars->@{qw<route rex in_header out_header payload callback>}=@_;
           try {
-            say STDERR "Plexsite root is $root";
             my $url_table=Template::Plexsite::URLTable->new(src=>$root);
             my $path=$_[REX][PATH].".plt";
             $path=substr $path, 1;
@@ -45,15 +44,12 @@ sub uhm_template_plex2 {
             my $info=$url_table->resource_info($path);
 
             #use Data::Dumper;
-            #say STDERR "INFO is ", Dumper $info;
-            #say STDERR "INPUT IN PLEXSITE2 for $_[PAYLOAD] is $input";
             #$url_table->add_resource($input);
             #$_[PAYLOAD]=$info->{template}{template}->render;
             #
             if($info){
               $_[PAYLOAD]=$info->{template}{template}->render;
 
-              say STDERR "PAYLOAD IS: ",$_[PAYLOAD];
               $_[REX][STATUS]=HTTP_OK;
               $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $_[PAYLOAD];
             }

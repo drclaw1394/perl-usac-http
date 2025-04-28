@@ -6,7 +6,6 @@ use uSAC::HTTP::Constants;
 use uSAC::HTTP::Route;
 use uSAC::HTTP::Header;
 
-use feature "say";
 use Export::These "uhm_trace";
 
 no warnings "experimental";
@@ -18,7 +17,6 @@ sub uhm_trace {
       
       #TODO: test the options 
       sub {
-        say "called with ", @_;
 
         # reconstruct the incomming request 
         my $body="";

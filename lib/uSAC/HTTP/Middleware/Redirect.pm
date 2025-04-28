@@ -1,8 +1,11 @@
 package uSAC::HTTP::Middleware::Redirect;
 use v5.36;
 
+
 use Import::These qw<uSAC::HTTP:: Constants Rex Header>;
 
+use uSAC::Log;
+use Log::OK;
 
 use Export::These qw(
   uhm_redirect_see_other
@@ -165,7 +168,7 @@ sub uhm_redirect_application {
 
           # Apply the query if it was present
           $_[PAYLOAD]= $_."/". ($q? "?".$q : "");
-          say "DOING permanent redirect to $_[PAYLOAD]";
+          Log::OK::INFO and log_info "DOING permanent redirect to $_[PAYLOAD]";
           return &rex_redirect_permanent;
 
         }

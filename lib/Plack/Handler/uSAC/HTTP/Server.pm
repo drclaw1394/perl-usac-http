@@ -1,6 +1,6 @@
 package Plack::Handler::uSAC::HTTP::Server;
 use v5.36;
-use feature qw<say refaliasing try>;
+use feature qw<refaliasing try>;
 no warnings "experimental";
 use uSAC::Log;
 
@@ -51,7 +51,6 @@ sub run{
     # 
     # Set the default route in the default 'host table' to the PSGI application
     #
-    #say "ADDING ROUTE";
     #sleep 1;
     $server->add_route(undef, uSAC::HTTP::Middleware::PSGI::uhm_psgi($app));
 
@@ -71,7 +70,6 @@ sub run{
     #                                                       #
     #   my $port=$self->{port};#//5000; #default port       #
     #   my $host=$self->{host};                             #
-    #   say STDERR "Port $port and host $host";             #
     #   if(defined($host) and defined($port)){              #
     #     my $t="";                                         #
     #     $t.="a=$host," if $host;                          #
@@ -95,7 +93,7 @@ sub run{
      $server->run;
     }
     catch($e){
-      say STDERR $e;
+      Log::OK::ERROR and log_error $e;
       exit -1;
     }
 

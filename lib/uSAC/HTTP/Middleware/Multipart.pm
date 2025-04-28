@@ -2,7 +2,6 @@ package uSAC::HTTP::Middleware::Multipart;
 use v5.36;
 use feature "refaliasing";
 no warnings "experimental";
-use feature "say";
 
 use uSAC::HTTP::Constants;
 use uSAC::HTTP::Header;
@@ -63,7 +62,6 @@ sub uhm_multipart {
       #TODO: check for content-disposition and filename if only a single part.
       while(length $buf){
         if($ctx->[state_]==BOUNDARY_SEARCH){
-          #say "boundary search";
           #TODO: Should this be a search from the back?
           #
           my $index=index($buf, $ctx->[boundary_]);
@@ -93,7 +91,6 @@ sub uhm_multipart {
               #not last, regular part
               my $data=substr($buf, 0, $len);
 
-              #say "buffer before part ", $buf;
               unless($ctx->[first_]){
                 # first boundary is start marker....
                 $_[PAYLOAD]=[$form_headers, $data];
@@ -103,7 +100,6 @@ sub uhm_multipart {
               }
               $ctx->[first_]=0;
               #move past data and boundary
-              #say "buffer after part ", $buf;
               $buf=substr $buf, $offset+2;
 
               # Allocate new part header here as we are about 
@@ -115,7 +111,6 @@ sub uhm_multipart {
 
             }
             else{
-              #say "need more";
               #need more
               #return
             }
@@ -194,7 +189,6 @@ sub uhm_multipart {
         else{
             die "UNKOWN STATE IN MULTIPART MIDDLEWARE";
         }
-        #say "End of while";
       }
     }
   };

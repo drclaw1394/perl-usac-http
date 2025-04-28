@@ -1,9 +1,8 @@
 package uSAC::HTTP::HPack;
 use strict;
 use warnings;
-use feature qw<say switch>;
+use feature qw<switch>;
 no warnings "experimental";
-use feature qw<say>;
 
 use Data::Dumper;
 our %STATIC;
@@ -140,7 +139,6 @@ sub new {
 }
 #add dynamic table entry to the start of table list
 sub add_entry {
-	say "adding entry";
 	my $array=$_[0][dynamic_array_];
 	my $hash=$_[0][dynamic_hash_];
 	#calculate the 'size' of the table with the new field added.
@@ -166,8 +164,6 @@ sub add_entry {
 		unshift $array->@*, $ref;
 
 	
-		say Dumper $_[0][dynamic_hash_];
-		say Dumper $_[0][dynamic_array_];
 	}
 }
 
@@ -277,7 +273,6 @@ sub encode_field {
 		$entry=$STATIC{$_}//$_[0][dynamic_hash_]{$_};
 	}
 	if($mode==EXISTING){
-		say "Encoding existing Header";
 		return undef unless $entry;
 		#Encoder with code
 		encode_integer @_, $entry->[0], $F_PRE[$mode]->@*;
@@ -286,20 +281,15 @@ sub encode_field {
 	else{
 		#need to use a literal value
 		my $new_name=$STATIC{$name}//$_[0][dynamic_hash_]{$name};
-		say "new name: ", Dumper $new_name;
 		if($new_name){
 			#name exists. use its code
 			encode_integer @_, $new_name->[0],$F_PRE[$mode]->@*;
 			encode_string @_, $value, 0;
 		}
 		else {
-			say "Name does not exist: $name";
 			#header name not existing encode new new name
 			encode_integer @_, 0, $F_PRE[$mode]->@*;
-			say "after integer";
-			say $name;
 			encode_string @_, $name, 0;
-			say "after name";
 			encode_string @_, $value, 0;
 			
 			#update the dynamic table
@@ -322,9 +312,7 @@ sub decode_field {
 	}
 	elsif($byte & 0x40){
 		$_[3]=6;
-		say "INCREMENTAL DECODE";
 		my (undef,$code)=&decode_integer;
-		say "code is $code";
 		if($code){
 			#name exists in table
 			[($STATIC[$code]//$_[0][dynamic_array_][$code-DYNAMIC_OFFSET])->[1], &decode_string];
@@ -385,7 +373,6 @@ sub encode_headers {
 	my $self= $_[0];
 	local $,=",";
 	for(splice @_, 3){
-		say "params", @_;
 
 		encode_field @_, $_->@*;
 	}
@@ -394,11 +381,7 @@ sub decode_headers {
 	# 0=> ctx
 	# 1=>buffer
 	# 2=>offset
-	say "Decoding headers";
 	while($_[2]<length $_[1]){
-		say Dumper &decode_field;
-		say "offset : $_[2]";
-		say "Length: ", length $_[1];
 	}
 }
 

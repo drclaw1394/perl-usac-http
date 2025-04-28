@@ -1,7 +1,7 @@
 package uSAC::HTTP::Middleware::Slurp;
 use warnings;
 use strict;
-use feature qw<current_sub say refaliasing state>;
+use feature qw<current_sub refaliasing state>;
 
 our $UPLOAD_LIMIT=1_000_000;
 our $PART_LIMIT=$UPLOAD_LIMIT;
@@ -113,8 +113,6 @@ sub uhm_slurp {
               $v=builtin::trim $v;
               $head->{"_$k"}=$v;
             }
-          say dd $head;
-
           }
           for($_[IN_HEADER]{HTTP_CONTENT_TYPE()}//()){
             $head->{HTTP_CONTENT_TYPE()}=$_;
@@ -163,14 +161,12 @@ sub uhm_slurp {
                   push @$c, $payload;
                 }
                 else {
-                  say STDERR "ERROR writing FILE $!";
                   return &rex_error_internal_server_error;
                   #Internal server error
                 }
               }
               else {
                 #Internal server error
-                say STDERR "ERROR OPENING FILE $!";
                 return &rex_error_internal_server_error;
               }
             }

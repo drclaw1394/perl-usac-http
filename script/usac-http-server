@@ -226,7 +226,6 @@ sub run {
         sub {
           my $ws=$_[PAYLOAD];
           $ws->on_open=sub {
-            #say STDERR "opened";
             $reader->start;
             $reader->on_read=sub{
               $ws->send_message($_[0]);
@@ -234,16 +233,13 @@ sub run {
             $writer->start;
           };
           $ws->on_message=sub {
-            #say STDERR "GOT message: $_[1]";
             $writer->write($_[1]);
           };
 
           $ws->on_error=sub {
-            #say STDERR "GOT error$_[0]";
           };
 
           $ws->on_close=sub {
-            #say STDERR "GOT close";
           };
           undef; #Needed to prevent calling of next
         }

@@ -2,7 +2,7 @@ package uSAC::HTTP::Middleware::Deflate;
 use strict;
 use warnings;
 
-use feature qw<refaliasing say state>;
+use feature qw<refaliasing state>;
 no warnings "experimental";
 
 use uSAC::HTTP::Code;

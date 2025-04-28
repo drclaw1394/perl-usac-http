@@ -1,7 +1,7 @@
 package uSAC::HTTP::Middleware::Static;
 use strict;
 use warnings;
-use feature qw<say  refaliasing state current_sub>;
+use feature qw<refaliasing state current_sub>;
 no warnings "experimental";
 
 use uSAC::Log;
@@ -313,10 +313,9 @@ sub send_file_uri {
         my $sz=($content_length-$total);
         $sz=$read_size if $sz>$read_size;
         use Data::Dumper;
-        use feature "say";
         $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
         $offset+=$rc;
-        say "Cached file entry : ".Dumper $entry unless defined $rc;
+        Log::OK::TRACE and log_trace "Cached file entry : ".Dumper $entry unless defined $rc;
 
         Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}";
         #non zero read length.. do the write
@@ -619,7 +618,6 @@ sub uhm_static_root {
 
   # Register for gracefull shutdown. No new connections should be accepted
 
-  #say STDERR "REGISTET gracefull shutdown======";
   uSAC::Main::usac_listen("server/shutdown/graceful", sub {
       Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN STATIC';
       uSAC::IO::timer_cancel $timer;
@@ -876,7 +874,7 @@ sub uhm_static_file {
 		uhm_static_content(%options, $data);
 	}
 	else {
-		log_error "Could not add hot path: $path";
+    Log::OK::ERROR and log_error "Could not add hot path: $path";
 	}
 }
 

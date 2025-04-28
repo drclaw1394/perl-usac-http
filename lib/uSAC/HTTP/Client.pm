@@ -1,6 +1,7 @@
 package uSAC::HTTP::Client;
 use feature qw<state isa>;
 use uSAC::Log;
+use uSAC::IO;
 use Object::Pad;
 
 use uSAC::HTTP;
@@ -15,7 +16,6 @@ class uSAC::HTTP::Client :isa(uSAC::HTTP::Server);
 no warnings "experimental";
 
 
-use feature "say";
 
 #TODO
 # cookie jar
@@ -51,16 +51,13 @@ BUILD {
 method _inner_dispatch :override {
     Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
     sub {
-      #say STDERR __PACKAGE__.": END OF CLIENT INNNERWARE CHAIN";
       if($_[CB]){
         #More data to come
-        #say STDERR __PACKAGE__." CALLBACK, expecting more data from parser";
         #
       }
       else {
         #No there isn't
         #
-        #say STDERR __PACKAGE__." NO CALLBACK, no more data from parser expected. Return to pool";
 
         #TODO: Check status code
         for($_[REX][STATUS]){
@@ -99,12 +96,12 @@ method _error_dispatch :override {
     sub {
 
             
-          say "ERROR DISPATCH";
+          Log::OK::ERROR and log_error "ERROR DISPATCH";
             # The route used is always associated with a host table. Use this table
             # and attempt get the next item in the requst queue for the host
             #
           require Error::Show;
-          say Error::Show::context indent=>"  ", frames=>Devel::StackTrace->new();
+          Log::OK::ERROR and log Error::Show::context indent=>"  ", frames=>Devel::StackTrace->new();
           my $entry;
           my $session;
             # If no rex is present, this is connection error...
@@ -266,7 +263,7 @@ method _request {
           $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
         }
 
-        $session->push_reader($_application_parser->(session=>$session, mode=>2, callback=>sub {say "DUMMY PARSER CALLBACK====="}));
+        $session->push_reader($_application_parser->(session=>$session, mode=>2, callback=>sub {asay "DUMMY PARSER CALLBACK====="}));
         $_sessions->{ $session_id } = $session;
 
         $session_id++;
@@ -278,7 +275,7 @@ method _request {
         #
         #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
         #$_total_request_count--;
-        say "error callback for stream connect: $_[1]";
+        Log::OK::ERROR and log_error "error callback for stream connect: $_[1]";
         IO::FD::close $_[0]; # Close the socket
         my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($details->[1]." ".$details->[2]);
 

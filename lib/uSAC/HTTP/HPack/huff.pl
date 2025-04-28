@@ -1,7 +1,10 @@
 #!/usr/bin/env perl
 use Data::Dumper;
+
 use feature ":all";
 no warnings "experimental";
+
+use uSAC::IO;
 
 #outputs perl code/structures from huffman table
 #stores codes in symbol indexed array
@@ -16,11 +19,9 @@ while(<>){
 	}
 
 }
-#say Dumper @codes;
 
 #sort by bits
 my @sorted= sort { $a->[2] <=> $b->[2] } @codes;
-#say Dumper \@sorted;
 
 
 sub decode_huffman32 {
@@ -44,58 +45,53 @@ sub decode_huffman32 {
 
 
 	while($pos<$len){
-		say "";
+		asay "";
 		#load more data if holding is empty
 		unless($holding_bits){
-			say "loading more data";
+			asay "loading more data";
 			$holding=unpack "x[$pos]N", $_[1];
 			$holding_bits=32;
 			$pos+=4;
-			say "loaded Holding: ", unpack "B*",pack "N*", $holding;	
+			asay "loaded Holding: ", unpack "B*",pack "N*", $holding;	
 		}
 
 		if($shift>$holding_bits){
 			#shift what we can
-			say "Clamping shift";
+			asay "Clamping shift";
 			$shift=$holding_bits;
 		}
 		my $temp=32-$shift;
-		say "Holding: ", unpack "B*",pack "N*", $holding;	
+		asay "Holding: ", unpack "B*",pack "N*", $holding;	
 		$acc=$acc | $holding>>$temp;
 		$acc_bits+=$shift;
 		$holding_bits-=$shift;
-		say "after shift: acc_bits: $acc_bits  holding_bits: $holding_bits";
-		say "Acc: ", unpack "B*",pack "N*", $acc;	
+		asay "after shift: acc_bits: $acc_bits  holding_bits: $holding_bits";
+		asay "Acc: ", unpack "B*",pack "N*", $acc;	
 
 		if($acc_bits<30){
 			#max symbol length not achieved. so redo
 			redo;
 		}
-		say "about to perform search on acc: ", unpack "B*", pack "N*", $acc;
+		asay "about to perform search on acc: ", unpack "B*", pack "N*", $acc;
 		#test $acc agains table of codes
 		for my $entry (@table) {
 			my $matcher=$entry->[2];
 			my $mask= ~(0xFFFFFFFF>>($entry->[1]));
 		
 			if($entry->[0]==49){
-				say "matcher for 49: ", unpack "B*", pack "N*",$matcher;
-				say "bits for 49: ", $entry->[1];
+				asay "matcher for 49: ", unpack "B*", pack "N*",$matcher;
+				asay "bits for 49: ", $entry->[1];
 			}
 			my $macc= ($acc & $mask);
 
-			#say "mask: ", unpack "B*", pack "N*",$mask;
-				#say "macc: ", unpack "B*", pack "N*",$macc;
-				#say "test: ", unpack "B*", pack "N*",$entry->[2];
-				#say "macc: $macc test: ", $entry->[2];
-				#say $macc==$entry->[2];
 			if( ($macc == $entry->[2])){
-				say "found ", Dumper $entry;
+				asay "found ", Dumper $entry;
 				return $result if $entry->[0] ==256;
 				$result.=$entry->[0];	
 				$acc&= 0xFFFFFFFF>>$entry->[1];
 				$acc<<=$entry->[1];	#shift to align msb in acc
-				say "After match and shift";
-				say "Acc: ", unpack "B*",pack "N*", $acc;	
+				asay "After match and shift";
+				asay "Acc: ", unpack "B*",pack "N*", $acc;	
 
 				$shift=$entry->[1];
 				$acc_bits-=$shift;
@@ -137,7 +133,7 @@ my $data=pack "B*", "00001111111111111111111111111111111";
 
 
 # my $data=pack "B*", "00001000010000100001000010000100001111111111111111111111111111111";
-say "data len: ", length $data;
-say Dumper unpack "B*", $data;
+asay "data len: ", length $data;
+asay Dumper unpack "B*", $data;
 decode_huffman32 \@sorted, $data;
 

@@ -1,7 +1,7 @@
 package uSAC::HTTP::Middleware::Websocket;
 use v5.36;
 
-use feature qw<bitwise state say refaliasing current_sub>;
+use feature qw<bitwise state refaliasing current_sub>;
 use uSAC::Log;
 use Log::OK;
 
@@ -111,8 +111,6 @@ sub websocket_client_out {
 
         # TODO This is context
         $key=builtin::trim MIME::Base64::encode_base64 $key;
-        say "SETTING KEY ON THE WAY OUT:", $_[REX];
-        say $key;
         $ctx{$_[REX]}=$key;
        
         Log::OK::TRACE and log_trace $key;
@@ -156,8 +154,6 @@ sub websocket_client_in {
         my $key=delete $ctx{$_[REX]}; #TODO this is context
 
         # this is the exepected value
-        say "GETTING KEY ON THE WAY IN:", $_[REX];
-        say $key;
         my $expected_key=builtin::trim MIME::Base64::encode_base64
             Digest::SHA1::sha1($key."258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
         if(
@@ -181,7 +177,6 @@ sub websocket_client_in {
           };
         }
         else {
-          say "FAILED";
           # Handshake failed
           Log::OK::TRACE and log_trace __PACKAGE__. " Handshake failed to websocket server";
         }
@@ -641,8 +636,6 @@ sub new {
 	#override dropper
 	my $old_dropper=$session->dropper;
 	my $dropper=sub {
-    say "WS dropper called from:";
-    say caller;
     $self->[pinger_] and uSAC::IO::cancel $self->[pinger_];
     #$self->[pinger_]=undef;
 		$self->[writer_]=sub {};
@@ -750,7 +743,7 @@ sub ping_interval {
 	
   #undef $self->[pinger_];
   $self->[pinger_] and uSAC::IO::cancel $self->[pinger_];
-  my $dummy=sub {say "pinger dummy"};
+  my $dummy=sub {};
 	$self->[ping_interval_]=$new;
 	$self->[pinger_] = uSAC::IO::timer(0, $self->[ping_interval_], sub {
 		$self->[ping_id_] = "ping...";	

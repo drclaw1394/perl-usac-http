@@ -31,7 +31,7 @@ sub _reexport {
   warnings->import;
 
   require feature;
-  feature->import(qw<say state refaliasing current_sub>);
+  feature->import(qw<state refaliasing current_sub>);
   feature->unimport(qw<indirect>);
   
 
