@@ -298,10 +298,8 @@ sub send_file_uri {
         unless(@_){
           #undef $sub;
           Log::OK::TRACE and log_trace "Handing error in normal file read/copy/write";
-          #$closer->($entry);
-          #$closer->(delete $ctx{$rex});
-          $rex->[uSAC::HTTP::Rex::dropper_]->(1);
-          undef $rex;
+          #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
+          #undef $rex;
           return;
         }
 

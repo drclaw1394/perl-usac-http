@@ -158,6 +158,9 @@ sub make_parser{
         #
         #if ($state== STATE_RESPONSE or $state == STATE_REQUEST) {
         if ($state < STATE_HEADERS) {
+          # Don't process new request until existing request is done.
+          # Rely on reader being pumped at output stage to retrigger
+          return if $pipeline->@*;
           $pos3=index $buf, CRLF2;#, $ppos;
           # Header is not complete. need more
           return if($pos3<=0);

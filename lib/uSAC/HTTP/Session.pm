@@ -72,13 +72,13 @@ method init {
 
   my $s2=sub {
     $_sr->buffer="";
-    $_read_stack[-1](); $_closeme=1; $_dropper->(1)
+    $_read_stack[-1](); $_closeme=1; $_dropper->()
   };
 
   $_sr=uSAC::IO::SReader::create(
     fh=>$_fh,
     max_read_size=>$_read_size//MAX_READ_SIZE,
-    on_eof =>$s,
+    on_eof =>$s2,
     on_error=>$s2,
     time=>\$_time,
     clock=>\$Time,
@@ -104,7 +104,11 @@ method init {
     Log::OK::DEBUG and log_debug join ", " , caller;
 
     $_fh or return;	#don't drop if already dropped
-    return unless $_closeme or !@_;	#IF no error or closeme then return
+    unless($_closeme or !@_){
+      #IF no error or closeme then return after pumping the reader
+      $_sr->pump;
+      return;
+    }
 
     #End of session transactions
     #
@@ -151,7 +155,7 @@ method init {
 
   $_sw=uSAC::IO::SWriter::create(
     fh=>$_fh,
-    on_error=>$_dropper,
+    on_error=>$s2,#$_dropper,
     time=>\$_time,
     clock=>\$Time,
     syswrite=>\&IO::FD::syswrite
