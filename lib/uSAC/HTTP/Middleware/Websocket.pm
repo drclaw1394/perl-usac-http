@@ -628,7 +628,8 @@ sub new {
 	$self->[writer_]=_make_websocket_server_writer $self, $session;	#create a writer and store in ws
 
 	#the pushed reader now has access to the writer via the session->rex
-	$session->push_reader(_make_websocket_server_reader($self, $session));
+  #$session->push_reader(_make_websocket_server_reader($self, $session));
+	$session->set_parser(_make_websocket_server_reader($self, $session));
 
 	#setup ping
 	$self->ping_interval($self->[ping_interval_]);

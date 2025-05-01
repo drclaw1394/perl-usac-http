@@ -7,7 +7,7 @@ no warnings "experimental";
 use uSAC::Log;
 use Log::OK;
 
-
+use Devel::Peek qw<SvREFCNT>;
 use uSAC::IO;
 use uSAC::IO::SReader;
 use uSAC::IO::SWriter;
@@ -47,6 +47,11 @@ field $_sr;
 field $_sw;
 field $_in_progress;
 field $_read_size;
+
+field $_parser;
+field $_serializer;
+field $_error;
+
 #field $_on_body;
 
 our $Date;		#Date string for http
@@ -63,16 +68,22 @@ method init {
   $_rex=[];
   $_sequence={};
   #make reader
-  my $s=sub {
-    #Close causes stack reset
-    $_sr->buffer="";
-    $_read_stack[-1]();
-    $_closeme=1; $_dropper->(1)
-  };
+  #################################
+  # my $s=sub {                   #
+  #   #Close causes stack reset   #
+  #   $_sr->buffer="";            #
+  #   $_read_stack[-1]();         #
+  #   $_closeme=1; $_dropper->(1) #
+  # };                            #
+  #################################
 
   my $s2=sub {
+    Log::OK::DEBUG and log_debug "IN s2  session sub";
+    Log::OK::DEBUG and log_debug "Session s2 called from: ".join ", " , caller;
     $_sr->buffer="";
-    $_read_stack[-1](); $_closeme=1; $_dropper->()
+    #$_read_stack[-1](); 
+    #$_parser->();   # THIS PUSHES 
+    $_closeme=1; $_dropper->()
   };
 
   $_sr=uSAC::IO::SReader::create(
@@ -101,14 +112,27 @@ method init {
     Log::OK::DEBUG and log_debug "Session: Dropper start";
     #Log::OK::DEBUG and log_debug "Session: args: @_";
     Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";
-    Log::OK::DEBUG and log_debug join ", " , caller;
+    Log::OK::DEBUG and log_debug "Session dropper called from: ".join ", " , caller;
 
     $_fh or return;	#don't drop if already dropped
+    #shift @$_rex; #shift rex pipeline
     unless($_closeme or !@_){
       #IF no error or closeme then return after pumping the reader
       $_sr->pump;
       return;
     }
+    
+    # Here we call the error middleware to allow each route/middleware section to clean up internal storage
+    use uSAC::HTTP::Constants;
+    use uSAC::HTTP::Route;
+    for (@$_rex){
+      my $route=$_->[uSAC::HTTP::Rex::route_];
+      Log::OK::DEBUG and log_debug "calling error middleware for rex $_";
+      Log::OK::DEBUG and log_debug "calling error middleware for rroute $route";
+      $route->[1][ROUTE_ERROR_HEAD]->($route, $_);
+    }
+
+    @$_rex=();
 
     #End of session transactions
     #
@@ -121,7 +145,8 @@ method init {
     $_id=undef;
 
     #If the dropper was called with an argument that indicates no error
-    if($_[0] and @zombies < 100){
+    #if($_[0] and @zombies < 100){
+    if(1){
       # NOTE: Complete reuses of a zombie may still be causing corruption
       # Suspect that the rex object is not being release intime 
       # when service static files.
@@ -130,15 +155,19 @@ method init {
       # Otherwise comment out the line below
       unshift @zombies, $self;
       Log::OK::DEBUG and log_debug "Pushed zombie";
+      Log::OK::DEBUG and log_debug "Session: refcount:".SvREFCNT($self);	
+      Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
     }
     else{
       #dropper was called without an argument. ERROR. Do not reuse 
       #
-      $_dropper=undef;
-      undef $_sr->on_eof;
-      undef $_sr->on_error;
-      undef $_sw->on_error;
-      undef $self;
+      #########################
+      # $_dropper=undef;      #
+      # undef $_sr->on_eof;   #
+      # undef $_sr->on_error; #
+      # undef $_sw->on_error; #
+      # undef $self;          #
+      #########################
 
       Log::OK::DEBUG and log_debug "NO Pushed zombie";
     }
@@ -247,6 +276,31 @@ method pump_reader {
 	$_sr->pump;
 }
 
+method set_serializer {
+  $_serializer=$_[0];
+}
+method get_serializer {
+  $_serializer;
+}
+
+
+method set_parser {
+  $_sr->on_read=$_parser=$_[0];
+}
+
+method get_parser {
+  $_parser;
+}
+
+method set_error {
+  $_error=$_[0];
+}
+
+method get_error {
+  $_error;
+}
+
+
 #timer for generating timestamps. 1 second resolution for HTTP date
 my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
@@ -268,7 +322,8 @@ uSAC::Main::usac_listen("server/shutdown/graceful", sub {
 #Return an array of references to variables which are publically editable
 #Bypasses method calls for accessors
 method exports {
-	[\$_closeme, $_dropper, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence];#, \$_route];
+  #[\$_closeme, $_dropper, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence];#, \$_route];
+	[\$_closeme, undef, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence];#, \$_route];
 
 }
 ##################################################################################

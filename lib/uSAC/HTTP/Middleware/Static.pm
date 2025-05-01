@@ -49,7 +49,7 @@ sub send_file_uri {
 
   my ($content_length, $mod_time)=($entry->[File::Meta::Cache::stat_][7], $entry->[File::Meta::Cache::stat_][9]);
 
-  $reply="";
+  my $reply="";
   #process caching headers
   my $headers=$_[IN_HEADER];
 
@@ -211,8 +211,10 @@ sub send_file_uri {
 
   if(($rex->[METHOD] eq "HEAD" or $rex->[STATUS]==HTTP_NOT_MODIFIED)){
     Log::OK::TRACE and log_trace "Range was head request";
-    #$closer->($entry);
-    $closer->(delete $ctx{$rex});
+    #$closer->(delete $ctx{$rex});
+    my $t=delete $ctx{$rex};
+    $closer->($t->[0]);
+    $t->[1]=undef;
     $next->($matcher, $rex, $in_header, $out_headers, "" );
     return;
   }
@@ -291,19 +293,26 @@ sub send_file_uri {
 
     my $t;
     my $count=0;
-    (sub {
+    my $sub;
+    $sub=sub {
         $count++;
         #This is the callback for itself
         #if no arguments an error occured
         unless(@_){
           #undef $sub;
-          Log::OK::TRACE and log_trace "Handing error in normal file read/copy/write";
+          #$closer->(delete $ctx{$rex});
+          Log::OK::TRACE and log_trace "Handing error in normal file read/copy/write for $rex";
           #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
           #undef $rex;
+          #
+            my $t=delete $ctx{$rex};
+            $closer->($t->[0]);
+            $t->[1]=undef;
+            $sub=undef;
+            $t=undef;
           return;
         }
 
-        my $sub=__SUB__;
 
 
         #NON Send file
@@ -340,8 +349,12 @@ sub send_file_uri {
           }
           else{
             Log::OK::TRACE and log_trace "No more ranges to send";
-            #$closer->($entry);
-            $closer->(delete $ctx{$rex});
+            #$closer->(delete $ctx{$rex});
+            my $t=delete $ctx{$rex};
+            $closer->($t->[0]);
+            $t->[1]=undef;
+            $sub=undef;
+            $t=undef;
             return $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
           }
         }
@@ -349,21 +362,32 @@ sub send_file_uri {
         Log::OK::TRACE and log_trace "File content still remains to be sent";
 
         #Data read but more to do
-        $rc and	($rex
-          ?return $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__)
-          :return undef $sub);
+        if($rc){
+          if ($rex){
+            return $next->($matcher, $rex, $in_header, $out_headers, $reply, $sub);
+          }
+          else {
+            return undef $sub;
+          }
+        }
+
 
         #if ($rc);
         #No data but error
         if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
           log_error "Static files: READ ERROR from file";
           log_error "Error: $!";
-          #$closer->($entry);
-          $closer->(delete $ctx{$rex});
+          #$closer->(delete $ctx{$rex});
+          my $t=delete $ctx{$rex};
+          $closer->($t->[0]);
+          $t->[1]=undef;
+          $sub=undef;
           $rex->[uSAC::HTTP::Rex::dropper_]->(1);
           undef $sub;
         }
-      })->(undef); #call with an argument to prevent error
+      };
+      $ctx{$rex}[1]=$sub; ## and sub to ctx
+      $sub->(undef); #call with an argument to prevent error
   }
 }
 
@@ -798,7 +822,7 @@ sub uhm_static_root {
               $_[OUT_HEADER]{$k}=$v;
             }
 
-            $ctx{$_[REX]}=$entry; # Save this for error processing
+            $ctx{$_[REX]}=[$entry, undef]; # Save this for error processing
 
             return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
           }
@@ -812,6 +836,7 @@ sub uhm_static_root {
           }
         }
 
+		    Log::OK::DEBUG and log_debug "Could not find anything for $path in any root for rex:". $_[REX];
         # Didn't match anything in the roots.
         $_[PAYLOAD]="";
         $_[REX][STATUS]=HTTP_NOT_FOUND unless $as_error;
@@ -835,7 +860,19 @@ sub uhm_static_root {
     my $next=shift;
     sub {
       #
-      $closer->(delete $ctx{$_[REX]}) if $_[REX];
+      #use Data::Dumper;
+
+      #my @keys=map $_->[0], values %ctx;
+      #Log::OK::DEBUG and log_debug "---- STATIC ERROR MIDDLEWARE CALLED ". Dumper @keys;
+      Log::OK::DEBUG and log_debug "---- STATIC ERROR MIDDLEWARE CALLED  for rex: $_[REX]";
+
+      
+      if($_[REX]){
+        my $t=delete $ctx{$_[REX]};
+        $closer->($t->[0]);
+        $t->[1]=undef;
+      }
+
       &$next;
     }
   };
@@ -921,5 +958,12 @@ sub uhm_static_content {
     }
   ]
 }
+
+#################################################################
+# uSAC::IO::timer 0, 1, sub {                                   #
+#   use Data::Dumper;                                           #
+#   Log::OK::INFO and log_info  "CONTEXT STATIC: ".Dumper %ctx; #
+# };                                                            #
+#################################################################
 
 1;

@@ -86,7 +86,7 @@ sub make_parser{
   my $ex=$r->exports;
 
   \my $closeme=$ex->[0];
-  my $dropper=$ex->[1];
+  #my $dropper=$ex->[1];
   \my $self=$ex->[2];
 
   my $route;
@@ -132,15 +132,19 @@ sub make_parser{
     # Set default HTTP code
     $code=-1;
     try {
-      unless(@_){
-        Log::OK::TRACE and log_trace "PASSING ON ERROR IN HTTP parser";
-        # 0=> site 1=> inner_head 2=> outer_head 3=> error_head/ reset
-        #
-        #$route and $route->[1][ROUTE_INNER_HEAD]($route, $rex);#, \%h, $out_header, $payload, my $cb=undef);
-        $route and $route->[1][ROUTE_ERROR_HEAD]($route, $rex);
-        $processed=0;
-        return;
-      }
+      ###########################################################################################################
+      # unless(@_){                                                                                             #
+      #   use Data::Dumper;                                                                                     #
+      #   Log::OK::DEBUG and log_debug "PASSING ON ERROR IN HTTP parser $rex";                                  #
+      #   Log::OK::DEBUG and log_debug   "@$pipeline";                                                          #
+      #   # 0=> site 1=> inner_head 2=> outer_head 3=> error_head/ reset                                        #
+      #   #                                                                                                     #
+      #   #$route and $route->[1][ROUTE_INNER_HEAD]($route, $rex);#, \%h, $out_header, $payload, my $cb=undef); #
+      #   $route and $route->[1][ROUTE_ERROR_HEAD]($route, $rex);                                               #
+      #   $processed=0;                                                                                         #
+      #   return;                                                                                               #
+      # }                                                                                                       #
+      ###########################################################################################################
       \my $buf=\$_[0][0];
 
       #while ( $len=length $buf) {
@@ -235,6 +239,7 @@ sub make_parser{
           if($mode==MODE_RESPONSE){
 
             $rex=uSAC::HTTP::Rex->new($r, $ex);#, $route);
+            Log::OK::DEBUG and log_debug  "New rex object: $rex";
             push @$pipeline, $rex;
             $out_header={};
             $rex->[METHOD]=$method;
@@ -262,6 +267,8 @@ sub make_parser{
             #($route, $h{":captures"}) = $cb->($host, "$method $uri");
             ($route, $rex->[CAPTURES]) = $cb->($host, "$method $uri");
 
+            # Set the route for this rex
+            $rex->[uSAC::HTTP::Rex::route_]=$route;
 
             # Work around for HTTP/1.0
             if($closeme){
@@ -473,30 +480,32 @@ sub make_serialize{
 
 
   sub {
-
-        my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];
-        my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
-
-        if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){
-          push $seq->{$_[REX][uSAC::HTTP::Rex::id_]}->@*, \@_;
-
-
-          # Use the first rex as key and call middleware
-          my $rex=$pipeline->[0];
-          my $args=shift $seq->{$rex->[uSAC::HTTP::Rex::id_]}->@*;
-          @_=@$args;
-
-          # If the CB was not set, then that was the end
-          # of the rex so shift it off
-          unless ($args->[CB]){
-            shift @$pipeline;
-            delete $seq->{$rex->[uSAC::HTTP::Rex::id_]};
-          }
-        }
-        else {
-          # short cut.
-          shift @$pipeline unless ($_[CB]);
-        }
+        
+        ##############################################################
+        # my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];               #
+        # my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];          #
+        #                                                            #
+        # if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){                 #
+        #   push $seq->{$_[REX][uSAC::HTTP::Rex::id_]}->@*, \@_;     #
+        #                                                            #
+        #                                                            #
+        #   # Use the first rex as key and call middleware           #
+        #   my $rex=$pipeline->[0];                                  #
+        #   my $args=shift $seq->{$rex->[uSAC::HTTP::Rex::id_]}->@*; #
+        #   @_=@$args;                                               #
+        #                                                            #
+        #   # If the CB was not set, then that was the end           #
+        #   # of the rex so shift it off                             #
+        #   unless ($args->[CB]){                                    #
+        #     shift @$pipeline;                                      #
+        #     delete $seq->{$rex->[uSAC::HTTP::Rex::id_]};           #
+        #   }                                                        #
+        # }                                                          #
+        # else {                                                     #
+        #   # short cut.                                             #
+        #   shift @$pipeline unless ($_[CB]);                        #
+        # }                                                          #
+        ##############################################################
 
 
 
@@ -609,12 +618,12 @@ sub make_serialize{
       else {
         $reply.=$_[PAYLOAD];
       }
-      Log::OK::TRACE and log_trace "HEADER AND BODY in serialize length: ". length $reply;
+      Log::OK::DEBUG and log_debug "HEADER AND BODY in serialize length: ". length($reply). "callback: $cb";
 
       $_[REX][uSAC::HTTP::Rex::write_]([$reply], $cb);
     }
     else{
-      Log::OK::TRACE and log_trace "BODYONLY in serialize. length: ". length $_[PAYLOAD];
+      #Log::OK::DEBUG and log_debug "BODYONLY in serialize. length: ". length $_[PAYLOAD];
       # No header specified. Just a body
       #
       if($ctx//=$out_ctx{$_[REX]}){
@@ -622,6 +631,7 @@ sub make_serialize{
 
         unless($_[CB]){
           # Marked as last call
+          Log::OK::DEBUG and log_debug "chunked write... last calle (CB=undef)";
           $reply.="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
@@ -629,11 +639,19 @@ sub make_serialize{
         $_[REX][uSAC::HTTP::Rex::write_]([$reply], $cb);
       }
       else{
+        Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
         # not chunked, so just write
         $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb);
       }
 
     }
+
+    # The rex has been processed, LAST CALL
+    unless($_[CB]){
+      my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
+      shift @$pipeline;
+    }
+
   }
 };
 
@@ -646,7 +664,9 @@ sub make_error {
   #
   sub {
     if($_[REX]){
-      # There might not be rex. ie could be a complete reply and client closes
+      Log::OK::DEBUG and log_debug "v1_1 error called--------";
+      #
+      #There might not be rex. ie could be a complete reply and client closes
       # connection which will trigger this 
       delete $out_ctx{$_[REX]};
       # Reset the serialize stack
@@ -656,6 +676,13 @@ sub make_error {
     }
   }
 }
+
+######################################################################
+# uSAC::IO::timer 0, 1, sub {                                        #
+#   use Data::Dumper;                                                #
+#   Log::OK::INFO and log_info  "CONTEXT IF v1.1: ".Dumper %out_ctx; #
+# };                                                                 #
+######################################################################
 
 #sub protocol_id { "http/1.1" }
 

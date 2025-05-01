@@ -51,7 +51,7 @@ use Export::These qw(
 
 use Import::These qw<uSAC::HTTP:: Code Method Header Rex Constants>;
 
-use uSAC::HTTP::v1_1_Reader;      #TODO: this will be dynamically linked in
+#use uSAC::HTTP::v1_1_Reader;      #TODO: this will be dynamically linked in
 use Sub::Middler;
 
 
@@ -150,9 +150,11 @@ method _inner_dispatch {
     undef;
 }
 
-method _error_dispatch {
-  uSAC::HTTP::v1_1_Reader::make_error;
-}
+##########################################
+# method _error_dispatch {               #
+#   uSAC::HTTP::v1_1_Reader::make_error; #
+# }                                      #
+##########################################
 
 method rebuild_routes {
   my $result;
@@ -226,7 +228,12 @@ method _add_route {
   #TODO: Need to rework this for other HTTP versions
   #       SHOULD use the parse/serialize stored in the session
 
-  my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$static_headers;
+  #my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$static_headers;
+  my $serialize=sub {
+
+    my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+    &$s; 
+  };
 
   my $outer_head;
   if(@outer){
@@ -256,7 +263,13 @@ method _add_route {
     $inner_head=$end;
   }
 
-  my $err=$self->_error_dispatch;
+  #my $err=$self->_error_dispatch;
+
+  my $err=sub {
+    Log::OK::DEBUG and log_debug "GETTING STREAM ERROR HANDLER FROM SESSION";
+    my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_error();
+    &$s; 
+  };
 
   my $error_head;
   if(@error){
@@ -311,7 +324,7 @@ method _add_route {
     $route[ROUTE_INNER_HEAD]=$inner_head;
     $route[ROUTE_OUTER_HEAD]=$outer_head;
     $route[ROUTE_ERROR_HEAD]=$error_head;
-    $route[ROUTE_SERIALIZE]=$serialize;
+    #$route[ROUTE_SERIALIZE]=$serialize;
     $route[ROUTE_COUNTER]=0;
     $route[ROUTE_TABLE]=undef;
 

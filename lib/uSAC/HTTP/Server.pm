@@ -27,7 +27,7 @@ use uSAC::Util;           # Auxillary functions
 use Hustle::Table;		    # Fancy dispatching of endpoints
 use uSAC::FastPack::Broker;
 
-
+use uSAC::HTTP::v1_1_Reader;
 use feature qw<refaliasing state current_sub>;
 use constant::more NAME=>"uSAC", VERSION=>"v0.1.0";
 
@@ -485,9 +485,24 @@ method make_stream_accept {
         $session->revive($session_id, $fh, $scheme, $peers->[$i]);
       }
       else {
+
+        # Create a new session
         $session=uSAC::HTTP::Session->new;
         $session->init($session_id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
-        $session->push_reader($parser->(session=>$session, mode=>1, callback=>$self->current_cb));
+
+        # Create a new parser (per session)
+        my $p=$parser->(session=>$session, mode=>1, callback=>$self->current_cb);
+
+        #$session->push_reader($p); # old way... for now
+        $session->set_parser($p);
+
+        # Create a serializer (per session)
+        my $s=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$self->find_root->static_headers;
+        $session->set_serializer($s);
+
+        my $e=uSAC::HTTP::v1_1_Reader::make_error;
+        $session->set_error($e);
+
       }
 
       $i++;
