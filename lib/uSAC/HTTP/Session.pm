@@ -157,6 +157,8 @@ method init {
       Log::OK::DEBUG and log_debug "Pushed zombie";
       Log::OK::DEBUG and log_debug "Session: refcount:".SvREFCNT($self);	
       Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
+      #use Devel::Cycle;
+  #find_cycle($_dropper);
     }
     else{
       #dropper was called without an argument. ERROR. Do not reuse 

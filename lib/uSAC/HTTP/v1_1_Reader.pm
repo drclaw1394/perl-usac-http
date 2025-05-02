@@ -532,7 +532,7 @@ sub make_serialize{
     #
     my $cb=$_[CB];#//$_[REX][uSAC::HTTP::Rex::dropper_];
 
-    my $reply="";
+    my $reply=[""];
     if($_[OUT_HEADER]){
 
       # If no valid code is set then set default 200
@@ -542,15 +542,14 @@ sub make_serialize{
 
 
       if($mode == MODE_RESPONSE){
-        $reply=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
+        $reply->[0]=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
       }
       elsif($mode == MODE_REQUEST) {
         return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $code;
 
         # serialize in client mode is a request
         #
-        #$reply="$_[OUT_HEADER]{':method'} $_[OUT_HEADER]{':path'} $protocol".CRLF;
-        $reply="$_[REX][METHOD] $_[REX][PATH] $protocol".CRLF;
+        $reply->[0]="$_[REX][METHOD] $_[REX][PATH] $protocol".CRLF;
       }
       else {
         # Mode none
@@ -565,7 +564,6 @@ sub make_serialize{
       if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
 
         # force 
-        # $reply.= HTTP_TRANSFER_ENCODING.": chunked".CRLF;
         # Only set if
         $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
         $ctx=1; #Mark as needing chunked
@@ -583,7 +581,7 @@ sub make_serialize{
       #response
       # Special handling of set cookie header for multiple values
       my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
-      $reply.= HTTP_SET_COOKIE().": ".$_.CRLF  for @$v;
+      $reply->[0].= HTTP_SET_COOKIE().": ".$_.CRLF  for @$v;
 
 
       for my ($k, $v)(%{$_[OUT_HEADER]}){
@@ -593,15 +591,14 @@ sub make_serialize{
 
         #next if index($k, ":" )==0;
 
-        $reply.= $k.": ".$v.CRLF;
+        $reply->[0].= $k.": ".$v.CRLF;
       }
 
-      $reply.=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
-      $reply.=$static_headers;
-      $reply.=CRLF;
+      $reply->[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
+      $reply->[0].=$static_headers;
+      $reply->[0].=CRLF;
 
       Log::OK::DEBUG and log_debug "->Serialize: headers:";
-      #Log::OK::DEBUG and log_debug $reply;
 
       # mark headers as done, if not informational
       #
@@ -611,32 +608,32 @@ sub make_serialize{
       if($ctx){
         # this is only set if we want chunked
         #
-        $reply.= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
-        $reply.="00".CRLF.CRLF unless $_[CB];
+        $reply->[0].= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+        $reply->[0].="00".CRLF.CRLF unless $_[CB];
 
       }
       else {
-        $reply.=$_[PAYLOAD];
+        $reply->[0].=$_[PAYLOAD];
       }
-      Log::OK::DEBUG and log_debug "HEADER AND BODY in serialize length: ". length($reply). "callback: $cb";
+      Log::OK::DEBUG and log_debug "HEADER AND BODY in serialize length: ". length($reply->[0]). "callback: $cb";
 
-      $_[REX][uSAC::HTTP::Rex::write_]([$reply], $cb);
+      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
     }
     else{
       #Log::OK::DEBUG and log_debug "BODYONLY in serialize. length: ". length $_[PAYLOAD];
       # No header specified. Just a body
       #
       if($ctx//=$out_ctx{$_[REX]}){
-        $reply= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+        $reply->[0]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
 
         unless($_[CB]){
           # Marked as last call
           Log::OK::DEBUG and log_debug "chunked write... last calle (CB=undef)";
-          $reply.="00".CRLF.CRLF;
+          $reply->[0].="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
 
-        $_[REX][uSAC::HTTP::Rex::write_]([$reply], $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
       }
       else{
         Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;

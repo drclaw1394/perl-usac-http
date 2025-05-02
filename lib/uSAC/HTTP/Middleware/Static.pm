@@ -295,6 +295,7 @@ sub send_file_uri {
     my $count=0;
     my $sub;
     $sub=sub {
+      my $sub=__SUB__;
         $count++;
         #This is the callback for itself
         #if no arguments an error occured
@@ -388,6 +389,7 @@ sub send_file_uri {
       };
       $ctx{$rex}[1]=$sub; ## and sub to ctx
       $sub->(undef); #call with an argument to prevent error
+      $sub=undef; # THIS IS IMPORTANT TO PRVENT MEMORY LEAKS
   }
 }
 
