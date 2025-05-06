@@ -213,8 +213,7 @@ sub send_file_uri {
     Log::OK::TRACE and log_trace "Range was head request";
     #$closer->(delete $ctx{$rex});
     my $t=delete $ctx{$rex};
-    $closer->($t->[0]);
-    $t->[1]=undef;
+    $closer->($t);
     $next->($matcher, $rex, $in_header, $out_headers, "" );
     return;
   }
@@ -287,7 +286,7 @@ sub send_file_uri {
     # the normal copy and write
     #
     Log::OK::TRACE and log_trace  'Normal file read/copy/write';
-    
+
     #Clamp the readsize to the file size if its smaller
     #$read_size=$content_length if $content_length < $read_size;
 
@@ -296,100 +295,94 @@ sub send_file_uri {
     my $sub;
     $sub=sub {
       my $sub=__SUB__;
-        $count++;
-        #This is the callback for itself
-        #if no arguments an error occured
-        unless(@_){
-          #undef $sub;
-          #$closer->(delete $ctx{$rex});
-          Log::OK::TRACE and log_trace "Handing error in normal file read/copy/write for $rex";
-          #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
-          #undef $rex;
-          #
-            my $t=delete $ctx{$rex};
-            $closer->($t->[0]);
-            $t->[1]=undef;
-            $sub=undef;
-            $t=undef;
-          return;
-        }
-
-
-
-        #NON Send file
+      $count++;
+      #This is the callback for itself
+      #if no arguments an error occured
+      unless(@_){
+        #undef $sub;
+        #$closer->(delete $ctx{$rex});
+        Log::OK::TRACE and log_trace "Handing error in normal file read/copy/write for $rex";
+        #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        #undef $rex;
         #
-        my $sz=($content_length-$total);
-        $sz=$read_size if $sz>$read_size;
-        use Data::Dumper;
-        $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
-        $offset+=$rc;
-        Log::OK::TRACE and log_trace "Cached file entry : ".Dumper $entry unless defined $rc;
+        my $t=delete $ctx{$rex};
+        $closer->($t);
+        $sub=undef;
+        return;
+      }
 
-        Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}";
-        #non zero read length.. do the write
 
-        #When we have read the required amount of data
-        if($total==$content_length){
-          Log::OK::TRACE and log_trace "Full file content read";
-          if(@ranges){
-            Log::OK::TRACE and log_trace "Ranges to send still";
-            return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {
-                unless(@_){
-                  return $sub->();
-                }
 
-                #TODO: FIX MULTIPART RANGE RESPONSE
-                my $r=shift @ranges;
-                $offset=$r->[0];
-                $total=0;
-                $content_length=$r->[1];
+      #NON Send file
+      #
+      my $sz=($content_length-$total);
+      $sz=$read_size if $sz>$read_size;
+      use Data::Dumper;
+      $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
+      $offset+=$rc;
+      Log::OK::TRACE and log_trace "Cached file entry : ".Dumper $entry unless defined $rc;
 
-                #write new multipart header
-                return $sub->(undef);           #Call with arg
-              })
-          }
-          else{
-            Log::OK::TRACE and log_trace "No more ranges to send";
-            #$closer->(delete $ctx{$rex});
-            my $t=delete $ctx{$rex};
-            $closer->($t->[0]);
-            $t->[1]=undef;
-            $sub=undef;
-            $t=undef;
-            return $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
-          }
+      Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}";
+      #non zero read length.. do the write
+
+      #When we have read the required amount of data
+      if($total==$content_length){
+        Log::OK::TRACE and log_trace "Full file content read";
+        if(@ranges){
+          Log::OK::TRACE and log_trace "Ranges to send still";
+          return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {
+              unless(@_){
+                return $sub->();
+              }
+
+              #TODO: FIX MULTIPART RANGE RESPONSE
+              my $r=shift @ranges;
+              $offset=$r->[0];
+              $total=0;
+              $content_length=$r->[1];
+
+              #write new multipart header
+              return $sub->(undef);           #Call with arg
+            })
         }
-
-        Log::OK::TRACE and log_trace "File content still remains to be sent";
-
-        #Data read but more to do
-        if($rc){
-          if ($rex){
-            return $next->($matcher, $rex, $in_header, $out_headers, $reply, $sub);
-          }
-          else {
-            return undef $sub;
-          }
-        }
-
-
-        #if ($rc);
-        #No data but error
-        if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
-          log_error "Static files: READ ERROR from file";
-          log_error "Error: $!";
+        else{
+          Log::OK::TRACE and log_trace "No more ranges to send";
           #$closer->(delete $ctx{$rex});
           my $t=delete $ctx{$rex};
-          $closer->($t->[0]);
-          $t->[1]=undef;
+          $closer->($t);
           $sub=undef;
-          $rex->[uSAC::HTTP::Rex::dropper_]->(1);
-          undef $sub;
+          return $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
         }
-      };
-      $ctx{$rex}[1]=$sub; ## and sub to ctx
-      $sub->(undef); #call with an argument to prevent error
-      $sub=undef; # THIS IS IMPORTANT TO PRVENT MEMORY LEAKS
+      }
+
+      Log::OK::TRACE and log_trace "File content still remains to be sent";
+
+      #Data read but more to do
+      if($rc){
+        if ($rex){
+          return $next->($matcher, $rex, $in_header, $out_headers, $reply, $sub);
+        }
+        else {
+          return undef $sub;
+        }
+      }
+
+
+      #if ($rc);
+      #No data but error
+      if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
+        log_error "Static files: READ ERROR from file";
+        log_error "Error: $!";
+        #$closer->(delete $ctx{$rex});
+        my $t=delete $ctx{$rex};
+        $closer->($t);
+        $sub=undef;
+        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+      }
+    };
+    #$ctx{$rex}[1]=$sub; ## and sub to ctx
+    $sub->(undef); #call with an argument to prevent error
+    $sub=undef; # THIS IS IMPORTANT TO PRVENT MEMORY LEAKS
   }
 }
 
@@ -824,7 +817,7 @@ sub uhm_static_root {
               $_[OUT_HEADER]{$k}=$v;
             }
 
-            $ctx{$_[REX]}=[$entry, undef]; # Save this for error processing
+            $ctx{$_[REX]}=$entry;#[$entry, undef]; # Save this for error processing
 
             return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
           }
@@ -871,8 +864,7 @@ sub uhm_static_root {
       
       if($_[REX]){
         my $t=delete $ctx{$_[REX]};
-        $closer->($t->[0]);
-        $t->[1]=undef;
+        $closer->($t);
       }
 
       &$next;

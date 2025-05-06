@@ -20,7 +20,7 @@ $server->add_route('GET'
     local $/=undef; state $data; $data=<DATA> unless $data;	
     #TODO: bug. <> operator not working with state
     $_[PAYLOAD]=$data;	
-    &rex_write;
+    #&rex_write;
   }
 );
 

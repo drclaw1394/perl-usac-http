@@ -8,11 +8,13 @@ our $VERSION="v0.1.0";
 use uSAC::Log;
 use Log::OK;
 
+our $SERVER;
 
 use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Static Log>;
 
 my %options;
 my @static_headers;
+my $enable_repl;
 
 # Parses a string into a site specification hash
 #
@@ -115,9 +117,10 @@ sub run {
   # Configure Server. Gets first dibs on cli arguments
   $server->process_cli_options(\@_);
 
-  # Get proxy?
+  # Server already has top level site  called "/". Get it
   my $server_proxy=$server->sites->{"/"};
   $sites{"/"}=$server_proxy;
+
   my $current=$server_proxy;
   my %cur_opts=(
     list_dir=>1,
@@ -199,8 +202,9 @@ sub run {
       my $out_fd;
 
       for($arg){
-        if(/^&/){
+        if(/^&(\d+)/){
           #FD number from exec 
+          $in_fd=$1;
         }
         elsif($_ eq "-"){
           # use stdin stdout
@@ -218,11 +222,11 @@ sub run {
         }
       }
 
-      my $reader=uSAC::IO::SReader->new(fd=>$in_fd);
-      my $writer=uSAC::IO::SWriter->new(fd=>$out_fd);
+      my $reader=uSAC::IO::SReader->new(fh=>$in_fd);
+      my $writer=uSAC::IO::SWriter->new(fh=>$out_fd);
 
       $current->add_route("",
-        uhm_websocket()=>
+        uSAC::HTTP::Middleware::Websocket::uhm_websocket()=>
         sub {
           my $ws=$_[PAYLOAD];
           $ws->on_open=sub {
@@ -245,7 +249,7 @@ sub run {
         }
       );
     }
-    elsif(/-{1,2}r/){
+    elsif(/-{1,2}route/){
       # Manually specifiy a route and content combination for to add to the current site
       # Need to parse the matcher and the content
       # matcher=sdfsdf, content='dfsdfsdf'
@@ -262,6 +266,10 @@ sub run {
       
      next; 
 
+    }
+    elsif(/^-{1,2}repl/){
+      # launch repl
+      $enable_repl=1;
     }
     elsif(/^--$/){
       # End processing of options  
@@ -312,6 +320,16 @@ sub run {
 
   # Run!
   $server->run(@ARGV);
+  $SERVER=$server;
+
+  # Run REPL if specified
+  require uSAC::REPL;
+  
+  if($enable_repl){
+    uSAC::REPL::start();
+    my $sig;$sig=uSAC::IO::signal(INT=> \&uSAC::REPL::pause);
+  }
+
 }
 
 __END__
