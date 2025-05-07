@@ -35,8 +35,11 @@ sub uhm_trace {
         # set the content typ
         $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="message/http";
         
+        $_[REX][uSAC::HTTP::Rex::serializer_]->&*;
         # return immediately
-        $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+        #$_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+        #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+        #&$s; 
         #return undef; 
 
       }

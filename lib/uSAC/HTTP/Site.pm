@@ -231,8 +231,9 @@ method _add_route {
   #my $serialize=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$static_headers;
   my $serialize=sub {
 
-    my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
-    &$s; 
+    $_[REX][uSAC::HTTP::Rex::serializer_]->&*;
+    #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+    #&$s; 
   };
 
   my $outer_head;

@@ -214,7 +214,7 @@ BUILD {
 
 	$_sessions={};
   $_listen_spec=[];
-  #$self->add_listeners(ref($_listen) eq "ARRAY"?@$_listen:$_listen);
+  #$self->add_listeners($_listen) if $_listen;
 
 	$self->static_headers={
 	  HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $_sub_product) )};

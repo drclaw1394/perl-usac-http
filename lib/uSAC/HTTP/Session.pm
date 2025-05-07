@@ -324,8 +324,8 @@ uSAC::Main::usac_listen("server/shutdown/graceful", sub {
 #Return an array of references to variables which are publically editable
 #Bypasses method calls for accessors
 method exports {
-  #[\$_closeme, $_dropper, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence];#, \$_route];
-	[\$_closeme, undef, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence];#, \$_route];
+  #[\$_closeme, $_dropper, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence, $_parser, $_serializer];#, \$_route];
+	[\$_closeme, undef, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence, \$_parser, \$_serializer];#, \$_route];
 
 }
 ##################################################################################

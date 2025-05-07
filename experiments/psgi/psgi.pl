@@ -1,16 +1,14 @@
 use v5.36;
-use EV;
-use AnyEvent;
-use Log::ger::Output 'Screen';
-use Log::OK;
 
+use uSAC::IO;
 use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log PSGI>;
+
 
 my $app3=sub {
   my $env=shift;
   sub {
     my $responder=shift;
-    my $t; $t=AE::timer 1.0, 0, sub {
+    my $t; $t=uSAC::IO::timer 1.0, 0, sub {
             $t=undef;
             $responder->([200,[],["delayed"]]);
     };
@@ -31,7 +29,7 @@ my $app4=sub {
 };
 
 my $server;
-$server=uSAC::HTTP::Server->new(listener=>"a=0.0.0.0,po=8081,t=stream");
+$server=uSAC::HTTP::Server->new(listen=>"a=0.0.0.0,po=8081,t=stream");
 $server->add_route("app3" =>uhm_psgi $app3);
 
 use Plack::Builder;

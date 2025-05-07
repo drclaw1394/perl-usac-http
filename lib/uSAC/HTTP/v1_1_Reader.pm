@@ -239,6 +239,8 @@ sub make_parser{
           if($mode==MODE_RESPONSE){
 
             $rex=uSAC::HTTP::Rex->new($r, $ex);#, $route);
+            #use Data::Dumper;
+            #Log::OK::DEBUG and log_debug  "Exports  ". Dumper $ex;
             Log::OK::DEBUG and log_debug  "New rex object: $rex";
             push @$pipeline, $rex;
             $out_header={};
@@ -442,11 +444,17 @@ sub make_parser{
 
       if(Log::OK::DEBUG){
         $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
-        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+        # my $s=$rex->[uSAC::HTTP::Rex::session_]->get_serializer();
+        #$route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+        my $s =$_[REX][uSAC::HTTP::Rex::serializer_]->&*;
+        $s->($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
       }
       else {
         $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
-        $route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0}, my $c="", my $d=undef);
+        #my $s=$rex->[uSAC::HTTP::Rex::session_]->get_serializer();
+        my $s =$_[REX][uSAC::HTTP::Rex::serializer_]->&*;
+        #$route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0}, my $c="", my $d=undef);
+        $s->($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0}, my $c="", my $d=undef);
       }
     }
   };

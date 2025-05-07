@@ -89,6 +89,8 @@ use constant::more qw<
   route_
   pipeline_
   sequence_
+  parser_
+  serializer_
 
   STATUS  
   METHOD
@@ -218,7 +220,9 @@ sub rex_redirect_moved{
     $_[OUT_HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
-  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  $_[REX][serializer_]->&*;
+  #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+  #&$s; 
   undef;
 }
 
@@ -244,7 +248,9 @@ sub rex_redirect_see_other{
     $_[OUT_HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
-  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  $_[REX][serializer_]->&*;
+  #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+  #&$s; 
   undef;
 }
 
@@ -268,7 +274,9 @@ sub rex_redirect_found {
     $_[OUT_HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
-  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  $_[REX][serializer_]->&*;
+  #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+  #&$s; 
   undef;
 	
 }
@@ -294,7 +302,9 @@ sub rex_redirect_temporary {
   }
 
   $_[PAYLOAD]="";
-  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  $_[REX][serializer_]->&*;
+  #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+  #&$s; 
   undef;
 }
 
@@ -317,7 +327,9 @@ sub rex_redirect_permanent {
       $_[OUT_HEADER]{$k}=$v;
     }
     $_[PAYLOAD]="";
-    $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+    $_[REX][serializer_]->&*;
+    #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+    #&$s; 
     undef; #ensure this chain stops
 }
 
@@ -335,7 +347,9 @@ sub rex_redirect_not_modified {
   $_[REX][STATUS]=HTTP_NOT_MODIFIED;
 
   $_[PAYLOAD]="";
-  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  $_[REX][serializer_]->&*;
+  #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+  #&$s; 
   undef;
 }
 
@@ -374,7 +388,9 @@ sub rex_error {
 
   # No custom error page so render immediately 
   $_[PAYLOAD]="";
-  $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+  $_[REX][serializer_]->&*;
+  #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+  #&$s; 
   undef;
 
   # Add this for short hand middleware support. If the redirect is the last
@@ -469,7 +485,9 @@ sub rex_redirect_internal {
 		$rex->[recursion_count_]=0;
 		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
     $_[REX][STATUS]=HTTP_LOOP_DETECTED;
-    $_[ROUTE][1][ROUTE_SERIALIZE]->&*;
+    $_[REX][serializer_]->&*;
+    #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
+    #&$s; 
 		return;
 	}
 
@@ -569,7 +587,7 @@ sub new {
 
 	#NOTE: A single call to Session export. give references to important variables
 	
-	($self[closeme_], $self[dropper_], \$self[server_], $self[pipeline_], undef, $self[write_], $self[peer_], $self[sequence_])= $_[2]->@*;
+	($self[closeme_], $self[dropper_], \$self[server_], $self[pipeline_], undef, $self[write_], $self[peer_], $self[sequence_], \$self[parser_], \$self[serializer_])= $_[2]->@*;
 
 	$self[recursion_count_]=0;
   $self[in_progress_]=undef;
