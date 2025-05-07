@@ -132,19 +132,6 @@ sub make_parser{
     # Set default HTTP code
     $code=-1;
     try {
-      ###########################################################################################################
-      # unless(@_){                                                                                             #
-      #   use Data::Dumper;                                                                                     #
-      #   Log::OK::DEBUG and log_debug "PASSING ON ERROR IN HTTP parser $rex";                                  #
-      #   Log::OK::DEBUG and log_debug   "@$pipeline";                                                          #
-      #   # 0=> site 1=> inner_head 2=> outer_head 3=> error_head/ reset                                        #
-      #   #                                                                                                     #
-      #   #$route and $route->[1][ROUTE_INNER_HEAD]($route, $rex);#, \%h, $out_header, $payload, my $cb=undef); #
-      #   $route and $route->[1][ROUTE_ERROR_HEAD]($route, $rex);                                               #
-      #   $processed=0;                                                                                         #
-      #   return;                                                                                               #
-      # }                                                                                                       #
-      ###########################################################################################################
       \my $buf=\$_[0][0];
 
       #while ( $len=length $buf) {
@@ -239,8 +226,6 @@ sub make_parser{
           if($mode==MODE_RESPONSE){
 
             $rex=uSAC::HTTP::Rex->new($r, $ex);#, $route);
-            #use Data::Dumper;
-            #Log::OK::DEBUG and log_debug  "Exports  ". Dumper $ex;
             Log::OK::DEBUG and log_debug  "New rex object: $rex";
             push @$pipeline, $rex;
             $out_header={};
@@ -682,12 +667,6 @@ sub make_error {
   }
 }
 
-######################################################################
-# uSAC::IO::timer 0, 1, sub {                                        #
-#   use Data::Dumper;                                                #
-#   Log::OK::INFO and log_info  "CONTEXT IF v1.1: ".Dumper %out_ctx; #
-# };                                                                 #
-######################################################################
 
 #sub protocol_id { "http/1.1" }
 

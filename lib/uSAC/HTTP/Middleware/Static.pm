@@ -177,8 +177,6 @@ sub send_file_uri {
     }
     elsif(@ranges==1){
       Log::OK::TRACE and log_trace "Range Single";
-      use Data::Dumper;
-      Log::OK::TRACE and log_trace Dumper @ranges;
       $rex->[STATUS]=HTTP_PARTIAL_CONTENT;
 
       my $total_length=0;
@@ -317,10 +315,8 @@ sub send_file_uri {
       #
       my $sz=($content_length-$total);
       $sz=$read_size if $sz>$read_size;
-      use Data::Dumper;
       $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
       $offset+=$rc;
-      Log::OK::TRACE and log_trace "Cached file entry : ".Dumper $entry unless defined $rc;
 
       Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}";
       #non zero read length.. do the write
@@ -855,10 +851,8 @@ sub uhm_static_root {
     my $next=shift;
     sub {
       #
-      #use Data::Dumper;
 
       #my @keys=map $_->[0], values %ctx;
-      #Log::OK::DEBUG and log_debug "---- STATIC ERROR MIDDLEWARE CALLED ". Dumper @keys;
       Log::OK::DEBUG and log_debug "---- STATIC ERROR MIDDLEWARE CALLED  for rex: $_[REX]";
 
       
@@ -953,11 +947,5 @@ sub uhm_static_content {
   ]
 }
 
-#################################################################
-# uSAC::IO::timer 0, 1, sub {                                   #
-#   use Data::Dumper;                                           #
-#   Log::OK::INFO and log_info  "CONTEXT STATIC: ".Dumper %ctx; #
-# };                                                            #
-#################################################################
 
 1;

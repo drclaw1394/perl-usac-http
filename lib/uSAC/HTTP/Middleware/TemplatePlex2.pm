@@ -43,7 +43,6 @@ sub uhm_template_plex2 {
             my $input=$url_table->add_resource($path);
             my $info=$url_table->resource_info($path);
 
-            #use Data::Dumper;
             #$url_table->add_resource($input);
             #$_[PAYLOAD]=$info->{template}{template}->render;
             #

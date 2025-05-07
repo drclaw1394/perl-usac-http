@@ -41,7 +41,6 @@ sub uhm_log {
   if($options{color}){
     my $res=require Data::Dump::Color;
     if($res){
-      #Data::Dumper::Color->import;
       $options{dd}=\&Data::Dump::Color::dump;
     }
     else {
