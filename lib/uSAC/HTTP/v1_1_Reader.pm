@@ -3,7 +3,6 @@ use feature qw<fc current_sub refaliasing state try>;
 use strict;
 use warnings;
 no warnings "experimental";
-#use EV;
 use uSAC::Log;
 use Log::OK;
 
@@ -349,7 +348,7 @@ sub make_parser{
             $body_len-=$new;
 
             #First pass always sets the header to undef for subsequent middleware
-            $out_header=undef;
+            #$out_header=undef;
           }
 
         }
@@ -393,7 +392,7 @@ sub make_parser{
               $buf=substr $buf,  $chunked_state+2;
               $chunked_state=0;
               $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, $dummy_cb);
-              $out_header=undef;
+              #$out_header=undef;
             }
             else {
               # need more data

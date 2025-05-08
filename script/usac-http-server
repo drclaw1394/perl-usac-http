@@ -10,7 +10,7 @@ use Log::OK;
 
 our $SERVER;
 
-use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Static Log>;
+use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Form Static Log Slurp Multipart>;
 
 my %options;
 my @static_headers;
@@ -258,9 +258,10 @@ sub run {
       my @parts=split /,/, $_;
       my @middle;
       for(@parts){
-        my $e=eval $_;
-        push @middle, $e?$e:$_;
+        my @e=eval $_;
+        push @middle, @e?@e:$_;
       }
+      Log::OK::INFO and log_info "--MIDDLE WARES: @middle";
       $current->add_route(@middle);
 
       

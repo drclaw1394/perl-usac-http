@@ -18,19 +18,6 @@ use Log::OK;
 use Export::These qw<uhm_log>;
 
 
-#########################################
-# BEGIN {                               #
-#   # Attempt to load Data::Dump::Color #
-#   my $res=require  Data::Dump::Color; #
-#   unless($res){                       #
-#     require Data::Dump;               #
-#     Data::Dump->import;               #
-#   }                                   #
-#   else {                              #
-#     Data::Dump::Color->import;        #
-#   }                                   #
-# }                                     #
-#########################################
 
 # ===========
 # Log Simple - Log basic stats to STDERR
@@ -50,7 +37,6 @@ sub uhm_log {
   else {
     require Data::Dump;
       $options{dd}=\&Data::Dump::dump;
-    #Data::Dump->import;
   }
 
 	[log_simple_in(%options), log_simple_out(%options), undef];

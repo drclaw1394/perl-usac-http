@@ -8,13 +8,6 @@ our $PART_LIMIT=$UPLOAD_LIMIT;
 use uSAC::Log;
 
 use Log::OK;
-##############################
-# use uSAC::HTTP::Code;      #
-# use uSAC::HTTP::Header;    #
-# use uSAC::HTTP::Constants; #
-# use uSAC::HTTP::Rex;       #
-# use uSAC::HTTP::Route;     #
-##############################
 
 use uSAC::HTTP;
 use IO::FD;
@@ -65,7 +58,7 @@ sub uhm_slurp {
     sub {
         my $c=$ctx{$_[REX]};
         my $payload=$_[PAYLOAD];
-        $_[PAYLOAD]="";
+        $_[PAYLOAD]=""; # Consume payload
 
         unless($c){
 
@@ -91,7 +84,6 @@ sub uhm_slurp {
 
 
 
-        use Data::Dump::Color;
         # Wrap payload if presenting as a normal body
         unless(ref $payload){
           # Reuse the head created of the first (and only) part if it exists

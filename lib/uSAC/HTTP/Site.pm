@@ -422,6 +422,8 @@ method _wrap_middleware {
       Log::OK::TRACE and log_trace __PACKAGE__. " ARRAY ref. Unwrap as inner and outerware";
       #check at least for one code ref
       if(ref($_->[0]) ne "CODE"){
+        use Data::Dumper;
+        Log::OK::TRACE and log_trace "INNER WARE NOT CODE REF";
         $_->[0]=sub { state $next=shift};  #Force short circuit
       }
 
@@ -482,8 +484,13 @@ method _wrap_middleware {
     else {
       #Ignore anything else
       #TODO: check of PSGI middleware and wrap
+  use Data::Dumper;
+      Log::OK::TRACE and log_trace Dumper "IGNORED--------+++++";
     }
   }
+
+  Log::OK::TRACE and log_trace Dumper @inner-0;;
+  Log::OK::TRACE and log_trace Dumper @inner;
 
   # Return references
   (\@inner, \@outer, \@error);
@@ -1040,38 +1047,6 @@ sub uhm_dead_horse_stripper {
     my $index=shift;
     my %options=@_;
     $inner_next;
-    ###########################################################################################
-    #             sub {                                                                       #
-    #   Log::OK::TRACE and log_trace "STRIP PREFIX MIDDLEWARE";                               #
-    #                                                                                         #
-    #   if($_[OUT_HEADER]){                                                                   #
-    #     ###########################################                                         #
-    #     # use Data::Dump::Color;                  #                                         #
-    #     # dd $_[OUT_HEADER];                      #                                         #
-    #     # $_[IN_HEADER]{":path_stripped"}=        #                                         #
-    #     #   $len                                  #                                         #
-    #     #   ?substr($_[IN_HEADER]{":path"}, $len) #                                         #
-    #     #   : $_[IN_HEADER]{":path"};             #                                         #
-    #     ###########################################                                         #
-    #   }                                                                                     #
-    #                                                                                         #
-    #   &$inner_next; #call the next                                                          #
-    #                                                                                         #
-    #   #Check the inprogress flag                                                            #
-    #   #here we force write unless the rex is in progress                                    #
-    #   #Log::OK::WARN and log_warn "REX in progress flag not set!";                          #
-    #   ##################################################################################### #
-    #   # unless($_[REX][uSAC::HTTP::Rex::in_progress_]){                                   # #
-    #   #   Log::OK::TRACE and log_trace "REX not in progress. forcing rex_write/cb=undef"; # #
-    #   #   $_[CB]=undef;                                                                   # #
-    #   #   return &rex_write;                                                              # #
-    #   # }                                                                                 # #
-    #   ##################################################################################### #
-    #                                                                                         #
-    #   Log::OK::TRACE and log_trace "++++++++++++ END STRIP PREFIX";                         #
-    #   undef;                                                                                #
-    # },                                                                                      #
-    ###########################################################################################
 
 	};
 
@@ -1079,38 +1054,6 @@ sub uhm_dead_horse_stripper {
     my ($next ,$index, %options)=@_;
       # This is now the pipeline sequencer
       $next
-      ######################################################################
-      # sub {                                                              #
-      # #my $session=$_[REX][uSAC::HTTP::Rex::session_];                   #
-      #   my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];#$session->sequence; #
-      #   my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];#$session->rex; #
-      #                                                                    #
-      #                                                                    #
-      #   # Save the arguments into partition sequence                     #
-      #   if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){                       #
-      #     push $seq->{$_[REX][uSAC::HTTP::Rex::id_]}->@*, \@_;           #
-      #                                                                    #
-      #                                                                    #
-      #     # Use the first rex as key and call middleware                 #
-      #     my $rex=$pipeline->[0];                                        #
-      #     my $args=shift $seq->{$rex->[uSAC::HTTP::Rex::id_]}->@*;       #
-      #     $next->(@$args);                                               #
-      #                                                                    #
-      #     # If the CB was not set, then that was the end                 #
-      #     # of the rex so shift it off                                   #
-      #     unless ($args->[CB]){                                          #
-      #       shift @$pipeline;                                            #
-      #       delete $seq->{$rex->[uSAC::HTTP::Rex::id_]};                 #
-      #     }                                                              #
-      #   }                                                                #
-      #   else {                                                           #
-      #     # short cut.                                                   #
-      #     shift @$pipeline unless ($_[CB]);                              #
-      #     &$next;                                                        #
-      #   }                                                                #
-      #                                                                    #
-      # }                                                                  #
-      ######################################################################
   };
 
   my $error=sub {
