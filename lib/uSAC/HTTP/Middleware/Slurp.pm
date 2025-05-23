@@ -16,10 +16,6 @@ use File::Spec::Functions qw<catfile>;
 
 no warnings "experimental";
 
-#use URL::Encode::XS;
-#use URL::Encode qw<url_decode_utf8>;
-#use Cpanel::JSON::XS qw<encode_json decode_json>;
-
 
 use Export::These qw<uhm_slurp>;
 

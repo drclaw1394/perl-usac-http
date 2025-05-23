@@ -228,6 +228,7 @@ sub make_parser{
             Log::OK::DEBUG and log_debug  "New rex object: $rex";
             push @$pipeline, $rex;
             $out_header={};
+            $rex->[URI]=$uri;
             $rex->[METHOD]=$method;
 
             $rex->[SCHEME]="http";
@@ -326,12 +327,14 @@ sub make_parser{
 
           my $new=length($buf)-$processed;	#length of read buffer
 
+          Log::OK::TRACE and log_trace ("DOING BODY CONTENT......... $new");
           $new=$new>$body_len?$len:$new;		#clamp to content length
           $processed+=$new;			#track how much we have processed
 
           my $payload=substr $buf, 0, $new, "";
 
           if($processed==$body_len){
+            Log::OK::TRACE and log_trace ("DOING BODY CONTENT last ......... $new");
             #
             # Last send
             #
@@ -341,6 +344,7 @@ sub make_parser{
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
           }
           else {
+            Log::OK::TRACE and log_trace ("DOING BODY CONTENT not last ......... $new");
             # 
             # Not last send
             #
@@ -572,6 +576,8 @@ sub make_serialize{
       #RFC 6265 -> duplicate cookies with the same name not permitted in same
       #response
       # Special handling of set cookie header for multiple values
+      use Data::Dumper;
+      Log::OK::DEBUG and log_debug "out headers ". Dumper $_[OUT_HEADER];
       my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
       $reply->[0].= HTTP_SET_COOKIE().": ".$_.CRLF  for @$v;
 
@@ -590,7 +596,7 @@ sub make_serialize{
       $reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      Log::OK::DEBUG and log_debug "->Serialize: headers:";
+      Log::OK::DEBUG and log_debug "->Serialize: headers:\n $reply->[0]";
 
       # mark headers as done, if not informational
       #

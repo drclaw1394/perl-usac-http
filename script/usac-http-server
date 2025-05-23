@@ -10,7 +10,9 @@ use Log::OK;
 
 our $SERVER;
 
-use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Form Static Log Slurp Multipart>;
+use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Form Static Log Slurp Multipart State Authentication>;
+
+use HTTP::State::Cookie qw<:all>;
 
 my %options;
 my @static_headers;
@@ -127,7 +129,8 @@ sub run {
     headers=>\@static_headers
   );
 
-
+  $current->add_middleware(uhm_state);#, uhm_authentication);
+  $current->add_site(uhm_authentication);
   my $counter=0;
   my @unknown;
   my @roots;
@@ -162,6 +165,7 @@ sub run {
         $sites{$spec->{id}}=$new;
         $current->add_site($new);
         $current=$new;
+        #$current->add_middleware(uhm_state);
       }
 
       next;

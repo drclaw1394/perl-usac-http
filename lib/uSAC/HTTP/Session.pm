@@ -145,8 +145,8 @@ method init {
     $_id=undef;
 
     #If the dropper was called with an argument that indicates no error
-    #if($_[0] and @zombies < 100){
-    if(1){
+    if($_[0] and @zombies < 100){
+      #if(1){
       # NOTE: Complete reuses of a zombie may still be causing corruption
       # Suspect that the rex object is not being release intime 
       # when service static files.

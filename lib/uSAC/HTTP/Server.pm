@@ -144,15 +144,13 @@ field $_application_parser :param=undef;
 field $_total_requests;
 field $_static_headers :mutator;
 
-field $_sites :reader;   # Hash of unique sites (shared accros hosts)
-                         # Route files can query if a site exits
 
 
 
 BUILD {
   
   # Hash of all sites on this server (indexed by id)
-  $_sites={}; 
+  #$_sites={}; 
 
   # server is top level, set  default mime
 	$self->set_mime_db(uSAC::MIME->new); # set  and index
@@ -161,7 +159,7 @@ BUILD {
   $self->prefix="/";
   $self->id="/";
 
-  $_sites->{"/"}=$self; # Add top level (server to the sites)
+  $self->sites->{"/"}=$self; # Add top level (server to the sites)
 	$_host_tables={};
   $_zombies=[];
 	$_zombie_limit//=100;
@@ -874,7 +872,7 @@ method dump_routes {
 
 method site_for_id {
   my $id=shift;
-  return $_sites->{$id};
+  return $self->sites->{$id};
 }
 ###################################################################
 # # Returns unique sites from the route table.                    #

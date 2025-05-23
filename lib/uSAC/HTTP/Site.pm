@@ -78,6 +78,9 @@ field $_unsupported;
 field $_built_label;
 field $_label;
 
+field $_sites :reader;   # Hash of unique sites (shared accros hosts)
+                         # Route files can query if a site exits
+
 #field $_protocols;      # Hash of Proto name to API
 
 field $_secrets        :mutator; # Hash table of host(no port num) to tls structures
@@ -112,6 +115,7 @@ BUILD{
   # Ensure a site ID
   $_id//=$id++;
 
+  $_sites={}; 
   # ... and a prefix
   $_prefix//="";
 
@@ -689,6 +693,8 @@ method add_delegate {
   }
 }
 
+# Takes site objects also!!!
+#
 method add_route {
   my $del_meth;
 

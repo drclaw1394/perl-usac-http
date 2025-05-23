@@ -63,7 +63,9 @@ use Export::These qw<
   STATE
   SCRATCH
   AS_ERROR
-
+  AUTHENTICATION
+  REDIRECT
+  URI 
 >;
 
 
@@ -103,6 +105,9 @@ use constant::more qw<
   STATE
   SCRATCH
   AS_ERROR
+  AUTHENTICATION
+  REDIRECT
+  URI
 
   >
 ;
@@ -171,7 +176,7 @@ sub rex_site_url {
 	#my $url= $_[0][4][0]->built_prefix;
 	my $url= $_[ROUTE][REX][ROUTE_SITE]->built_prefix;
 	if($_[PAYLOAD]){
-		return "$url/$_[PAYLOAD]";
+		return "$url/$_[REX][URI]";
 	}
 	$url;
 	#$_[0][4][0]->built_prefix."/".($_[3]//"");
@@ -214,7 +219,7 @@ calling.
 
 =cut
 sub rex_redirect_moved{
-  my $url=$_[PAYLOAD];
+  my $url=$_[REX][REDIRECT];
   $_[REX][STATUS]=HTTP_MOVED_PERMANENTLY;
   for my ($k,$v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
     $_[OUT_HEADER]{$k}=$v;
@@ -237,7 +242,7 @@ calling.
 
 =cut
 sub rex_redirect_see_other{
-  my $url=$_[PAYLOAD];
+  my $url=$_[REX][REDIRECT];
   $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
 
   # If url is string and relative, relative to server root
@@ -266,7 +271,7 @@ calling.
 
 =cut
 sub rex_redirect_found {
-  my $url=$_[PAYLOAD];
+  my $url=$_[REX][REDIRECT];
   $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[REX][STATUS]=HTTP_FOUND;
 
@@ -293,7 +298,7 @@ calling.
 
 =cut
 sub rex_redirect_temporary {
-  my $url=$_[PAYLOAD];
+  my $url=$_[REX][REDIRECT];
   $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[REX][STATUS]=HTTP_TEMPORARY_REDIRECT;
 
@@ -318,7 +323,7 @@ chain will be halted immediately. Ensure code returns immediately after
 calling.
 =cut
 sub rex_redirect_permanent {
-    my $url=$_[PAYLOAD];
+    my $url=$_[REX][REDIRECT];
     $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
 
     $_[REX][STATUS]=HTTP_PERMANENT_REDIRECT;
@@ -381,16 +386,16 @@ sub rex_error {
   #Locate applicable site urls to handle the error
 
   for($site->error_uris->{$_[REX][STATUS]}//()){
-      $_[PAYLOAD]=my $a=$_;
+      #$_[PAYLOAD]=my $a=$_;
       $_[REX][AS_ERROR]=1;
+      $_[REX][REDIRECT]= $_;
       return &rex_redirect_internal
   }
 
   # No custom error page so render immediately 
   $_[PAYLOAD]="";
   $_[REX][serializer_]->&*;
-  #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
-  #&$s; 
+
   undef;
 
   # Add this for short hand middleware support. If the redirect is the last
@@ -462,12 +467,14 @@ execution by returning immediately after calling this routine.
 #TODO: recursion limit
 sub rex_redirect_internal {
 
-	my ($matcher, $rex, undef, undef, $uri)=@_;
+  #my ($matcher, $rex, undef, undef)=@_;
+  my $rex=$_[REX];
+  my $uri=$_[REX][REDIRECT];
+  $_[REX][URI]=$_[REX][REDIRECT];
   
   # If a scalar reference, 
   $uri=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$uri if ref $uri;
 
-	#state $previous_rex=$rex;
 	if(substr($uri,0,1) ne "/"){
 		$uri="/".$uri;	
 	}
@@ -476,8 +483,8 @@ sub rex_redirect_internal {
   # Should the code be force reset to -1 on internal redirect, or leave it to the
   # programmer?
   #
-  my $in_header=$_[IN_HEADER];
-  my $header=$_[OUT_HEADER]?{$_[OUT_HEADER]->%*}:{};
+  #my $in_header=$_[IN_HEADER];
+  #my $header=$_[OUT_HEADER]?{$_[OUT_HEADER]->%*}:{};
 
   $rex->[in_progress_]=1;
 
@@ -504,7 +511,12 @@ sub rex_redirect_internal {
     join(" ", $rex->[METHOD], $rex->[PATH]),#New method and url
   );
   
-  $route->[1][ROUTE_INNER_HEAD]($route, $rex, $in_header, $header, my $a="", my $b=undef);
+  # update route
+  $_[ROUTE]= $route;
+  $_[REX][uSAC::HTTP::Rex::route_]=$route;
+
+  $route->[1][ROUTE_INNER_HEAD]->&*;
+
   undef;
 }
 
@@ -592,7 +604,8 @@ sub new {
 	$self[recursion_count_]=0;
   $self[in_progress_]=undef;
   $self[id_]=$id++;
-  $self[STATE]={};
+  #$self[STATE]={};
+  $self[AUTHENTICATION]=[];
   #$self;
   \@self;
 }
