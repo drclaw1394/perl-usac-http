@@ -322,7 +322,6 @@ sub send_file_uri {
       #
       my $sz=($content_length-$total);
       $sz=$read_size if $sz>$read_size;
-      #my $reply="";
       #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset,  fh $in_fh";
       $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
       $offset+=$rc;
@@ -739,7 +738,7 @@ sub uhm_static_root {
                 $entry=$opener->($_path, $open_modes);#, \@suffix_indexes);
                 if($entry){
                   my $index=rindex $_path, ".";
-                  my $ext=substr $_path, $index+1;
+                  my $ext=lc substr $_path, $index+1;
                   $content_type=$mime->{$ext}//$default_mime;
                   $path=$_path;
                   last;
@@ -774,7 +773,7 @@ sub uhm_static_root {
             #
             Log::OK::TRACE and log_trace "Working on opening normal file";
             my $index=rindex $path, ".";
-            my $ext=substr $path, $index+1;
+            my $ext=lc substr $path, $index+1;
             $content_type=$mime->{$ext}//$default_mime;
 
 
