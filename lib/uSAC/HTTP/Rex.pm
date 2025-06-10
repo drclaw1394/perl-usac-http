@@ -243,7 +243,7 @@ calling.
 =cut
 sub rex_redirect_see_other{
   my $url=$_[REX][REDIRECT];
-  $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
+  $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
 
   # If url is string and relative, relative to server root
   # if ref to stirng and relative, relative to site
@@ -272,7 +272,10 @@ calling.
 =cut
 sub rex_redirect_found {
   my $url=$_[REX][REDIRECT];
-  $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
+  Log::OK::TRACE and log_trace " redirect side management route during call is: $_[ROUTE][0] site  $_[ROUTE][1][ROUTE_SITE] ";
+  Log::OK::TRACE and log_trace "REX redirect ROUTE SITE is ".$_[ROUTE][1][ROUTE_SITE];
+  Log::OK::TRACE and log_trace $url;
+  $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[REX][STATUS]=HTTP_FOUND;
 
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
@@ -299,7 +302,7 @@ calling.
 =cut
 sub rex_redirect_temporary {
   my $url=$_[REX][REDIRECT];
-  $url=join "/", $_[ROUTE][ROUTE_SITE]->built_prefix, $$url if ref $url;
+  $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
   $_[REX][STATUS]=HTTP_TEMPORARY_REDIRECT;
 
   for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){

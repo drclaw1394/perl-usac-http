@@ -392,7 +392,7 @@ method __adjust_matcher {
 # Resolve delegate-by-name middleware specs
 #
 method _wrap_middleware {
-  Log::OK::TRACE and log_trace __PACKAGE__. " _wrap_middleware";
+  Log::OK::TRACE and log_trace __PACKAGE__. " _wrap_middleware: @_";
 #my $self=shift;
   my @inner;
   my @outer;
@@ -480,8 +480,12 @@ method _wrap_middleware {
 
 
       $string='$_delegate->'.s/\$$//r;
-
+  
+      Log::OK::TRACE and log_trace "........DELEGATE STRING: $string";
+      
       my @a=eval $string;
+
+      Log::OK::TRACE and log_trace "=====DELEGATE evalSTRING: @a";
       die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
       unshift @_, @pre, @a;
     }

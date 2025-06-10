@@ -17,6 +17,8 @@ use uSAC::HTTP::Constants;
 use HTTP::State;
 use HTTP::State::Cookie qw<:all>;
 
+use uSAC::HTTP::Route;
+use Data::Dumper;
 
 use Export::These "uhm_state";
 
@@ -43,7 +45,7 @@ sub uhm_state {
         # If we have already setup state, skip
         return &$next if $_[REX][STATE];
         Log::OK::TRACE and log_trace " Server side state management";
-        use Data::Dumper;
+        Log::OK::TRACE and log_trace " Server side state management route is: $_[ROUTE][0] site  $_[ROUTE][1][ROUTE_SITE] ";
         #Log::OK::TRACE and log_trace "State decoded  for rex $_[REX] before: ".Dumper $_[REX];
 
         my $state=$_[REX][STATE]//={};

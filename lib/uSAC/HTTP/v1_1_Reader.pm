@@ -596,7 +596,7 @@ sub make_serialize{
       $reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      Log::OK::DEBUG and log_debug "->Serialize: headers:\n $reply->[0]";
+      Log::OK::DEBUG and log_debug "->Serialize: headers: $_[REX]\n $reply->[0]";
 
       # mark headers as done, if not informational
       #
@@ -613,7 +613,7 @@ sub make_serialize{
       else {
         $reply->[0].=$_[PAYLOAD];
       }
-      Log::OK::DEBUG and log_debug "HEADER AND BODY in serialize length: ". length($reply->[0]). "callback: $cb";
+      Log::OK::DEBUG and log_debug "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
 
       $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
     }
@@ -667,7 +667,7 @@ sub make_error {
       # Reset the serialize stack
       #
       my $c=$_[REX][uSAC::HTTP::Rex::write_];
-      $c->() if $c;
+      #$c->() if $c;
     }
   }
 }

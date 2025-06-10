@@ -27,9 +27,9 @@ field $_scheme :reader;
 field $_time :mutator;
 field $_closeme;
 field $_route;
-field $_rw;
-field $_ww;
-field $_wcb;
+#field $_rw;
+#field $_ww;
+#field $_wcb;
 #field $_left;
 field $_read;
 field $_write :mutator;
@@ -38,7 +38,7 @@ field @_read_stack;
 field @_write_stack;
 field $_current_reader;
 field $_read_cache;
-field $_writer_cached;
+#field $_writer_cached;
 field $_rex       :reader;        # Incoming stack/pipeline
 field $_sequence  :reader;   # Outgoing reordering
 field $_dropper;
@@ -81,6 +81,7 @@ method init {
     Log::OK::DEBUG and log_debug "IN s2  session sub";
     Log::OK::DEBUG and log_debug "Session s2 called from: ".join ", " , caller;
     $_sr->buffer="";
+    #$_sr->reset;
     #$_read_stack[-1](); 
     #$_parser->();   # THIS PUSHES 
     $_closeme=1; $_dropper->()
@@ -123,16 +124,6 @@ method init {
     }
     
     # Here we call the error middleware to allow each route/middleware section to clean up internal storage
-    use uSAC::HTTP::Constants;
-    use uSAC::HTTP::Route;
-    for (@$_rex){
-      my $route=$_->[uSAC::HTTP::Rex::route_];
-      Log::OK::DEBUG and log_debug "calling error middleware for rex $_";
-      Log::OK::DEBUG and log_debug "calling error middleware for rroute $route";
-      $route->[1][ROUTE_ERROR_HEAD]->($route, $_);
-    }
-
-    @$_rex=();
 
     #End of session transactions
     #
@@ -144,9 +135,22 @@ method init {
     $_fh=undef;
     $_id=undef;
 
+    use uSAC::HTTP::Constants;
+    use uSAC::HTTP::Route;
+    Log::OK::TRACE and log_trace "-------------- REXS @$_rex ---------";
+    for (@$_rex){
+      my $route=$_->[uSAC::HTTP::Rex::route_];
+      Log::OK::DEBUG and log_debug "calling error middleware for rex $_";
+      Log::OK::DEBUG and log_debug "calling error middleware for rroute $route";
+      $route->[1][ROUTE_ERROR_HEAD]->($route, $_);
+      $_=undef;
+    }
+
+    @$_rex=();
+
     #If the dropper was called with an argument that indicates no error
-    if($_[0] and @zombies < 100){
-      #if(1){
+    #if( undef==$_[0] and @zombies < 100){
+    if(1){
       # NOTE: Complete reuses of a zombie may still be causing corruption
       # Suspect that the rex object is not being release intime 
       # when service static files.
@@ -163,13 +167,13 @@ method init {
     else{
       #dropper was called without an argument. ERROR. Do not reuse 
       #
-      #########################
-      # $_dropper=undef;      #
-      # undef $_sr->on_eof;   #
-      # undef $_sr->on_error; #
-      # undef $_sw->on_error; #
-      # undef $self;          #
-      #########################
+      $_dropper=undef;
+      undef $_sr->on_eof;
+      undef $_sr->on_error;
+      undef $_sw->on_error;
+      $_sw->reset;
+      undef $_rex;
+      undef $self;
 
       Log::OK::DEBUG and log_debug "NO Pushed zombie";
     }

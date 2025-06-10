@@ -49,7 +49,7 @@ sub send_file_uri {
 
   my ($content_length, $mod_time)=($entry->[File::Meta::Cache::stat_][7], $entry->[File::Meta::Cache::stat_][9]);
 
-  my $reply="";
+  $reply="";
   #process caching headers
   my $headers=$_[IN_HEADER];
 
@@ -60,7 +60,7 @@ sub send_file_uri {
   my @ranges;
 
   # 
-  my $as_error= $out_headers->{":as_error"};
+  my $as_error= $rex->[AS_ERROR];
 
   #Ignore caching headers if we are processing as an error
   if(!$as_error){
@@ -110,10 +110,12 @@ sub send_file_uri {
 
   for my($k, $v)(
     $entry->[File::Meta::Cache::user_]->@*, 
-    HTTP_VARY, "Accept",
-    HTTP_ACCEPT_RANGES, "bytes"
+    #HTTP_VARY, "Accept", 
+    HTTP_ACCEPT_RANGES, "bytes" #// Even when used as cache, we can repsonde with byte range
   ){
-    $out_headers->{$k}=$v;
+    # NOTE: Only set headers if not already set. 
+    # Give caching system a change to do it thing!
+    $out_headers->{$k}//=$v;
   }
 
   if(!$as_error and $headers->{range}){
@@ -187,7 +189,11 @@ sub send_file_uri {
         HTTP_CONTENT_RANGE, "bytes $ranges[0][0]-$ranges[0][1]/$content_length",
         HTTP_CONTENT_LENGTH, $total_length
       ){
-        $out_headers->{$k}=$v;
+
+        # Allow cache to do its thing but only setting if it doesn't exist
+        #
+        $out_headers->{$k}//=$v;
+
       }
 
       $content_length=$total_length;
@@ -196,13 +202,15 @@ sub send_file_uri {
       shift @ranges;
     }
     else{
+      $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="multipart/byteranges";
       Log::OK::TRACE and log_trace "Range multiple .. not implemented";
 
     }
   }
   else {
     # process as error or non partial content
-    $out_headers->{HTTP_CONTENT_LENGTH()}= $content_length;
+    # Allow for caching
+    $out_headers->{HTTP_CONTENT_LENGTH()}//= $content_length;
   }
 
   Log::OK::TRACE and log_trace join ", ", %$out_headers;
@@ -211,7 +219,7 @@ sub send_file_uri {
     Log::OK::TRACE and log_trace "Range was head request";
     #$closer->(delete $ctx{$rex});
     my $t=delete $ctx{$rex};
-    $closer->($t);
+    $closer->($t->[0]);
     $next->($matcher, $rex, $in_header, $out_headers, "" );
     return;
   }
@@ -292,20 +300,19 @@ sub send_file_uri {
     my $count=0;
     my $sub;
     $sub=sub {
-      my $sub=__SUB__;
+      #Log::OK::TRACE and log_trace "--- MAIN STATIC CALLBACK for $rex from ".caller;
       $count++;
       #This is the callback for itself
       #if no arguments an error occured
       unless(@_){
-        #undef $sub;
-        #$closer->(delete $ctx{$rex});
-        Log::OK::TRACE and log_trace "Handing error in normal file read/copy/write for $rex";
+        Log::OK::TRACE and log_trace __PACKAGE__." Handing error in normal file read/copy/write for $rex";
+        #$rex->[uSAC::HTTP::Rex::closeme_]=1;
         #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
         #undef $rex;
         #
         my $t=delete $ctx{$rex};
-        $closer->($t);
-        $sub=undef;
+        $closer->($t->[0]);
+        @$t=();
         return;
       }
 
@@ -315,10 +322,12 @@ sub send_file_uri {
       #
       my $sz=($content_length-$total);
       $sz=$read_size if $sz>$read_size;
+      #my $reply="";
+      #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset,  fh $in_fh";
       $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
       $offset+=$rc;
 
-      Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}";
+      #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset,  fh $in_fh";
       #non zero read length.. do the write
 
       #When we have read the required amount of data
@@ -328,7 +337,7 @@ sub send_file_uri {
           Log::OK::TRACE and log_trace "Ranges to send still";
           return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {
               unless(@_){
-                return $sub->();
+                return __SUB__->();
               }
 
               #TODO: FIX MULTIPART RANGE RESPONSE
@@ -338,28 +347,32 @@ sub send_file_uri {
               $content_length=$r->[1];
 
               #write new multipart header
-              return $sub->(undef);           #Call with arg
+              __SUB__->(undef);
+              return;
             })
         }
         else{
           Log::OK::TRACE and log_trace "No more ranges to send";
-          #$closer->(delete $ctx{$rex});
+          Log::OK::TRACE and log_trace __PACKAGE__."------REMOVING CONTEXT before sending file $rex";
           my $t=delete $ctx{$rex};
-          $closer->($t);
-          $sub=undef;
-          return $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
+          $closer->($t->[0]);
+          $t->[1]=undef;
+          @$t=();
+          $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
+          return;
         }
       }
 
-      Log::OK::TRACE and log_trace "File content still remains to be sent";
+      #Log::OK::TRACE and log_trace "File content still remains to be sent";
 
       #Data read but more to do
       if($rc){
         if ($rex){
-          return $next->($matcher, $rex, $in_header, $out_headers, $reply, $sub);
+          $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__);
+          return;
         }
         else {
-          return undef $sub;
+          return;
         }
       }
 
@@ -371,14 +384,15 @@ sub send_file_uri {
         log_error "Error: $!";
         #$closer->(delete $ctx{$rex});
         my $t=delete $ctx{$rex};
-        $closer->($t);
-        $sub=undef;
+        $closer->($t->[0]);
+        $t->[1]=undef;
+        @$t=();
         $rex->[uSAC::HTTP::Rex::dropper_]->(1);
       }
     };
-    #$ctx{$rex}[1]=$sub; ## and sub to ctx
+    $ctx{$rex}[1]=$sub; ## and sub to ctx
     $sub->(undef); #call with an argument to prevent error
-    $sub=undef; # THIS IS IMPORTANT TO PRVENT MEMORY LEAKS
+    #$sub=undef; # THIS IS IMPORTANT TO PRVENT MEMORY LEAKS
   }
 }
 
@@ -575,6 +589,12 @@ sub uhm_static_root {
 
   \my @indexes=($options{index}//$options{indexes}//[]);
 
+  # If given a meta cache object, use it.  Otherwise create our own
+  # External meta cache give caching control to associated middleware
+  #
+  #
+  my $fmc=$options{meta_cache}//File::Meta::Cache->new(no_fh=>1);
+
   my @suffix_indexes;
   # Combinations of all pre encoded options. The unencoded form is last
   #
@@ -617,10 +637,6 @@ sub uhm_static_root {
 
   Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
 
-  # We want to use pread from IO::FD. That means we don't need the filehandle
-  # which saves some cpu time
-  #
-  my $fmc=File::Meta::Cache->new(no_fh=>1);
 
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
@@ -659,7 +675,7 @@ sub uhm_static_root {
     my $as_error;
     sub {
       if($_[OUT_HEADER]){
-        $as_error=$_[REX][AS_ERROR];#$_[OUT_HEADER]{":as_error"};
+        $as_error=$_[REX][AS_ERROR];
         # 
         # Path is either given with the rex object or passed in by the payload
         # middleware argument.
@@ -807,13 +823,15 @@ sub uhm_static_root {
             #
 
             $_[OUT_HEADER]{HTTP_CONTENT_ENCODING()}=$enc if $enc;
-            #Push any user static headers
+
+            # Push any user static headers common to this configuration
             #
             for my ($k, $v)(@$headers){
               $_[OUT_HEADER]{$k}=$v;
             }
 
-            $ctx{$_[REX]}=$entry;#[$entry, undef]; # Save this for error processing
+            $ctx{$_[REX]}=[$entry, undef]; # Save this for error processing
+            Log::OK::TRACE and log_trace __PACKAGE__."------SAVING CONTEXT before sending file $_[REX]";
 
             return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
           }
@@ -858,7 +876,10 @@ sub uhm_static_root {
       
       if($_[REX]){
         my $t=delete $ctx{$_[REX]};
-        $closer->($t);
+        $closer->($t->[0]);
+        Log::OK::DEBUG and log_debug " calling reset on $_[REX] ...on sub:".$t->[1];
+        $t->[1]->();
+        @$t=();
       }
 
       &$next;

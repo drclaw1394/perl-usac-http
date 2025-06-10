@@ -5,8 +5,6 @@ use warnings;
 use feature qw<refaliasing state>;
 no warnings "experimental";
 
-#no feature "indirect";
-#use uSAC::HTTP::Session;
 use Import::These qw<uSAC::HTTP:: Code Header Rex Route Constants>;
 
 use Time::HiRes qw<time>;
@@ -57,26 +55,26 @@ sub log_simple_in {
 		my $inner_next=shift;	#This is the next mw in the chain
 		sub {
 
-      return &$inner_next unless $_[OUT_HEADER];
-			my $time=time;
+      if($_[OUT_HEADER]){
+        my $time=time;
 
-      my @out=(
-        "<<<---",
-        "Arraval initial time:		$time",
-        "Original matched URI: 	$_[REX][PATH]",
-        #"Site relative URI:	$_[IN_HEADER]{':path_stripped'}",
-        "Matched for site:	".($_[ROUTE][1][ROUTE_SITE]->id//"n/a"),
-        "Hit counter:		$_[ROUTE][1][ROUTE_COUNTER]"
-      );
+        my @out=(
+          "<<<---",
+          "Arraval initial time:		$time",
+          "Original matched URI: 	$_[REX][PATH]",
+          #"Site relative URI:	$_[IN_HEADER]{':path_stripped'}",
+          "Matched for site:	".($_[ROUTE][1][ROUTE_SITE]->id//"n/a"),
+          "Hit counter:		$_[ROUTE][1][ROUTE_COUNTER]"
+        );
 
-      if($dump_headers){
-        push @out, "==Incomming Headers==","";
-        push @out, $dd->($_[IN_HEADER]);
+        if($dump_headers){
+          push @out, "==Incomming Headers==","";
+          push @out, $dd->($_[IN_HEADER]);
+        }
+
+        push @out, "";
+        Log::OK::INFO and log_info join "\n", @out;
       }
-
-      push @out, "";
-      Log::OK::INFO and log_info join "\n", @out;
-
 			&$inner_next;		#alway call next. this is just logging
 		}
 	};
@@ -92,15 +90,16 @@ sub log_simple_out {
 		my $outer_next=shift;
 		sub {
 			#matcher, rex, code, header, body, cb, arg
-      return &$outer_next unless $_[OUT_HEADER];
-      my @out;
-      push @out, "Depature time:		".time;
-      if($dump_headers){
-        push @out, "==Outgoing Headers==","";
-        push @out, $dd->($_[OUT_HEADER]);
+      if($_[OUT_HEADER]){
+        my @out;
+        push @out, "Depature time:		".time;
+        if($dump_headers){
+          push @out, "==Outgoing Headers==","";
+          push @out, $dd->($_[OUT_HEADER]);
+        }
+        push @out, "--->>>";
+        Log::OK::INFO and log_info join "\n", @out;
       }
-      push @out, "--->>>";
-      Log::OK::INFO and log_info join "\n", @out;
 
 			&$outer_next;
 		}

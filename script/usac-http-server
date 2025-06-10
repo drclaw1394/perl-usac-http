@@ -129,8 +129,8 @@ sub run {
     headers=>\@static_headers
   );
 
-  $current->add_middleware(uhm_state);#, uhm_authentication);
-  $current->add_site(uhm_authentication);
+  #$current->add_middleware(uhm_state);#, uhs_authentication);
+  #$current->add_site(uhs_authentication);
   my $counter=0;
   my @unknown;
   my @roots;
