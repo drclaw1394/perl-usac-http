@@ -850,6 +850,7 @@ sub uhm_static_root {
         $_[REX][STATUS]=HTTP_NOT_FOUND unless $as_error;
 
         $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
+        $_[CB]=undef; # No more data to follow 
         &$next;
       }
       else {
