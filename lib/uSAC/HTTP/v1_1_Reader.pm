@@ -85,7 +85,6 @@ sub make_parser{
   my $ex=$r->exports;
 
   \my $closeme=$ex->[0];
-  #my $dropper=$ex->[1];
   \my $self=$ex->[2];
 
   my $route;
@@ -526,9 +525,10 @@ sub make_serialize{
     # for HTTP/1.0 dropper is called on close anyhow.
     # saves call
     #
-    my $cb=$_[CB];#//$_[REX][uSAC::HTTP::Rex::dropper_];
+    my $cb=$_[CB];
 
     my $reply=[""];
+    #Log::OK::ERROR and log_error "IN SERIALIZE";
     if($_[OUT_HEADER]){
 
       # If no valid code is set then set default 200
@@ -576,8 +576,6 @@ sub make_serialize{
       #RFC 6265 -> duplicate cookies with the same name not permitted in same
       #response
       # Special handling of set cookie header for multiple values
-      use Data::Dumper;
-      Log::OK::DEBUG and log_debug "out headers ". Dumper $_[OUT_HEADER];
       my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
       $reply->[0].= HTTP_SET_COOKIE().": ".$_.CRLF  for @$v;
 
@@ -596,7 +594,7 @@ sub make_serialize{
       $reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      Log::OK::DEBUG and log_debug "->Serialize: headers: $_[REX]\n $reply->[0]";
+      Log::OK::ERROR and log_error "->Serialize: headers: $_[REX]\n$reply->[0]";
 
       # mark headers as done, if not informational
       #
@@ -613,7 +611,7 @@ sub make_serialize{
       else {
         $reply->[0].=$_[PAYLOAD];
       }
-      Log::OK::DEBUG and log_debug "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
+      Log::OK::ERROR and log_error "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
 
       $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
     }

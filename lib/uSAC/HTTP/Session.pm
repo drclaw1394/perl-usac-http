@@ -51,6 +51,7 @@ field $_read_size;
 field $_parser;
 field $_serializer;
 field $_error;
+field $_do_error;
 
 #field $_on_body;
 
@@ -77,11 +78,11 @@ method init {
   # };                            #
   #################################
 
-  my $s2=sub {
-    Log::OK::DEBUG and log_debug "IN s2  session sub";
-    Log::OK::DEBUG and log_debug "Session s2 called from: ".join ", " , caller;
+  $_do_error=sub {
+    Log::OK::DEBUG and log_debug "IN do_Error  session sub";
+    Log::OK::DEBUG and log_debug "Session do_Error called from: ".join ", " , caller;
     $_sr->buffer="";
-    #$_sr->reset;
+    $_sw->reset;
     #$_read_stack[-1](); 
     #$_parser->();   # THIS PUSHES 
     $_closeme=1; $_dropper->()
@@ -90,8 +91,8 @@ method init {
   $_sr=uSAC::IO::SReader::create(
     fh=>$_fh,
     max_read_size=>$_read_size//MAX_READ_SIZE,
-    on_eof =>$s2,
-    on_error=>$s2,
+    on_eof =>sub { Log::OK::ERROR and log_error "End of file..... @_"; &$_do_error },
+    on_error=>sub {Log::OK::ERROR and log_error "ON error .... @_"; &$_do_error},
     time=>\$_time,
     clock=>\$Time,
     on_read=>undef,
@@ -110,10 +111,11 @@ method init {
   #if a true value is present then no dropping is performed
   #if a false or non existent value is present, session is closed
   $_dropper=sub {
-    Log::OK::DEBUG and log_debug "Session: Dropper start";
-    #Log::OK::DEBUG and log_debug "Session: args: @_";
-    Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";
-    Log::OK::DEBUG and log_debug "Session dropper called from: ".join ", " , caller;
+    ####################################################################################
+    # Log::OK::DEBUG and log_debug "Session: Dropper start";                           #
+    # Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";                      #
+    # Log::OK::DEBUG and log_debug "Session dropper called from: ".join ", " , caller; #
+    ####################################################################################
 
     $_fh or return;	#don't drop if already dropped
     #shift @$_rex; #shift rex pipeline
@@ -127,7 +129,7 @@ method init {
 
     #End of session transactions
     #
-    Log::OK::DEBUG and log_debug "Session: Dropper ".$_id;
+    #Log::OK::DEBUG and log_debug "Session: Dropper ".$_id;
     $_sr->pause;
     $_sw->pause;
     delete $_sessions->{$_id};
@@ -137,11 +139,11 @@ method init {
 
     use uSAC::HTTP::Constants;
     use uSAC::HTTP::Route;
-    Log::OK::TRACE and log_trace "-------------- REXS @$_rex ---------";
+    #Log::OK::TRACE and log_trace "-------------- REXS @$_rex ---------";
     for (@$_rex){
       my $route=$_->[uSAC::HTTP::Rex::route_];
       Log::OK::DEBUG and log_debug "calling error middleware for rex $_";
-      Log::OK::DEBUG and log_debug "calling error middleware for rroute $route";
+      #Log::OK::DEBUG and log_debug "calling error middleware for rroute $route";
       $route->[1][ROUTE_ERROR_HEAD]->($route, $_);
       $_=undef;
     }
@@ -158,24 +160,37 @@ method init {
       # see if that fixes the issue.
       # Otherwise comment out the line below
       unshift @zombies, $self;
-      Log::OK::DEBUG and log_debug "Pushed zombie";
-      Log::OK::DEBUG and log_debug "Session: refcount:".SvREFCNT($self);	
-      Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
+      ###################################################################################
+      # Log::OK::DEBUG and log_debug "Pushed zombie";                                   #
+      # Log::OK::DEBUG and log_debug "Session: refcount:".SvREFCNT($self);              #
+      # Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper); #
+      ###################################################################################
       #use Devel::Cycle;
   #find_cycle($_dropper);
     }
     else{
+      Log::OK::TRACE and log_trace "Ref count for session         ".SvREFCNT($self);
+      Log::OK::TRACE and log_trace "sr is $_sr";
+      Log::OK::TRACE and log_trace "sw is $_sw";
+      $_sr->destroy();
+      #find_cycle($_sw);
+      $_sr=undef;
+
+      $_write=undef;
+      $_sw->destroy();
+      $_sw=undef;
       #dropper was called without an argument. ERROR. Do not reuse 
       #
       $_dropper=undef;
-      undef $_sr->on_eof;
-      undef $_sr->on_error;
-      undef $_sw->on_error;
-      $_sw->reset;
+
       undef $_rex;
       undef $self;
+      $_route=undef;
+      $_do_error=undef;
+      $_rex=undef;
 
       Log::OK::DEBUG and log_debug "NO Pushed zombie";
+      use Devel::Cycle;
     }
 
     Log::OK::DEBUG and log_debug "Session: zombies: ".@zombies;
@@ -190,7 +205,7 @@ method init {
 
   $_sw=uSAC::IO::SWriter::create(
     fh=>$_fh,
-    on_error=>$s2,#$_dropper,
+    on_error=>$_do_error,#$_dropper,
     time=>\$_time,
     clock=>\$Time,
     syswrite=>\&IO::FD::syswrite
@@ -218,11 +233,14 @@ method revive {
 	$_closeme=undef;
 
 	$_sr->start($_fh);
-	$_sw->set_write_handle($_fh);
+  $_sw->set_write_handle($_fh);
 	
 	#return $self;
 }
 
+method error {
+  $_do_error->();
+}
 method drop {
 	$_dropper->(@_);
 }

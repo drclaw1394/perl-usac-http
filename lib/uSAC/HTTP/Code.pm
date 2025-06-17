@@ -22,7 +22,7 @@ BEGIN {
 		"Non-Authoritative Information"=>203,
 		"No Content"=>204,
 		"Reset Content"=>205,
-		"Partial_Content"=>206,
+		"Partial Content"=>206,
 		"Multi-Staus"=>207,
 		"Already Reported"=>208,
 		"IM Used"=>226,

@@ -45,7 +45,7 @@ sub send_file_uri {
 
 
   $rex->[uSAC::HTTP::Rex::in_progress_]=1;
-  my $in_fh=$entry->[File::Meta::Cache::fd_];
+  # my $in_fh=$entry->[File::Meta::Cache::fd_];
 
   my ($content_length, $mod_time)=($entry->[File::Meta::Cache::stat_][7], $entry->[File::Meta::Cache::stat_][9]);
 
@@ -117,6 +117,8 @@ sub send_file_uri {
     # Give caching system a change to do it thing!
     $out_headers->{$k}//=$v;
   }
+            use Data::Dumper;
+            Log::OK::ERROR and log_error Dumper $out_headers;
 
   if(!$as_error and $headers->{range}){
     Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{range}";
@@ -179,7 +181,7 @@ sub send_file_uri {
     }
     elsif(@ranges==1){
       Log::OK::TRACE and log_trace "Range Single";
-      $rex->[STATUS]=HTTP_PARTIAL_CONTENT;
+      $rex->[STATUS]=HTTP_PARTIAL_CONTENT();
 
       my $total_length=0;
       $total_length+=($_->[1]-$_->[0]+1) for @ranges;
@@ -198,7 +200,7 @@ sub send_file_uri {
 
       $content_length=$total_length;
       $offset= $ranges[0][0];
-      Log::OK::TRACE and log_trace "Content length for single range: $content_length, offset $offset";
+      Log::OK::ERROR and log_error "Content length for single range: $content_length, offset $offset";
       shift @ranges;
     }
     else{
@@ -213,7 +215,7 @@ sub send_file_uri {
     $out_headers->{HTTP_CONTENT_LENGTH()}//= $content_length;
   }
 
-  Log::OK::TRACE and log_trace join ", ", %$out_headers;
+  Log::OK::ERROR and log_error join ", ", %$out_headers;
 
   if(($rex->[METHOD] eq "HEAD" or $rex->[STATUS]==HTTP_NOT_MODIFIED)){
     Log::OK::TRACE and log_trace "Range was head request";
@@ -238,7 +240,8 @@ sub send_file_uri {
 
     $do_sendfile=sub {
       Log::OK::TRACE  and log_trace "Doing send file";
-      $total+=$rc=IO::FD::sendfile($out_fh, $in_fh, $read_size, $offset);
+      $total+=$rc=IO::FD::sendfile($out_fh, $entry->[File::Meta::Cache::fd_], $read_size, $offset);
+
       $offset+=$rc;
 
       #non zero read length.. do the write
@@ -255,7 +258,8 @@ sub send_file_uri {
           &__SUB__;	#restart
           return;	
         }
-        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        $rex->[uSAC::HTTP::Rex::session_]->error();;
         $do_sendfile=undef;
         $out_fh=undef;
         $ww=undef;
@@ -269,7 +273,8 @@ sub send_file_uri {
       elsif( $! != EAGAIN and  $! != EINTR and $! != EBUSY){
         #log_error "Send file error $!";
         $ww=undef;
-        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        $rex->[uSAC::HTTP::Rex::session_]->error();;
         $do_sendfile=undef;
         #return;
       }
@@ -306,10 +311,6 @@ sub send_file_uri {
       #if no arguments an error occured
       unless(@_){
         Log::OK::TRACE and log_trace __PACKAGE__." Handing error in normal file read/copy/write for $rex";
-        #$rex->[uSAC::HTTP::Rex::closeme_]=1;
-        #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
-        #undef $rex;
-        #
         my $t=delete $ctx{$rex};
         $closer->($t->[0]);
         @$t=();
@@ -321,9 +322,10 @@ sub send_file_uri {
       #NON Send file
       #
       my $sz=($content_length-$total);
-      $sz=$read_size if $sz>$read_size;
+      $sz=$read_size;# if $sz>$read_size;
       #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset,  fh $in_fh";
-      $total+=$rc=IO::FD::pread $in_fh, $reply, $sz, $offset;
+      $total+=$rc=IO::FD::pread $entry->[File::Meta::Cache::fd_], $reply, $sz, $offset;
+      #Log::OK::TRACE and log_trace "Size of read is $sz,  offset id $offset rc is $rc  for rex $rex";
       $offset+=$rc;
 
       #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset,  fh $in_fh";
@@ -351,11 +353,12 @@ sub send_file_uri {
             })
         }
         else{
+          log_error "Headers with complete file send ". Dumper $out_headers;
           Log::OK::TRACE and log_trace "No more ranges to send";
           Log::OK::TRACE and log_trace __PACKAGE__."------REMOVING CONTEXT before sending file $rex";
           my $t=delete $ctx{$rex};
           $closer->($t->[0]);
-          $t->[1]=undef;
+          #$t->[1]=undef;
           @$t=();
           $next->($matcher, $rex, $in_header, $out_headers, $reply, undef);
           return;
@@ -366,13 +369,20 @@ sub send_file_uri {
 
       #Data read but more to do
       if($rc){
+        #Log::OK::TRACE and log_trace "We have a and RC $rc";
         if ($rex){
+          log_error "Headers with incomplete file send ". Dumper $out_headers if $out_headers;
+
           $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__);
           return;
         }
         else {
+          log_error " NO REX in ....";
           return;
         }
+      }
+      else{
+        Log::OK::TRACE and log_trace "DO NOT HAVE RC $rc";
       }
 
 
@@ -381,17 +391,12 @@ sub send_file_uri {
       if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
         log_error "Static files: READ ERROR from file";
         log_error "Error: $!";
-        #$closer->(delete $ctx{$rex});
-        my $t=delete $ctx{$rex};
-        $closer->($t->[0]);
-        $t->[1]=undef;
-        @$t=();
-        $rex->[uSAC::HTTP::Rex::dropper_]->(1);
+        Log::OK::ERROR and log_error Dumper $entry;
+        $rex->[uSAC::HTTP::Rex::session_]->error();;
       }
     };
     $ctx{$rex}[1]=$sub; ## and sub to ctx
     $sub->(undef); #call with an argument to prevent error
-    #$sub=undef; # THIS IS IMPORTANT TO PRVENT MEMORY LEAKS
   }
 }
 
@@ -642,7 +647,9 @@ sub uhm_static_root {
   my $sweeper=$fmc->sweeper;
   #$fmc->disable;
 
-  my $timer=uSAC::IO::timer 0, 10, sub { $sweeper->() };
+  my $timer=uSAC::IO::timer 0, 10, sub { 
+    #$sweeper->()
+  };
 
   # Register for gracefull shutdown. No new connections should be accepted
 
@@ -875,11 +882,9 @@ sub uhm_static_root {
 
       
       if($_[REX]){
-        my $t=delete $ctx{$_[REX]};
-        $closer->($t->[0]);
+        my $t=$ctx{$_[REX]};
         Log::OK::DEBUG and log_debug " calling reset on $_[REX] ...on sub:".$t->[1];
-        $t->[1]->();
-        @$t=();
+        $t->[1]->(); # Call the main sub with no args... which indicates error?
       }
 
       &$next;
