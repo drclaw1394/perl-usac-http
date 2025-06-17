@@ -91,8 +91,8 @@ method init {
   $_sr=uSAC::IO::SReader::create(
     fh=>$_fh,
     max_read_size=>$_read_size//MAX_READ_SIZE,
-    on_eof =>sub { Log::OK::ERROR and log_error "End of file..... @_"; &$_do_error },
-    on_error=>sub {Log::OK::ERROR and log_error "ON error .... @_"; &$_do_error},
+    on_eof =>$_do_error, #sub { Log::OK::ERROR and log_error "End of file..... @_"; &$_do_error },
+    on_error=>$_do_error, #sub {Log::OK::ERROR and log_error "ON error .... @_"; &$_do_error},
     time=>\$_time,
     clock=>\$Time,
     on_read=>undef,

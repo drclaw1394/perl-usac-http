@@ -117,8 +117,6 @@ sub send_file_uri {
     # Give caching system a change to do it thing!
     $out_headers->{$k}//=$v;
   }
-            use Data::Dumper;
-            Log::OK::ERROR and log_error Dumper $out_headers;
 
   if(!$as_error and $headers->{range}){
     Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{range}";
@@ -200,7 +198,7 @@ sub send_file_uri {
 
       $content_length=$total_length;
       $offset= $ranges[0][0];
-      Log::OK::ERROR and log_error "Content length for single range: $content_length, offset $offset";
+      Log::OK::TRACE and log_trace "Content length for single range: $content_length, offset $offset";
       shift @ranges;
     }
     else{
@@ -215,7 +213,6 @@ sub send_file_uri {
     $out_headers->{HTTP_CONTENT_LENGTH()}//= $content_length;
   }
 
-  Log::OK::ERROR and log_error join ", ", %$out_headers;
 
   if(($rex->[METHOD] eq "HEAD" or $rex->[STATUS]==HTTP_NOT_MODIFIED)){
     Log::OK::TRACE and log_trace "Range was head request";
@@ -271,7 +268,6 @@ sub send_file_uri {
         #return;
       }
       elsif( $! != EAGAIN and  $! != EINTR and $! != EBUSY){
-        #log_error "Send file error $!";
         $ww=undef;
         #$rex->[uSAC::HTTP::Rex::dropper_]->(1);
         $rex->[uSAC::HTTP::Rex::session_]->error();;
@@ -353,7 +349,6 @@ sub send_file_uri {
             })
         }
         else{
-          log_error "Headers with complete file send ". Dumper $out_headers;
           Log::OK::TRACE and log_trace "No more ranges to send";
           Log::OK::TRACE and log_trace __PACKAGE__."------REMOVING CONTEXT before sending file $rex";
           my $t=delete $ctx{$rex};
@@ -371,7 +366,6 @@ sub send_file_uri {
       if($rc){
         #Log::OK::TRACE and log_trace "We have a and RC $rc";
         if ($rex){
-          log_error "Headers with incomplete file send ". Dumper $out_headers if $out_headers;
 
           $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__);
           return;
