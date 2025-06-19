@@ -509,8 +509,8 @@ method make_stream_accept {
       $session_id++;
     }
 
-    @{$fhs}=();
-    @{$peers}=();
+    #@{$fhs}=();
+    #@{$peers}=();
   }
 }
 

@@ -7,7 +7,7 @@ no warnings "experimental";
 use uSAC::Log;
 use Log::OK;
 
-use Devel::Peek qw<SvREFCNT>;
+#use Devel::Peek qw<SvREFCNT>;
 use uSAC::IO;
 use uSAC::IO::SReader;
 use uSAC::IO::SWriter;
@@ -165,13 +165,9 @@ method init {
       # Log::OK::DEBUG and log_debug "Session: refcount:".SvREFCNT($self);              #
       # Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper); #
       ###################################################################################
-      #use Devel::Cycle;
   #find_cycle($_dropper);
     }
     else{
-      Log::OK::TRACE and log_trace "Ref count for session         ".SvREFCNT($self);
-      Log::OK::TRACE and log_trace "sr is $_sr";
-      Log::OK::TRACE and log_trace "sw is $_sw";
       $_sr->destroy();
       #find_cycle($_sw);
       $_sr=undef;
@@ -190,13 +186,10 @@ method init {
       $_rex=undef;
 
       Log::OK::DEBUG and log_debug "NO Pushed zombie";
-      use Devel::Cycle;
     }
 
     Log::OK::DEBUG and log_debug "Session: zombies: ".@zombies;
 
-    #Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($self);	
-    #Log::OK::DEBUG and log_debug "Session: Dropper: refcount:".SvREFCNT($_dropper);	
 
     Log::OK::DEBUG and log_debug "Session: Dropper end";
 
