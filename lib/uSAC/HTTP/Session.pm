@@ -79,7 +79,7 @@ method init {
   #################################
 
   $_do_error=sub {
-    Log::OK::DEBUG and log_debug "IN do_Error  session sub";
+    Log::OK::DEBUG and log_debug "IN do_Error  session: $_id";
     Log::OK::DEBUG and log_debug "Session do_Error called from: ".join ", " , caller;
     $_sr->buffer="";
     $_sw->reset;
@@ -331,8 +331,10 @@ my $timer=uSAC::IO::timer 0, 1, sub {
 };
 
 uSAC::Main::usac_listen("server/shutdown/graceful", sub {
-    Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN SESSION';
-    uSAC::IO::cancel $timer;
+    if($timer){
+      uSAC::IO::cancel $timer;
+      Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN SESSION';
+    }
 });
 
 

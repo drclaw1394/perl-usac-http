@@ -262,7 +262,12 @@ sub run {
       my @parts=split /,/, $_;
       my @middle;
       for(@parts){
+        local $@;
         my @e=eval $_;
+        if($@){
+          Log::OK::FATAL and log_fatal $@;
+          die;
+        }
         push @middle, @e?@e:$_;
       }
       Log::OK::INFO and log_info "--MIDDLE WARES: @middle";

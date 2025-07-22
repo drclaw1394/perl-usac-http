@@ -759,16 +759,22 @@ method run {
 
   if($_workers){
     for(1..$_workers){
-      my $pid=fork;
-      if($pid){
-        #server
-      }
-      else {
-        #child, start accepting only on workers
-        $self->prepare;
-        last;
-      }
+      
+      uSAC::Worker->new(work=> sub {$self->prepare});
+
+      #############################################
+      # my $pid=fork;                             #
+      # if($pid){                                 #
+      #   #server                                 #
+      # }                                         #
+      # else {                                    #
+      #   #child, start accepting only on workers #
+      #   $self->prepare;                         #
+      #   last;                                   #
+      # }                                         #
+      #############################################
     }
+
   }
   else {
         $self->prepare;
