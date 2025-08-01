@@ -364,6 +364,7 @@ method prepare {
 	#setup timer for constructing date header once a second
   #my ($self)=shift;
 
+	$self->do_accept;
   #Start the acceptors running on this worker 
   $_->start for(values $_aws->%*);
   
@@ -417,7 +418,8 @@ method prepare {
 # 
 method do_accept{
   #Accept is only for SOCK_STREAM 
-  Log::OK::DEBUG and log_debug __PACKAGE__. " Accepting connections";
+  #Log::OK::DEBUG and log_debug 
+  Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
 
   my $do_client=$self->make_stream_accept;
 
@@ -729,7 +731,7 @@ method run {
   }
   
 	$self->do_passive;
-	$self->do_accept;
+  #$self->do_accept;
 
 	$self->dump_listeners;
   
@@ -761,9 +763,10 @@ method run {
 
   if($_workers){
     for(1..$_workers){
-      
-      push @$_pool, uSAC::Worker->new(work=> sub {$self->prepare});
+      Log::OK::TRACE and log_trace "-----PUSHING NEW WORKER--"; 
+      push @$_pool, uSAC::Worker->new(rpc=>{}, work=> sub {$self->prepare});
 
+      Log::OK::TRACE and log_trace "-----AFTER NeW WORKER"; 
       #############################################
       # my $pid=fork;                             #
       # if($pid){                                 #
