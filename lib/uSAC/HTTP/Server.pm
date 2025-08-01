@@ -138,6 +138,7 @@ field $_server_clock;
 field $_mime;
 field $_sub_product :param="ductapeXchansaw";
 field $_workers :mutator :param=0;
+field $_pool;
 #field $_cv;
 field $_options :reader;
 field $_application_parser :param=undef;
@@ -149,6 +150,7 @@ field $_static_headers :mutator;
 
 BUILD {
   
+  $_pool=[];
   # Hash of all sites on this server (indexed by id)
   #$_sites={}; 
 
@@ -760,7 +762,7 @@ method run {
   if($_workers){
     for(1..$_workers){
       
-      uSAC::Worker->new(work=> sub {$self->prepare});
+      push @$_pool, uSAC::Worker->new(work=> sub {$self->prepare});
 
       #############################################
       # my $pid=fork;                             #
