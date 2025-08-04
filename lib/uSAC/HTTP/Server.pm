@@ -406,6 +406,17 @@ method prepare {
   
   #alarm $interval;
   Log::OK::INFO and log_info "Accepting connections on PID: $$";
+
+
+  # Hustle::Table cache management NOTE: Hustle table caches matching inputs.
+  # Any routes with wide ranging regex will grow the table very quickly.
+  # Here we flush to ensure it is kept under control
+  #
+  for my ($k,$v)(%$_host_tables){
+    # Clear the cached table lookup
+    $v->[1]->%*=();
+  }
+
 }
 
 

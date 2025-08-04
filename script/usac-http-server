@@ -340,15 +340,6 @@ sub run {
     my $sig;$sig=uSAC::IO::signal(INT=> \&uSAC::REPL::pause);
   }
   
-#####################################################
-# uSAC::IO::getaddrinfo("google.com",80, {}, sub {  #
-# use Data::Dumper;                                 #
-#     uSAC::IO::asay $STDERR, "GAI RETURN--------"; #
-#     uSAC::IO::asay $STDERR, Dumper @_[0];         #
-#     }                                             #
-#     );                                            #
-#####################################################
-
 }
 
 __END__

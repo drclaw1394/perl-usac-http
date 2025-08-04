@@ -26,7 +26,6 @@ sub decode_urlencoded_form {
   }
   \%kv;
 }
-        use Data::Dumper;
         use uSAC::IO;
 
 # Basic wrapper to simply give the key value pairs from slurped url

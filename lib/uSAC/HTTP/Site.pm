@@ -426,7 +426,6 @@ method _wrap_middleware {
       Log::OK::TRACE and log_trace __PACKAGE__. " ARRAY ref. Unwrap as inner and outerware";
       #check at least for one code ref
       if(ref($_->[0]) ne "CODE"){
-        use Data::Dumper;
         Log::OK::TRACE and log_trace "INNER WARE NOT CODE REF";
         $_->[0]=sub { state $next=shift};  #Force short circuit
       }
@@ -492,13 +491,9 @@ method _wrap_middleware {
     else {
       #Ignore anything else
       #TODO: check of PSGI middleware and wrap
-  use Data::Dumper;
-      Log::OK::TRACE and log_trace Dumper "IGNORED--------+++++";
     }
   }
 
-  Log::OK::TRACE and log_trace Dumper @inner-0;;
-  Log::OK::TRACE and log_trace Dumper @inner;
 
   # Return references
   (\@inner, \@outer, \@error);

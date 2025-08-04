@@ -18,7 +18,6 @@ use HTTP::State;
 use HTTP::State::Cookie qw<:all>;
 
 use uSAC::HTTP::Route;
-use Data::Dumper;
 
 use Export::These "uhm_state";
 

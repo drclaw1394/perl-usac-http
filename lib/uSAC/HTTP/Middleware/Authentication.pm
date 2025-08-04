@@ -14,7 +14,6 @@ use uSAC::Log;
 
 use Cpanel::JSON::XS;
 use Crypt::JWT;
-use Data::Dumper;
 
 
 
@@ -100,7 +99,6 @@ sub uhs_authentication {
         if($auth->[1] and !$auth->[2]){
           # data is valid and not expired . CONTINUE THROUGH MIDDLEWARE CHAIN
           Log::OK::TRACE and log_trace "---AUTHENTICATION OK CONTINUES=-----";
-          Log::OK::TRACE and log_trace Dumper $auth;
 
           return &$next;
         }
@@ -205,9 +203,9 @@ sub uhs_authentication {
         my $username=$_[PAYLOAD][0][1]{username};
         my $password=$_[PAYLOAD][0][1]{password};
 
-        $_[PAYLOAD]= Dumper $_[PAYLOAD];
+        #$_[PAYLOAD]= Dumper $_[PAYLOAD];
         $_[PAYLOAD].= "Username is $username, password is $password";
-        $_[PAYLOAD].= Dumper $_[REX][STATE];
+        #$_[PAYLOAD].= Dumper $_[REX][STATE];
 
 
         # Decode the form
@@ -229,7 +227,7 @@ sub uhs_authentication {
     );
 
     $login_site->add_route("POST", "logout",  uhm_decode_form, sub {
-        $_[PAYLOAD]= Dumper $_[PAYLOAD];
+        #$_[PAYLOAD]= Dumper $_[PAYLOAD];
 
         # redirect to home page
         #
@@ -242,7 +240,7 @@ sub uhs_authentication {
 
     # Static files for log in
     $protected_site->add_route("GET", "test", sub {
-        $_[PAYLOAD]=Dumper $_[REX][AUTHENTICATION];
+        #$_[PAYLOAD]=Dumper $_[REX][AUTHENTICATION];
         1
       }
     );
