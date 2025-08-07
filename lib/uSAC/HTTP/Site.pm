@@ -642,7 +642,7 @@ method add_site {
 method child_site {
   my $root=$self->find_root;
   my $child=uSAC::HTTP::Site->new(parent_site=> $self);
-  $root->sites->{$child->id}=$child;
+  $self->add_site($child);
   $child;
 }
 

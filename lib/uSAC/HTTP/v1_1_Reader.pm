@@ -594,7 +594,7 @@ sub make_serialize{
       $reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      Log::OK::TRACE and log_trace "->Serialize: headers: $_[REX]\n$reply->[0]";
+      #Log::OK::TRACE and log_trace "->Serialize: headers: $_[REX]\n$reply->[0]";
 
       # mark headers as done, if not informational
       #
