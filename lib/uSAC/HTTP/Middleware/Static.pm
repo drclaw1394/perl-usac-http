@@ -301,7 +301,7 @@ sub send_file_uri {
     my $count=0;
     my $sub;
     $sub=sub {
-      #Log::OK::TRACE and log_trace "--- MAIN STATIC CALLBACK for $rex from ".caller;
+      Log::OK::TRACE and log_trace __SUB__."--- MAIN STATIC CALLBACK for $rex from ".caller;
       $count++;
       #This is the callback for itself
       #if no arguments an error occured
@@ -324,7 +324,7 @@ sub send_file_uri {
       #Log::OK::TRACE and log_trace "Size of read is $sz,  offset id $offset rc is $rc  for rex $rex";
       $offset+=$rc;
 
-      #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset,  fh $in_fh";
+      #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset";
       #non zero read length.. do the write
 
       #When we have read the required amount of data
@@ -364,7 +364,7 @@ sub send_file_uri {
 
       #Data read but more to do
       if($rc){
-        #Log::OK::TRACE and log_trace "We have a and RC $rc";
+        Log::OK::TRACE and log_trace "We have a and RC $rc";
         if ($rex){
 
           $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__);

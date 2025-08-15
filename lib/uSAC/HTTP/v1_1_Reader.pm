@@ -627,9 +627,11 @@ sub make_serialize{
     }
     else{
       #Log::OK::DEBUG and log_debug "BODYONLY in serialize. length: ". length $_[PAYLOAD];
+      #Log::OK::DEBUG and log_debug "cb is $cb";
       # No header specified. Just a body
       #
       if($ctx//=$out_ctx{$_[REX]}){
+        #Log::OK::DEBUG and log_debug "chunked write... ";
         $reply->[0]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
 
         unless($_[CB]){
@@ -642,7 +644,8 @@ sub make_serialize{
         $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
       }
       else{
-        Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
+        #Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
+        #Log::OK::DEBUG and log_debug "normal write $cb";
         # not chunked, so just write
         $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
       }
