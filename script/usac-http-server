@@ -129,6 +129,16 @@ sub run {
     headers=>\@static_headers
   );
 
+  # DEBUG#
+  #
+  use Devel::MAT::Dumper;
+  $current->add_route("dump", sub {
+      use Devel::MAT::Dumper;
+      asay $STDERR, "DUMPING MAT FILE";
+      Devel::MAT::Dumper::dump("pmat.dat");
+      1;
+    });
+
   #$current->add_middleware(uhm_state);#, uhs_authentication);
   #$current->add_site(uhs_authentication);
   my $counter=0;

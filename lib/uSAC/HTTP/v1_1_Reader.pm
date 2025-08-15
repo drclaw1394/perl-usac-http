@@ -92,6 +92,9 @@ sub make_parser{
   my $pipeline=$ex->[3];
   
 
+  use Scalar::Util qw<weaken>;
+  weaken $r;
+
   my ($state, $seq) = ($start_state, 0);
   my ($method, $uri, $version, $len, $pos, $req);
   my $line;
@@ -123,9 +126,13 @@ sub make_parser{
   #TODO: this needs to be an argument supplied by the server
   # Currently set from the PSGI middleware
 
+  #use Scalar::Util qw<weaken>;
+  #weaken $r;
   sub {
+    #log_trace "--- TOP OF PARSER";
+    #log_trace "--- pipeline is ".$pipeline->@*;
     my $processed=0;
-    my $rex=$pipeline->[$pipeline->@*-1];
+    my $rex;#=$pipeline->[$pipeline->@*-1];
 
     # Set default HTTP code
     $code=-1;
@@ -473,6 +480,7 @@ sub make_serialize{
   my $i=1;
   my $ctx;
 
+  my $dummy_cb=sub {};
 
   sub {
         
@@ -613,7 +621,9 @@ sub make_serialize{
       }
       Log::OK::TRACE and log_trace "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
 
-      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      #Log::OK::TRACE and log_trace "--- dropper is currently ". $_[REX][uSAC::HTTP::Rex::dropper_];
+      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+      #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$_[REX][uSAC::HTTP::Rex::dropper_]);
     }
     else{
       #Log::OK::DEBUG and log_debug "BODYONLY in serialize. length: ". length $_[PAYLOAD];
@@ -629,20 +639,22 @@ sub make_serialize{
           delete $out_ctx{$_[REX]};
         }
 
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
       }
       else{
         Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
         # not chunked, so just write
-        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
       }
 
     }
 
     # The rex has been processed, LAST CALL
-    unless($_[CB]){
+    unless($cb){
       my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
       shift @$pipeline;
+      #$_[REX][uSAC::HTTP::Rex::serializer_]=undef;
+      #$_[REX]=undef;
     }
 
   }

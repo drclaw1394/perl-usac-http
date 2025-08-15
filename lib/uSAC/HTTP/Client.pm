@@ -263,7 +263,7 @@ method _request {
           $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
         }
 
-        $session->set_parser($_application_parser->(session=>$session, mode=>2, callback=>sub {asay "DUMMY PARSER CALLBACK====="}));
+        $session->set_parser($_application_parser->(session=>$session, mode=>2, callback=>sub {asay $STDERR, "DUMMY PARSER CALLBACK====="}));
         my $s=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$self->find_root->static_headers;
         $session->set_serializer($s);
 

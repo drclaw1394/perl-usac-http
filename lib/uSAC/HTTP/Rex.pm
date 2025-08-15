@@ -599,10 +599,17 @@ sub new {
 
 
   $self[session_]=$_[1];
+  use Scalar::Util qw<weaken>;
+  weaken $self[session_];
 
 	#NOTE: A single call to Session export. give references to important variables
 	
-	($self[closeme_], $self[dropper_], \$self[server_], $self[pipeline_], undef, $self[write_], $self[peer_], $self[sequence_], \$self[parser_], \$self[serializer_])= $_[2]->@*;
+	($self[closeme_], $self[dropper_], \$self[server_], $self[pipeline_], undef, $self[write_], $self[peer_], $self[sequence_], $self[parser_], $self[serializer_])= $_[2]->@*;
+
+  # NOTE: THIS isnt need in the Rex and causes circular references.. so undef
+  $self[parser_]=undef;
+  weaken $self[write_];
+  #$self[pipeline_]=undef;
 
 	$self[recursion_count_]=0;
   $self[in_progress_]=undef;

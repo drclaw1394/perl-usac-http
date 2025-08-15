@@ -462,8 +462,8 @@ sub make_do_dgram_client {
 #Returns a sub for processing new TCP client connections
 #
 method make_stream_accept {
-  \my @zombies=$_zombies;
-  \my %sessions=$_sessions;
+  #\my @zombies=$_zombies;
+  #\my %sessions=$_sessions;
 
 
   # TLS extensions...
@@ -474,7 +474,6 @@ method make_stream_accept {
   # Application Layer Protocol Negotiation
   #
 
-  my $session;
   unless($_application_parser){
     need uSAC::HTTP::v1_1_Reader;
     $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
@@ -485,6 +484,7 @@ method make_stream_accept {
 
   sub {
     my ($fhs, $peers, $passive_fd)=@_;
+    my $session;
     my $i=0;
     for my $fh(@$fhs){
       # TCP_NODELY etc here?
@@ -493,15 +493,28 @@ method make_stream_accept {
 
       Log::OK::DEBUG and log_debug "Server new client connection: id $session_id";
 
-      if(@zombies){
-        $session=pop @zombies;
+      if(@$_zombies){
+        try {
+        Log::OK::DEBUG and log_debug "--REUSE ZOMBIE";
+        $session=pop @$_zombies;
         $session->revive($session_id, $fh, $scheme, $peers->[$i]);
+      }
+      catch($e){
+        log_debug "--- revieve error";
+        log_debug $e;
+      }
       }
       else {
 
+        Log::OK::DEBUG and log_debug "--create new session";
         # Create a new session
         $session=uSAC::HTTP::Session->new;
         $session->init($session_id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
+
+
+        # Create a serializer (per session)
+        my $s=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$self->find_root->static_headers;
+        $session->set_serializer($s);
 
         # Create a new parser (per session)
         my $p=$parser->(session=>$session, mode=>1, callback=>$self->current_cb);
@@ -509,23 +522,16 @@ method make_stream_accept {
         #$session->push_reader($p); # old way... for now
         $session->set_parser($p);
 
-        # Create a serializer (per session)
-        my $s=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$self->find_root->static_headers;
-        $session->set_serializer($s);
-
         my $e=uSAC::HTTP::v1_1_Reader::make_error;
         $session->set_error($e);
 
       }
 
       $i++;
-      $sessions{$session_id} = $session;
-
+      $_sessions->{$session_id} = $session;
       $session_id++;
+      #log_trace "AFTER increment $session_id";
     }
-
-    #@{$fhs}=();
-    #@{$peers}=();
   }
 }
 

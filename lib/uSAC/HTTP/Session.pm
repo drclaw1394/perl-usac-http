@@ -12,6 +12,7 @@ use uSAC::IO;
 use uSAC::IO::SReader;
 use uSAC::IO::SWriter;
 use IO::FD;
+use Scalar::Util qw<weaken>;
 
 use Errno qw(EAGAIN EINTR);
 
@@ -65,7 +66,10 @@ method init {
 
   $_time=$Time;   #Copy value of clock to time
   ($_id, $_fh, $_sessions, my $zombies, $_server, $_scheme, $_peer, $_read_size)=@_;
-  \my @zombies= $zombies;
+
+  #\my @zombies= $zombies;
+  weaken $_sessions;
+  weaken $zombies;
   $_rex=[];
   $_sequence={};
   #make reader
@@ -87,6 +91,9 @@ method init {
     #$_parser->();   # THIS PUSHES 
     $_closeme=1; $_dropper->()
   };
+
+  #weaken $_sr;
+  #weaken $_sw;
 
   $_sr=uSAC::IO::SReader::create(
     fh=>$_fh,
@@ -112,7 +119,7 @@ method init {
   #if a false or non existent value is present, session is closed
   $_dropper=sub {
     ####################################################################################
-    # Log::OK::DEBUG and log_debug "Session: Dropper start";                           #
+    Log::OK::DEBUG and log_debug "Session: Dropper start";                           #
     # Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";                      #
     # Log::OK::DEBUG and log_debug "Session dropper called from: ".join ", " , caller; #
     ####################################################################################
@@ -121,6 +128,7 @@ method init {
     #shift @$_rex; #shift rex pipeline
     unless($_closeme or !@_){
       #IF no error or closeme then return after pumping the reader
+      log_debug "--- SESSION- pumping  via dropper";
       $_sr->pump;
       return;
     }
@@ -129,7 +137,7 @@ method init {
 
     #End of session transactions
     #
-    #Log::OK::DEBUG and log_debug "Session: Dropper ".$_id;
+    Log::OK::DEBUG and log_debug "---Session: Dropper ".$_id;
     $_sr->pause;
     $_sw->pause;
     delete $_sessions->{$_id};
@@ -152,14 +160,17 @@ method init {
 
     #If the dropper was called with an argument that indicates no error
     #if( undef==$_[0] and @zombies < 100){
-    if(1){
+    if(0){
+    #if(@$zombies < 100){
+      #if(1){
       # NOTE: Complete reuses of a zombie may still be causing corruption
       # Suspect that the rex object is not being release intime 
       # when service static files.
       # Forced rex to be undef on IO error in static server.. Lets
       # see if that fixes the issue.
       # Otherwise comment out the line below
-      unshift @zombies, $self;
+      unshift @$zombies, $self;
+      #$self=undef;
       ###################################################################################
       # Log::OK::DEBUG and log_debug "Pushed zombie";                                   #
       # Log::OK::DEBUG and log_debug "Session: refcount:".SvREFCNT($self);              #
@@ -182,13 +193,13 @@ method init {
       undef $_rex;
       undef $self;
       $_route=undef;
-      $_do_error=undef;
+      #$_do_error=undef;
       $_rex=undef;
 
       Log::OK::DEBUG and log_debug "NO Pushed zombie";
     }
 
-    Log::OK::DEBUG and log_debug "Session: zombies: ".@zombies;
+    Log::OK::DEBUG and log_debug "Session: zombies: ".@$zombies;
 
 
     Log::OK::DEBUG and log_debug "Session: Dropper end";
@@ -342,7 +353,7 @@ uSAC::Main::usac_listen("server/shutdown/graceful", sub {
 #Bypasses method calls for accessors
 method exports {
   #[\$_closeme, $_dropper, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence, $_parser, $_serializer];#, \$_route];
-	[\$_closeme, undef, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence, \$_parser, \$_serializer];#, \$_route];
+	[\$_closeme, undef, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence, $_parser, $_serializer];#, \$_route];
 
 }
 ##################################################################################

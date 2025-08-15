@@ -319,7 +319,7 @@ sub send_file_uri {
       #
       my $sz=($content_length-$total);
       $sz=$read_size;# if $sz>$read_size;
-      #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset,  fh $in_fh";
+      #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset";
       $total+=$rc=IO::FD::pread $entry->[File::Meta::Cache::fd_], $reply, $sz, $offset;
       #Log::OK::TRACE and log_trace "Size of read is $sz,  offset id $offset rc is $rc  for rex $rex";
       $offset+=$rc;
@@ -385,6 +385,7 @@ sub send_file_uri {
       if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
         log_error "Static files: READ ERROR from file";
         log_error "Error: $!";
+        use Data::Dumper;
         Log::OK::ERROR and log_error Dumper $entry;
         $rex->[uSAC::HTTP::Rex::session_]->error();;
       }
@@ -876,9 +877,9 @@ sub uhm_static_root {
 
       
       if($_[REX]){
-        my $t=$ctx{$_[REX]};
-        Log::OK::DEBUG and log_debug " calling reset on $_[REX] ...on sub:".$t->[1];
-        $t->[1]->(); # Call the main sub with no args... which indicates error?
+        my $t=delete $ctx{$_[REX]};
+        #Log::OK::DEBUG and log_debug " calling reset on $_[REX] ...on sub:".$t->[1];
+        $t->[1]->() if $t; # Call the main sub with no args... which indicates error?
       }
 
       &$next;
