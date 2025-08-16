@@ -48,6 +48,16 @@ sub _reexport {
   # uSAC::HTTP::Route->import;     #
   ##################################
   uSAC::MIME->import;
+
+  require uSAC::IO;
+  uSAC::IO->import;
+
+  require strict;
+  strict->import;
+  require warnings;
+  warnings->import;
+  require feature;
+  feature->import(qw<state try>);
   
 }
 

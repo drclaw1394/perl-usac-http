@@ -1,10 +1,3 @@
-use strict;
-use warnings;
-use feature qw<state say>;
-
-use Log::ger::Output "Screen";
-
-use uSAC::IO;
 
 use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log Websocket>;
 
@@ -19,8 +12,8 @@ $server->add_route('GET'
   =>sub {
     local $/=undef; state $data; $data=<DATA> unless $data;	
     #TODO: bug. <> operator not working with state
+
     $_[PAYLOAD]=$data;	
-    #&rex_write;
   }
 );
 
@@ -29,37 +22,36 @@ $server->add_route('GET'
   => uhm_websocket()
   =>sub{
 		my ($matcher, $rex, $in_headers, $headers, $ws)=@_;
-		say " IN usac websocket  callback: ",join ", ", @_;
+		asay $STDERR, " IN usac websocket  callback: ",join ", ", @_;
 		my $timer;
     $ws->on_open=sub {
       $clients{$_[0]}=$_[0];
-      $timer=uSAC::IO::timer 0, 1, sub {
-      say "TIMER IS: $timer";
+      $timer=timer 0, 1, sub {
+      asay $STDERR, "TIMER IS: $timer";
        my $string="hello";
-       utf8::encode $string;
-       say "Sending $string";
+       asay $STDERR, "Sending $string";
         $ws->send_text_message($string, sub {
-            say "CALLBACK";
+            asay $STDERR, "CALLBACK";
           });
       };
     };
 
 		$ws->on_message=sub {
-				say "GOT message: $_[1]";
+				asay $STDERR, "GOT message: $_[1]";
 				while(my($id, $client)=each  %clients){
 					$client->send_text_message("hello") unless $client==$_[0];
 				}
 			};
 
 		$ws->on_error=sub {
-				say "GOT error$_[0]";
+				asay $STDERR, "GOT error$_[0]";
 			};
 
 		$ws->on_close=sub {
-				say "GOT close";
+				asay $STDERR, "GOT close";
         #undef $timer;
-        say "CLOSE TIMER: $timer";
-        $timer and uSAC::IO::timer_cancel $timer;
+        asay $STDERR, "CLOSE TIMER: $timer";
+        $timer and timer_cancel $timer;
 			};
       undef; #Needed to prevent calling of next
 	}

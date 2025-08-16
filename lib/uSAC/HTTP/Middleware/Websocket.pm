@@ -694,8 +694,8 @@ sub send_binary_message {
 #Write text message and do optional callback
 sub send_text_message {
 	#write as a single complete message. checks utf flag
+  utf8::encode $_[1];
 	my $self=splice @_, 0, 1, FIN_FLAG|TEXT;
-  #utf8::encode $_[0];
 	if($self->[PMD_]){
 		$_[0]|=RSV1_FLAG;
 		my $scratch="";

@@ -1,15 +1,11 @@
 use v5.36;
 package uSAC::HTTP::Server; 
 our $VERSION = 'v0.1.0';
-use feature "try";
+#use feature "try";
 
-# Attempt event system detection here...
-# and load default if none found
-#
 
 use Object::Pad;          # Class
 use uSAC::Log;
-#use Log::OK { lvl=>"info" };  # CLI control of log system
 use Log::OK;
 
 # Socket::More also exports Socket Symbols
