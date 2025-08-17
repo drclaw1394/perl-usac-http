@@ -141,6 +141,7 @@ sub websocket_client_in {
    sub {
     my ($next, $index)=@_;
     sub {
+        asay $STDERR, "--CLIENT WS IN";
         # The expected response is 101 Switching prototols
         # If this is the case we prevent the remainder of the innerware  form executing
         # and assume we have a websocket
@@ -172,7 +173,7 @@ sub websocket_client_in {
           # Create a websocket object
           my $ws=uSAC::HTTP::Middleware::Websocket->new($session, 1);
           $_[PAYLOAD]=$ws;
-          uSAC::IO::asap {
+          uSAC::IO::asap sub {
             $ws->[on_open_]->($ws)
           };
         }

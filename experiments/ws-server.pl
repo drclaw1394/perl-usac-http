@@ -1,9 +1,8 @@
-
 use Import::These qw<uSAC::HTTP:: Server ::Middleware:: Log Websocket>;
 
 my %clients;
 
-my $server=uSAC::HTTP::Server->new(listen=>"interface=en0,f=INET\$,po=9090,s=stream");
+my $server=uSAC::HTTP::Server->new(listen=>"f=INET\$,po=9090,s=stream");
 
 $server->add_middleware(uhm_log);
 

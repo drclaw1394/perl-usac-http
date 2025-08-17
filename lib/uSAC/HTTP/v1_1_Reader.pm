@@ -6,6 +6,8 @@ no warnings "experimental";
 use uSAC::Log;
 use Log::OK;
 
+            use uSAC::IO;
+            use Data::Dumper;
 
 use uSAC::HTTP::Rex;
 use Encode qw<find_encoding decode encode decode_utf8>;
@@ -129,10 +131,12 @@ sub make_parser{
   #use Scalar::Util qw<weaken>;
   #weaken $r;
   sub {
-    #log_trace "--- TOP OF PARSER";
-    #log_trace "--- pipeline is ".$pipeline->@*;
+    log_trace "--- TOP OF PARSER";
+    log_trace "--- pipeline is ".$pipeline->@*;
     my $processed=0;
     my $rex;#=$pipeline->[$pipeline->@*-1];
+
+    $rex=$pipeline->[0];
 
     # Set default HTTP code
     $code=-1;
@@ -156,7 +160,8 @@ sub make_parser{
         if ($state < STATE_HEADERS) {
           # Don't process new request until existing request is done.
           # Rely on reader being pumped at output stage to retrigger
-          return if $pipeline->@*;
+          
+          return if $mode == MODE_RESPONSE and $pipeline->@*;
           $pos3=index $buf, CRLF2;#, $ppos;
           # Header is not complete. need more
           return if($pos3<=0);
@@ -273,6 +278,10 @@ sub make_parser{
 
           }
           elsif($mode == MODE_REQUEST) {
+            asay $STDERR, "Pipeline is". $pipeline;
+            #$rex=$pipeline->[0];
+            $route=$rex->[uSAC::HTTP::Rex::route_];
+
             # In client mode the route (and the rex) is already defined.
             # However the headers from incomming request and the response code
             # need updating. 
@@ -281,6 +290,7 @@ sub make_parser{
             $code=$uri; # NOTE: variable is called $uri, but doubles as code in client mode
 
             # Set the status in the innerware on the existing rex
+            asay $STDERR, "rex for client is: ".$rex;
             $rex->[STATUS]=$code;
 
             # Loopback the output headers to the input side of the chain.
@@ -602,7 +612,7 @@ sub make_serialize{
       $reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      #Log::OK::TRACE and log_trace "->Serialize: headers: $_[REX]\n$reply->[0]";
+      Log::OK::TRACE and log_trace "->Serialize: headers: $_[REX]\n$reply->[0]";
 
       # mark headers as done, if not informational
       #
@@ -654,10 +664,18 @@ sub make_serialize{
 
     # The rex has been processed, LAST CALL
     unless($cb){
-      my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
-      shift @$pipeline;
-      #$_[REX][uSAC::HTTP::Rex::serializer_]=undef;
-      #$_[REX]=undef;
+      if($mode == MODE_RESPONSE){
+        asay $STDERR, "-SERVER MODE end of serialize";
+        ## ONLY shift he pipeline when its a respoonse (SERVER MODE)
+        my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
+        shift @$pipeline;
+        #$_[REX][uSAC::HTTP::Rex::serializer_]=undef;
+        #$_[REX]=undef;
+      }
+      else {
+        my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
+        asay $STDERR, "-CLIENT MODE end of serialize: rex count: " .$pipeline->@*;
+      }
     }
 
   }

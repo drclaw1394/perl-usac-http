@@ -52,12 +52,12 @@ sub uhm_slurp {
     my $next=shift;
     my $last;
     sub {
+        Log::OK::TRACE and log_trace "---SLurp top for rex: ". $_[REX];
         my $c=$ctx{$_[REX]};
         my $payload=$_[PAYLOAD];
         $_[PAYLOAD]=""; # Consume payload
-
         unless($c){
-
+          Log::OK::TRACE and log_trace "--Slurp context does not exist for rex";
           #first call, create a new context
           $c=$ctx{$_[REX]}=[];
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
@@ -82,6 +82,8 @@ sub uhm_slurp {
 
         # Wrap payload if presenting as a normal body
         unless(ref $payload){
+
+          Log::OK::TRACE and log_trace "--Slurp payload not a ref... single part";
           # Reuse the head created of the first (and only) part if it exists
           my $head=@$c?$c->[0][0]:{};
 
@@ -160,6 +162,7 @@ sub uhm_slurp {
             }
             else {
               # Append into memory
+              Log::OK::TRACE and log_trace "--- APpend to memoy"; 
               push @$c, $payload;
             }
           }

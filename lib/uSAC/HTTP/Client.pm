@@ -5,6 +5,8 @@ use uSAC::IO;
 use Object::Pad;
 
 use uSAC::HTTP;
+use Data::Dumper;
+use uSAC::IO;
 
 sub _reexport {
   uSAC::HTTP->import;
@@ -41,7 +43,7 @@ field $_running_flag :mutator;
 
 BUILD {
   $self->mode=2;          # Set mode to client.
-  $_host_pool_limit//=4;  # limit to 5 concurrent connections by default
+  $_host_pool_limit//=1;  # limit to 5 concurrent connections by default
   $_zombies=[];
 }
 
@@ -58,6 +60,9 @@ method _inner_dispatch :override {
       else {
         #No there isn't
         #
+        
+        # shift the pipeline
+        shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
 
         #TODO: Check status code
         for($_[REX][STATUS]){
@@ -127,29 +132,17 @@ method _error_dispatch :override {
 
 }
 
-method stop {
-  uSAC::IO::asap(sub{
-      exit;
-  });
-}
+#########################
+# method stop {         #
+#   uSAC::IO::asap(sub{ #
+#       exit;           #
+#   });                 #
+# }                     #
+#########################
 
-method run {
-  #my $self=shift;
-  my $sig; $sig=AE::signal(INT=>sub {
-      $self->stop;
-      $sig=undef;
-  });
-
-  $self->rebuild_routes;
-	$self->rebuild_dispatch;
-
-  if($self->options->{show_routes}){
-    Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $self->options->{show_routes}->@*);
-    $self->dump_routes;
-    #return;
-  }
-
-	Log::OK::TRACE and log_trace(__PACKAGE__. " starting client...");
+method prepare :override {
+  log_trace "__ TOP OF PREPARE CLIENT";
+  $self->SUPER::prepare;
   $self->running_flag=1;
 
   #Trigger any queued requests
@@ -157,11 +150,35 @@ method run {
     while($self->_request($v)){
     }
   }
-
-  #require AnyEvent;
-  #$_cv=AE::cv;
-  #$_cv->recv();
 }
+###############################################################################################################
+# method run {                                                                                                #
+#   #my $self=shift;                                                                                          #
+#   my $sig; $sig=AE::signal(INT=>sub {                                                                       #
+#       $self->stop;                                                                                          #
+#       $sig=undef;                                                                                           #
+#   });                                                                                                       #
+#                                                                                                             #
+#   $self->rebuild_routes;                                                                                    #
+#         $self->rebuild_dispatch;                                                                            #
+#                                                                                                             #
+#   if($self->options->{show_routes}){                                                                        #
+#     Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $self->options->{show_routes}->@*); #
+#     $self->dump_routes;                                                                                     #
+#     #return;                                                                                                #
+#   }                                                                                                         #
+#                                                                                                             #
+#         Log::OK::TRACE and log_trace(__PACKAGE__. " starting client...");                                   #
+#   $self->running_flag=1;                                                                                    #
+#                                                                                                             #
+#   #Trigger any queued requests                                                                              #
+#   for my ($k,$v)($self->host_tables->%*){                                                                   #
+#     while($self->_request($v)){                                                                             #
+#     }                                                                                                       #
+#   }                                                                                                         #
+#                                                                                                             #
+# }                                                                                                           #
+###############################################################################################################
 
 
 my $session_id=0;
@@ -204,6 +221,7 @@ method request {
 # If no session is provided then create a new one, up to limit
 method _request {
   Log::OK::TRACE and log_trace __PACKAGE__." _request";
+  Log::OK::TRACE and log_trace __PACKAGE__. Dumper caller 0;
   die "_request must be made with a host table" unless @_ >=1 and ref $_[0] eq "ARRAY";
   # From the given host table and session attmempt to execute the request stored in $details
   # or of extract from the host queue
@@ -299,6 +317,7 @@ sub __request {
 
   my ($table, $session, $details)=@_;
 
+  asay $STDERR, "--- Top of __request";
 
   my $version;
   my $ex;
@@ -343,14 +362,17 @@ sub __request {
     $rex->[uSAC::HTTP::Rex::route_]=$route;
     
 
+    asay $STDERR, "------  ",$path;
     $rex->[METHOD]=$method;
     $rex->[PATH]=$path;
     # Set the current rex and route for the session.
     # This is needed for the parser in client mode. It makes the route known
     # ahead of time.
-    $ex->[3]->$*=$rex;
+    push $ex->[3]->@*, $rex;
 
 
+    asay $STDERR, "--exports are ". $ex;
+    asay $STDERR, "--exports pipeline ". $ex->[3];
     # Call the head of the outerware function
     #
     $route->[1][ROUTE_OUTER_HEAD]($route, $rex, \%in_header, $out_header, $payload, undef);

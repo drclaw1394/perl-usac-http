@@ -357,12 +357,10 @@ method do_passive {
 # Each worker calls this after spawning. Sets up timers, signal handlers etc
 #
 method prepare {
+  log_trace "__ TOP OF PREPARE SERVER";
 	#setup timer for constructing date header once a second
   #my ($self)=shift;
 
-	$self->do_accept;
-  #Start the acceptors running on this worker 
-  $_->start for(values $_aws->%*);
   
   #Setup the watchdog timer for the any active connections
 	my $interval=1;
@@ -385,6 +383,7 @@ method prepare {
       for(keys $_sessions->%*){
         $session=$_sessions->{$_};
 
+        asay $STDERR, $session;
         if(($_server_clock-$session->time)> $timeout){
           Log::OK::DEBUG and log_debug "DROPPING ID: $_";
           $session->closeme=1;
@@ -401,7 +400,6 @@ method prepare {
     };
   
   #alarm $interval;
-  Log::OK::INFO and log_info "Accepting connections on PID: $$";
 
 
   # Hustle::Table cache management NOTE: Hustle table caches matching inputs.
@@ -426,7 +424,8 @@ method prepare {
 method do_accept{
   #Accept is only for SOCK_STREAM 
   #Log::OK::DEBUG and log_debug 
-  Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
+  #Log::OK::INFO and log_info __PACKAGE__. " Accepting connections";
+  Log::OK::INFO and log_info "Accepting connections on PID: $$";
 
   my $do_client=$self->make_stream_accept;
 
@@ -721,6 +720,7 @@ method start {
 }
 
 method run {
+  log_trace Error::Show::context undef;
   my $sig;$sig=uSAC::IO::signal(INT=>sub {
           $self->stop;
           $sig=undef;
@@ -736,18 +736,22 @@ method run {
     $self->dump_routes;
     #return;
   }
-	Log::OK::TRACE and log_trace(__PACKAGE__. " starting server...");
 
-  unless(@$_listen_spec){
-    # Set default if no listeners specified 
-    $self->add_listeners(ref($_listen) eq "ARRAY"?@$_listen:$_listen);
+  #  Only do passive setup for actual server
+  if($self->mode ==  1){
+    Log::OK::TRACE and log_trace(__PACKAGE__. " starting server...");
+
+    unless(@$_listen_spec){
+      # Set default if no listeners specified 
+      $self->add_listeners(ref($_listen) eq "ARRAY"?@$_listen:$_listen);
+    }
+
+    $self->do_passive;
+    #$self->do_accept;
+
+    $self->dump_listeners;
+
   }
-  
-	$self->do_passive;
-  #$self->do_accept;
-
-	$self->dump_listeners;
-  
   #TODO: Preforking server
   #Seems like there are no 'thundering herds' in linux and darwin
   #Calles to accept are serialised. Use SO_REUSEPORT for 'zero' downtime
@@ -771,13 +775,21 @@ method run {
     Log::OK::INFO and log_info "Running $_workers workers + manager";
   }
   else {
-    Log::OK::INFO and log_info "Running single process mode";
+    Log::OK::INFO and log_info "Running single process mode at: ".time;
   }
 
   if($_workers){
     for(1..$_workers){
       Log::OK::TRACE and log_trace "-----PUSHING NEW WORKER--"; 
-      push @$_pool, uSAC::Worker->new(rpc=>{}, work=> sub {$self->prepare});
+      push @$_pool, uSAC::Worker->new(rpc=>{}, work=> sub {
+
+          if($self->mode ==1){
+            $self->do_accept;
+            #Start the acceptors running on this worker 
+            $_->start for(values $_aws->%*);
+          }
+          $self->prepare
+        });
 
       Log::OK::TRACE and log_trace "-----AFTER NeW WORKER"; 
       #############################################
@@ -795,7 +807,12 @@ method run {
 
   }
   else {
-        $self->prepare;
+    if($self->mode == 1){
+      $self->do_accept;
+      #Start the acceptors running on this worker 
+      $_->start for(values $_aws->%*);
+    }
+    $self->prepare;
   }
 
   $self;
@@ -1056,6 +1073,7 @@ method do_stream_connect {
     
   }
   else {
+    log_trace "----- resolveing with connect";
     $id=uSAC::IO::connect $socket, {address=>$host, port=>$port, data=>{ on_connect=>$on_connect, on_error=>$on_error}};
 
   }
@@ -1066,6 +1084,11 @@ method do_stream_connect {
 method worker_count {
   $_workers= pop;
   $self;
+}
+
+method _inner_dispatch {
+}
+method _error_dispatch {
 }
 
 1; 
