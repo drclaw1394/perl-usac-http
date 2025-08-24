@@ -383,7 +383,6 @@ method prepare {
       for(keys $_sessions->%*){
         $session=$_sessions->{$_};
 
-        asay $STDERR, $session;
         if(($_server_clock-$session->time)> $timeout){
           Log::OK::DEBUG and log_debug "DROPPING ID: $_";
           $session->closeme=1;
@@ -720,7 +719,6 @@ method start {
 }
 
 method run {
-  log_trace Error::Show::context undef;
   my $sig;$sig=uSAC::IO::signal(INT=>sub {
           $self->stop;
           $sig=undef;
@@ -1086,9 +1084,9 @@ method worker_count {
   $self;
 }
 
-method _inner_dispatch {
-}
-method _error_dispatch {
-}
+#method _inner_dispatch {
+#}
+#method _error_dispatch {
+#}
 
 1; 

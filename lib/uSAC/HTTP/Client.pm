@@ -43,7 +43,7 @@ field $_running_flag :mutator;
 
 BUILD {
   $self->mode=2;          # Set mode to client.
-  $_host_pool_limit//=1;  # limit to 5 concurrent connections by default
+  $_host_pool_limit//=4;  # limit to 5 concurrent connections by default
   $_zombies=[];
 }
 
@@ -51,8 +51,8 @@ BUILD {
 
 # Innerware chain dispatcher. Triggers redirects and executes queued requests
 method _inner_dispatch :override {
-    Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
     sub {
+      #Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
       if($_[CB]){
         #More data to come
         #
@@ -63,6 +63,7 @@ method _inner_dispatch :override {
         
         # shift the pipeline
         shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
+        $_on_response and &$_on_response;
 
         #TODO: Check status code
         for($_[REX][STATUS]){
@@ -105,8 +106,8 @@ method _error_dispatch :override {
             # The route used is always associated with a host table. Use this table
             # and attempt get the next item in the requst queue for the host
             #
-          require Error::Show;
-          Log::OK::ERROR and log Error::Show::context indent=>"  ", frames=>Devel::StackTrace->new();
+            #require Error::Show;
+          #Log::OK::ERROR and log_error Error::Show::context indent=>"  ", frames=>Devel::StackTrace->new();
           my $entry;
           my $session;
             # If no rex is present, this is connection error...
@@ -123,7 +124,7 @@ method _error_dispatch :override {
             $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
             $_total_request_count--;
             $_err->();
-            $_on_error and $_on_error->();
+            $_on_error and $_on_error->($_[PAYLOAD]);
 
             $self->_request($entry, $session);
 
@@ -221,7 +222,7 @@ method request {
 # If no session is provided then create a new one, up to limit
 method _request {
   Log::OK::TRACE and log_trace __PACKAGE__." _request";
-  Log::OK::TRACE and log_trace __PACKAGE__. Dumper caller 0;
+  #Log::OK::TRACE and log_trace __PACKAGE__. Dumper caller 0;
   die "_request must be made with a host table" unless @_ >=1 and ref $_[0] eq "ARRAY";
   # From the given host table and session attmempt to execute the request stored in $details
   # or of extract from the host queue
@@ -231,12 +232,13 @@ method _request {
 
   #my $limit =2;
   my $count=$table->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
-  
+  Log::OK::TRACE and log_trace "pending request count $count,  Active count: $table->[uSAC::HTTP::Site::ACTIVE_COUNT]"; 
   return if($table->[uSAC::HTTP::Site::ACTIVE_COUNT] >= $_host_pool_limit or $count == 0);
 
 
   my $details=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
 
+  Log::OK::TRACE and log_trace "details are: ". $details;
   # If a session is supplied reuse it if possible
   #
   if($session){
@@ -247,6 +249,7 @@ method _request {
         #push $table->[uSAC::HTTP::Site::IDLE_POOL]->@*, $session;
         return;
       }
+      Log::OK::TRACE and log_trace "----OK SESSION";
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
       $_total_request_count++;
       __request($table, $session, $details);
@@ -262,50 +265,56 @@ method _request {
   my ($__host, $port)=split ":", $host; 
   $port//=80;
 
-      $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
-      $_total_request_count++;
+  $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
+  $_total_request_count++;
 
-      $self->do_stream_connect($__host, $port, sub {
-        my ($socket, $addr)=@_;
-        $table->[uSAC::HTTP::Site::ADDR]=$addr;
-        # Create a session here
-        #
-        my $scheme="http";
-        Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";
+  $self->do_stream_connect($__host, $port, sub {
+      my ($socket, $addr)=@_;
+      $table->[uSAC::HTTP::Site::ADDR]=$addr;
+      # Create a session here
+      #
+      my $scheme="http";
+      Log::OK::TRACE and log_trace __PACKAGE__." CRATEING NEW SESSION";
 
-        my $session=uSAC::HTTP::Session->new;
-        $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);
+      Log::OK::TRACE and log_trace "----NO SESSION... creating";
+      my $session=uSAC::HTTP::Session->new;
+      $session->init($session_id, $socket, $_sessions, $_zombies, $self, $scheme, $addr, $_read_size);
 
-        unless($_application_parser){
-          require uSAC::HTTP::v1_1_Reader;
-          $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
-        }
-
-        $session->set_parser($_application_parser->(session=>$session, mode=>2, callback=>sub {asay $STDERR, "DUMMY PARSER CALLBACK====="}));
-        my $s=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$self->find_root->static_headers;
-        $session->set_serializer($s);
-
-        $_sessions->{ $session_id } = $session;
-
-        $session_id++;
-        __request($table, $session, $details);
-      },
-
-      sub {
-        # connection error
-        #
-        #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-        #$_total_request_count--;
-        Log::OK::ERROR and log_error "error callback for stream connect: $_[1]";
-        IO::FD::close $_[0]; # Close the socket
-        my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($details->[1]." ".$details->[2]);
-
-        die "No route found for $host" unless $route;
-
-        # call error middleware
-        $route->[1][ROUTE_ERROR_HEAD]->($route);
+      unless($_application_parser){
+        require uSAC::HTTP::v1_1_Reader;
+        $_application_parser=\&uSAC::HTTP::v1_1_Reader::make_parser;
       }
-    );
+
+      $session->set_parser($_application_parser->(session=>$session, mode=>2, callback=>sub {asay $STDERR, "DUMMY PARSER CALLBACK====="}));
+      my $s=uSAC::HTTP::v1_1_Reader::make_serialize mode=>$self->find_root->mode, static_headers=>$self->find_root->static_headers;
+      $session->set_serializer($s);
+
+      $_sessions->{ $session_id } = $session;
+
+      $session_id++;
+      __request($table, $session, $details);
+    },
+
+    sub {
+      # connection error
+      #
+      #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+      #$_total_request_count--;
+      Log::OK::ERROR and log_error "error callback for stream connect: $_[1]";
+      IO::FD::close $_[0]; # Close the socket
+      
+      my($route, $captures)=$table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($details->[1]." ".$details->[2]);
+      Log::OK::TRACE and log_trace "route is $route";
+      Log::OK::TRACE and log_trace "captures is $captures";
+
+      die "No route found for $host" unless $route;
+
+      # call error middleware
+      $route->[1][ROUTE_ERROR_HEAD]->($route,undef,undef, undef,$_[1]);
+
+      1;
+    }
+  );
   return $table->[uSAC::HTTP::Site::ACTIVE_COUNT] < $_host_pool_limit ;
 }
 
@@ -317,7 +326,6 @@ sub __request {
 
   my ($table, $session, $details)=@_;
 
-  asay $STDERR, "--- Top of __request";
 
   my $version;
   my $ex;
@@ -328,7 +336,7 @@ sub __request {
   my $i;
   
   uSAC::IO::asap(sub {
-
+      Log::OK::TRACE and log_trace "=====TOP __request asap";
     my $host=$details->[0];
     my $method=$details->[1];
     my $path=$details->[2];
@@ -362,7 +370,6 @@ sub __request {
     $rex->[uSAC::HTTP::Rex::route_]=$route;
     
 
-    asay $STDERR, "------  ",$path;
     $rex->[METHOD]=$method;
     $rex->[PATH]=$path;
     # Set the current rex and route for the session.
@@ -370,12 +377,11 @@ sub __request {
     # ahead of time.
     push $ex->[3]->@*, $rex;
 
-
-    asay $STDERR, "--exports are ". $ex;
-    asay $STDERR, "--exports pipeline ". $ex->[3];
+    Log::OK::TRACE and log_trace "About to call outerware";
     # Call the head of the outerware function
     #
     $route->[1][ROUTE_OUTER_HEAD]($route, $rex, \%in_header, $out_header, $payload, undef);
+    Log::OK::TRACE and log_trace "after to call outerware";
   });
 }
 
@@ -434,6 +440,15 @@ method _redirect_external {
     $header->{HTTP_HOST()}=$uri->host_port;
     #$self->request($hp, $_[OUT_HEADER]{":method"}, $uri->path, $header, "", 1);
     $self->request($hp, $_[REX][METHOD], $uri->path, $header, "", 1);
+}
+
+
+method on_response :lvalue{
+  $_on_response;
+}
+
+method on_error :lvalue{
+  $_on_error;
 }
 
 1;

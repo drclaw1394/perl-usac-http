@@ -154,11 +154,17 @@ method _inner_dispatch {
     undef;
 }
 
-##########################################
-# method _error_dispatch {               #
-#   uSAC::HTTP::v1_1_Reader::make_error; #
-# }                                      #
-##########################################
+method _error_dispatch {
+  print STDERR "IN ERROR DISPATCH\n";
+  sub {
+    Log::OK::DEBUG and log_debug "GETTING STREAM ERROR HANDLER FROM SESSION";
+    my $session=$_[REX][uSAC::HTTP::Rex::session_];
+    if($session){
+      my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_error();
+      &$s; 
+    }
+  };
+}
 
 method rebuild_routes {
   my $result;
@@ -268,13 +274,18 @@ method _add_route {
     $inner_head=$end;
   }
 
-  #my $err=$self->_error_dispatch;
+  my $err=$self->_error_dispatch;
 
-  my $err=sub {
-    Log::OK::DEBUG and log_debug "GETTING STREAM ERROR HANDLER FROM SESSION";
-    my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_error();
-    &$s; 
-  };
+  ###############################################################################
+  # my $err=sub {                                                               #
+  #   Log::OK::DEBUG and log_debug "GETTING STREAM ERROR HANDLER FROM SESSION"; #
+  #   my $session=$_[REX][uSAC::HTTP::Rex::session_];                           #
+  #   if($session){                                                             #
+  #     my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_error();                  #
+  #     &$s;                                                                    #
+  #   }                                                                         #
+  # };                                                                          #
+  ###############################################################################
 
   my $error_head;
   if(@error){

@@ -131,8 +131,7 @@ sub make_parser{
   #use Scalar::Util qw<weaken>;
   #weaken $r;
   sub {
-    log_trace "--- TOP OF PARSER";
-    log_trace "--- pipeline is ".$pipeline->@*;
+    Log::OK::TRACE and log_trace "--TOp of parser";
     my $processed=0;
     my $rex;#=$pipeline->[$pipeline->@*-1];
 
@@ -278,7 +277,6 @@ sub make_parser{
 
           }
           elsif($mode == MODE_REQUEST) {
-            asay $STDERR, "Pipeline is". $pipeline;
             #$rex=$pipeline->[0];
             $route=$rex->[uSAC::HTTP::Rex::route_];
 
@@ -290,7 +288,6 @@ sub make_parser{
             $code=$uri; # NOTE: variable is called $uri, but doubles as code in client mode
 
             # Set the status in the innerware on the existing rex
-            asay $STDERR, "rex for client is: ".$rex;
             $rex->[STATUS]=$code;
 
             # Loopback the output headers to the input side of the chain.
@@ -665,7 +662,6 @@ sub make_serialize{
     # The rex has been processed, LAST CALL
     unless($cb){
       if($mode == MODE_RESPONSE){
-        asay $STDERR, "-SERVER MODE end of serialize";
         ## ONLY shift he pipeline when its a respoonse (SERVER MODE)
         my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
         shift @$pipeline;
@@ -674,7 +670,6 @@ sub make_serialize{
       }
       else {
         my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
-        asay $STDERR, "-CLIENT MODE end of serialize: rex count: " .$pipeline->@*;
       }
     }
 
