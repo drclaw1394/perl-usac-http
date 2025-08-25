@@ -133,13 +133,6 @@ method _error_dispatch :override {
 
 }
 
-#########################
-# method stop {         #
-#   uSAC::IO::asap(sub{ #
-#       exit;           #
-#   });                 #
-# }                     #
-#########################
 
 method prepare :override {
   log_trace "__ TOP OF PREPARE CLIENT";
@@ -152,34 +145,6 @@ method prepare :override {
     }
   }
 }
-###############################################################################################################
-# method run {                                                                                                #
-#   #my $self=shift;                                                                                          #
-#   my $sig; $sig=AE::signal(INT=>sub {                                                                       #
-#       $self->stop;                                                                                          #
-#       $sig=undef;                                                                                           #
-#   });                                                                                                       #
-#                                                                                                             #
-#   $self->rebuild_routes;                                                                                    #
-#         $self->rebuild_dispatch;                                                                            #
-#                                                                                                             #
-#   if($self->options->{show_routes}){                                                                        #
-#     Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $self->options->{show_routes}->@*); #
-#     $self->dump_routes;                                                                                     #
-#     #return;                                                                                                #
-#   }                                                                                                         #
-#                                                                                                             #
-#         Log::OK::TRACE and log_trace(__PACKAGE__. " starting client...");                                   #
-#   $self->running_flag=1;                                                                                    #
-#                                                                                                             #
-#   #Trigger any queued requests                                                                              #
-#   for my ($k,$v)($self->host_tables->%*){                                                                   #
-#     while($self->_request($v)){                                                                             #
-#     }                                                                                                       #
-#   }                                                                                                         #
-#                                                                                                             #
-# }                                                                                                           #
-###############################################################################################################
 
 
 my $session_id=0;
