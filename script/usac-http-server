@@ -342,10 +342,11 @@ sub run {
   $server->run(@ARGV);
   $SERVER=$server;
 
-  # Run REPL if specified
-  require uSAC::REPL;
   
+  # The repl is only in the master process
   if($enable_repl){
+    # Run REPL if specified
+    require uSAC::REPL;
     uSAC::REPL::start();
     my $sig;$sig=uSAC::IO::signal(INT=> \&uSAC::REPL::pause);
   }
