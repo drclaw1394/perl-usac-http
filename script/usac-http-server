@@ -341,16 +341,17 @@ sub run {
   # Run!
   $server->run(@ARGV);
   $SERVER=$server;
+# The repl is only in the master process
+      if($enable_repl){
+# Run REPL if specified
+        #asay $STDERR, "=-=-=-== REPL required";
+        require uSAC::REPL;
+        uSAC::REPL::start();
+        my $sig;
+        $sig=uSAC::IO::signal(INT=> \&uSAC::REPL::stop);
+        #asay $STDERR, "=-=-=-== END REPL required";
+      }
 
-  
-  # The repl is only in the master process
-  if($enable_repl){
-    # Run REPL if specified
-    require uSAC::REPL;
-    uSAC::REPL::start();
-    my $sig;$sig=uSAC::IO::signal(INT=> \&uSAC::REPL::pause);
-  }
-  
 }
 
 __END__
