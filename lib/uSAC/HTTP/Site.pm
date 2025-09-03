@@ -155,7 +155,6 @@ method _inner_dispatch {
 }
 
 method _error_dispatch {
-  print STDERR "IN ERROR DISPATCH\n";
   sub {
     Log::OK::DEBUG and log_debug "GETTING STREAM ERROR HANDLER FROM SESSION";
     my $session=$_[REX][uSAC::HTTP::Rex::session_];

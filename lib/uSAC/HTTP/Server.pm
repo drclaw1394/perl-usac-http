@@ -813,6 +813,9 @@ method run {
     $self->prepare;
   }
 
+  $STDOUT->flush;
+  $STDERR->flush;
+
   $self;
 }
 

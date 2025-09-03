@@ -7,6 +7,7 @@ no warnings "experimental";
 use uSAC::Log;
 use Log::OK;
 
+use Data::Dumper;
 use uSAC::IO;
 
 use File::Meta::Cache;
@@ -49,7 +50,6 @@ sub send_file_uri {
 
   my ($content_length, $mod_time)=($entry->[File::Meta::Cache::stat_][7], $entry->[File::Meta::Cache::stat_][9]);
 
-  $reply="";
   #process caching headers
   my $headers=$_[IN_HEADER];
 
@@ -320,6 +320,7 @@ sub send_file_uri {
       my $sz=($content_length-$total);
       $sz=$read_size;# if $sz>$read_size;
       #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset";
+      $reply//="";
       $total+=$rc=IO::FD::pread $entry->[File::Meta::Cache::fd_], $reply, $sz, $offset;
       #Log::OK::TRACE and log_trace "Size of read is $sz,  offset id $offset rc is $rc  for rex $rex";
       $offset+=$rc;
@@ -329,7 +330,7 @@ sub send_file_uri {
 
       #When we have read the required amount of data
       if($total==$content_length){
-        Log::OK::TRACE and log_trace "Full file content read";
+        Log::OK::TRACE and log_trace "Full file content read: $total";
         if(@ranges){
           Log::OK::TRACE and log_trace "Ranges to send still";
           return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {
@@ -385,7 +386,6 @@ sub send_file_uri {
       if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
         log_error "Static files: READ ERROR from file";
         log_error "Error: $!";
-        use Data::Dumper;
         Log::OK::ERROR and log_error Dumper $entry;
         $rex->[uSAC::HTTP::Rex::session_]->error();;
       }
