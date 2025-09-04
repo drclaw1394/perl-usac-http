@@ -715,10 +715,10 @@ method stop {
 }
 
 method start {
-  $self->run;
+    $self->_run;
 }
 
-method run {
+method _run {
   my $sig;$sig=uSAC::IO::signal(INT=>sub {
           $self->stop;
           $sig=undef;
@@ -726,8 +726,6 @@ method run {
 
   $self->rebuild_routes;
 	$self->rebuild_dispatch;
-
-  
 
   if($_options->{show_routes}){
     Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $_options->{show_routes}->@*);

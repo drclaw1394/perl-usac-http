@@ -8,7 +8,6 @@ our $VERSION="v0.1.0";
 use uSAC::Log;
 use Log::OK;
 
-our $SERVER;
 
 use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Form Static Log Slurp Multipart State Authentication>;
 
@@ -339,18 +338,16 @@ sub run {
 
 
   # Run!
-  $server->run(@ARGV);
-  $SERVER=$server;
-# The repl is only in the master process
-      if($enable_repl){
-# Run REPL if specified
-        #asay $STDERR, "=-=-=-== REPL required";
-        require uSAC::REPL;
-        uSAC::REPL::start();
-        my $sig;
-        $sig=uSAC::IO::signal(INT=> \&uSAC::REPL::stop);
-        #asay $STDERR, "=-=-=-== END REPL required";
-      }
+  # TODO: Need to debug why asap is required here...
+  asap sub{$server->start};
+  $uSAC::HTTP::Site=$server;
+  if($enable_repl){
+    # Run REPL if specified
+    # The repl is only in the master process
+    require uSAC::REPL;
+    uSAC::REPL::start();
+    my $sig;
+  }
 
 }
 

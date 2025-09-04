@@ -492,9 +492,12 @@ method _wrap_middleware {
   
       Log::OK::TRACE and log_trace "........DELEGATE STRING: $string";
       
+      Log::OK::TRACE and log_trace "=====DELEGATE is: $_delegate";
+      local $@;
       my @a=eval $string;
 
-      Log::OK::TRACE and log_trace "=====DELEGATE evalSTRING: @a";
+      Log::OK::TRACE and log_trace "=====DELEGATE evalSTRING: @a   error :  $@";
+      #die $@ if $@;
       die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
       unshift @_, @pre, @a;
     }
@@ -1141,24 +1144,28 @@ method load {
 			$self->load( %options, $file);
 		}
 	}
-	else{
-		#not a dir . do it
-		Log::OK::INFO and log_info "Including server script from $path";
+  else{
+    #not a dir . do it
+    Log::OK::INFO and log_info "Including server script from $path";
     #my $result=
     #eval "require '$path'";
     local $uSAC::HTTP::Site=$self;
     local $@;
-    eval { need $path };
-
-    if($@){
-      my $error=$@;
+    #eval { need $path };
+    try {
+      need $path;
+    }
+    catch($error){
+      #if($@){
+      #my $error=$@;
       require Error::Show;
       my $context=Error::Show::context($error);
+      print STDERR $context;
       Log::OK::ERROR and log_error $context;
-      #log_error "Could not include file: $@";
+      log_error "Could not include file: $error";
       die "Could not include file $path";	
     }
-	}
+  }
   $self;
 }
 
