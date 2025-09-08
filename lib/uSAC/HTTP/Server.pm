@@ -380,6 +380,7 @@ method prepare {
       $_server_clock+=$interval;
       #and the current tick
       my $session;
+      uSAC::HTTP::Session::_ticker;
       for(keys $_sessions->%*){
         $session=$_sessions->{$_};
 

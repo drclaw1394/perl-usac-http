@@ -332,21 +332,32 @@ method get_error {
 #timer for generating timestamps. 1 second resolution for HTTP date
 my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
-my $timer=uSAC::IO::timer 0, 1, sub {
+########################################################################################################################
+# my $timer=uSAC::IO::timer 0, 1, sub {                                                                                #
+#         my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = gmtime($Time=time);                       #
+#         #export to globally available time?                                                                          #
+#         #                                                                                                            #
+#         #Format Tue, 15 Nov 1994 08:12:31 GMT                                                                        #
+#         #TODO: 0 padding of hour min sec                                                                             #
+#         $Date="$days[$wday], $mday $months[$mon] ".($year+1900).sprintf(" %02d:%02d:%02d",$hour, $min, $sec)." GMT"; #
+# };                                                                                                                   #
+# uSAC::Main::usac_listen("server/shutdown/graceful", sub {                                                            #
+#     if($timer){                                                                                                      #
+#       uSAC::IO::cancel $timer;                                                                                       #
+#       Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN SESSION';                                             #
+#     }                                                                                                                #
+# });                                                                                                                  #
+########################################################################################################################
+
+sub _ticker {
 	my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = gmtime($Time=time);
 	#export to globally available time?
 	#
 	#Format Tue, 15 Nov 1994 08:12:31 GMT
 	#TODO: 0 padding of hour min sec
 	$Date="$days[$wday], $mday $months[$mon] ".($year+1900).sprintf(" %02d:%02d:%02d",$hour, $min, $sec)." GMT";
-};
+}
 
-uSAC::Main::usac_listen("server/shutdown/graceful", sub {
-    if($timer){
-      uSAC::IO::cancel $timer;
-      Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN SESSION';
-    }
-});
 
 
 #Return an array of references to variables which are publically editable

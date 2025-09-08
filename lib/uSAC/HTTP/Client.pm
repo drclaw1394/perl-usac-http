@@ -48,6 +48,33 @@ BUILD {
 }
 
 
+method process_cli_options {
+  my $options=shift;
+  $options//=\@ARGV;
+
+
+  #Attempt to parse the CLI options
+  require Getopt::Long;
+  my %options;
+  my $parser=Getopt::Long::Parser->new;
+  $parser->configure("pass_through");
+  
+  $parser->getoptionsfromarray($options, \%options,
+    "host_pool_limit=i",
+    
+  ) or die "Invalid arguments";
+
+  for my($key, $value)(%options){
+    if($key eq "host_pool_limit"){
+      $_host_pool_limit=$value;
+    }
+  }
+
+  $self->SUPER::process_cli_options($options);
+  $self;
+}
+
+
 
 # Innerware chain dispatcher. Triggers redirects and executes queued requests
 method _inner_dispatch :override {
@@ -198,7 +225,19 @@ method _request {
   #my $limit =2;
   my $count=$table->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
   Log::OK::TRACE and log_trace "pending request count $count,  Active count: $table->[uSAC::HTTP::Site::ACTIVE_COUNT]"; 
-  return if($table->[uSAC::HTTP::Site::ACTIVE_COUNT] >= $_host_pool_limit or $count == 0);
+
+  # If we are too busy.. return
+  return if($table->[uSAC::HTTP::Site::ACTIVE_COUNT] >= $_host_pool_limit);
+
+
+  # If host has nothing to do,,, drop the session, the return
+  # TODO: make this a time check.
+  #
+  if($count == 0){
+    # ensure all sessions are dropped!
+    $session->drop;
+    return;
+  }
 
 
   my $details=shift($table->[uSAC::HTTP::Site::REQ_QUEUE]->@*);
