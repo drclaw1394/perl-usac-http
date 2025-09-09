@@ -115,6 +115,8 @@ BUILD{
   # Ensure a site ID
   $_id//=$id++;
 
+  $self->add_to($_parent_site) if $_parent_site;
+  
   $_sites={}; 
   # ... and a prefix
   $_prefix//="";

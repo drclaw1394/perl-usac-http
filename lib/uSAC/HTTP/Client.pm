@@ -41,6 +41,8 @@ field $_on_error :param=undef;
 field $_on_response :param=undef;
 field $_running_flag :mutator;
 
+field $_auto_finish :param=1;
+
 BUILD {
   $self->mode=2;          # Set mode to client.
   $_host_pool_limit//=4;  # limit to 5 concurrent connections by default
@@ -91,6 +93,22 @@ method _inner_dispatch :override {
         # shift the pipeline
         shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
         $_on_response and &$_on_response;
+
+        if($_auto_finish){
+          my $finish=0;
+          for my ($k, $v)($self->host_tables->%*){
+            $finish+=$v->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
+          }
+          if($finish==0){
+            # Stop internal timers
+            #timer_cancel $_stream_timer;
+            uSAC::Main::usac_broadcast "server/shutdown/graceful", "yes";
+          }
+        }
+
+
+
+        ###
 
         #TODO: Check status code
         for($_[REX][STATUS]){
@@ -235,7 +253,7 @@ method _request {
   #
   if($count == 0){
     # ensure all sessions are dropped!
-    $session->drop;
+    $session->drop if $session;
     return;
   }
 
@@ -453,6 +471,10 @@ method on_response :lvalue{
 
 method on_error :lvalue{
   $_on_error;
+}
+
+method stop :override {
+  uSAC::Main::usac_broadcast "server/shutdown/graceful", "yes";
 }
 
 1;
