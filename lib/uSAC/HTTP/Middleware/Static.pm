@@ -584,6 +584,7 @@ sub uhm_static_root {
   my $do_dir=$options{list_dir}//$options{do_dir};
   my $pre_encoded=$options{pre_encoded}//{};
   my $prefix=$options{prefix};
+  my $meta_cache_limit=$options{meta_cacche_limit}//10;
   \my @roots=$options{roots};
 
   \my @indexes=($options{index}//$options{indexes}//[]);
@@ -640,17 +641,19 @@ sub uhm_static_root {
   my $opener=$fmc->opener;
   my $closer=$fmc->closer;
   my $sweeper=$fmc->sweeper;
-  #$fmc->disable;
 
-  my $timer=uSAC::IO::timer 0, 10, sub { 
-    #$sweeper->()
-  };
+  # Disable metat caching if a limit of 0 seconds
+  $fmc->disable if $meta_cache_limit <= 0;
+
+  my $timer;
+
+  $timer=uSAC::IO::timer 0, 10, sub { $sweeper->() } if $meta_cache_limit >0;
 
   # Register for gracefull shutdown. No new connections should be accepted
 
   uSAC::Main::usac_listen("server/shutdown/graceful", sub {
       Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN STATIC';
-      uSAC::IO::timer_cancel $timer;
+      uSAC::IO::timer_cancel $timer if $timer;
   });
   
   my $list_dir=_make_list_dir(%options);

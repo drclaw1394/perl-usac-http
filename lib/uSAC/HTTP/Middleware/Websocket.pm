@@ -714,6 +714,9 @@ sub close {
 	my $self=splice @_, 0, 1, FIN_FLAG|CLOSE;
 	&{$self->[writer_]};
 }
+sub destroy {
+  $_[0]->@*=();
+}
 
 #getter/setters
 sub on_message: lvalue {
