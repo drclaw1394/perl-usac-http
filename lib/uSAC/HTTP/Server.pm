@@ -3,7 +3,7 @@ package uSAC::HTTP::Server;
 our $VERSION = 'v0.1.0';
 #use feature "try";
 
-
+use Time::HiRes qw<time>;
 use Object::Pad;          # Class
 use uSAC::Log;
 use Log::OK;
@@ -20,7 +20,6 @@ use uSAC::HTTP;           # uSAC::HTTP Core code
 use uSAC::HTTP::Session;  # 'session' stuff
 use uSAC::Util;           # Auxillary functions
 
-use Hustle::Table;		    # Fancy dispatching of endpoints
 use uSAC::FastPack::Broker;
 
 use uSAC::HTTP::v1_1_Reader;
@@ -49,26 +48,8 @@ my $session_id=0;
 # allow setup code to force the actual default handler below. It is needed to
 # allow an default matcher to be set from outside the server/site.
 #
-my $dummy_default=[];
+our $dummy_default=[];
 
-#
-# If nothing else on this server matches, this will run
-# And if that happens it it most likley a protocol error
-# ie expecting a request line but getting something else
-#
-sub _default_handler {
-    require uSAC::HTTP::Middleware::Log;
-(
-    uSAC::HTTP::Middleware::Log::uhm_log(),
-    sub {
-			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER"; 
-			Log::OK::DEBUG and log_debug __PACKAGE__.join ", ", $_[IN_HEADER]->%*;
-			$_[PAYLOAD]="NOT FOUND";
-			return &rex_error_not_found;
-      undef;
-		}
-  )
-}
 
 sub _reexport {
   my ($pack, $target)=(shift, shift);
@@ -93,7 +74,6 @@ sub _reexport {
 class uSAC::HTTP::Server :isa(uSAC::HTTP::Site);
 
 no warnings "experimental";
-field $_host_tables :mutator;
 field $_cb;
 field $_listen :param=["po=5001,addr=::,t=stream"];
 field $_listen_spec;    # The array listeners
@@ -132,7 +112,7 @@ field $_zombie_limit;
 field $_stream_timer;
 field $_server_clock;
 field $_mime;
-field $_sub_product :param="ductapeXchansaw";
+field $_sub_product :reader :param="ductapeXchansaw";
 field $_workers :mutator :param=0;
 field $_pool;
 #field $_cv;
@@ -148,7 +128,6 @@ BUILD {
   
   $_pool=[];
   # Hash of all sites on this server (indexed by id)
-  #$_sites={}; 
 
   # server is top level, set  default mime
 	$self->set_mime_db(uSAC::MIME->new); # set  and index
@@ -158,7 +137,7 @@ BUILD {
   $self->id="/";
 
   $self->sites->{"/"}=$self; # Add top level (server to the sites)
-	$_host_tables={};
+	$self->host_tables={};
   $_zombies=[];
 	$_zombie_limit//=100;
 	$_static_headers={};#STATIC_HEADERS;
@@ -168,16 +147,19 @@ BUILD {
   # Add the wildcard host, incase no sites or route are added. Gives at least
   # one table with rebuilding the routes/dispatch
   # 
-  $_host_tables->{"*.*"}=[
-    Hustle::Table->new($dummy_default), # Table
-    {},                                  # Table cache
-    undef,                              #  dispatcher
-    "",
-    [],
-    [],
-    0
-
-  ];
+  ########################################################
+  # $_host_tables->{"*.*"}=[                             #
+  #   Hustle::Table->new($dummy_default), # Table        #
+  #   {},                                  # Table cache #
+  #   undef,                              #  dispatcher  #
+  #   "",                                                #
+  #   [],                                                #
+  #   [],                                                #
+  #   0                                                  #
+  #                                                      #
+  # ];                                                   #
+  ########################################################
+  $self->add_host_table("*.*", $dummy_default);
 
   # Setup passive socket database and configuration
   $_group_table={};
@@ -214,6 +196,25 @@ BUILD {
 
 	$self->static_headers={
 	  HTTP_SERVER()=>(uSAC::HTTP::Server::NAME."/".uSAC::HTTP::Server::VERSION." ".join(" ", $_sub_product) )};
+}
+
+#
+# If nothing else on this server matches, this will run
+# And if that happens it it most likley a protocol error
+# ie expecting a request line but getting something else
+#
+method _default_handler {
+    require uSAC::HTTP::Middleware::Log;
+(
+    uSAC::HTTP::Middleware::Log::uhm_log(),
+    sub {
+			Log::OK::DEBUG and log_debug __PACKAGE__. " DEFAULT HANDLER"; 
+			Log::OK::DEBUG and log_debug __PACKAGE__.join ", ", $_[IN_HEADER]->%*;
+			$_[PAYLOAD]="NOT FOUND";
+			return &rex_error_not_found;
+      undef;
+		}
+  )
 }
 
 method _setup_dgram_passive {
@@ -393,6 +394,7 @@ method prepare {
 
       if(!$_sessions->%* and $do_shutdown){
         Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN stream timer';
+        Log::OK::INFO and log_info "==END TIME: ". time;
         uSAC::IO::timer_cancel $_stream_timer;
       }
       
@@ -406,7 +408,7 @@ method prepare {
   # Any routes with wide ranging regex will grow the table very quickly.
   # Here we flush to ensure it is kept under control
   #
-  for my ($k,$v)(%$_host_tables){
+  for my ($k,$v)($self->host_tables->%*){
     # Clear the cached table lookup
     $v->[1]->%*=();
   }
@@ -550,20 +552,23 @@ method add_host_end_point{
 	#This becomes the value field in hustle table entry
 	#[matcher, value, type, default]
   
-	my $table=$_host_tables->{$host};
-  unless ($table){
-    # Host table does not exist. So create on. Add a default path also
-    $_host_tables->{$host}=$table=[
-      Hustle::Table->new($dummy_default), # Table
-      {},                                  # Table cache
-      undef,                              #  dispatcher
-      "", 
-      [],
-      [],
-      0
-
-    ];
-  }
+	my $table=$self->add_host_table($host, $dummy_default);
+  ########################################################################
+  # $_host_tables->{$host};                                              #
+  # unless ($table){                                                     #
+  #   # Host table does not exist. So create on. Add a default path also #
+  #   $_host_tables->{$host}=$table=[                                    #
+  #     Hustle::Table->new($dummy_default), # Table                      #
+  #     {},                                  # Table cache               #
+  #     undef,                              #  dispatcher                #
+  #     "",                                                              #
+  #     [],                                                              #
+  #     [],                                                              #
+  #     0                                                                #
+  #                                                                      #
+  #   ];                                                                 #
+  # }                                                                    #
+  ########################################################################
 
 
   # NOTE: This is the route context. This is  a back refernce to the table
@@ -582,17 +587,17 @@ method rebuild_routes {
   # Create a special default site for each host that matches any method and uri
   #  An entry is only added if the dummy_defualt is currently the default
   #
-  for my $host (keys $_host_tables->%*) {
+  for my $host (keys $self->host_tables->%*) {
     Log::OK::TRACE and log_trace(__PACKAGE__. " $host");
     #If the table has a dummy catch all then lets make an fallback
-    my $entry=$_host_tables->{$host}; 
+    my $entry=$self->host_tables->{$host}; 
     my $last=$entry->[0]->@*-1; #Index of default in hustle table
 
     if($entry->[0][$last][1] == $dummy_default){
       Log::OK::DEBUG and log_debug "Adding default handler to $host";
-      my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, server=>$self, mode=>$self->mode);
+      my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, mode=>$self->mode);
       $site->parent_site=$self;
-      $site->_add_route([$Any_Method], undef, _default_handler);
+      $site->_add_route([$Any_Method], undef,$self-> _default_handler);
     }
   }
 }
@@ -609,14 +614,14 @@ method rebuild_dispatch {
   # routes as hosts. This means that all host tables will only fail matching to
   # either defaults at all times
 
-  if($self->routes == keys $_host_tables->%*){
+  if($self->routes == keys $self->host_tables->%*){
     Log::OK::WARN and log_warn "Multiple host tables, but each only contain default route matching";
     #exit;
   }
 
 
     # prepare dispatcher 
-    for(values $_host_tables->%*){
+    for(values $self->host_tables->%*){
       Log::OK::TRACE and log_trace __PACKAGE__." processing table entry for rebuild";
       $_->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]=$_->[uSAC::HTTP::Site::HOST_TABLE]->prepare_dispatcher(cache=>$_->[uSAC::HTTP::Site::HOST_TABLE_CACHE]);
     } 
@@ -624,7 +629,7 @@ method rebuild_dispatch {
 
     # Pre lookup the any host
     #my $any_host=$lookup{"*.*"};
-    my $any_host=$_host_tables->{"*.*"};
+    my $any_host=$self->host_tables->{"*.*"};
 
 
     # If we only have single host table, it is the anyhost. It it only has one
@@ -632,8 +637,8 @@ method rebuild_dispatch {
     # perform any routing lookups as we already know which one to use
     #
     my $single_end_point_mode=(
-      ($self->routes == keys $_host_tables->%*)
-        and (keys $_host_tables->%*)==1);
+      ($self->routes == keys $self->host_tables->%*)
+        and (keys $self->host_tables->%*)==1);
 
 
     if($single_end_point_mode){
@@ -660,12 +665,11 @@ method rebuild_dispatch {
     use Time::HiRes qw<time>;
     Log::OK::TRACE and  log_trace "IN SERVER CB: @_";
 
-    Log::OK::TRACE and  log_trace join ", ", values $_host_tables->%*;
+    Log::OK::TRACE and  log_trace join ", ", values $self->host_tables->%*;
     #my ($host, $input);
     
     # input is "method url"
-    #$table=$_host_tables->{$_[0]//""}//$any_host;
-    $table=$_[0]?$_host_tables->{$_[0]}//$any_host : $any_host;
+    $table=$_[0]?$self->host_tables->{$_[0]}//$any_host : $any_host;
 
     #Log::OK::TRACE and  log_trace  join ", ",$table->@*;
     (my $route, my $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
@@ -849,8 +853,8 @@ method dump_listeners {
 method routes {
   #my $self=shift;
   my @routes;
-  for my $host (sort keys $_host_tables->%*){
-    my $table= $_host_tables->{$host};
+  for my $host (sort keys $self->host_tables->%*){
+    my $table= $self->host_tables->{$host};
     for my $entry ($table->[0]->@*){
       push @routes, $entry;
     }
@@ -863,8 +867,8 @@ method dump_routes {
   use re qw(is_regexp regexp_pattern);
   try {
     require Text::Table;
-    for my $host (sort keys $_host_tables->%*){
-      my $table= $_host_tables->{$host};
+    for my $host (sort keys $self->host_tables->%*){
+      my $table= $self->host_tables->{$host};
       my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
       #
       # table is hustle table and cache entry
@@ -1064,7 +1068,7 @@ method do_stream_connect {
   #$socket=uSAC::IO::socket(AF_INET, SOCK_STREAM, 0);
   IO::FD::socket(my $socket, AF_INET, SOCK_STREAM, 0);
 
-  if( $entry=$_host_tables->{$host} and $entry->[uSAC::HTTP::Site::ADDR]){
+  if( $entry=$self->host_tables->{$host} and $entry->[uSAC::HTTP::Site::ADDR]){
 
     # Don't do a name resolve as we already have it.
     # 

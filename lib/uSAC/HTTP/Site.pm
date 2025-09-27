@@ -55,6 +55,8 @@ use Import::These qw<uSAC::HTTP:: Code Method Header Rex Constants>;
 use Sub::Middler;
 
 
+use Hustle::Table;		    # Fancy dispatching of endpoints
+
 class uSAC::HTTP::Site;
 
 no warnings "experimental";
@@ -84,6 +86,7 @@ field $_sites :reader;   # Hash of unique sites (shared accros hosts)
 #field $_protocols;      # Hash of Proto name to API
 
 field $_secrets        :mutator; # Hash table of host(no port num) to tls structures
+field $_host_tables    :mutator;
 
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE TRACE>;
@@ -104,9 +107,9 @@ our $Dir_Path=		qr{(?:<=[/])([^?]*+)(?<=[/])};
 
 #NOTE Comp matching only matches between slashes
 #
-our $Comp=		qr{(?:[^/?]+)};		#Path component
-our $Decimal=   qr{(?:\d+)};    #Decimal Integer
-our $Word=      qr{(?:\w+)};    #Word
+our $Comp=		qr{(?:[^/?]+)};		# Path component
+our $Decimal=   qr{(?:\d+)};    # Positive Decimal Integer
+our $Word=      qr{(?:\w+)};    # Word
 
 my $id=0;
 
@@ -185,7 +188,7 @@ method rebuild_routes {
     else {
       # Assume "normal" route
       $result=$self->_add_route(@$r);
-      die Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
+      Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
     }
   }
   $self;
@@ -232,7 +235,7 @@ method _add_route {
   #unshift @error, $self->construct_errorware;
   splice @error, 1, 0, $self->construct_errorware;
 
-  my $end=$self->_inner_dispatch;
+  my $end=$self->find_root->_inner_dispatch;
 
   my $static_headers=$self->find_root->static_headers;
 
@@ -455,13 +458,13 @@ method _wrap_middleware {
 
     }
     elsif(!defined){
-      die Exception::Class::Base->throw("Undefined Middleware attempted");
+      Exception::Class::Base->throw("Undefined Middleware attempted");
     }
     elsif (ref eq "" ){
       # Scalar used as a method name. Call method on delegate
       # and unshift the result to be processed
       # TODO: need a iteration limit here...
-      die Exception::Class::Base->throw("No delegate set for site. Cannot call method by name: $_")unless $_delegate;
+      Exception::Class::Base->throw("No delegate set for site. Cannot call method by name: $_")unless $_delegate;
         
 
       # Use postfix notation to access either a package or object method 
@@ -500,7 +503,7 @@ method _wrap_middleware {
 
       Log::OK::TRACE and log_trace "=====DELEGATE evalSTRING: @a   error :  $@";
       #die $@ if $@;
-      die Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
+      Exception::Class::Base->throw("Could not run $_delegate with method $_. $@") if $@;
       unshift @_, @pre, @a;
     }
     else {
@@ -641,8 +644,9 @@ method add_to {
 method add_site {
   for my $site(@_){
     my $root=$self->find_root;
+    say keys $root->sites->%*;
     if( exists $root->sites->{$site->id}){
-      die "Duplicate site id not allowed: @{[$site->id]}";
+      Exception::Class::Base->throw( "Duplicate site id not allowed: @{[$site->id]}");
     }
     $root->sites->{$site->id}=$site;
     $site->mode=$root->mode;
@@ -652,11 +656,32 @@ method add_site {
   $self;
 }
 
+method add_host_table {
+  my $host=shift;
+  my $dummy_default=shift;
+
+	my $table=$_host_tables->{$host};
+  unless ($table){
+    # Host table does not exist. So create on. Add a default path also
+    $_host_tables->{$host}=$table=[
+      Hustle::Table->new($dummy_default), # Table
+      {},                                  # Table cache
+      undef,                              #  dispatcher
+      "", 
+      [],
+      [],
+      0
+
+    ];
+  }
+  $table;
+}
+
 
 
 method child_site {
   my $root=$self->find_root;
-  my $child=uSAC::HTTP::Site->new(parent_site=> $self);
+  my $child=uSAC::HTTP::Site->new();#parent_site=> $self);
   $self->add_site($child);
   $child;
 }
@@ -835,7 +860,7 @@ method add_route {
       #
       #
 
-      die Exception::Class::Base->throw("Route Addition: a route needs at least two parameters (path, middleware, ...) or (method, path, middleware ...")
+      Exception::Class::Base->throw("Route Addition: a route needs at least two parameters (path, middleware, ...) or (method, path, middleware ...")
       unless @_>=2;
 
 
@@ -906,7 +931,7 @@ method add_route {
   catch($e){
     #my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
     require Error::Show;
-    log_fatal Error::Show::context(message=>$e, frames=>[$e->trace->frames]);
+    log_fatal Error::Show::context $e;
     exit;
     #$e->throw;
   }
@@ -933,7 +958,7 @@ method _delegate {
     # If delegate is not a reference, assume it is a package name. Check the package exists
     #
     no strict "refs";
-    die Exception::Class::Base->throw("Delegate package $_delegate not found. Do you need ro require it?") unless (%{$_delegate."::"});
+    Exception::Class::Base->throw("Delegate package $_delegate not found. Do you need ro require it?") unless (%{$_delegate."::"});
   }
 
   

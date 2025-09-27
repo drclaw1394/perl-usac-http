@@ -25,7 +25,7 @@ sub uhm_bridge_ws{
     [sub {
         my ($next, $index, $site)= $_[0];
         
-        # If external broker not set, use one in the site;
+        # If external broker not set, find the closes one in site hierrachy
         $broker//=$site->broker;
 
         # Lastley,, we just make our own... 
@@ -57,16 +57,6 @@ sub uhm_bridge_ws{
               $broker->listen(undef, $matcher,  $bridge, $type); 
             }
 
-            ###
-
-
-            ####################################################################################
-            # $broker->listen("$ws",  "test", sub {                                            #
-            #     Log::OK::TRACE and log_trace "from broker on ws $ws! ". Dumper @_;           #
-            #     #$bridge->forward_message_sub->([undef,[[time, "return", pack "D", 1234]]]); #
-            #     $broker->broadcast(undef, "return", pack "D", 1234);                         #
-            #   });                                                                            #
-            ####################################################################################
             
             $_[PAYLOAD]=[$broker, $bridge];
             &$next;

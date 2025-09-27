@@ -178,6 +178,7 @@ sub uhm_slurp {
           }
 
           $_[PAYLOAD]=delete $ctx{$_[REX]};
+          Log::OK::TRACE and log_trace "__Slurp complete .. calling next";
           &$next;
         }
       }

@@ -141,7 +141,9 @@ method init {
     $_sr->pause;
     $_sw->pause;
     delete $_sessions->{$_id};
-    IO::FD::close $_fh;
+    #IO::FD::close $_fh;
+    IO::FD::shutdown $_fh, 1;
+
     $_fh=undef;
     $_id=undef;
 

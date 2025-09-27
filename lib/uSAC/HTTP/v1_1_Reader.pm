@@ -554,6 +554,29 @@ sub make_serialize{
 
       if($mode == MODE_RESPONSE){
         $reply->[0]=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
+        # Render headers
+        #
+
+        # TODO: fix with multipart uploads? what is the content length
+        #
+        if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
+
+          # force 
+          # Only set if
+          $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
+          $ctx=1; #Mark as needing chunked
+          $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
+        }
+        elsif(!$_[PAYLOAD] and $code != HTTP_NOT_MODIFIED){
+
+          # No content but client might not have indicated a close. Force a content length of 0
+          $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
+        }
+        
+        # Render date header
+        $reply->[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
+
+
       }
       elsif($mode == MODE_REQUEST) {
         return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $code;
@@ -567,24 +590,6 @@ sub make_serialize{
         # DO NO RENDER REQUEST/RESPONSE LINE
       }
 
-      # Render headers
-      #
-
-      # TODO: fix with multipart uploads? what is the content length
-      #
-      if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
-
-        # force 
-        # Only set if
-        $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
-        $ctx=1; #Mark as needing chunked
-        $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
-      }
-      elsif(!$_[PAYLOAD] and $code != HTTP_NOT_MODIFIED){
-
-        # No content but client might not have indicated a close. Force a content length of 0
-        $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
-      }
 
       #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
 
@@ -605,11 +610,10 @@ sub make_serialize{
         $reply->[0].= $k.": ".$v.CRLF;
       }
 
-      $reply->[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
       $reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      Log::OK::TRACE and log_trace "->Serialize: headers: $_[REX]\n$reply->[0]";
+      Log::OK::TRACE and log_trace "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
 
       # mark headers as done, if not informational
       #

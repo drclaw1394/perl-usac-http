@@ -3,7 +3,7 @@ use feature qw<state isa>;
 use uSAC::Log;
 use uSAC::IO;
 use Object::Pad;
-
+use Time::HiRes qw<time>;
 use uSAC::HTTP;
 use Data::Dumper;
 use uSAC::IO;
@@ -17,6 +17,7 @@ use URI;
 class uSAC::HTTP::Client :isa(uSAC::HTTP::Server);
 no warnings "experimental";
 
+use constant::more NAME=>"uSAC", VERSION=>"0.1.0";
 
 
 #TODO
@@ -35,6 +36,8 @@ field $_read_size;
 field $_zombies;
 field $_application_parser;
 field $_total_request_count;
+
+
 #field $_host
 
 field $_on_error :param=undef;
@@ -45,8 +48,12 @@ field $_auto_finish :param=1;
 
 BUILD {
   $self->mode=2;          # Set mode to client.
-  $_host_pool_limit//=4;  # limit to 5 concurrent connections by default
+  $_host_pool_limit//=1;  # limit to 5 concurrent connections by default
   $_zombies=[];
+	$self->static_headers={
+	  HTTP_USER_AGENT()=>(uSAC::HTTP::Client::NAME."/".uSAC::HTTP::Client::VERSION)
+    #." ".join(" ", $self->sub_product) )};
+  };
 }
 
 
@@ -76,12 +83,26 @@ method process_cli_options {
   $self;
 }
 
+method do_auto_finish {
+          my $finish=0;
+          for my ($k, $v)($self->host_tables->%*){
+            $finish+=$v->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
+            #$finish+=$v->[uSAC::HTTP::Site::ACTIVE_COUNT];
+          }
+          if($finish==0){
+            # Stop internal timers
+            #timer_cancel $_stream_timer;
+            #Log::OK::INFO and log_info "==END TIME: ". time;
+            #uSAC::Main::usac_broadcast "server/shutdown/graceful", "yes";
+            $self->stop;
+          }
+}
 
 
 # Innerware chain dispatcher. Triggers redirects and executes queued requests
 method _inner_dispatch :override {
     sub {
-      #Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
+      Log::OK::TRACE and log_trace __PACKAGE__. " end is client ".join ", ", caller;
       if($_[CB]){
         #More data to come
         #
@@ -95,15 +116,7 @@ method _inner_dispatch :override {
         $_on_response and &$_on_response;
 
         if($_auto_finish){
-          my $finish=0;
-          for my ($k, $v)($self->host_tables->%*){
-            $finish+=$v->[uSAC::HTTP::Site::REQ_QUEUE]->@*;
-          }
-          if($finish==0){
-            # Stop internal timers
-            #timer_cancel $_stream_timer;
-            uSAC::Main::usac_broadcast "server/shutdown/graceful", "yes";
-          }
+          $self->do_auto_finish;
         }
 
 
@@ -171,6 +184,10 @@ method _error_dispatch :override {
             $_err->();
             $_on_error and $_on_error->($_[PAYLOAD]);
 
+            if($_auto_finish){
+              $self->do_auto_finish;
+            }
+
             $self->_request($entry, $session);
 
             #Call back to user agent?
@@ -183,7 +200,7 @@ method prepare :override {
   log_trace "__ TOP OF PREPARE CLIENT";
   $self->SUPER::prepare;
   $self->running_flag=1;
-
+  Log::OK::INFO and log_info "==START TIME: ". time;
   #Trigger any queued requests
   for my ($k,$v)($self->host_tables->%*){
     while($self->_request($v)){
@@ -289,7 +306,7 @@ method _request {
 
   $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
   $_total_request_count++;
-
+  Log::OK::TRACE and log_trace "Connect to $__host on port $port";
   $self->do_stream_connect($__host, $port, sub {
       my ($socket, $addr)=@_;
       $table->[uSAC::HTTP::Site::ADDR]=$addr;
@@ -432,11 +449,21 @@ method fetch {
   $options//={};
   # parse the uri
   unless($uri isa URI){
-    $uri=URI->new($uri);
+    $uri="URI"->new($uri);
   }
 
   #set host header if not present
-  $options->{headers}{HTTP_HOST()}=$uri->host_port unless exists $options->{headers}{HTTP_HOST()};
+  my $port=$uri->port; 
+  if($port != 80){
+   $options->{headers}{HTTP_HOST()}=$uri->host_port unless exists $options->{headers}{HTTP_HOST()};
+   $self->add_host_table($uri->host_port, $uSAC::HTTP::Server::dummy_default);
+  }
+  else {
+   $options->{headers}{HTTP_HOST()}=$uri->host unless exists $options->{headers}{HTTP_HOST()};
+   $self->add_host_table($uri->host, $uSAC::HTTP::Server::dummy_default);
+  }
+
+  $options->{headers}{HTTP_ACCEPT()}//="*/*";
   $self->request(
     $uri->host_port,               # Host
     $options->{method}//"GET",     # Method
@@ -444,6 +471,14 @@ method fetch {
     $options->{headers}//{},       # Headers
     $options->{body},              # payload
   );
+}
+
+method _default_handler :override {
+    require uSAC::HTTP::Middleware::Log;
+(
+  #uSAC::HTTP::Middleware::Log::uhm_log(),
+    uSAC::HTTP::Middleware::Slurp::uhm_slurp(),
+  )
 }
 
 method get {
