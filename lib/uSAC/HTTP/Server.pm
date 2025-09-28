@@ -384,7 +384,9 @@ method prepare {
       for(keys $_sessions->%*){
         $session=$_sessions->{$_};
 
-        if(($_server_clock-$session->time)> $timeout){
+        if(($_server_clock-$session->time)> $timeout
+            or $do_shutdown >1){
+
           Log::OK::DEBUG and log_debug "DROPPING ID: $_";
           $session->closeme=1;
           $session->drop(1);
@@ -392,7 +394,8 @@ method prepare {
       }
 
       if(!$_sessions->%* and $do_shutdown){
-        Log::OK::INFO and log_info "SERVER GRACEFULL SHUTDOWN IN stream timer $do_shutdown";
+        Log::OK::INFO and log_info "SERVER GRACEFULL SHUTDOWN IN stream timer" if $do_shutdown ==1;
+        Log::OK::WARN and log_warn "SERVER FORCED SHUTDOWN IN stream timer" if $do_shutdown >1;
         $_end_time=time;
         #Log::OK::INFO and log_info "==END TIME: ". time;
         uSAC::IO::timer_cancel $_stream_timer;
