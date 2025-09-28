@@ -36,6 +36,7 @@ field $_read_size;
 field $_zombies;
 field $_application_parser;
 field $_total_request_count;
+field $_accumulated_request_count;
 
 
 #field $_host
@@ -50,6 +51,8 @@ BUILD {
   $self->mode=2;          # Set mode to client.
   $_host_pool_limit//=1;  # limit to 5 concurrent connections by default
   $_zombies=[];
+  $_total_request_count=0;
+  $_accumulated_request_count=0;
 	$self->static_headers={
 	  HTTP_USER_AGENT()=>(uSAC::HTTP::Client::NAME."/".uSAC::HTTP::Client::VERSION)
     #." ".join(" ", $self->sub_product) )};
@@ -90,10 +93,6 @@ method do_auto_finish {
             #$finish+=$v->[uSAC::HTTP::Site::ACTIVE_COUNT];
           }
           if($finish==0){
-            # Stop internal timers
-            #timer_cancel $_stream_timer;
-            #Log::OK::INFO and log_info "==END TIME: ". time;
-            #uSAC::Main::usac_broadcast "server/shutdown/graceful", "yes";
             $self->stop;
           }
 }
@@ -114,6 +113,11 @@ method _inner_dispatch :override {
         # shift the pipeline
         shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
         $_on_response and &$_on_response;
+
+
+        my ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
+        $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
+        $_total_request_count--;
 
         if($_auto_finish){
           $self->do_auto_finish;
@@ -143,9 +147,6 @@ method _inner_dispatch :override {
         # The route used is always associated with a host table. Use this table
         # and attempt get the next item in the requst queue for the host
         #
-        my ($entry, $session)= ($_[ROUTE][1][ROUTE_TABLE], $_[REX][uSAC::HTTP::Rex::session_]);
-        $entry->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-        $_total_request_count--;
         $self->_request($entry, $session);
 
         # User agent should already know about this response
@@ -200,7 +201,8 @@ method prepare :override {
   log_trace "__ TOP OF PREPARE CLIENT";
   $self->SUPER::prepare;
   $self->running_flag=1;
-  Log::OK::INFO and log_info "==START TIME: ". time;
+  $self->start_time=time;
+  #Log::OK::INFO and log_info "==START TIME: ". time;
   #Trigger any queued requests
   for my ($k,$v)($self->host_tables->%*){
     while($self->_request($v)){
@@ -291,6 +293,7 @@ method _request {
       Log::OK::TRACE and log_trace "----OK SESSION";
       $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
       $_total_request_count++;
+      $_accumulated_request_count++;
       __request($table, $session, $details);
 
       return $table->[uSAC::HTTP::Site::ACTIVE_COUNT] < $_host_pool_limit ;
@@ -306,6 +309,7 @@ method _request {
 
   $table->[uSAC::HTTP::Site::ACTIVE_COUNT]++;
   $_total_request_count++;
+  $_accumulated_request_count++;
   Log::OK::TRACE and log_trace "Connect to $__host on port $port";
   $self->do_stream_connect($__host, $port, sub {
       my ($socket, $addr)=@_;
@@ -337,8 +341,6 @@ method _request {
     sub {
       # connection error
       #
-      #$table->[uSAC::HTTP::Site::ACTIVE_COUNT]--;
-      #$_total_request_count--;
       Log::OK::ERROR and log_error "error callback for stream connect: $_[1]";
       IO::FD::close $_[0]; # Close the socket
       
@@ -512,4 +514,11 @@ method stop :override {
   uSAC::Main::usac_broadcast "server/shutdown/graceful", "yes";
 }
 
+method report {
+  my $time=$self->end_time -$self->start_time;
+  my $rate=$_accumulated_request_count/$time;
+  Log::OK::INFO and log_info "Total Time: $time";
+  Log::OK::INFO and log_info "Total Requests: $_accumulated_request_count";
+  Log::OK::INFO and log_info "Request rate: $rate";
+}
 1;

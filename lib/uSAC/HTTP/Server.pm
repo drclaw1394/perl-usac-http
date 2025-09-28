@@ -121,7 +121,8 @@ field $_application_parser :param=undef;
 field $_total_requests;
 field $_static_headers :mutator;
 
-
+field $_start_time :mutator;
+field $_end_time   :mutator;
 
 
 BUILD {
@@ -372,11 +373,9 @@ method prepare {
 	#
 
   my $do_shutdown;
-  uSAC::Main::usac_listen("server/shutdown/graceful", sub { $do_shutdown=1; });
 
-  $_stream_timer=uSAC::IO::timer 0, $interval,
   
-    sub {
+    my $tsub=sub {
       #iterate through all connections and check the difference between the last update
       $_server_clock+=$interval;
       #and the current tick
@@ -393,13 +392,27 @@ method prepare {
       }
 
       if(!$_sessions->%* and $do_shutdown){
-        Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN stream timer';
-        Log::OK::INFO and log_info "==END TIME: ". time;
+        Log::OK::INFO and log_info "SERVER GRACEFULL SHUTDOWN IN stream timer $do_shutdown";
+        $_end_time=time;
+        #Log::OK::INFO and log_info "==END TIME: ". time;
         uSAC::IO::timer_cancel $_stream_timer;
+        $self->report;
       }
       
       #alarm	 $interval;# if $self->[sessions_]->%*; #only start interval if something to watch?
     };
+
+    $_stream_timer=uSAC::IO::timer 0, $interval, $tsub;
+
+    uSAC::Main::usac_listen("server/shutdown/graceful", sub { 
+        $do_shutdown++; 
+        if($do_shutdown > 1 and $_stream_timer){
+          # cancel timer
+          uSAC::IO::timer_cancel $_stream_timer; 
+          # and run cleanup now
+        }
+        $tsub->();
+      });
   
   #alarm $interval;
 
