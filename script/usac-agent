@@ -1,4 +1,4 @@
-#!/usr/bin/env usac --backend AnyEvent
+#!/usr/bin/env -S usac --backend AnyEvent
 use uSAC::HTTP::Client;
 use uSAC::HTTP;
 use uSAC::HTTP::Rex;
