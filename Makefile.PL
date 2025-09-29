@@ -4,7 +4,10 @@ WriteMakefile(
 	NAME              => 'uSAC::HTTP',
 	VERSION_FROM      => 'lib/uSAC/HTTP.pm',
 	MIN_PERL_VERSION  => '5.36.0',		
-	EXE_FILES	=> ['script/usac-http-server'],
+	EXE_FILES	=> [
+    'script/usac-http-server',
+    'script/usac-agent'
+  ],
 	
 	PREREQ_PM         => {
 		EV		=> 0,

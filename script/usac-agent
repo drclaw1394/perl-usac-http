@@ -1,0 +1,100 @@
+#!/usr/bin/env usac --backend AnyEvent
+use uSAC::HTTP::Client;
+use uSAC::HTTP;
+use uSAC::HTTP::Rex;
+use uSAC::Log;
+use Data::Dumper;
+use uSAC::IO;
+use Time::HiRes qw<time>;
+use Getopt::Long;
+use uSAC::HTTP::Middleware::Slurp;
+
+
+my $duration;
+my @static_headers;
+my $enable_repl;
+
+# Before we even attempt setup, check if help is needed.
+if(grep /-{1,2}h/, @ARGV){
+  help();
+}
+else {
+  run(@ARGV);
+}
+
+sub help {
+  require Pod::Usage;                    
+  Pod::Usage::pod2usage(verbose=>1, );
+  CORE::exit;
+
+}
+
+sub run {
+  my $agent=uSAC::HTTP::Client->new;
+  $agent->process_cli_options(\@_);
+
+  # Process remainder of CLI
+  while(@_){
+    $_=shift;
+    if(/-{1,2}duration/){
+      $duration=shift;
+    }
+    elsif(/^-{1,2}H/){
+      # A header field  like  NAME: VALUE
+      my $t=shift;
+      my ($k,$v)=split  ":", $t, 2;
+      push @static_headers, $k, $v;
+      next;
+    }
+    elsif(/^-{1,2}ws/){
+      # configure ws and upgrade?
+      # how to to message callback?
+    }
+    elsif(/^-{1,2}jar/){
+      # Path to cookie jar file to use
+    }
+    elsif(/^-{1,2}repl/){
+      # launch repl
+      $enable_repl=1;
+    }
+    elsif(/^--$/){
+      # End processing of options  
+      last;
+    }
+    elsif(/^[^-]/){
+      # Urls baby
+      my $url=$_;
+      #$agent->request($url, "GET", "/", {host=>$url});
+      asay $STDOUT, "FETCH QUEUE: $url";
+      $agent->fetch($url) for 1..1;#40000;
+    }
+  }
+
+  #my $count=10;
+
+  $agent->on_response= sub {
+    #asay $STDERR, " ---------ON RESPONSE ........";
+    asay $STDOUT, Dumper $_[IN_HEADER];
+    asay $STDOUT, $_[PAYLOAD][0][1];
+    };
+
+  $agent->on_error=sub {
+    asay $STDERR, "----_GOT ERROR============= @_";
+    #unless(--$count){
+    #  exit;
+    };
+
+#   $agent->add_route("GET", qr{.*}, uhm_slurp);
+
+  $agent->start;
+  $uSAC::HTTP::Site=$agent;
+  if($enable_repl){
+    # Run REPL if specified
+    # The repl is only in the master process
+    require uSAC::REPL;
+    uSAC::REPL::start();
+  }
+
+}
+
+
