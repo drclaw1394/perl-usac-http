@@ -15,6 +15,7 @@ use POSIX ();
 
 use IO::FD;
 use uSAC::FastPack::Broker;
+use URI::Escape;
 
 use Import::These qw<uSAC:: Util ::HTTP:: Code Header Rex Constants Route>;
 
@@ -417,6 +418,7 @@ sub _html_dir_list {
 		if(ref $entries eq "ARRAY"){
 			for my $row(@$entries){
 				my ($url,$label)=splice @$row,0,2;
+        #$url=uri_escape $url;
 				unshift @$row, qq|<a href="$url">$label</a>|;
 				$_[0].=
 				"    <tr>\n"
@@ -484,7 +486,7 @@ sub _make_list_dir {
     # Ensure html root has trailing slash
     $html_root.="/" unless $html_root=~m|/$|;
 
-		my $abs_path=$html_root.$uri;
+		my $abs_path=$html_root.uri_unescape $uri;
 		stat $abs_path;
     Log::OK::TRACE and log_trace "DIR LISTING for $abs_path";
     Log::OK::TRACE and log_trace "HTML ROOT is $html_root";
@@ -500,10 +502,10 @@ sub _make_list_dir {
 		#build uri from sysroot
 		my @fs_paths;
 		if($abs_path eq $html_root){
-			@fs_paths=<$abs_path*>;	
+			@fs_paths=<"$abs_path"*>;	
 		}
 		else{
-			@fs_paths=<$abs_path.* $abs_path*>;	
+			@fs_paths=<"$abs_path".* "$abs_path"*>;	
 		}
 		state $labels=[qw<name dev inode mode nlink uid gid rdev size access_time modification_time change_time block_size blocks>];
 		my @results
@@ -685,7 +687,7 @@ sub uhm_static_root {
         # middleware argument.
         #
         #$p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
-        $p=$_[PAYLOAD]||$_[REX][PATH];
+        $p=uri_unescape $_[PAYLOAD]||$_[REX][PATH];
 
         #
         # Strip the prefix if its specified

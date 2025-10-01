@@ -29,7 +29,7 @@ WriteMakefile(
     "HTTP::State"=>"v0.1.1",    # Cookies
     "constant::more"=> "v0.3.0",
 		"Log::OK"	=> "v0.2.1",
-		"Template::Plex"	=> "v0.7.0",
+		"Template::Plex"	=> "v0.9.1",
     "uSAC::FastPack" => 0,      # Message brokering
     "Text::Table"=>0,
 
@@ -42,11 +42,11 @@ WriteMakefile(
 		"URI"		=> 0,
 		"URL::Encode"	=> 0,
 		"URL::Encode::XS" =>0,
-    "Data::UUID"=>0,
+    "UUID"=>0,
     "Data::Dump"=>0,
     "Data::Dump::Color"=>0,
     "Time::Local"=>0,
-    "Exception::Class::Base"=>0
+    "Exception::Class::Base"=>0,
 
 
 	},
