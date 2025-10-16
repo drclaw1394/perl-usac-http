@@ -15,7 +15,6 @@ sub uhm_bridge_ws{
   my %options=@_;
 
   # Here we can specify a specifiy broker
-  my $broker=$options{broker};
 
   # Topic matchers /type pairs to forward immediately
   my $forward=$options{forward}//[];
@@ -23,10 +22,11 @@ sub uhm_bridge_ws{
   (
     uhm_websocket(),
     [sub {
-        my ($next, $index, $site)= $_[0];
+        my ($next, $index, %opts)= @_;
         
         # If external broker not set, find the closes one in site hierrachy
-        $broker//=$site->broker;
+        my $broker=$options{broker};
+        $broker//=($opts{site}->build_broker);
 
         # Lastley,, we just make our own... 
         $broker//=uSAC::FastPack::Broker->new();
@@ -38,14 +38,20 @@ sub uhm_bridge_ws{
           $ws->on_open=sub {
             # Create a new bridge
             #
-            $bridge=uSAC::FastPack::Broker::Bridge->new(broker=>$broker);
+            $bridge=uSAC::FastPack::Broker::Bridge->new(broker=>$broker, forward=>$forward);
 
-            # Set the the output sub BERFORE listening
-            $bridge->buffer_out_sub=sub { Log::OK::TRACE and log_trace , "--CALLIND BUFFER OUT on ws $ws"; $ws->send_binary_message($_[0][0]); };
+            $bridge->buffer_out_sub=sub {
+              Log::OK::TRACE and log_trace , "--CALLIND BUFFER OUT on ws $ws";
+              $ws->send_binary_message($_[0][0]); 
+            };
 
-            # Access the forwarding sub to force linking
+            # Access the forwarding sub to force linking with 
             $bridge->forward_message_sub;
 
+            # Add the bridge to the broker
+            $broker->add_bridge($bridge);
+
+            # Set the the output sub BERFORE listening
             ## Forward messages form the local broker across the bridge, unless the message originated from the bridge
             # When a bridge is used as the callback, it the forwarding sub and client id is used automatically
             #
@@ -53,17 +59,21 @@ sub uhm_bridge_ws{
             #$broker->listen(undef, "return",  $bridge); 
 
             # Add the initial forwarding 
-            for my ($matcher, $type)(@$forward){
-              $broker->listen(undef, $matcher,  $bridge, $type); 
-            }
+            ########################################################
+            # for my ($matcher, $type)(@$forward){                 #
+            #   $broker->listen(undef, $matcher,  $bridge, $type); #
+            # }                                                    #
+            ########################################################
 
             
-            $_[PAYLOAD]=[$broker, $bridge];
+            $_[PAYLOAD]=[$bridge, $broker];
+
             &$next;
 
           };
 
           $ws->on_message=sub {
+            # Pass data from ws
             Log::OK::TRACE and log_trace  Dumper $_[1];
             $bridge->on_read_handler->([$_[1]]);
           };
@@ -72,7 +82,7 @@ sub uhm_bridge_ws{
             Log::OK::TRACE and log_trace  "WEBSOCKET CLOSED";
             $ws->destroy;
             $bridge->close;
-            $broker->ignore("$ws",undef, undef,undef,"sub matcher"); #Remove all entires with client id 
+            #$broker->ignore("$ws",undef, undef,undef,"sub matcher"); #Remove all entires with client id 
             $ws=undef;
           };
 

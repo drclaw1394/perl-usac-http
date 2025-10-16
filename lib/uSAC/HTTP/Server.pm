@@ -127,6 +127,7 @@ field $_end_time   :mutator;
 
 BUILD {
   
+  $self->broker//=uSAC::FastPack::Broker->new();# This could be default broker...
   $_pool=[];
   # Hash of all sites on this server (indexed by id)
 
@@ -148,18 +149,7 @@ BUILD {
   # Add the wildcard host, incase no sites or route are added. Gives at least
   # one table with rebuilding the routes/dispatch
   # 
-  ########################################################
-  # $_host_tables->{"*.*"}=[                             #
-  #   Hustle::Table->new($dummy_default), # Table        #
-  #   {},                                  # Table cache #
-  #   undef,                              #  dispatcher  #
-  #   "",                                                #
-  #   [],                                                #
-  #   [],                                                #
-  #   0                                                  #
-  #                                                      #
-  # ];                                                   #
-  ########################################################
+  
   $self->add_host_table("*.*", $dummy_default);
 
   # Setup passive socket database and configuration
@@ -569,22 +559,6 @@ method add_host_end_point{
 	#[matcher, value, type, default]
   
 	my $table=$self->add_host_table($host, $dummy_default);
-  ########################################################################
-  # $_host_tables->{$host};                                              #
-  # unless ($table){                                                     #
-  #   # Host table does not exist. So create on. Add a default path also #
-  #   $_host_tables->{$host}=$table=[                                    #
-  #     Hustle::Table->new($dummy_default), # Table                      #
-  #     {},                                  # Table cache               #
-  #     undef,                              #  dispatcher                #
-  #     "",                                                              #
-  #     [],                                                              #
-  #     [],                                                              #
-  #     0                                                                #
-  #                                                                      #
-  #   ];                                                                 #
-  # }                                                                    #
-  ########################################################################
 
 
   # NOTE: This is the route context. This is  a back refernce to the table

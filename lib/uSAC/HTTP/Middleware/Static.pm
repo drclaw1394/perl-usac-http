@@ -581,7 +581,7 @@ sub uhm_static_root {
   my $open_modes=$options{open_flags}//0;
   my $allow=$options{allow};
   my $block=$options{block};
-  my $template=$options{template};
+  my $template=$options{template}//qr{plex$|plt$};
   my $no_encoding=$options{no_encoding}//"";
   my $do_dir=$options{list_dir}//$options{do_dir};
   my $pre_encoded=$options{pre_encoded}//{};

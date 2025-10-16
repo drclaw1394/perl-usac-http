@@ -88,6 +88,8 @@ field $_sites :reader;   # Hash of unique sites (shared accros hosts)
 field $_secrets        :mutator; # Hash table of host(no port num) to tls structures
 field $_host_tables    :mutator;
 
+field $_broker         :mutator :param=undef;         # Sites support have built in suppor for message brokering
+
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE TRACE>;
 
@@ -551,6 +553,19 @@ method build_hosts {
 		$parent=$parent->parent_site;
 	}
 	@hosts;
+}
+
+# Get broker from ancestors
+method build_broker {
+  my $broker;
+  
+  my $parent=$self; 
+  while($parent){
+    $broker=$self->broker; 
+    last if $broker;
+    $parent=$_parent_site;
+  }
+  $broker;
 }
 
 #find the root and unshift middlewares along the way
