@@ -208,10 +208,12 @@ method rebuild_routes {
 method _add_route {
   local $,=" ";
   my $method_matcher=shift;
+  my $type_spec=shift;
   my $path_matcher=shift;
 
   return unless $method_matcher;
-
+  say STDERR  "in _add_route";
+  say STDERR "$method_matcher, $type_spec, $path_matcher, @_";
   # Dead horse stripper is always the first
   #
   unshift @_, uhm_dead_horse_stripper(prefix=>$self->built_prefix);
@@ -327,18 +329,21 @@ method _add_route {
       $host=$uri;	#match all
     }
 
-    # 
-    # Fix the path matcher to a regex if the method matcher 
-    # is a regex.
-    #
-    if(ref($method_matcher) eq "Regexp"
-        and defined $path_matcher
-        and ref($path_matcher) ne "Regexp"){
-      # Force pathmatcher to re if method  matcher is an re
-      $path_matcher=qr{$path_matcher} ;
-
-    }
-    my ($matcher, $type, $path_matcher)=$self->__adjust_matcher($host, $method_matcher, $path_matcher);
+    ###########################################################
+    # #                                                       #
+    # # Fix the path matcher to a regex if the method matcher #
+    # # is a regex.                                           #
+    # #                                                       #
+    # if(ref($method_matcher) eq "Regexp"                     #
+    #     and defined $path_matcher                           #
+    #     and ref($path_matcher) ne "Regexp"){                #
+    #   # Force pathmatcher to re if method  matcher is an re #
+    #   $path_matcher=qr{$path_matcher} ;                     #
+    #                                                         #
+    # }                                                       #
+    ###########################################################
+    say STDERR "before adjust : $host, $method_matcher, $type_spec, $path_matcher";
+    my ($matcher, $type, $path_matcher)=$self->__adjust_matcher($host, $method_matcher, $type_spec, $path_matcher);
 
     # Create a route structure
     my @route;
@@ -361,6 +366,7 @@ method _add_route {
     }
 
     # Actually add the route to the server/client
+    say STDERR "$host, $matcher, $type, @route";
     $self->find_root->add_host_end_point($host, $matcher, \@route, $type);
     last unless defined $matcher;
 
@@ -370,7 +376,7 @@ method _add_route {
 
 # Returns a matcher and a type suitable for using in a hustle::table
 method __adjust_matcher {
-  my ($host, $method_matcher, $path_matcher)=@_;
+  my ($host, $method_matcher, $type_spec, $path_matcher)=@_;
   my $matcher;
   my $type;
     # $host, @matcher (for method), $path_matcher
@@ -379,28 +385,17 @@ method __adjust_matcher {
   Log::OK::TRACE and log_trace "$host=>$method_matcher ";
   #test if $path_matcher is a regex
 
-  if(ref($path_matcher) eq "Regexp"){
+  if(!defined $path_matcher){
     $type=undef;
-    #$pm=$path_matcher;
-    $matcher=qr{^$method_matcher $bp$path_matcher};
-  }
-  elsif(!defined $path_matcher){
-    $type=undef;
-    #$pm=$path_matcher;
     $matcher=undef;
-    #$matcher=qr{$method_matcher $bp$path_matcher};
   }
-  elsif($path_matcher =~ /\$$/){
-    #$pm=substr $path_matcher, 0, -1;
-    Log::OK::TRACE and log_trace "Exact match";
-    $type="exact";
-    #my $pm=
-    $path_matcher =~ s/\$$//;
+  elsif($type_spec eq "exact" or $type_spec eq "begin"){
     $matcher="$method_matcher $bp$path_matcher";
+    $type=$type_spec;
   }
   else {
-    $type="begin";
-    $matcher="$method_matcher $bp$path_matcher";
+    $matcher=qq{^$method_matcher $bp$path_matcher};
+    $type=undef;
   }
   ($matcher, $type, $path_matcher);
 }
@@ -748,8 +743,135 @@ method add_delegate {
 }
 
 # Takes site objects also!!!
-#
+# 
+#   /pop/asdpiasd"   # Prefix match
+#   "==" "/kjdflkjsdf   # exact match
+#   "=~" asdfasdf"    # Regex match
+#   
 method add_route {
+  # METHOD, path, type, middlewares
+  my $state="SITE";
+  my $method;
+  my $type;
+  my $matcher;
+  my @middleware;
+  
+  my $item;
+      use Data::Dumper;
+      say STDERR caller(0);
+  say STDERR "INPUTS: ".Dumper @_;
+  LOOP: while(defined ($item =shift @_)){
+    say STDERR "STATE: $state   $item"; 
+    say STDERR ref $item;
+    if($state eq  "SITE"){
+      # Direct push if another site object
+      if($item isa uSAC::HTTP::Site){
+        push @$_staged_routes, $item; # Copy to staging
+        return; # bypass
+      }
+      else {
+        $state="METHOD";
+        redo;
+      }
+    }
+    elsif($state eq "METHOD"){
+      say STDERR  $item;
+      # Expecting a string or array of strings
+      if(ref $item eq ""){
+        say STDERR "STRING METHOD";
+        # String name of a method. 
+        $method=$item//"";
+        $state="TYPE";
+
+        
+        unless($method and grep /$method/, $self->supported_methods){
+          say STDERR "NO MATCHING METHOD";
+          $method=$self->default_method;;
+          say STDERR "after  MATCHING METHOD";
+          redo;  # Redo as item needs further processing
+        }
+      }
+      elsif(ref($item->[0]) eq ""){
+        # Assume an array. call this method again with unpacked method names
+        my @args=@_;
+        for(@$item){
+          $self->add_route($_, @args);
+        }
+        # Exit above while loop
+        last;
+      }
+      else {
+        die "Confused by method";
+      }
+    }
+    elsif($state eq "TYPE"){
+      $state="PATH";
+
+      for($item){
+        if(/^exact$/ or /^==$/){
+          $type= "exact";
+        }
+        elsif(/^begin$/){
+          $type="begin";
+        }
+        elsif(/^=~$/){
+          $type = undef;
+        }
+        else {
+          # If no match we assume its a path 
+          $type="begin";
+          # redo
+          redo LOOP;
+        }
+      }
+
+    }
+    elsif($state eq "PATH"){
+      # Assume item is a string here 
+      $matcher=$item;
+      $state="MIDDLE";
+    }
+    elsif($state eq "MIDDLE"){
+      # Test for delegate methods
+      if(ref($item) eq ""){
+        my $del_meth=$item;
+        unless($del_meth){
+          $del_meth="__";
+        }
+        else {
+          $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
+        }
+        push @middleware, $del_meth;
+      }
+      else {
+        push @middleware, $item;
+      }
+
+    }
+    elsif($state eq "FINAL"){
+      # Convert any implicit routes? missing method, type etc
+      $method//=$self->default_method;
+      $type//="begin";
+      $matcher="";
+
+      # path will way exist
+      
+
+        #push to staging
+    }
+    else {
+      die " INVALID STATE IN add_route";
+    }
+
+
+  }
+
+  say STDERR "END OF ADD ROUTE";
+  say STDERR "$$, $method, $type, $matcher, @middleware";
+  push @$_staged_routes, [$method, $type, $matcher, @middleware]; # Copy to staging
+
+  return $self;
+
   my $del_meth;
 
   my $ref=ref $_[0];
@@ -820,55 +942,65 @@ method add_route {
         # implicit route to delegate
         #
         my $a=shift;
-
-        $a= "(?:".join("|", @$a).")";
-
-        #Test the methods actually match somthing
-
-        $a=qr{$a};
         my $b=shift;
-        $del_meth=$b;   # The path is the basis for implicit method
-        unless($del_meth){
-          $del_meth="__";
-        }
-        else {
-          $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
-        }
-        #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
 
-        $b=qr{$b}; #if defined $b;
-        unshift @_, $a, $b, $del_meth;
-        push @$_staged_routes, [@_]; # Copy to staging
+        # Call add rount again with each method
+        for (@$a){
+          $self->add_route($_,$b); 
+        }
+
+        #################################################################
+        # $a= "(?:".join("|", @$a).")";                                 #
+        #                                                               #
+        # #Test the methods actually match somthing                     #
+        #                                                               #
+        # $a=qr{$a};                                                    #
+        # $del_meth=$b;   # The path is the basis for implicit method   #
+        # unless($del_meth){                                            #
+        #   $del_meth="__";                                             #
+        # }                                                             #
+        # else {                                                        #
+        #   $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1; #
+        # }                                                             #
+        # #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;  #
+        #                                                               #
+        # $b=qr{$b}; #if defined $b;                                    #
+        # unshift @_, $a, $b, $del_meth;                                #
+        # push @$_staged_routes, [@_]; # Copy to staging                #
+        #################################################################
 
     }
 
-    elsif(@_ == 2 and ref($_[0]) eq "RegExp" and ref($_[1]) eq ""){
-        # Two argument ,first is HTTP method regex, second is path scalar
-        # implicit route to delegate
-        #
-        my $a=shift;
-
-        #$a= "(?:".join("|", @$a).")";
-
-        #Test the methods actually match somthing
-
-        #$a=qr{$a};
-        
-        my $b=shift;
-
-        $del_meth=$b;   # The path is the basis for implicit method
-        unless($del_meth){
-          $del_meth="__";
-        }
-        else {
-          $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
-        }
-        #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
-
-        $b=qr{$b}; #if defined $b;
-        unshift @_, $a, $b, $del_meth;
-        push @$_staged_routes, [@_]; # Copy to staging
-    }
+    # Multiple methods are only allowed in array form 
+    #########################################################################
+    # elsif(@_ == 2 and ref($_[0]) eq "RegExp" and ref($_[1]) eq ""){       #
+    #     # Two argument ,first is HTTP method regex, second is path scalar #
+    #     # implicit route to delegate                                      #
+    #     #                                                                 #
+    #     my $a=shift;                                                      #
+    #                                                                       #
+    #     #$a= "(?:".join("|", @$a).")";                                    #
+    #                                                                       #
+    #     #Test the methods actually match somthing                         #
+    #                                                                       #
+    #     #$a=qr{$a};                                                       #
+    #                                                                       #
+    #     my $b=shift;                                                      #
+    #                                                                       #
+    #     $del_meth=$b;   # The path is the basis for implicit method       #
+    #     unless($del_meth){                                                #
+    #       $del_meth="__";                                                 #
+    #     }                                                                 #
+    #     else {                                                            #
+    #       $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;     #
+    #     }                                                                 #
+    #     #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;      #
+    #                                                                       #
+    #     $b=qr{$b}; #if defined $b;                                        #
+    #     unshift @_, $a, $b, $del_meth;                                    #
+    #     push @$_staged_routes, [@_]; # Copy to staging                    #
+    # }                                                                     #
+    #########################################################################
 
     else {
       # Long form processing
@@ -896,6 +1028,13 @@ method add_route {
         # Also means the path matcher must also be changed
         #
         my $a=shift;
+
+        my @args=@_;
+        for(@$a){
+          $self->add_route($_, @args);
+        }
+
+
         #unshift @_, "(?:".join("|", @$a).")";
         $a= "(?:".join("|", @$a).")";
 

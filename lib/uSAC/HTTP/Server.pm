@@ -20,6 +20,8 @@ use uSAC::HTTP;           # uSAC::HTTP Core code
 use uSAC::HTTP::Session;  # 'session' stuff
 use uSAC::Util;           # Auxillary functions
 
+use uSAC::HTTP::Method;
+
 use uSAC::FastPack::Broker;
 
 use uSAC::HTTP::v1_1_Reader;
@@ -489,6 +491,9 @@ method make_stream_accept {
     my ($fhs, $peers, $passive_fd)=@_;
     my $session;
     my $i=0;
+    # Lookup the spec entry from fd_table
+    my $entry=$_fd_table->{$passive_fd};
+    adump $STDERR, $entry;
     for my $fh(@$fhs){
       # TCP_NODELY etc here?
       #
@@ -498,18 +503,19 @@ method make_stream_accept {
 
       if(@$_zombies){
         try {
-        Log::OK::DEBUG and log_debug "--REUSE ZOMBIE";
-        $session=pop @$_zombies;
-        $session->revive($session_id, $fh, $scheme, $peers->[$i]);
-      }
-      catch($e){
-        log_debug "--- revieve error";
-        log_debug $e;
-      }
+          Log::OK::DEBUG and log_debug "--REUSE ZOMBIE";
+          $session=pop @$_zombies;
+          $session->revive($session_id, $fh, $scheme, $peers->[$i]);
+        }
+        catch($e){
+          log_debug "--- revieve error";
+          log_debug $e;
+        }
       }
       else {
 
         Log::OK::DEBUG and log_debug "--create new session";
+
         # Create a new session
         $session=uSAC::HTTP::Session->new;
         $session->init($session_id, $fh, $_sessions, $_zombies, $self, $scheme, $peers->[$i],$_read_size);
@@ -566,7 +572,7 @@ method add_host_end_point{
   $ctx->[ROUTE_TABLE]=$table;
 
   #Actually add the entry to hustle table
-	$table->[0]->add(matcher=>$matcher, value=>$ctx, type=>$type);
+	$table->[0]->add(matcher=>"$matcher", value=>$ctx, type=>$type);
 }
 
 method rebuild_routes {
@@ -587,7 +593,10 @@ method rebuild_routes {
       Log::OK::DEBUG and log_debug "Adding default handler to $host";
       my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, mode=>$self->mode);
       $site->parent_site=$self;
-      $site->_add_route([$Any_Method], undef,$self-> _default_handler);
+      for(HTTP_GET, HTTP_HEAD, HTTP_POST, HTTP_PUT, HTTP_DELETE, HTTP_CONNECT, HTTP_OPTIONS, HTTP_TRACE, HTTP_PATCH){
+        say STDERR "_____ $_ _______";
+        $site->_add_route($_, "begin", "" , $self-> _default_handler);
+      }
     }
   }
 }
@@ -859,7 +868,8 @@ method dump_routes {
     require Text::Table;
     for my $host (sort keys $self->host_tables->%*){
       my $table= $self->host_tables->{$host};
-      my $tab=Text::Table->new("Match", "Match Type", "Site ID", "Prefix", "Host");
+      my $sep=\"|";
+      my $tab=Text::Table->new($sep,"Match", $sep, "Match_Type", $sep, "Site_ID", $sep, "Prefix",$sep,  "Host",$sep, );
       #
       # table is hustle table and cache entry
       # 
@@ -875,22 +885,22 @@ method dump_routes {
 
 
         my $matcher=$entry->[0];
-        if(is_regexp $matcher){
-          $matcher=regexp_pattern $matcher;
-          while($matcher=~s|\(\?\^u\:(.*)\)|$1|){};
+        if(is_regexp $entry->[2]){
+          #$matcher=regexp_pattern $matcher;
+          #while($matcher=~s|\(\?\^u\:(.*)\)|$1|){};
 
         }
         my $key;
         my @a;
 
         if($site){
-          $tab->load([$matcher, $entry->[2]//"regexp", $site->id, $site->prefix, join "\n",$host]);
+          $tab->load([$matcher, is_regexp($entry->[2])?"regexp":$entry->[2], $site->id, $site->prefix, join "\n",$host]);
         }
         else{
-          $tab->load([$matcher, $entry->[2]//"regexp", "na", "na", join "\n",$host]);
+          $tab->load([$matcher, is_regexp($entry->[2])?"regexp":$entry->[2], "na", "na", join "\n",$host]);
         }
       }
-      Log::OK::INFO and log_info join "", $tab->table;
+      Log::OK::INFO and log_info "\n".join "", $tab->table;
 
     }
   }
@@ -1074,6 +1084,8 @@ method do_stream_connect {
   $id;
 }
 
+method report {
+}
 
 method worker_count {
   $_workers= pop;

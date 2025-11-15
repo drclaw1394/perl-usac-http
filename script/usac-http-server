@@ -328,7 +328,9 @@ sub run {
   }
   # process any remaining static file service location 
   #
-  $current->add_route("", uhm_static_root roots=>[@roots], %cur_opts) if @roots;
+  my $sr=uhm_static_root roots=>[@roots], %cur_opts;
+  say STDERR "-----STAIC ROOTS is $sr";
+  $current->add_route("", $sr) if @roots;
   @roots=(); # Reset roots
 
 
