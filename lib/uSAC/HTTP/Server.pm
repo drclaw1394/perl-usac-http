@@ -863,6 +863,7 @@ method routes {
 
 method dump_routes {
   #my ($self)=@_;
+  say STDERR "-----DUMPING ROUTES=------";
   use re qw(is_regexp regexp_pattern);
   try {
     require Text::Table;

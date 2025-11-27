@@ -677,10 +677,10 @@ method add_host_table {
       Hustle::Table->new($dummy_default), # Table
       {},                                  # Table cache
       undef,                              #  dispatcher
-      "", 
-      [],
-      [],
-      0
+      "",                                 # addr
+      [],                                 # request que
+      [],                                 # idle pool
+      0                                   # active count 
 
     ];
   }
@@ -761,8 +761,8 @@ method add_route {
       say STDERR caller(0);
   say STDERR "INPUTS: ".Dumper @_;
   LOOP: while(defined ($item =shift @_)){
-    say STDERR "STATE: $state   $item"; 
-    say STDERR ref $item;
+    say STDERR "STATE: $state   $item\n"; 
+    #say STDERR ref $item;
     if($state eq  "SITE"){
       # Direct push if another site object
       if($item isa uSAC::HTTP::Site){
@@ -830,6 +830,10 @@ method add_route {
       # Assume item is a string here 
       $matcher=$item;
       $state="MIDDLE";
+      unless(@_){
+        # need to use implicit routing  and reprocess item
+        redo LOOP;
+      }
     }
     elsif($state eq "MIDDLE"){
       # Test for delegate methods
@@ -866,8 +870,9 @@ method add_route {
 
   }
 
-  say STDERR "END OF ADD ROUTE";
-  say STDERR "$$, $method, $type, $matcher, @middleware";
+  say STDERR "END OF ADD ROUTE\n";
+  say STDERR "$$, $method, $type, $matcher, @middleware\n";
+
   push @$_staged_routes, [$method, $type, $matcher, @middleware]; # Copy to staging
 
   return $self;

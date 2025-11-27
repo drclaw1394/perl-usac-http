@@ -6,18 +6,10 @@ my $server=uSAC::HTTP::Server->new(listen=>"f=INET\$,po=9090,s=stream");
 
 $server->add_middleware(uhm_log);
 
-$server->add_route('GET'
-  =>'$'
-  =>sub {
-    local $/=undef; state $data; $data=<DATA> unless $data;	
-    #TODO: bug. <> operator not working with state
-
-    $_[PAYLOAD]=$data;	
-  }
-);
 
 $server->add_route('GET'
-  =>'ws$'
+  =>"==",
+  =>'ws',
   => uhm_websocket()
   =>sub{
 		my ($matcher, $rex, $in_headers, $headers, $ws)=@_;
@@ -56,9 +48,20 @@ $server->add_route('GET'
 	}
 );
 
+# Catch all
+$server->add_route('GET'
+  =>''
+  =>sub {
+    local $/=undef; state $data; $data=<DATA> unless $data;	
+    #TODO: bug. <> operator not working with state
+
+    $_[PAYLOAD]=$data;	
+  }
+);
+
 
 $server->process_cli_options(@ARGV);
-$server->run;
+$server->start;
 
 __DATA__
 <html>
