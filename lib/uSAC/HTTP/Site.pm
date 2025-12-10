@@ -130,7 +130,9 @@ BUILD{
   $_staged_routes//=[];
 
   # Only add delegate if specified
-  $self->add_delegate($_delegate) if $_delegate;
+  #
+  $_delegate=$self unless $_delegate;
+  $self->add_delegate($_delegate);
 
   # Normalize host
   if(defined($_host) and ref $_host ne "ARRAY"){
@@ -182,11 +184,13 @@ method rebuild_routes {
     if($r isa __PACKAGE__){
       $r->rebuild_routes; # Recurse down
     }
-    elsif (($ref  ne "ARRAY" and $ref ne "HASH") or %{$r."::"}){
-      # Other object or namespace
-      $_delegate=$r;    # update the active delegate for implicit routes
-      $self->_delegate($r);
-    }
+    ########################################################################
+    # elsif (($ref  ne "ARRAY" and $ref ne "HASH") or %{$r."::"}){         #
+    #   # Other object or namespace                                        #
+    #   $_delegate=$r;    # update the active delegate for implicit routes #
+    #   $self->_delegate($r);                                              #
+    # }                                                                    #
+    ########################################################################
     else {
       # Assume "normal" route
       $result=$self->_add_route(@$r);
@@ -212,8 +216,6 @@ method _add_route {
   my $path_matcher=shift;
 
   return unless $method_matcher;
-  say STDERR  "in _add_route";
-  say STDERR "$method_matcher, $type_spec, $path_matcher, @_";
   # Dead horse stripper is always the first
   #
   unshift @_, uhm_dead_horse_stripper(prefix=>$self->built_prefix);
@@ -342,7 +344,6 @@ method _add_route {
     #                                                         #
     # }                                                       #
     ###########################################################
-    say STDERR "before adjust : $host, $method_matcher, $type_spec, $path_matcher";
     my ($matcher, $type, $path_matcher)=$self->__adjust_matcher($host, $method_matcher, $type_spec, $path_matcher);
 
     # Create a route structure
@@ -366,7 +367,6 @@ method _add_route {
     }
 
     # Actually add the route to the server/client
-    say STDERR "$host, $matcher, $type, @route";
     $self->find_root->add_host_end_point($host, $matcher, \@route, $type);
     last unless defined $matcher;
 
@@ -469,26 +469,28 @@ method _wrap_middleware {
       my $string;
       my @pre;
       my $hook;
-      try {
-        $hook=$_delegate->middleware_hook;
-      }
-      catch($e){
-        Log::OK::WARN and log_warn $e;
-      }
-
-      if($hook){
-        unless(ref $hook eq "CODE"){
-          my $msg="$_delegate->middleware_hook must return a subroutine reference";
-          log_fatal  $msg;
-          die $msg;
-        }
-        $hook->($self);
-      }
-
-      if($@){
-        Log::OK::TRACE and log_trace "No middleware method/sub in delegate... ignoring";
-      }
-
+      ######################################################################################
+      # try {                                                                              #
+      #   $hook=$_delegate->middleware_hook;                                               #
+      # }                                                                                  #
+      # catch($e){                                                                         #
+      #   Log::OK::WARN and log_warn $e;                                                   #
+      # }                                                                                  #
+      #                                                                                    #
+      # if($hook){                                                                         #
+      #   unless(ref $hook eq "CODE"){                                                     #
+      #     my $msg="$_delegate->middleware_hook must return a subroutine reference";      #
+      #     log_fatal  $msg;                                                               #
+      #     die $msg;                                                                      #
+      #   }                                                                                #
+      #   $hook->($self);                                                                  #
+      # }                                                                                  #
+      #                                                                                    #
+      # if($@){                                                                            #
+      #   Log::OK::TRACE and log_trace "No middleware method/sub in delegate... ignoring"; #
+      # }                                                                                  #
+      #                                                                                    #
+      ######################################################################################
 
       $string='$_delegate->'.s/\$$//r;
   
@@ -654,7 +656,6 @@ method add_to {
 method add_site {
   for my $site(@_){
     my $root=$self->find_root;
-    say keys $root->sites->%*;
     if( exists $root->sites->{$site->id}){
       Exception::Class::Base->throw( "Duplicate site id not allowed: @{[$site->id]}");
     }
@@ -729,16 +730,21 @@ method _method_match_check{
     $result;
 }
 
-# Add a delegate. This inserts the delegate into the staged routes list.
-# At rebuild time, the route list is processed sequentially. So multiple delegates
-# can be added to a site.
-# The  LATEST delegate is used for implicit routing
+# Add a delegate. This inserts the the auto_routes from the delegate into the
+# staged routes list.  At rebuild time, 
+# A site can be its own delegate, which means it mush implement the auto_route_hook method
 #
 method add_delegate {
   no strict "refs";
   for(@_){
     # Add the items as a delegate if it is a ref or the name space exists
-    push @$_staged_routes, $_ if ref $_ or  %{$_."::"}; # Copy to staging
+    #push @$_staged_routes, $_ if ref $_ or  %{$_."::"}; # Copy to staging
+
+    my $ref =ref $_;
+    if (($ref  ne "ARRAY" and $ref ne "HASH") or %{$_."::"}){
+      # Other object or namespace
+      $self->_delegate($_);
+    }
   }
 }
 
@@ -758,11 +764,7 @@ method add_route {
   
   my $item;
       use Data::Dumper;
-      say STDERR caller(0);
-  say STDERR "INPUTS: ".Dumper @_;
   LOOP: while(defined ($item =shift @_)){
-    say STDERR "STATE: $state   $item\n"; 
-    #say STDERR ref $item;
     if($state eq  "SITE"){
       # Direct push if another site object
       if($item isa uSAC::HTTP::Site){
@@ -775,19 +777,15 @@ method add_route {
       }
     }
     elsif($state eq "METHOD"){
-      say STDERR  $item;
       # Expecting a string or array of strings
       if(ref $item eq ""){
-        say STDERR "STRING METHOD";
         # String name of a method. 
         $method=$item//"";
         $state="TYPE";
 
         
         unless($method and grep /$method/, $self->supported_methods){
-          say STDERR "NO MATCHING METHOD";
           $method=$self->default_method;;
-          say STDERR "after  MATCHING METHOD";
           redo;  # Redo as item needs further processing
         }
       }
@@ -870,8 +868,6 @@ method add_route {
 
   }
 
-  say STDERR "END OF ADD ROUTE\n";
-  say STDERR "$$, $method, $type, $matcher, @middleware\n";
 
   push @$_staged_routes, [$method, $type, $matcher, @middleware]; # Copy to staging
 
@@ -1287,7 +1283,7 @@ method process_cli_options{
   my $options=shift//[];
   my $hook;
   try {
-    $hook=$_delegate->process_cli_options_hook;
+    $_delegate and $hook=$_delegate->process_cli_options_hook;
   }
   catch($e){
     Log::OK::DEBUG and log_debug "$e";
@@ -1295,7 +1291,7 @@ method process_cli_options{
 
   if($hook){
     die "process_cli_options_hook must return a subroutine reference"unless ref $hook eq "CODE";
-    $hook->($self, $options);# if $_delegate;
+    $hook->($self, $options);
   }
 
   # Send message down the tree
@@ -1353,6 +1349,32 @@ method load {
     }
   }
   $self;
+}
+
+
+
+#========== Delegate methods 
+
+# Delegates or sub classes override this method  to automatically add routes and middlew chains
+#
+method auto_route_hook {
+  sub {
+    # first argument is the site to add to ( the side that delegated)
+    my $site=shift;
+
+    # $site->add_route(...); 
+  }
+}
+
+#
+method middleware_hook {
+  sub {
+    my $site=shift;
+
+    # Return a list of middleware to be used in a route 
+
+  }
+
 }
 
 

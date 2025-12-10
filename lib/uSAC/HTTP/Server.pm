@@ -594,7 +594,6 @@ method rebuild_routes {
       my $site=uSAC::HTTP::Site->new(id=>"_default_$host", host=>$host, mode=>$self->mode);
       $site->parent_site=$self;
       for(HTTP_GET, HTTP_HEAD, HTTP_POST, HTTP_PUT, HTTP_DELETE, HTTP_CONNECT, HTTP_OPTIONS, HTTP_TRACE, HTTP_PATCH){
-        say STDERR "_____ $_ _______";
         $site->_add_route($_, "begin", "" , $self-> _default_handler);
       }
     }

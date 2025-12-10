@@ -6,7 +6,7 @@ uSAC::HTTP::Site -  Routes and Grouping of related Routes and middleware
 
   use uSAC::HTTP;
   
-  my $site=uSAC::HTTP::Site->new(id=>STRING, prefix=>STRING);
+  my $site=uSAC::HTTP::Site->new(id=>STRING, prefix=>STRING, delegate=>OBJECT/PACKAGE);
   $site->add_route(...);  #Add a route to $site
 
   $site->add_to($parent); #Add a site to a parent site
@@ -69,6 +69,10 @@ combined with parent prefixes.
 
 A label for the user to aid in identification of the site.
 
+
+=head4 delegate
+
+A delegate allows external code to modify add routes and middleware and reolve implicit route paths
 
 =head2 Adding Route and Sites 
 
