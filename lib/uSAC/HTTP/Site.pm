@@ -34,7 +34,7 @@ use constant::more qw<
   >;
 
 use uSAC::IO;
-use uSAC::TLS ":all";
+#use uSAC::TLS ":all";
 
 use Exception::Class::Base;
 
@@ -829,7 +829,8 @@ method add_route {
       $matcher=$item;
       $state="MIDDLE";
       unless(@_){
-        # need to use implicit routing  and reprocess item
+        # No more arguments to process... need to use implicit routing  and reprocess item
+        # to link to middleware
         redo LOOP;
       }
     }
@@ -1331,7 +1332,7 @@ method load {
     Log::OK::INFO and log_info "Including server script from $path";
     #my $result=
     #eval "require '$path'";
-    local $uSAC::HTTP::Site=$self;
+    local $uSAC::HTTP::Site::Site=$self;
     local $@;
     #eval { need $path };
     try {
@@ -1355,14 +1356,15 @@ method load {
 
 #========== Delegate methods 
 
-# Delegates or sub classes override this method  to automatically add routes and middlew chains
+# Delegates or sub classes override this method  to automatically add routes and middlew chains to the site.
+#
+# The 
 #
 method auto_route_hook {
   sub {
-    # first argument is the site to add to ( the side that delegated)
+    # first argument is the site to add to ( the site that delegated)
     my $site=shift;
 
-    # $site->add_route(...); 
   }
 }
 
@@ -1374,6 +1376,62 @@ method middleware_hook {
     # Return a list of middleware to be used in a route 
 
   }
+
+}
+
+# Given the refernece to an object or a string namespace,
+# extract the implicit routes from the related namespace.
+# If no argument is given, then use self as the argument
+#
+method parse_implicit_routes {
+  # Target can be a object, or a package
+  my $package;
+  # Target could be a object or a namespace
+  my $target=shift//$self;
+  use feature "state";
+  state $chain= linker 
+      => io_grep(/^_.*_$/)
+      => sub {
+          for($_[0]->@*){
+            my $name=$_;
+            my @fields=split "__";
+            
+            if(@fields){
+              # Trim the funny start and end
+              $fields[0]=~s/^_//;
+
+              $fields[$#fields]=~s/_$//;
+            }
+          
+
+            # add the route, and call the code reference
+            #my $code=eval "%$package"."::{$_}";
+            
+            # Call the code with the target,  .. could be a namespace or object
+            #
+            $self->add_route(@fields, eval '$target->$name');
+
+            #$code->($target));
+          }
+      } ;
+
+
+  my $ref=ref $target;
+
+  if($ref=~ /::/){
+    $package=$ref; 
+  }
+  else {
+    $package=$target;
+  }
+
+
+  # Locate all code symbols in the table
+  my @potential= [eval "keys %$package"."::" ];
+  
+  $chain->(\@potential); 
+
+
 
 }
 

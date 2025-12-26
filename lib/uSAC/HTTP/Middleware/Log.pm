@@ -1,6 +1,5 @@
 package uSAC::HTTP::Middleware::Log;
-use strict;
-use warnings;
+use v5.36;
 
 use feature qw<refaliasing state>;
 no warnings "experimental";
@@ -12,6 +11,7 @@ use Time::HiRes qw<time>;
 
 use uSAC::Log; 
 use Log::OK;
+use uSAC::IO;
 
 use Export::These qw<uhm_log>;
 
@@ -73,7 +73,9 @@ sub log_simple_in {
         }
 
         push @out, "";
-        Log::OK::INFO and log_info join "\n", @out;
+        asay $STDERR, join "\n", @out;
+
+        #Log::OK::INFO and log_info join "\n", @out;
       }
 			&$inner_next;		#alway call next. this is just logging
 		}
@@ -95,10 +97,14 @@ sub log_simple_out {
         push @out, "Depature time:		".time;
         if($dump_headers){
           push @out, "==Outgoing Headers==","";
-          push @out, $dd->($_[OUT_HEADER]);
+          $_[OUT_HEADER]{HTTP_DATE()}//=$uSAC::HTTP::Session::Date;
+          my %head=($_[OUT_HEADER]->%*, ($_[ROUTE][1][ROUTE_SITE]->find_root->static_headers->%*));
+          
+          push @out, $dd->(\%head);
         }
         push @out, "--->>>";
-        Log::OK::INFO and log_info join "\n", @out;
+        asay $STDERR, join "\n", @out;
+        #Log::OK::INFO and log_info join "\n", @out;
       }
 
 			&$outer_next;

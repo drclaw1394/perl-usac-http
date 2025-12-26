@@ -13,7 +13,7 @@ use Import::These qw<uSAC:: Util HTTP ::HTTP:: Server ::Middleware:: Form Static
 
 use HTTP::State::Cookie qw<:all>;
 
-my %options;
+my $options;
 my @static_headers;
 my $enable_repl;
 
@@ -22,7 +22,7 @@ my $enable_repl;
 sub parse_site_spec{
   no warnings "experimental";
   use builtin <trim >;
-  my @full=qw<id prefix>;
+  my @full=qw<id prefix delegate>;
   my %spec;
 
   $spec{id}=undef;        # Default id is  a new site
@@ -115,8 +115,10 @@ sub run {
   #
   my $server=uSAC::HTTP::Server->new();
 
+  say STDERR "__REMAINING OPTIONS @_";
   # Configure Server. Gets first dibs on cli arguments
   $server->process_cli_options(\@_);
+  say STDERR "__REMAINING OPTIONS @_";
 
   # Server already has top level site  called "/". Get it
   my $server_proxy=$server->sites->{"/"};
@@ -127,6 +129,8 @@ sub run {
     list_dir=>1,
     headers=>\@static_headers
   );
+
+  $options=\%cur_opts;
 
   # DEBUG#
   #
@@ -203,6 +207,10 @@ sub run {
 
     elsif(/^-{1,2}(no-)?log/){
       $cur_opts{log}=!$1;
+
+  
+      $current->add_middleware( uhm_log dump_headers=>1, color=>1) if $cur_opts{log};
+
     }
     elsif(/^-{1,2}ws/){
       require uSAC::HTTP::Middleware::WebSocket;
@@ -334,9 +342,6 @@ sub run {
   @roots=(); # Reset roots
 
 
-  # Inject logging if logging enabled
-  #
-  $server->add_middleware( uhm_log dump_headers=>1, color=>1) if $options{log};
 
 
   # Run!

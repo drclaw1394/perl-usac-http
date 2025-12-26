@@ -759,7 +759,7 @@ sub ping_interval {
 
   uSAC::Main::usac_listen("server/shutdown/graceful", sub {
       Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN WEBSOCKET';
-      uSAC::IO::cancel $self->[ping_interval_];
+      uSAC::IO::timer_cancel $self->[pinger_];
   });
 	return $self->[ping_interval_];
 }

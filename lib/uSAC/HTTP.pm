@@ -11,11 +11,10 @@ use Import::These "uSAC::HTTP::",
 
 use uSAC::MIME;
 
-our $Site;   
 
 # Generate import sub and support reexport
 #
-use Export::These;
+use Export::These;# qw<current_site>;
 
 # Called from Export::These hook. $target is the package of the importer
 # of this module. Works at any level  with Export::These
@@ -61,7 +60,15 @@ sub _reexport {
   
 }
 
-#__PACKAGE__;
+sub current_site{
+  my $site;
+  $site=$uSAC::HTTP::Site::Site;
+  unless($site){
+   Error::Show::throw "No currents site. Load this script via a uSAC::HTTP::Server";
+  }
+
+}
+
 1;
 
 

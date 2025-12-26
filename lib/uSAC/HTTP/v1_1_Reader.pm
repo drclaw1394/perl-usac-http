@@ -574,7 +574,8 @@ sub make_serialize{
         }
         
         # Render date header
-        $reply->[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
+        $_[OUT_HEADER]{HTTP_DATE()}//=$uSAC::HTTP::Session::Date;
+        #$reply->[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
 
 
       }
@@ -635,6 +636,8 @@ sub make_serialize{
       #Log::OK::TRACE and log_trace "--- dropper is currently ". $_[REX][uSAC::HTTP::Rex::dropper_];
       $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
       #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$_[REX][uSAC::HTTP::Rex::dropper_]);
+
+      # If logging is enabled call logging middleware on a seperate chain
     }
     else{
       #Log::OK::DEBUG and log_debug "BODYONLY in serialize. length: ". length $_[PAYLOAD];
