@@ -32,9 +32,7 @@ use Crypt::JWT;
 #
 #
 sub uhs_authentication {
-
   my %options=@_;
-
   # The routine to encode the cookie value and sign it if needed. Simply decodes json and forces authentication and non expiry
   
 	my $state_encode=	$options{encode}//=sub {unpack("H*", &encode_json)};
@@ -81,6 +79,9 @@ sub uhs_authentication {
       # the state in the rex      
       # If the it doesn't exist create
       #
+      
+      $_[REX][STATE]//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};
+
       for my $v ((($_[REX][STATE]{$state_name})//[])->@*) {
         #
         # Process each of the values for the name   
@@ -122,7 +123,7 @@ sub uhs_authentication {
 
               # Also store the intended target as a cookie
               \my $set_cookies=\$_[OUT_HEADER]{HTTP_SET_COOKIE()};
-              push $set_cookies->@*, encode_set_cookie cookie_struct  "target_uri", $_[REX][URI], path=> "/";
+              push $set_cookies->@*, cookie_struct  "target_uri", $_[REX][URI], path=> "/";
 
               #return &rex_redirect_internal;
 
@@ -214,8 +215,8 @@ sub uhs_authentication {
 
         # Also store the intended target as a cookie
         \my $set_cookies=\$_[OUT_HEADER]{HTTP_SET_COOKIE()};
-        push $set_cookies->@*, encode_set_cookie cookie_struct  $state_name, $state_encode->({username=>$username, data=>"abcd"}), path=> "/";
-        push $set_cookies->@*, encode_set_cookie cookie_struct  "target_uri", "", "Max-Age"=>0, path=> "/";
+        push $set_cookies->@*, cookie_struct  $state_name, $state_encode->({username=>$username, data=>"abcd"}), path=> "/";
+        push $set_cookies->@*, cookie_struct  "target_uri", "", "Max-Age"=>0, path=> "/";
 
         $_[REX][REDIRECT]=$_[REX][STATE]{target_uri}[0];
         Log::OK::TRACE and log_trace " AUTH POST side state management route before call is: $_[ROUTE][0] site  $_[ROUTE][1][ROUTE_SITE] ";
@@ -234,7 +235,7 @@ sub uhs_authentication {
        
         # Expire authentications
         \my $set_cookies=\$_[OUT_HEADER]{HTTP_SET_COOKIE()};
-        push $set_cookies->@*, encode_set_cookie cookie_struct  $state_name, $state_encode->({}), "Max-Age"=>0, path=> "/";
+        push $set_cookies->@*, cookie_struct  $state_name, $state_encode->({}), "Max-Age"=>0, path=> "/";
       }
     );
 

@@ -1,3 +1,11 @@
+#####
+#NOTE:
+# THIS IS NOT NEEDED.
+#
+# Serialiser handles encoding of cookies 
+#
+# DECODING OF COOKIES done on demand
+#####
 use v5.36;
 package uSAC::HTTP::Middleware::State;
 

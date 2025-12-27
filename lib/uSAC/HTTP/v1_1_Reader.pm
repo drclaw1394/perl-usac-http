@@ -190,16 +190,16 @@ sub make_parser{
             if($k eq "set-cookie"){
               # Set-Cookie could occur multiple times and is not listable.
               # Special case
-              push @$_, $val; # auto viv?
+              push @$_, $val  for $h{$k}; # auto viv?
             }
             else {
               # RFC 6265 Cookie SHOULD NOT occur more than once. So treat as 'listable'
-              $_ = defined $_ ? $_.",".$val : $val for $h{lc $k};
+              $_ = defined $_ ? $_.",".$val : $val for $h{$k};
             }
-
           }
 
           $buf=substr $buf, $pos3+4;
+
 
           if($psgi_compat){
 
