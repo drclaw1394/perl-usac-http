@@ -24,6 +24,7 @@ use Export::These "uhm_state";
 # Middleware interfacing code for a HTTP state. Client side this is commonly called a cookie jar
 
 sub uhm_state {
+  asay $STDERR, "-----UHM_STATE CALLED---";
   [
   sub {
     # called when linking middleware
@@ -40,12 +41,16 @@ sub uhm_state {
       # false server. 
       # Innerware simply parses the cookie header and stores it in state hash from innerware
       
-      sub {
+      return sub {
         # If we have already setup state, skip
         return &$next if $_[REX][STATE];
         Log::OK::TRACE and log_trace " Server side state management";
         Log::OK::TRACE and log_trace " Server side state management route is: $_[ROUTE][0] site  $_[ROUTE][1][ROUTE_SITE] ";
         #Log::OK::TRACE and log_trace "State decoded  for rex $_[REX] before: ".Dumper $_[REX];
+
+        asay $STDERR, "-----UHM_STATE INNER WARE ---";
+
+        #$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
 
         my $state=$_[REX][STATE]//={};
         for my($k, $v)(decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}){
@@ -70,18 +75,24 @@ sub uhm_state {
       # Otherwise server mode IN server mode we want to take the cookies stored
       # in :state (output header) and serialize them into multiple head lines
       #
-      sub {
+      return sub {
         # Out header is undef when header has been written. So only encode headeres and state when there is an outheader present
         #
         return &$next unless $_[OUT_HEADER];
 
 
-        #Convert any cookie structures to strings for direct rendering in output
-        for my $set ($_[OUT_HEADER]{HTTP_SET_COOKIE()}//()){
-          for my $cookie (@$set){
-            $cookie=encode_set_cookie $cookie if ref $cookie;
-          }
-        }
+        asay $STDERR, "----- IN STATE MIDDLEWARE OUTPUT---";
+        ############################################################################
+        # #Convert any cookie structures to strings for direct rendering in output #
+        # for my $set ($_[OUT_HEADER]{HTTP_SET_COOKIE()}){                         #
+        #   asay $STDERR, "== do have set cookies";                                #
+        #   for my $cookie (@$set){                                                #
+        #     asay $STDERR, "== do have set cookies: ", $cookie;                   #
+        #     $cookie=encode_set_cookie $cookie if ref $cookie;                    #
+        #     asay $STDERR, "== encoded", $cookie;                                 #
+        #   }                                                                      #
+        # }                                                                        #
+        ############################################################################
 
         # The state in rex is what has come back from the client, not what is to encoded
         &$next;

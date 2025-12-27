@@ -741,6 +741,12 @@ method add_delegate {
     #push @$_staged_routes, $_ if ref $_ or  %{$_."::"}; # Copy to staging
 
     my $ref =ref $_;
+    if($ref eq "" and /::/){
+      # A package name ...  ensure its loaded
+      Log::OK::INFO and log_info "Loading Delegate Package $_";
+      need $_;
+    }
+
     if (($ref  ne "ARRAY" and $ref ne "HASH") or %{$_."::"}){
       # Other object or namespace
       $self->_delegate($_);
@@ -1119,6 +1125,13 @@ method _delegate {
 
   
   local $uSAC::HTTP::Site=$self;
+  try {
+      $_delegate->middleware_hook->($self);
+  }
+  catch($e){
+    no strict "refs";
+    warn "Delegate has no valid middleware hock. ignoring; $e"
+  }
   # Attempt to auto import any route chains
   try {
       #my $string;

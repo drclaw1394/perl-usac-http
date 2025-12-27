@@ -17,6 +17,9 @@ use URL::Encode qw<url_decode_utf8>;
 use uSAC::HTTP::Constants;# For message strucutre
 use uSAC::HTTP::Route;    # For routing structure
 
+use HTTP::State;
+use HTTP::State::Cookie qw<:all>;
+
 use Export::These qw<
 		parse_form
 		MODE_RESPONSE
@@ -557,6 +560,8 @@ sub make_serialize{
         # Render headers
         #
 
+        $reply->[0].=$static_headers;
+
         # TODO: fix with multipart uploads? what is the content length
         #
         if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
@@ -577,6 +582,21 @@ sub make_serialize{
         $_[OUT_HEADER]{HTTP_DATE()}//=$uSAC::HTTP::Session::Date;
         #$reply->[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
 
+        my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
+
+        for my ($k, $v)(%{$_[OUT_HEADER]}){
+          $reply->[0].= $k.": ".$v.CRLF;
+        }
+
+        for(@$v){
+          if(ref){
+            $_=encode_set_cookie $_;
+          }
+          # else assume already encoded
+          $reply->[0].= HTTP_SET_COOKIE().": ".$_.CRLF  
+        }
+
+
 
       }
       elsif($mode == MODE_REQUEST) {
@@ -585,6 +605,12 @@ sub make_serialize{
         # serialize in client mode is a request
         #
         $reply->[0]="$_[REX][METHOD] $_[REX][PATH] $protocol".CRLF;
+
+        $reply->[0].=$static_headers;
+
+        for my ($k, $v)(%{$_[OUT_HEADER]}){
+          $reply->[0].= $k.": ".$v.CRLF;
+        }
       }
       else {
         # Mode none
@@ -597,21 +623,13 @@ sub make_serialize{
       #RFC 6265 -> duplicate cookies with the same name not permitted in same
       #response
       # Special handling of set cookie header for multiple values
-      my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
-      $reply->[0].= HTTP_SET_COOKIE().": ".$_.CRLF  for @$v;
 
 
-      for my ($k, $v)(%{$_[OUT_HEADER]}){
-        # Render anything that isn't a 'pseudo header'. and combine multiple
-        # header items onto one line
-        #
+      #for my ($k, $v)(%{$_[OUT_HEADER]}){
+      #$reply->[0].= $k.": ".$v.CRLF;
+      #}
 
-        #next if index($k, ":" )==0;
-
-        $reply->[0].= $k.": ".$v.CRLF;
-      }
-
-      $reply->[0].=$static_headers;
+      #$reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
       Log::OK::TRACE and log_trace "->Serialize: headers=|$_[REX]\n$reply->[0]|=";

@@ -470,7 +470,6 @@ execution by returning immediately after calling this routine.
 #TODO: recursion limit
 sub rex_redirect_internal {
 
-  #my ($matcher, $rex, undef, undef)=@_;
   my $rex=$_[REX];
   my $uri=$_[REX][REDIRECT];
   $_[REX][URI]=$_[REX][REDIRECT];
@@ -478,7 +477,7 @@ sub rex_redirect_internal {
   # If a scalar reference, 
   $uri=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$uri if ref $uri;
 
-	if(substr($uri,0,1) ne "/"){
+	if(substr($uri, 0, 1) ne "/"){
 		$uri="/".$uri;	
 	}
 
