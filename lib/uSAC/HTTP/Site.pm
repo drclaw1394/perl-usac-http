@@ -193,6 +193,7 @@ method rebuild_routes {
     ########################################################################
     else {
       # Assume "normal" route
+      say "REBUILDING NORMAL ROUTE @$r";
       $result=$self->_add_route(@$r);
       Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
     }
@@ -356,7 +357,8 @@ method _add_route {
     $route[ROUTE_COUNTER]=0;
     $route[ROUTE_TABLE]=undef;
 
-    unless(ref $path_matcher){
+    #unless(ref $path_matcher){
+    if($type){
       # Allows middleware like static files serving to strip the entire prefix
       # INCLUDING the last part of the route if it is a basic string
       $route[ROUTE_PATH]=$self->built_prefix.($path_matcher//"");
@@ -761,6 +763,7 @@ method add_delegate {
 #   "=~" asdfasdf"    # Regex match
 #   
 method add_route {
+  say "CALLED ADD ROUTE @_";
   # METHOD, path, type, middlewares
   my $state="SITE";
   my $method;
@@ -821,6 +824,9 @@ method add_route {
         elsif(/^=~$/){
           $type = undef;
         }
+        elsif(/^regexp$/){
+          $type = undef;
+        }
         else {
           # If no match we assume its a path 
           $type="begin";
@@ -876,9 +882,16 @@ method add_route {
   }
 
 
-  push @$_staged_routes, [$method, $type, $matcher, @middleware]; # Copy to staging
+  my $copy=[$method, $type, $matcher, @middleware]; # Copy to staging
+  say "Staging route: @$copy";
+
+  push @$_staged_routes, $copy;
 
   return $self;
+
+
+
+
 
   my $del_meth;
 
@@ -1133,17 +1146,20 @@ method _delegate {
     warn "Delegate has no valid middleware hock. ignoring; $e"
   }
   # Attempt to auto import any route chains
+  my $hook;
   try {
       #my $string;
       #$string="$_delegate->_auto";
       #eval "$string";
-      $_delegate->auto_route_hook->($self);
+      $hook=$_delegate->auto_route_hook;
   }
   catch($e){
     no strict "refs";
     warn "Delegate has no valid auto_route_hook. ignoring; $e"
     #Exception::Class::Base->throw("Delegate  has no import $e");
   }
+  # Attempt to execute the hook
+  $hook->($self);
   $self;
 }
 

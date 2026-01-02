@@ -1,0 +1,185 @@
+=head1 TITLE
+
+uSAC::HTTP::Manual - Reference manual and Tutorial
+
+=head1 DESCRIPTION
+
+uSAC::HTTP is a Perl HTTP framework and server striving to achieve:
+
+=over 
+
+=item Event based processing of HTTP requests
+
+Efficent IO and Event loop agnostic using L<uSAC::IO>
+
+=item All processing done asynchronously and on the fly
+
+Processing chain designed around streaming data which also has provisions for
+simple requests, instead of the otherway around
+
+
+=item fine grain (route level) control of middleware
+
+Middleware can be added at the level of a route. That means higher
+performance for routes that don't need heavy  middleware
+
+=item integrate server into applications instead of the otherway around
+
+Using existing event loops means you can add a L<uSAC::HTTP> server to your
+applcation, instead of shoe-horning your applicaiton is to a webserver
+
+=item leveraging advanced perl features for peformance over niceness
+
+Opimised subroutine calling saves on memory access, using builtin code loading
+facilities instead of making another plugin system
+
+=back
+
+To order to  achieve this, the main tenents of the design include:
+
+=over
+
+=item Static code as CODE refs
+
+Any repetatively called code (ie per request) such as  routes, callbacks and
+parsing and IO setup is generally performed with code refs, which are
+'statically linked' for the any requests have arrived
+
+
+=item Caching of code and dispatch tables
+
+IO setup and event watchers are reused as much as possible. Route matching is
+cached to provide fast hash key lookup for subsequent requests
+Event content can be cached or loaded for fast access
+
+=item Objects for management
+
+Most setup and management code is implemented in OO style.
+
+=item Avoid filehandles
+
+Perl filehandle creation has relatively huge memory and cpu overhead for network programming.
+
+=back
+
+
+This gives the highest performance where you need it and ease of use where you
+want it.
+
+For example, adding listeners and for the main server is object orientated. The
+HTTP request processing on the otherhand has each stage 'statically linked' at
+application launch. Repeated request are not performing dynamic resolution
+
+
+=head2 Future direction
+
+TLS, HTTP/2 and HTTP/3 
+
+=head2 General Concepts
+
+=head2 Structure
+
+a L<uSAC::HTTP> application consists of hierachy of structures. These
+structures are setup up during application launch and remain 'unchanged' during
+the lifetime of the applciation. The main parts to this hierachy are:
+
+-Server                 1
+  -Site+
+    -Middleware+
+    -Route+
+      -Middleware+
+      -End_point
+    
+Server
+has multiple listeners (tcp,UNIX and udp) which are configured Contains
+multiple 'sites'
+
+Site
+Optional prefix to add to contained routes
+Optional common middleware to add to contained routes Optional routes which map
+urls to chains of middleware
+
+
+Middeware Units of code, prelinked together which processs header and body
+content of incomming and outgoing data
+
+
+Prcessing message The calling convention used to link middleware together and
+allow custom data to be passed from one to the other
+
+
+
+
+
+
+
+
+
+
+=head1 IO
+
+=head2 All processing is streaming
+
+The main processing chain always assumes streaming input and output data.
+
+The good news is the calling mechanisim for the main processing chain makes it
+very easy to respond in a fire and forget approach with out adding more APIS
+
+Socket input and output is performed with uSAC::IO (which uses IO::FD). This is designed to pro
+
+=head1 PROCRESSING 
+
+=head2 Overview
+
+
+=head2 Concepts
+
+=head2 Routing
+
+Like most other web frameworks a route can specify what URL  and method is to
+access what part of the application. The big difference in  L<uSAC::HTTP> is
+that inner and outerware pairs are can be optionally added to the route. This
+allows middleware control down to the route level.
+
+      usac_route "/my_url"=>[inner1,outer1, error1]=>[inner2,outer2 error2 ]
+
+
+
+=head1 Middleware
+
+Processing a HTTP request looks like this:
+
+Socket_reader --> Parsing --> routing --> innerware --> outerware --> serialisation --> Socket_writer
+
+
+Note there is no 'application' in the chain like  L<Mojolicious> and L<Plack>. 
+
+Innerware and outerware are created in pairs, (even if one half isn't needed and optimised away). This give inner/outer ware the following options after any precoessing data
+
+ Call &$next  to pass on the parameters to the next stage
+ Call the output half directly (pair dependent) to short circuit any inbetween processing
+
+'Middleware' as it's known in other frameworks should 
+
+Between the parsing of incomming data and serialization or response data, there
+is innerware and outerware. These are linked seemlessly togther to form a chain
+of processing. Other frameworks treat the 'application' as a single special code point for processing. L<uSAC::HTTP> lets you use as many as you like.
+
+
+
+
+
+
+Other frameworks and servers refer to applications and middleware. I find this
+confusing. The application is the server running your code, it isn't just your
+code. The middleware name is also non descriptive. In the middle of what
+exacty?
+
+L<uSAC::HTTP> has B<innerware> and B<outerware>. The innerware is 
+
+=head1 Requst and Processing chain
+
+=head2  HTTP/1.1
+
+Here a TCP connection is recieved and the data parsed into a http request.df
+The start of the processing chains is the incomming req

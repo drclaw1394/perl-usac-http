@@ -1,0 +1,21 @@
+@{[init {
+  output  location=>"index", inline=>1;
+  inherit "parent.plt";
+
+  use Time::HiRes qw<time>; 
+
+}]}
+
+@{[fill_slot header=>"Time: ".time]}
+
+
+@{[fill_slot footer=>"That was fun"]}
+<br>
+
+
+<br>
+output from template
+<img src="@{[plt_res "logo.png"]}">
+<a href="@{[res "page2.plt"]}"> Page 2 </a>
+<a href="@{[plt_res "sub.plt"]}"> Sub </a>
+

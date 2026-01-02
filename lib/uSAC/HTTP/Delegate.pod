@@ -1,0 +1,130 @@
+=head1 TITLE
+
+uSAC::HTTP::Delegate - Site Delegation and Implicit Routing 
+
+
+=head1 DESCRIPTION
+
+A Site Delegate is an object B<or> a namespace which is given the responsiblity
+of completing a task via a role/API. 
+
+
+
+Delegates are used for 'hooks' at to allow modification of configuration and to
+provide a implicit/named middleware. Togther this provides  for exremely
+consise and powerful linking of a route endpoint to a middlware chain.
+
+
+Multiple delegates can be assigned/changed to site during the configuration
+state. The latest delegate assigment, has is the delegete responsible for
+handling subsequent method calls to hooks or implicit/named middleware
+
+=head1 Perl calling
+
+Perl allows the same notation for calling objects and namespaces, which makes
+for very neat calling code:
+
+  $object->method
+
+  Name::Space->routine
+
+The convention of the first argument being 'self' or a package name in the
+above has become a little murky with the new Corina OO system, which doesn't
+use either. So to avoid forcing any OO style, the interfaces B<must> return
+subroutine reference or middlware, depending on the use case, which will be
+called to do the actual work.
+
+
+=head1 Delegate Tasks
+
+The two groups of task are considered 'configuration  hooks' and 'implicit or
+named routing'. 
+
+
+=head2 Configuration Hooks
+
+Hooks are methods/routines which are called during the configuration stage of
+route and site step up. 
+
+These are B<always> named ending with 'hook'.
+
+They B<always return subroutines>, which expect the first argument to be the
+site/delegator.
+
+The delegate currently set on the site will have hooks called on them.
+
+=over
+
+=item parse_cli_options_hook
+  
+Called when the L<uSAC::HTTP::Site> has the C<parse_cli_options> method called
+called. The returned subroutine is (if defined) is called with the arguments
+(site, options) where site is the site associated with the delatage and the
+options are the same as the options provided to the C<parse_cli_options> call.
+
+All sub site in the site (ie the server down) will have this hook called if
+applicable. This gives an ability to process command line arguments throughout
+the site strucure.
+
+
+
+=item auto_route_hook
+
+Called when the delegate is applied/set to a site, including when supplied as
+parameter to a new site. It returns a subroutine ref, which is called with the
+site. Purpose of this hook is to allow a delegate to automatically add routes
+to a site.
+
+=back
+
+=head2 Named Middleware
+
+When a delegate is added to a site, it is staged, along with other routing
+information. When named middleware is encountered, it will be resolved on the
+delegate currently set as the staged routes are processed.
+
+The method/subroutines actually called on the delegate is based on implicit or
+explicit names as discussed in the next section.
+
+In either case, like all routines that return middleware, it is a list of to
+form a chain. The items in the list can be a simple CODE ref, or and ARRAY REF.
+Refer to L<uSAC::HTTP::Middleware> on the details.
+
+
+=head3 Implicit Named Middeware
+
+A delegate is also responsible for resolving a route's path to a middlware
+chain, when only the route path is given.  A route consiting of a path only (or
+method and path only) has the path converted into a subroutine name to call on
+the delegate.
+
+  The path is split into tokens between "/".
+  Each token is has "_" appended and prepended  to it.
+  Empty trailing tokens ARE NOT IGNORED, 
+
+
+For example:
+      
+    
+      $site->add_route("my/endpoint/a")  =>  sub _my__endpoint__a_{}
+      $site->add_route("my/endpoint/")   =>  sub _my__endpoint___{}
+      $site->add_route("")               =>  sub __{}
+
+
+
+
+
+=head3 Explicit Named Middleware
+
+Instead of the implicit subrouting naming automatically generated from a route,
+an explicit string name can be provided. This will be the name of the method or
+subroutine to call on the delegate.
+
+
+For example:
+  
+    add_route("my/endpoint/a", "some_method")    => sub some_method {}
+
+
+=back
+

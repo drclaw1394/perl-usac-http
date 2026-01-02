@@ -1,0 +1,31 @@
+@{[init {
+  #  Button fragment
+}]}
+<script>
+  function clicker (e){
+    console.log("clicked",e);
+  }
+</script>
+<button>
+  asdfasdfasdf
+</button>
+<div>
+  <style>
+    div {
+      background-color:red;
+    }
+    button { border-style:solid; }
+  </style>
+
+  <button onclick="clicker(event)">
+    <img src="up.svg">    
+    UP $label
+    $fields{label}
+  </button>
+
+  <button onclick="clicker(event)">
+    DOWN $label
+    <img src="down.svg">    
+    $fields{label}
+  </button>
+</div>

@@ -1,0 +1,29 @@
+<html>
+  <head>
+    <title> Replace script</title>
+  </head>
+  <body>
+    <div > before the script</div>
+    <div>
+      <script id="test">
+        let s=document.currentScript;
+          let p=s.parentElement;
+          fetch("/multipart")
+          .then((res)=>{
+            return res.text();
+            
+          })
+          .then((text)=>{
+            p.removeChild(s);
+            p.innerHTML=text;//"RESULT";
+          });
+      </script>
+    </div>
+    <div>
+      After the script
+    </div>
+    <div>
+      <script src="/wrapped"></script>
+    </div>
+  </body>
+</html>

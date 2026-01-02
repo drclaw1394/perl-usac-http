@@ -1,6 +1,6 @@
 package uSAC::HTTP::Middleware::Static;
-use strict;
-use warnings;
+
+use v5.36;
 use feature qw<refaliasing state current_sub>;
 no warnings "experimental";
 
@@ -553,7 +553,7 @@ sub _make_list_dir {
 # NOTE: If payload is NOT UNDEF, it is used as the relative path to search for!
 #       Otherwise the path to search for is from the url path in the request
 sub uhm_static_root {
-  
+ say "STATIC ROOT CALLED"; 
 #my $html_root;
   my %options;
   my $frame=[caller];
@@ -696,6 +696,9 @@ sub uhm_static_root {
 	#if($prefix ne "/"){
         $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
 	  #}
+        say STDERR " SITE PREFIX IS $prefix";
+        say STDERR " REX URL is $_[REX][PATH]";
+        say STDERR " p is $p";
         #$p="/" unless $p; #ensure the path ends in a slash if it is root dir
         my $path;
 
@@ -708,7 +711,9 @@ sub uhm_static_root {
           return &$next unless($_[REX][STATUS]//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
 
 
-          $path=$html_root."/".$p;
+          #$path=$html_root."/".$p;
+          $path=$html_root.$p;
+        say STDERR " path is $path";
           #
           # First this is to report not found  and call next middleware
           # if the allow doesn't match (if a ignore exists)
@@ -772,10 +777,11 @@ sub uhm_static_root {
               return $list_dir->(@_, $html_root, $p);
             }
 
-            next unless $entry;
+            #next unless $entry;
           }
 
           else {
+            say STDERR "NORMAL FILE SERVE";
             # Attempt a normal file serve
             #
             Log::OK::TRACE and log_trace "Working on opening normal file";
@@ -791,14 +797,14 @@ sub uhm_static_root {
               my $enc_ext=$pre_encoded->{$1};
               $entry=$opener->($path.$enc_ext, $open_modes) if $enc_ext;
               unless($entry){
-		Log::OK::TRACE and log_trace "NO Existing entry for opening file!";
+                Log::OK::TRACE and log_trace "NO Existing entry for opening file!";
                 $entry=$opener->($path, $open_modes);
                 $enc=($no_encoding and $ext=~/$no_encoding/)?"identity":"";
 
               }
-	      else {
-		      Log::OK::TRACE and log_trace "Existing entry for opening file!";
-	      }
+              else {
+                Log::OK::TRACE and log_trace "Existing entry for opening file!";
+              }
             }
             else{
               # No preencoded files enabled
@@ -845,7 +851,7 @@ sub uhm_static_root {
             # Return the path in the payload,
             # Set the stats us undef, as the result needs to be rendered
             $_[REX][STATUS]=undef;
-            $_[PAYLOAD]=$entry->[File::Meta::Cache::key_];
+            $_[PAYLOAD]=$p; #$entry->[File::Meta::Cache::key_];
             $closer->($entry);
             return &$next;
           }
@@ -891,6 +897,7 @@ sub uhm_static_root {
     }
   };
 
+  say "END OF STATIC ROOT";
   [$inner, $outer, $error];
   #[$outer, $inner];
 }
@@ -898,6 +905,7 @@ sub uhm_static_root {
 
 
 sub uhm_static_file {
+  say "STATIC FILE";
 	my $path=uSAC::Util::path pop, [caller];
 	my %options=@_;
 
@@ -914,16 +922,18 @@ sub uhm_static_file {
 
 	if( stat $path and -r _ and !-d _){
     #my $entry;
-		open my $fh, "<", $path;
+    say "BEFORE OPEN";
+		open my $fh, "<", $path or Error::Show::throw $!;
 		local $/;
     my $data=<$fh>;
 		close $fh;
-
+    say "DATA LOADED FROM FILE $data";
 		#Create a static content endpoint
 		uhm_static_content(%options, $data);
 	}
 	else {
-    Log::OK::ERROR and log_error "Could not add hot path: $path";
+    #Log::OK::ERROR and log_error 
+    Error::Show::throw "Could not access hot path: $path";
 	}
 }
 

@@ -722,6 +722,7 @@ method start {
 }
 
 method _run {
+  say "START OF RUN";
   my $sig;$sig=uSAC::IO::signal(INT=>sub {
           $self->stop;
           $sig=undef;
@@ -734,6 +735,7 @@ method _run {
     Log::OK::INFO and log_info("Routes for selected hosts: ".join ", ", $_options->{show_routes}->@*);
     $self->dump_routes;
     #return;
+    say "END OF RUN";
   }
 
   #  Only do passive setup for actual server
