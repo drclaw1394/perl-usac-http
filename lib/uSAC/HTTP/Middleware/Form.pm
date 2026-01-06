@@ -1,5 +1,8 @@
 use v5.36;
 package uSAC::HTTP::Middleware::Form;
+#use uSAC::IO;
+#use uSAC::Main;
+
 
 use Cpanel::JSON::XS;
 
@@ -12,12 +15,35 @@ use Export::These qw<decode_urlencoded_form uhm_decode_form generate_protection_
 use UUID qw<uuid4>;
 use Crypt::JWT ":all";
 
-# Stores the count of each form instance
-#
-my %submit_count;
+# Stores the count of each form CSRF token instance.
 
-# Internal secret to for signing
+my %valid;
+
+# Ever changing secrets.
+#
 my $secret=uuid4();
+my $prev_secret=uuid4();
+
+my $timer=uSAC::IO::timer 0, 10, sub {
+  # The csrf values are invalidated when on updating the secret (twice)
+  # All the csrf values are keyed by the secret value used.  So simply delete the
+  # has entry minimuse state storage
+  #
+  delete $valid{$prev_secret};
+  $prev_secret=$secret;
+  $secret=uuid4();
+};
+
+##########################################
+# my $timer2=uSAC::IO::timer 0, 1, sub { #
+#   adump $STDERR ,\%valid;              #
+# };                                     #
+##########################################
+
+uSAC::Main::usac_listen("server/shutdown/graceful", sub { 
+  uSAC::IO::timer_cancel $timer; 
+  #uSAC::IO::timer_cancel $timer2; 
+});
 
 
 # the argument is is the payload for a jwt.
@@ -26,25 +52,24 @@ my $secret=uuid4();
 sub generate_protection_token {
   my $data=shift;
 
-
   my $timeout=shift//5*60; # five minutes
 
   my $csrf_token = uuid4(); 
 
-
   my $limit=shift//1;
-  if($limit){
-    # track the tocken only if we set a limit
-    $submit_count{$csrf_token}=$limit;
-  }
 
   my $hidden={
-    csrf=>$csrf_token,
-    expires=>$timeout,
-    data=>$data,
+    csrf    =>  $csrf_token,
+    counter =>  $limit,
+    limit   =>  $limit,
+    timeout =>  $timeout,
+    create  =>  time,
+    data    =>  $data,
   };
 
-  my $jwt=encode_jwt (payload=>$hidden, alg=>'HS256', key=>$secret);
+  $valid{$secret}{$csrf_token}=$limit;
+
+  my $jwt=encode_jwt(payload=>$hidden, alg=>'HS256', key=>$secret);
 }
 
 # Return data if it passes verification checks
@@ -53,7 +78,21 @@ sub verify_protection_token {
     my $token=shift;
     asay $STDERR, "verify token";
     adump $STDERR, $token;
-    my $jwt=decode_jwt(token=>$token, key=>$secret);
+    my $jwt;
+    
+    my $key;
+    $jwt=eval {decode_jwt(token=>$token, key=>$secret)};
+    if($jwt){
+      $key=$secret
+    }
+    else {
+     $jwt=eval {decode_jwt(token=>$token, key=>$prev_secret)};
+      $key=$prev_secret;
+    }
+
+    return unless $jwt;
+
+
 
     my $pass=1;
     # Check if checksum matches. Discontinue processing if checksum fails
@@ -64,21 +103,24 @@ sub verify_protection_token {
 
     #Check if expired or replays reached
     #
-
-    for($submit_count{$jwt->{csrf}}){
-      if($jwt->{expires} <= time 
-          and (!defined $_ or $_ > 0
+    my $csrf=$jwt->{csrf};
+    my $entry=$valid{$key};
+    for($entry->{$csrf}){
+      if(defined
+          and $jwt->{expires} <= time 
+          and ($_ > 0
         )){
-        # Within limit and not expired yet
 
+        # Within limit and not expired yet. Decrement count
         $_-- if $_;
 
+        delete $entry->{$csrf};
         return $jwt->{data};
       }
       else {
-        # Limit reached or maybe expired
+        # Limit reached or maybe expired or doesn't exist
         asay $STDERR, "Limit Reached or expired... removing ";
-        delete $submit_count{$jwt->{csrf}};
+        delete $entry->{$csrf};
         return undef;
       }
     }

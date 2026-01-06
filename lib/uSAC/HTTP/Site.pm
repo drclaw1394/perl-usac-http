@@ -43,6 +43,7 @@ use URI;
 use Export::These qw(
   $Path
   $Comp
+  $Decimal
   $File_Path
   $Dir_Path
   $Any_Method
@@ -103,15 +104,15 @@ our $Method=		qr{^([^ ]+)};
 
 #NOTE Path matching tests for a preceeding /
 #
-our $Path=		qr{(?:<=[/])([^?]*)};		#Remainder of path components  in request line
-our $File_Path=		qr{(?:<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
-our $Dir_Path=		qr{(?:<=[/])([^?]*+)(?<=[/])};
+our $Path=		q{(?:<=[/])([^?]*)};		#Remainder of path components  in request line
+our $File_Path=		q{(?:<=[/])([^?]++)(?<![/])};#[^/?](?:$|[?])};
+our $Dir_Path=		q{(?:<=[/])([^?]*+)(?<=[/])};
 
 #NOTE Comp matching only matches between slashes
 #
-our $Comp=		qr{(?:[^/?]+)};		# Path component
-our $Decimal=   qr{(?:\d+)};    # Positive Decimal Integer
-our $Word=      qr{(?:\w+)};    # Word
+our $Comp=		q{(?:[^/?]+)};		# Path component
+our $Decimal=   q{(?:\d+)};    # Positive Decimal Integer
+our $Word=      q{(?:\w+)};    # Word
 
 my $id=0;
 
@@ -184,15 +185,9 @@ method rebuild_routes {
     if($r isa __PACKAGE__){
       $r->rebuild_routes; # Recurse down
     }
-    ########################################################################
-    # elsif (($ref  ne "ARRAY" and $ref ne "HASH") or %{$r."::"}){         #
-    #   # Other object or namespace                                        #
-    #   $_delegate=$r;    # update the active delegate for implicit routes #
-    #   $self->_delegate($r);                                              #
-    # }                                                                    #
-    ########################################################################
     else {
       # Assume "normal" route
+      local $"="|";
       say "REBUILDING NORMAL ROUTE @$r";
       $result=$self->_add_route(@$r);
       Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
@@ -756,6 +751,12 @@ method add_delegate {
   }
 }
 
+method get {
+  $self->add_route("GET", @_);
+}
+method post {
+  $self->add_route("POST", @_);
+}
 # Takes site objects also!!!
 # 
 #   /pop/asdpiasd"   # Prefix match
@@ -763,7 +764,8 @@ method add_delegate {
 #   "=~" asdfasdf"    # Regex match
 #   
 method add_route {
-  say "CALLED ADD ROUTE @_";
+      local $"="|";
+  asay $STDERR, "CALLED ADD ROUTE @_";
   # METHOD, path, type, middlewares
   my $state="SITE";
   my $method;
@@ -795,17 +797,19 @@ method add_route {
         
         unless($method and grep /$method/, $self->supported_methods){
           $method=$self->default_method;;
-          redo;  # Redo as item needs further processing
+          redo;  # Redo (dont pop) as item needs further processing
         }
       }
       elsif(ref($item->[0]) eq ""){
         # Assume an array. call this method again with unpacked method names
         my @args=@_;
         for(@$item){
+          asay $STDERR, "READDING ROUTE... $_,@args";
           $self->add_route($_, @args);
         }
         # Exit above while loop
-        last;
+        return;
+        #last;
       }
       else {
         die "Confused by method";
@@ -856,6 +860,8 @@ method add_route {
         else {
           $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
         }
+        my $_type=$type?$type:"regexp";
+        $del_meth="_${method}__${_type}_$del_meth";
         push @middleware, $del_meth;
       }
       else {
@@ -883,234 +889,11 @@ method add_route {
 
 
   my $copy=[$method, $type, $matcher, @middleware]; # Copy to staging
-  say "Staging route: @$copy";
+  asay $STDERR, "Staging route: @$copy";
 
   push @$_staged_routes, $copy;
 
   return $self;
-
-
-
-
-
-  my $del_meth;
-
-  my $ref=ref $_[0];
-
-  # Direct push if another site object
-  if($_[0] isa uSAC::HTTP::Site){
-    push @$_staged_routes, $_[0]; # Copy to staging
-    return $self;
-  }
-
-  # If the first argument is a simple scalar, test if it is a method
-  # name. If it IS NOT a method name, we assume it it path and unshift
-  # the default method to the route
-  if(ref $_[0] eq ""){
-    # Inject default method immediately if no method provided
-    #
-      my $meth=$_[0]//"";
-      unless($meth and grep /$meth/, $self->supported_methods){
-        unshift @_, $self->default_method;
-      }
-  }
-
-  
-
-  try {
-    # Adjust for 1 and two argument short hand
-    #
-    if(@_== 2 and ref($_[1]) eq ""){
-      #
-      # Only 1 argument (path). Implict method and route to delegate
-      #
-      #single argument and its a scalar
-      # Duplicate the argument as it will be the name of a method to call on the delegate
-      #
-      $del_meth=$_[1];
-      unless($del_meth){
-        $del_meth="__";
-      }
-      else {
-        $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
-      }
-
-      push @_, $del_meth;
-      push @$_staged_routes, [@_]; # Copy to staging
-    }
-
-
-    elsif(@_ == 2 and ref($_[0]) eq "" and ref($_[1]) eq ""){
-        # Two argument , first string is method, second is path
-        # implicit route to delegate
-        #
-        $del_meth=$_[1];
-        unless($del_meth){
-          $del_meth="__";
-        }
-        else {
-          $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
-        }
-        #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
-
-        push @_, $del_meth;
-        unshift @_, $self->default_method if $_[0] =~ m|^/| or $_[0] eq "";
-        push @$_staged_routes, [@_]; # Copy to staging
-    }
-    
-    elsif(@_ == 2 and ref($_[0]) eq "ARRAY" and ref($_[1]) eq ""){
-        # Two argument ,first is HTTP method array, second is path
-        # implicit route to delegate
-        #
-        my $a=shift;
-        my $b=shift;
-
-        # Call add rount again with each method
-        for (@$a){
-          $self->add_route($_,$b); 
-        }
-
-        #################################################################
-        # $a= "(?:".join("|", @$a).")";                                 #
-        #                                                               #
-        # #Test the methods actually match somthing                     #
-        #                                                               #
-        # $a=qr{$a};                                                    #
-        # $del_meth=$b;   # The path is the basis for implicit method   #
-        # unless($del_meth){                                            #
-        #   $del_meth="__";                                             #
-        # }                                                             #
-        # else {                                                        #
-        #   $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1; #
-        # }                                                             #
-        # #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;  #
-        #                                                               #
-        # $b=qr{$b}; #if defined $b;                                    #
-        # unshift @_, $a, $b, $del_meth;                                #
-        # push @$_staged_routes, [@_]; # Copy to staging                #
-        #################################################################
-
-    }
-
-    # Multiple methods are only allowed in array form 
-    #########################################################################
-    # elsif(@_ == 2 and ref($_[0]) eq "RegExp" and ref($_[1]) eq ""){       #
-    #     # Two argument ,first is HTTP method regex, second is path scalar #
-    #     # implicit route to delegate                                      #
-    #     #                                                                 #
-    #     my $a=shift;                                                      #
-    #                                                                       #
-    #     #$a= "(?:".join("|", @$a).")";                                    #
-    #                                                                       #
-    #     #Test the methods actually match somthing                         #
-    #                                                                       #
-    #     #$a=qr{$a};                                                       #
-    #                                                                       #
-    #     my $b=shift;                                                      #
-    #                                                                       #
-    #     $del_meth=$b;   # The path is the basis for implicit method       #
-    #     unless($del_meth){                                                #
-    #       $del_meth="__";                                                 #
-    #     }                                                                 #
-    #     else {                                                            #
-    #       $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;     #
-    #     }                                                                 #
-    #     #$del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;      #
-    #                                                                       #
-    #     $b=qr{$b}; #if defined $b;                                        #
-    #     unshift @_, $a, $b, $del_meth;                                    #
-    #     push @$_staged_routes, [@_]; # Copy to staging                    #
-    # }                                                                     #
-    #########################################################################
-
-    else {
-      # Long form processing
-      #
-      #
-
-      Exception::Class::Base->throw("Route Addition: a route needs at least two parameters (path, middleware, ...) or (method, path, middleware ...")
-      unless @_>=2;
-
-
-
-      if(!defined($_[0])){
-        # 
-        # Sets the default for the host
-        #
-        shift; unshift @_, $self->any_method, undef;
-        push @$_staged_routes, [@_]; # Copy to staging
-      }
-
-
-      elsif(ref($_[0]) eq "ARRAY"){
-        #
-        # Methods specified as an array ref, which will get
-        # converted to a regexp
-        # Also means the path matcher must also be changed
-        #
-        my $a=shift;
-
-        my @args=@_;
-        for(@$a){
-          $self->add_route($_, @args);
-        }
-
-
-        #unshift @_, "(?:".join("|", @$a).")";
-        $a= "(?:".join("|", @$a).")";
-
-        #Test the methods actually match somthing
-
-
-        $a=qr{$a};
-        my $b=shift;
-        my $method=$b;
-        $b=qr{$b} if defined $b;
-        unshift @_, $a, $b;
-
-        if(@_ == 2){
-          #Only method type and path specified.
-          $method=~s|^/||g;
-          $method=~s|/|__|g;
-          push @_, $method;
-        }
-
-        push @$_staged_routes, [@_]; # Copy to staging
-      }
-
-
-      elsif(ref($_[0]) eq "Regexp"){
-        if(@_>=3){
-          #method and path matcher specified
-          push @$_staged_routes, [@_]; # Copy to staging
-        }
-        else {
-          #Path matcher is a regex
-          unshift @_, "GET";
-          push @$_staged_routes, [@_]; # Copy to staging
-        }
-      }
-      elsif($_[0] eq ""){
-        # Explicit matching for site prefix
-        unshift @_, $self->default_method;
-        push @$_staged_routes, [@_]; # Copy to staging
-      }
-      else{
-        # method, url and middleware specified
-        push @$_staged_routes, [@_]; # Copy to staging
-      }
-
-    }
-
-  }
-  catch($e){
-    #my $trace=Devel::StackTrace->new(skip_frames=>1); # Capture the stack frames from user call
-    require Error::Show;
-    log_fatal Error::Show::context $e;
-    exit;
-    #$e->throw;
-  }
-  $self;    #Chaining
 }
 
 

@@ -242,6 +242,7 @@ calling.
 
 =cut
 sub rex_redirect_see_other{
+  #say STDERR "-----CALLER", join "|", caller;
   my $url=$_[REX][REDIRECT];
   $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
 

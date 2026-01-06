@@ -220,8 +220,7 @@ sub send_file_uri {
     #$closer->(delete $ctx{$rex});
     my $t=delete $ctx{$rex};
     $closer->($t->[0]);
-    $next->($matcher, $rex, $in_header, $out_headers, "" );
-    return;
+    return $next->($matcher, $rex, $in_header, $out_headers, my $pay="" );
   }
 
 
@@ -575,6 +574,7 @@ sub uhm_static_root {
     map {uSAC::Util::path $_, $frame} $options{roots}->@*;
 
 
+  my $pass_through=$options{pass_through}//1;
   my $headers=$options{headers}//[];
   my $read_size=$options{read_size}//READ_SIZE;
   my $sendfile=$options{sendfile}//0;
@@ -693,13 +693,13 @@ sub uhm_static_root {
         # Strip the prefix if its specified
         #
         $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
-	#if($prefix ne "/"){
+  
         $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
-	  #}
-        say STDERR " SITE PREFIX IS $prefix";
-        say STDERR " REX URL is $_[REX][PATH]";
-        say STDERR " p is $p";
-        #$p="/" unless $p; #ensure the path ends in a slash if it is root dir
+
+    #say STDERR " SITE PREFIX IS $prefix";
+    #say STDERR " REX URL is $_[REX][PATH]";
+    #say STDERR " p is $p";
+    #
         my $path;
 
         ROOTS:
@@ -710,9 +710,11 @@ sub uhm_static_root {
           #
           return &$next unless($_[REX][STATUS]//HTTP_NOT_FOUND)==HTTP_NOT_FOUND or $as_error;
 
+          #NOTE: roots are normalizeds to NOT have a trainling slash
+          # 
+          $path=$html_root."/".$p;
 
-          #$path=$html_root."/".$p;
-          $path=$html_root.$p;
+          #$path=$html_root.$p;
         say STDERR " path is $path";
           #
           # First this is to report not found  and call next middleware
@@ -777,7 +779,7 @@ sub uhm_static_root {
               return $list_dir->(@_, $html_root, $p);
             }
 
-            #next unless $entry;
+            next unless $entry;
           }
 
           else {
@@ -816,9 +818,9 @@ sub uhm_static_root {
           }
 
           # Mark as path only if it looks like a template
-          $path_only=$path =~ /$template/o if $template;
+          #$path_only=$path =~ /$template/o if $template;
 
-          unless($path_only){
+          #unless($path_only){
             # Setup meta cache fields if they don't exist
             #
             unless($entry->[File::Meta::Cache::user_]){
@@ -846,23 +848,17 @@ sub uhm_static_root {
             Log::OK::TRACE and log_trace __PACKAGE__."------SAVING CONTEXT before sending file $_[REX]";
 
             return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
-          }
-          else {
-            # Return the path in the payload,
-            # Set the stats us undef, as the result needs to be rendered
-            $_[REX][STATUS]=undef;
-            $_[PAYLOAD]=$p; #$entry->[File::Meta::Cache::key_];
-            $closer->($entry);
-            return &$next;
-          }
         }
 
 		    Log::OK::DEBUG and log_debug "Could not find anything for $path in any root for rex:". $_[REX];
-        # Didn't match anything in the roots.
-        $_[PAYLOAD]="";
+
+        # Didn't match anything in the roots. Set payload to stripped path
+        # for next middleware to look for it
+        #
+        #$_[PAYLOAD]=$p;#"";
         $_[REX][STATUS]=HTTP_NOT_FOUND unless $as_error;
 
-        $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
+        #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
         $_[CB]=undef; # No more data to follow 
         &$next;
       }

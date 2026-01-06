@@ -1,0 +1,11 @@
+@{[init {
+  output  location=>"posts", inline=>1;
+  inherit "parent.plt";
+
+  use Time::HiRes qw<time>; 
+
+}]}
+
+<a href="@{[plt_res "create.plt"]}">create</a>
+<br>
+posts content

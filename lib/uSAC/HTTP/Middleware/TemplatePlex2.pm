@@ -4,6 +4,7 @@ use feature "try";
 use uSAC::HTTP;
 use uSAC::HTTP::Constants;
 use uSAC::Util;
+use URI::Escape;
 
 
 use Template::Plexsite;
@@ -17,6 +18,7 @@ sub uhm_template_plex2 {
 
   my %options=@_;
 
+  my $url_table=$options{url_table};
   my $vars={
     route=>undef, 
     rex=>undef, 
@@ -26,44 +28,81 @@ sub uhm_template_plex2 {
     callback=>undef
   };
   
-  my $root=uSAC::Util::path $options{src}, [caller];
-  Error::Show::throw "No html_root specified" unless $options{html_root};
-  Error::Show::throw "No wrc specified" unless $options{src};
-  my $url_table=Template::Plexsite::URLTable->new(src=>$root, html_root=>$options{html_root}, locale=>undef);
+
+  my %reverse;
+  # built reverse index
+  for my ($k, $v)($url_table->table->%*){
+    if($v->{template}){
+      $reverse{"/".$v->{output}}=$k;
+      say STDERR "/$v->{output} -> $k";
+    }
+  }
+
+  my $prefix=$options{prefix};
+
   [
     sub {
     #my %options=@_;
 
     my ($next, $index)=@_;
+      my $p;
       sub {
         # Check the url ends witha slash. If it doesnt. tell the client to redirect
-        #asay $STDERR, "ROOT IS $root";
-  #asay $STDERR, "IN template plexsite 2";
-        #asay $STDERR, "STATUS IN IS $_[REX][STATUS]";
-        if($_[OUT_HEADER] and $_[REX][STATUS] != HTTP_OK()){
+        if($_[OUT_HEADER] and ($_[REX][STATUS]//HTTP_NOT_FOUND == HTTP_NOT_FOUND())){
 
-          # Redirect to url ending with slash if need be
           for($_[REX][PATH]){
+            my @comp =split "/";
+
+            # If the last component looks like a file.. go next
+            if($comp[$#comp]=~/\./){
+              $_[REX][STATUS]=HTTP_NOT_FOUND;
+              return &$next;
+            }
+            
+            # Redirect to url ending with slash if need be
             unless(m|/$|){
               $_[REX][REDIRECT]=$_[REX][PATH]."/";
               return &rex_redirect_see_other;
             }
           }
 
+          # Strip prefix
+          #
+          $p=uri_unescape $_[PAYLOAD]||$_[REX][PATH];
+          $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
+
+          $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
+
           #Update variables
           $vars->@{qw<route rex in_header out_header payload callback>}=@_;
           try {
-            #my $path=substr $_[REX][PATH],0 ,-1;
-            my $path=substr $_[PAYLOAD],0 ,-1;
-            $path.=".plt";
+            ##############################################
+            # my $output= substr($_[PAYLOAD],0,1) ne "/" #
+            #     ?"/".$_[PAYLOAD]                       #
+            #     : $_[PAYLOAD];                         #
+            #                                            #
+            ##############################################
+            my $output= substr($p,0,1) ne "/"
+                ?"/".$p
+                : $p;
 
-            $path=substr $path, 1;
-            my @input=$url_table->add_resource($path);
+            my @comps=split "/", $output; 
 
-            my $info=$url_table->resource_info($path);
+            # Shift off the root path
+            shift @comps;
 
-            if($info){
-              my %res=$url_table->build($path);
+            # Translate to input namespace
+            @comps=map {$_.".plt"} @comps;
+            my $path=join "/", @comps;
+
+
+            say STDERR " INPUT PATH FOR OUTPUT: $path ||||   $output";
+
+            #$path=substr $path, 1;
+            $url_table->add_resource($path);
+
+            if($path){
+              my %res=$url_table->build($path, $vars);
               $_[PAYLOAD]=$res{$path};
 
               $_[REX][STATUS]=HTTP_OK;
@@ -71,6 +110,7 @@ sub uhm_template_plex2 {
             }
             else {
               $_[REX][STATUS]=HTTP_NOT_FOUND;
+              &$next;
             }
           }
           catch($e){
@@ -88,8 +128,6 @@ sub uhm_template_plex2 {
     sub {
       my ($next, $index)=@_;
       sub {
-        #Force delete context
-        #delete $ctx{$_[REX]};
         &$next;
       }
     }

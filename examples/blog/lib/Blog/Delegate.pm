@@ -2,6 +2,7 @@ package Blog::Delegate;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware::Form;
+use Template::Plexsite::URLTable;
 #
 
 use HTTP::State::Cookie ":all";
@@ -17,8 +18,16 @@ no warnings "experimental";
 
 use HTTP::State::Cookie qw<:all>;
 use uSAC::Util;
+my $url_table=Template::Plexsite::URLTable->new(src=>path(\"../../src"), html_root=>path(\"../../static"), local=>undef);
 
+  # Seed the table
+  $url_table->add_resource("index.plt");
 
+  $url_table->build();
+#=========
+# Hooks.
+#  Hooks return a sub to actually be called
+#
 
 sub process_cli_options_hook {
   sub {
@@ -26,21 +35,42 @@ sub process_cli_options_hook {
   }
 }
 
+# return a list of middleware to add before calling each delegate method
+sub middleware_hook {
+  sub {
+    my $site=shift;
+    #$site->add_middleware( uhm_state);
+    $site->add_middleware( _authenticate());
+
+  }
+}
+
+# What to add as a route, in what order
+# resolved names delegate methods automatically
 sub auto_route_hook {
   sub {
     asay $STDERR, "Deletage auto route sub";
     my $site=shift; 
-    $site->add_route(POST=>"login")
-    ->add_route("login")
-    ->add_route("logout")
-    ->add_route("public")
-    ->add_route("home")
+    $site->post("login")
+    ->get("logout")
+
+    #->post("posts/create")
+    ->post("exact","posts")
+    #->get("=~", "posts/$Decimal")
+
+    #->get("=~", "posts/$Decimal/edit")
+    #->add_route("PUT","=~","posts/$Decimal")
+    #->add_route("DELETE","=~","posts/$Decimal")
+
+    ->get("public")
+    ->get("home")
 
     ->add_route('exact', 'static/hot.txt'
       => uhm_static_file(
         #headers=>{"transfer-encoding"=>"chunked"},
         \"../../static/hot.txt")
     );
+
     #->add_route('exact', 'static/hot.txt' => uhm_static_content "static/hot.txt");
 
     ###############################################################################
@@ -98,16 +128,19 @@ sub auto_route_hook {
     ###############################################################################
 
 
-    $site->add_route('static'
+    $site->add_route([qw<GET HEAD>],''
+      => uhm_gzip()
+      => uhm_template_plex2(url_table=>$url_table)
       => uhm_static_root(
         #index=>["index.html"],
         #list_dir=>1,
         roots=> [\"../../static", \"../../admin/static"],
-        template=>qr/\/$/
+        #template=>qr/\/$/
       )
-      => uhm_template_plex2 src=>path(\"../../src"), html_root=>path(\"../../static")
 
     );
+
+    $site->add_route("");
   $site->add_route("more_testing"=>sub {
       $_[PAYLOAD]="asdf";
       1;
@@ -117,7 +150,117 @@ sub auto_route_hook {
 
 
   }
+}
 
+
+# Implicit routing
+#
+
+sub _POST__begin__login_ {
+  (
+    uhm_slurp(),    # Ensure the entire contents of the request are received #
+
+    sub {
+      adump $STDERR, "post loin";
+      my $details=decode_urlencoded_form $_[PAYLOAD][0][1];
+      # Check the CSRF token is valid
+      adump $STDERR, $details;
+
+
+      for($details->{authentication_token}){
+        my $data=verify_protection_token($_);
+        #my $jwt=decode_jwt(token=>$_, key=>$secret);
+        adump $STDERR, $data;
+
+        if(defined $data){
+          # Here we validate the content of the form
+          $_[PAYLOAD]=$details;
+          &_handle_login_cb;
+        }
+        else {
+          &rex_error_forbidden;
+        }
+      }
+      1;
+    }
+  )
+}
+
+sub _POST__exact__posts_ {
+  # handle form submission
+  (
+    uhm_decode_form(),
+    sub {
+      adump $STDERR, $_[PAYLOAD];
+      $_[REX][REDIRECT]="/posts/";
+      &rex_redirect_found; 
+
+      1;
+    }
+  )
+}
+
+
+sub _handle_login_cb {
+  adump $STDERR, "in handle long in cb";
+  my $details=$_[PAYLOAD];
+  my $set=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
+  for($details->{username}){
+    push @$set, 
+    cookie_struct 
+    "SESSION_ID"=>ref?$_->[0]:$_, 
+    #"Max-Age"=>100, 
+    path=> '/';
+  }
+  $_[REX][REDIRECT]=$details->{target}|| "/home";
+  return &rex_redirect_see_other;
+}
+
+
+sub _GET__begin__logout_ {
+  (
+    sub {
+      my $set=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
+      push @$set, cookie_struct SESSION_ID=>"", "max-age"=>1, path=>"/";
+
+      $_[PAYLOAD]="";
+      $_[REX][REDIRECT]="/login/";
+      &rex_redirect_see_other;
+      1;
+    }
+  )
+}
+
+
+
+
+sub _GET__begin__public_ {
+  (uhm_static_root(read_size=>4096, do_dir=>1, \undef));
+}
+
+
+sub _GET__begin__home_ {
+    sub {
+      $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/html";
+      $_[PAYLOAD]=qq|
+        <html>
+          <head>
+            <title> Home </title>
+          </head>
+          <body>
+            HELLO there
+          </body>
+        </html>
+      |;
+    }
+}
+
+sub _GET__begin___ {
+  sub {
+   $_[REX][STATUS]=HTTP_OK;
+   $_[PAYLOAD]="lkjalsdkjalkjasdf";
+   1;
+  }
 }
 
 
@@ -155,15 +298,6 @@ sub _authenticate {
 }
 
 
-# return a list of middleware to add before calling each delegate method
-sub middleware_hook {
-  sub {
-    my $site=shift;
-    #$site->add_middleware( uhm_state);
-    $site->add_middleware( _authenticate);
-
-  }
-}
 
 
 sub test {
@@ -190,133 +324,6 @@ sub test {
   }
 }
 
-# Implicit routing
-#
-
-sub _login_{
-  (
-                    
-    uhm_slurp(),    # Ensure the entire contents of the request are received
-    sub {
-      for($_[REX][METHOD]){
-        /GET/ and return &_GET_login; 
-        /POST/ and return &_POST_login;
-        return &rex_error_not_found;
-        }
-      }
-  )
-}
-
-sub _GET_login {
-  $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/html";
-
-  my $jwt=generate_protection_token("data");
-  
-  # Render the page for login?
-  state $form=Template::Plex->load([q|
-      <html>
-        <body>
-          <form action="/login" method="POST">
-            <label for="username">Username</label>
-            <input name="username">
-
-            <label for="password">Password</label>
-            <input name="password" type="password">
-
-            <input name="target" hidden value="/home">
-            <input name="authentication_token" hidden value="$fields{token}">
-            <input type="submit">
-          </form>
-        </body>
-      </html>
-      |]);
-
-  $_[PAYLOAD]=$form->render({token=>$jwt});
-  1;
-}
-
-sub _POST_login {
-  adump $STDERR, "post loin";
-  my $details=decode_urlencoded_form $_[PAYLOAD][0][1];
-  # Check the CSRF token is valid
-  adump $STDERR, $details;
-
-
-  for($details->{authentication_token}){
-    my $data=verify_protection_token($_);
-    #my $jwt=decode_jwt(token=>$_, key=>$secret);
-    adump $STDERR, $data;
-
-    if(defined $data){
-      # Here we validate the content of the form
-      $_[PAYLOAD]=$details;
-      &_handle_login_cb;
-    }
-    else {
-      &rex_error_forbidden;
-    }
-  }
-  1;
-}
-
-sub _handle_login_cb {
-  adump $STDERR, "in handle long in cb";
-  my $details=$_[PAYLOAD];
-  my $set=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
-  for($details->{username}){
-    push @$set, 
-    cookie_struct 
-    "SESSION_ID"=>ref?$_->[0]:$_, 
-    #"Max-Age"=>100, 
-    path=> '/';
-  }
-  $_[REX][REDIRECT]=$details->{target}|| "/home";
-  return &rex_redirect_see_other;
-}
-
-
-sub _logout_ {
-  (
-    sub {
-      my $set=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
-      push @$set, cookie_struct SESSION_ID=>"", "max-age"=>1, path=>"/";
-
-      $_[PAYLOAD]="";
-      $_[REX][REDIRECT]="/login";
-      &rex_redirect_see_other;
-      1;
-    }
-  )
-}
-
-sub _public_ {
-  (uhm_static_root(read_size=>4096, do_dir=>1, \undef));
-}
-
-
-sub _home_ {
-    sub {
-      $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/html";
-      $_[PAYLOAD]=qq|
-        <html>
-          <head>
-            <title> Home </title>
-          </head>
-          <body>
-            HELLO there
-          </body>
-        </html>
-      |;
-    }
-}
-
-sub __ {
-  sub {
-   $_[REX][STATUS]=HTTP_OK;
-   $_[PAYLOAD]="lkjalsdkjalkjasdf";
-   1;
-  }
-}
 
 # return the name of the package... 
 __PACKAGE__;
