@@ -67,15 +67,6 @@ sub auto_route_hook {
     ->get("public")
     ->get("home", uhm_http_authentication(
         {
-          scheme=>"basic",
-          realm=>"asdf",
-          charset=>"utf8",
-          auth_cb=> sub {
-            asay $STDERR, "GOT AUTH CALLBACK basic";
-            $_[1]->({username=>"test"});
-          }
-        },
-        {
           scheme=>"cookie",
           realm=>"asdf",
           charset=>"utf8",
@@ -83,6 +74,15 @@ sub auto_route_hook {
           redirect=>"/login",
           auth_cb=> sub {
             asay $STDERR, "GOT AUTH CALLBACK cookie";
+            $_[1]->({username=>"test"});
+          }
+        },
+        {
+          scheme=>"basic",
+          realm=>"asdf",
+          charset=>"utf8",
+          auth_cb=> sub {
+            asay $STDERR, "GOT AUTH CALLBACK basic";
             $_[1]->({username=>"test"});
           }
         },
@@ -317,38 +317,40 @@ sub _GET__begin___ {
 }
 
 
-sub _authenticate {
-  [
-    sub {
-      my ($next, $index)=(shift, shift);
-      sub{
-        # session id is stored in cookie. check if session is valid
-        for my $state ($_[REX][STATE]){
-          $state//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};
-
-          if($state->{"SESSION_ID"}){
-            # Validate the session and continue
-            &$next;
-          }
-          else {
-            # No session_ID. Force a showing of a login page, redirect to login
-            unless($_[REX][PATH] =~ m"^/login"){
-              $_[REX][REDIRECT]="/login";#$_[REX][PATH];
-              $_[PAYLOAD]="/login";#?target=$in_header{':path'}";
-              &rex_redirect_see_other ;
-              return undef;
-            }
-            else {
-              # This is the login page
-              &$next;
-            }
-
-          }
-        }
-      }
-    }
-  ]
-}
+###################################################################################
+# sub _authenticate {                                                             #
+#   [                                                                             #
+#     sub {                                                                       #
+#       my ($next, $index)=(shift, shift);                                        #
+#       sub{                                                                      #
+#         # session id is stored in cookie. check if session is valid             #
+#         for my $state ($_[REX][STATE]){                                         #
+#           $state//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};               #
+#                                                                                 #
+#           if($state->{"SESSION_ID"}){                                           #
+#             # Validate the session and continue                                 #
+#             &$next;                                                             #
+#           }                                                                     #
+#           else {                                                                #
+#             # No session_ID. Force a showing of a login page, redirect to login #
+#             unless($_[REX][PATH] =~ m"^/login"){                                #
+#               $_[REX][REDIRECT]="/login";#$_[REX][PATH];                        #
+#               $_[PAYLOAD]="/login";#?target=$in_header{':path'}";               #
+#               &rex_redirect_see_other ;                                         #
+#               return undef;                                                     #
+#             }                                                                   #
+#             else {                                                              #
+#               # This is the login page                                          #
+#               &$next;                                                           #
+#             }                                                                   #
+#                                                                                 #
+#           }                                                                     #
+#         }                                                                       #
+#       }                                                                         #
+#     }                                                                           #
+#   ]                                                                             #
+# }                                                                               #
+###################################################################################
 
 # return the name of the package... 
 __PACKAGE__;

@@ -56,6 +56,17 @@ At least one authentication must be present to pass.
 
 All authentication present must pass.
 
+=head2 SCHEME SPECIFICATION
+
+A scheme is a hash ref. Require keys for http schems are the 'scheme', 'realm'
+For cookie schemes, 'scheme', 'name' (of cookie)  and 'redirect' keys are required.
+
+All  require 'auth_cb' and scheme.
+
+=head3 auth_cb
+
+The auth callback is passed the either the parsed kv pairs or the raw token value, as the first arugument. THe second argument is the finalising callback function to pass the authorised information and can be called asynchronously.
+
 =cut
 
 sub uhm_http_authentication {
@@ -102,8 +113,6 @@ sub uhm_http_authentication {
     $web_error_mode="redirect";
     $redirect_location=$methods[0]->{redirect};
   }
-
-
 
   [sub {
       my ($next, $index)=@_;
@@ -270,94 +279,94 @@ sub basic_parser {
 }
 
 
-  sub digest_parser{
-    my $nonce;
-    my $cnonce;
-    my $opaque;
-    my $domain;
-    my $algorithm;
-    my $realm;
-    my $qop;
-    my $userhash;
-    my $charset;
-    my $nc;
-    my $response;
+sub digest_parser{
+  my $nonce;
+  my $cnonce;
+  my $opaque;
+  my $domain;
+  my $algorithm;
+  my $realm;
+  my $qop;
+  my $userhash;
+  my $charset;
+  my $nc;
+  my $response;
 
-    my $secret;
-    my $hash=sub{};
-    my %params;
-    sub {
-      my ($info, $credentials)=@_;
+  my $secret;
+  my $hash=sub{};
+  my %params;
+  sub {
+    my ($info, $credentials)=@_;
 
-      if($credentials){
-        # Parse
-        my @pairs=split ", ", $credentials;
-        for (@pairs){
-          my ($k,$v)=split "=";
-          $v=~s/^"//;
-          $v=~s/"$//;
+    if($credentials){
+      # Parse
+      my @pairs=split ", ", $credentials;
+      for (@pairs){
+        my ($k,$v)=split "=";
+        $v=~s/^"//;
+        $v=~s/"$//;
 
-          $params{$k}=$v;
-        }
+        $params{$k}=$v;
+      }
 
-        # Find username, or at least hashed username from external
-        #
-        #
-        my $username;
+      # Find username, or at least hashed username from external
+      #
+      #
+      my $username;
 
-        # and get password
-        #
-        my $password;
-
-
-        # Calculate server side
-        my $A1;
-        my $A2;
-        if($params{algorithm}=~/-sess/){
-          #A1 = H( unq(username) ":" unq(realm) ":" passwd ) ":" unq(nonce-prime) ":" unq(cnonce-prime)
-        }
-        else {
-          #A1 = unq(username) ":" unq(realm) ":" passwd
-          $A1=$hash->("$username:$realm:$password");
-
-        }
-
-        for($params{$qop}){
-          if($_ eq "auth"){
-            $A2="$_[REX][METHOD]:$_[REX][URI]";
-          }
-          elsif($_ eq "auth-int"){
-            $A2="$_[REX][METHOD]:$_[REX][URI]:". $hash->($_[PAYLOAD]);
-          }
-          else {
-            # error
-          }
-        }
+      # and get password
+      #
+      my $password;
 
 
-        my $hash_A1=$hash->($A1);
-        my $hash_A2=$hash->($A2);
-
-
-        my $server_gen_response=$hash->("$hash_A1:"."$nonce:$nc:$cnonce:$qop:$hash_A2");
-        #compare with what the client sent
-        if($server_gen_response eq $response){
-          #Authenticated
-        }
-        else {
-          # Failed
-          # #write the headers
-        }
-        $params{scheme}=$_[0]{scheme};
-        $params{label}=$_[0]{label};
-        # Write header
-        #
-        return \%params;
+      # Calculate server side
+      my $A1;
+      my $A2;
+      if($params{algorithm}=~/-sess/){
+        #A1 = H( unq(username) ":" unq(realm) ":" passwd ) ":" unq(nonce-prime) ":" unq(cnonce-prime)
       }
       else {
-        #Write out headers
+        #A1 = unq(username) ":" unq(realm) ":" passwd
+        $A1=$hash->("$username:$realm:$password");
+
       }
+
+      for($params{$qop}){
+        if($_ eq "auth"){
+          $A2="$_[REX][METHOD]:$_[REX][URI]";
+        }
+        elsif($_ eq "auth-int"){
+          $A2="$_[REX][METHOD]:$_[REX][URI]:". $hash->($_[PAYLOAD]);
+        }
+        else {
+          # error
+        }
+      }
+
+
+      my $hash_A1=$hash->($A1);
+      my $hash_A2=$hash->($A2);
+
+
+      my $server_gen_response=$hash->("$hash_A1:"."$nonce:$nc:$cnonce:$qop:$hash_A2");
+      #compare with what the client sent
+      if($server_gen_response eq $response){
+        #Authenticated
+      }
+      else {
+        # Failed
+        # #write the headers
+      }
+      $params{scheme}=$_[0]{scheme};
+      $params{label}=$_[0]{label};
+      # Write header
+      #
+      return \%params;
     }
+    else {
+      #Write out headers
+    }
+  }
 }
 
 
