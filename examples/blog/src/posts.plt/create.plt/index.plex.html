@@ -13,11 +13,11 @@ make a form here
 <br>
 <form action="/posts" method="POST">
   <label for="title">Title</label>
-  <input name="title"></input>
+  <input name="title">
   
   <label for="content">Content</label>
   <textarea name="content"></textarea>
-
-  <input type="submit"></input>
+  <input hidden name="authentication_token" value="@{[generate_protection_token]}">
+  <input type="submit">
 </form>
 

@@ -2,8 +2,10 @@ package Blog::Delegate;
 
 use uSAC::HTTP;
 use uSAC::HTTP::Middleware::Form;
+use uSAC::HTTP::Middleware::Authentication;
+
 use Template::Plexsite::URLTable;
-#
+
 
 use HTTP::State::Cookie ":all";
 use Import::These qw<uSAC::HTTP::Middleware::
@@ -21,9 +23,9 @@ use uSAC::Util;
 my $url_table=Template::Plexsite::URLTable->new(src=>path(\"../../src"), html_root=>path(\"../../static"), local=>undef);
 
   # Seed the table
-  $url_table->add_resource("index.plt");
+  #$url_table->add_resource("index.plt");
 
-  $url_table->build();
+  #$url_table->build();
 #=========
 # Hooks.
 #  Hooks return a sub to actually be called
@@ -40,7 +42,7 @@ sub middleware_hook {
   sub {
     my $site=shift;
     #$site->add_middleware( uhm_state);
-    $site->add_middleware( _authenticate());
+    #$site->add_middleware( _authenticate());
 
   }
 }
@@ -56,14 +58,47 @@ sub auto_route_hook {
 
     #->post("posts/create")
     ->post("exact","posts")
-    #->get("=~", "posts/$Decimal")
+    ->get("=~", "posts/($Decimal)", "posts_id")
 
     #->get("=~", "posts/$Decimal/edit")
     #->add_route("PUT","=~","posts/$Decimal")
     #->add_route("DELETE","=~","posts/$Decimal")
 
     ->get("public")
-    ->get("home")
+    ->get("home", uhm_http_authentication(
+        {
+          scheme=>"basic",
+          realm=>"asdf",
+          charset=>"utf8",
+          auth_cb=> sub {
+            asay $STDERR, "GOT AUTH CALLBACK basic";
+            $_[1]->({username=>"test"});
+          }
+        },
+        {
+          scheme=>"cookie",
+          realm=>"asdf",
+          charset=>"utf8",
+          name=>"SESSION_ID",
+          redirect=>"/login",
+          auth_cb=> sub {
+            asay $STDERR, "GOT AUTH CALLBACK cookie";
+            $_[1]->({username=>"test"});
+          }
+        },
+        #################################################
+        # {                                             #
+        #   scheme=>"bearer",                           #
+        #   realm=>"my relm",                           #
+        #   auth_cb=>sub {                              #
+        #     asay $STDERR, "GOT AUTH CALLBACK bearer"; #
+        #     ({username=>"test"});                     #
+        #                                               #
+        #   }                                           #
+        # }                                             #
+        #################################################
+      ),
+      "home")
 
     ->add_route('exact', 'static/hot.txt'
       => uhm_static_file(
@@ -192,9 +227,24 @@ sub _POST__exact__posts_ {
     uhm_decode_form(),
     sub {
       adump $STDERR, $_[PAYLOAD];
+
+      my $token=$_[PAYLOAD][0][PART_CONTENT]{authentication_token};
+      asay $STDERR, $token;
+      my $data=verify_protection_token($token);
+      
       $_[REX][REDIRECT]="/posts/";
       &rex_redirect_found; 
 
+      1;
+    }
+  )
+}
+
+sub _GET__regexp__posts_id_ {
+
+  (
+    sub {
+      adump $STDERR,"Captures", $_[REX][CAPTURES];
       1;
     }
   )
@@ -240,19 +290,22 @@ sub _GET__begin__public_ {
 
 
 sub _GET__begin__home_ {
+  (
     sub {
+      asay $STDERR, "CALLED HOME------";
       $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="text/html";
       $_[PAYLOAD]=qq|
-        <html>
-          <head>
-            <title> Home </title>
-          </head>
-          <body>
-            HELLO there
-          </body>
-        </html>
+      <html>
+      <head>
+      <title> Home </title>
+      </head>
+      <body>
+      HELLO there
+      </body>
+      </html>
       |;
     }
+  )
 }
 
 sub _GET__begin___ {
@@ -265,65 +318,37 @@ sub _GET__begin___ {
 
 
 sub _authenticate {
-    [
-      sub {
-        my ($next, $index)=(shift, shift);
-        sub{
-          # session id is stored in cookie. check if session is valid
-          for my $state ($_[REX][STATE]){
-            $state//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};
+  [
+    sub {
+      my ($next, $index)=(shift, shift);
+      sub{
+        # session id is stored in cookie. check if session is valid
+        for my $state ($_[REX][STATE]){
+          $state//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};
 
-            if($state->{"SESSION_ID"}){
-              # Validate the session and continue
-              &$next;
+          if($state->{"SESSION_ID"}){
+            # Validate the session and continue
+            &$next;
+          }
+          else {
+            # No session_ID. Force a showing of a login page, redirect to login
+            unless($_[REX][PATH] =~ m"^/login"){
+              $_[REX][REDIRECT]="/login";#$_[REX][PATH];
+              $_[PAYLOAD]="/login";#?target=$in_header{':path'}";
+              &rex_redirect_see_other ;
+              return undef;
             }
             else {
-              # No session_ID. Force a showing of a login page, redirect to login
-              unless($_[REX][PATH] =~ m"^/login"){
-                $_[REX][REDIRECT]="/login";#$_[REX][PATH];
-                $_[PAYLOAD]="/login";#?target=$in_header{':path'}";
-                &rex_redirect_see_other ;
-                return undef;
-              }
-              else {
-                # This is the login page
-                &$next;
-              }
+              # This is the login page
+              &$next;
+            }
 
-            }
-            }
           }
         }
-    ]
-}
-
-
-
-
-sub test {
-  sub {
-  (
-    sub {
-      \my %kv=$_[IN_HEADER]{":state"};
-      if($kv{name}){
-        asay $STDERR, "Existing cookie from client";
-        # Validate 
-        asay $STDERR, "ok" if $kv{name} =~ /value/;
       }
-      else {
-        #say "No cookie... setting";
-        my $c=cookie_struct name=>"value";#, COOKIE_PATH()=>"/static";
-
-        local $_=$_[OUT_HEADER]{HTTP_SET_COOKIE()}= [ encode_set_cookie($c)];
-        $c=cookie_struct name2=>"new value";
-        push @$_, encode_set_cookie($c);
-      }
-      1;
     }
-  )
-  }
+  ]
 }
-
 
 # return the name of the package... 
 __PACKAGE__;

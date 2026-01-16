@@ -266,6 +266,7 @@ sub make_parser{
             #
             #($route, $h{":captures"}) = $cb->($host, "$method $uri");
             ($route, $rex->[CAPTURES]) = $cb->($host, "$method $uri");
+            #adump $STDERR, \%+;
 
             # Set the route for this rex
             $rex->[uSAC::HTTP::Rex::route_]=$route;

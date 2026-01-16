@@ -37,6 +37,7 @@ use Export::These qw<
   rex_redirect_permanent
   rex_redirect_not_modified
 
+  rex_error_unauthorized 
   rex_error_not_found
   rex_error_forbidden 
   rex_error_internal_server_error 
@@ -406,6 +407,11 @@ sub rex_error {
   # statement, the return value is undef, which prevents from automatic
   # middleware execution of the current chain.
   #1;#undef;
+}
+
+sub rex_error_unauthorized {
+  $_[REX][STATUS]=HTTP_UNAUTHORIZED;
+  &rex_error;
 }
 
 =head3 rex_error_not_found

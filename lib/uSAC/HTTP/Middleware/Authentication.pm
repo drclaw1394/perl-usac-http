@@ -2,9 +2,10 @@ use v5.36;
 package uSAC::HTTP::Middleware::Authentication;
 use feature "refaliasing";
 no warnings "experimental";
+use uSAC::IO;
 use Import::These qw<uSAC::HTTP:: Code Rex Constants>;
 
-use Export::These qw<uhs_authentication>;
+use Export::These qw<uhm_http_authentication>;
 use HTTP::State::Cookie qw<:all>;
 use uSAC::HTTP::Middleware::Form;
 use uSAC::HTTP::Code;# qw<:constants>;
@@ -16,240 +17,390 @@ use Cpanel::JSON::XS;
 use Crypt::JWT;
 
 
+=pod
 
-# Returns a site hierrachy with routes  used for authentication
-# User options
-#
-# login
-# uri to the redirect to for html login page. a route needs to exist for this
-# for both GET and POST methods
-# If no login give the defualt site relative route (createded in this module )
-# is used.
-#
-# logout
-# is the logout route to complement the login. As per login
-#
-#
-#
-sub uhs_authentication {
-  my %options=@_;
-  # The routine to encode the cookie value and sign it if needed. Simply decodes json and forces authentication and non expiry
+=head1 NAME
+
+HTTP AUTHENTICATION
+
+=head2 DESCRIPTION
+
+Implements HTTP Authentication schemes (Basic, Digest and Bearer). Also
+supports cookie authentication. Multiple schemesare supported at once.
+
+Both http and cookies schemes (multiple of both) can be used at once.  A client
+can respond to either 0 or more of these by either sending the Authorize header
+or a cookie with the credentials.
+
+Cookie and Bearer schemes are application  specific in what information is
+encoded decoded. This could be a simple session ID  or a JWT for example. 
+
+=head2 AUTHENTICATION FAILURE
+
+If http schemes only are configured,  all failures generate the
+WWW-Authenticate headers rendered for all configured http schemes.
+
+If ONLY http schemds are configured, a 401 response is returned.
+
+If ONLY cookie schemes are confitured, the location is set and a 303 see other is the response.
+
+If both cookie and http schemes are configured, www-authenticate headers are
+set, but the return status is base on the first scheme in the configuration
+list. If it is acookie, the status will be a redirect. Otherwise a 401.
+
+This allows for the same url end point to utilised either cookie or http
+authentication. (ie one for web browsers, and the other for api clients)
+
+
+At least one authentication must be present to pass.
+
+All authentication present must pass.
+
+=cut
+
+sub uhm_http_authentication {
   
-	my $state_encode=	$options{encode}//=sub {unpack("H*", &encode_json)};
-
-  # The routine to decode and validate any signed values
-  #/Users/drclaw/Documents/UNIX/perl/uSAC-HTTP-Middleware-Uploader 
-	my $state_decode=	$options{decode}//=sub {[decode_json(pack("H*", $_[0])), 1, undef]};#//sub {$_[0]};
-
-
-  # The name of a variable in a cookie which contains what we are after
-	my $state_name=		$options{name}//"USAC_AUTHENTICATION";
-
-  # The path, domain  expiry timesof the cookies
-	my $state_path= 	$options{path}//"/";
-
-
-  # The name of the field in the REX state with decoede client side state
-	my $state_field=	$options{field}//$state_name;
-
-  my $container_site=uSAC::HTTP::Site->new(id=>"auth_container");
-  my $protected_site=uSAC::HTTP::Site->new(id=>"auth_protected", prefix=>"private/");
-  my $login_site=uSAC::HTTP::Site->new(id=>"auth_login", prefix=>"auth/");
-
-  my $use_builtin_routes= !$options{login};
-
-  my $inner=sub {
-    my $next=shift;
-    my $index=shift;
-    my %link_options=@_;
-    my $b_prefix=$login_site->built_prefix;
-
-
-    $options{login}//="${b_prefix}login";
-
-    sub {
-      Log::OK::TRACE and log_trace "AUTHENTICATION IINNER WARE++++";
-
-      # Skip if we already have authentication. Could be a multi call (large body)
-      #
-      return &$next if $_[REX][AUTHENTICATION]->@*;
-
-
-      # Assumes the state from the client has been stored via cookies, so check
-      # the state in the rex      
-      # If the it doesn't exist create
-      #
-      
-      $_[REX][STATE]//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};
-
-      for my $v ((($_[REX][STATE]{$state_name})//[])->@*) {
-        #
-        # Process each of the values for the name   
-        #
-
-        # Decode if decoder provided, must return a decoded value, verified
-        # flag, and expired flag
-        #
-        push $_[REX][AUTHENTICATION]->@*, $state_decode->($v);
-      }
-
-      # if valid and not expired, proceed to rest of middleware
-      #
-      for my $auth ($_[REX][AUTHENTICATION][0]){
-
-        if($auth->[1] and !$auth->[2]){
-          # data is valid and not expired . CONTINUE THROUGH MIDDLEWARE CHAIN
-          Log::OK::TRACE and log_trace "---AUTHENTICATION OK CONTINUES=-----";
-
-          return &$next;
-        }
-        else {
-          # Not authorized.
-          #
-          Log::OK::TRACE and log_trace "Not authorized+++ with method $_[REX][METHOD]";
-
-          if($_[REX][METHOD] ne "GET" and $_[REX][METHOD] ne "HEAD"){
-            # Straight up reject any non GET or HEAD requests
-            Log::OK::TRACE and log_trace "DROPPING Non idemetic";
-            $_[REX][uSAC::HTTP::Rex::closeme_]=1;
-            $_[REX][uSAC::HTTP::Rex::session_]->drop();
-          }
-          else {
-            # If its GET/HEAD we can redirect to login
-            if($options{login}){
-              Log::OK::TRACE and log_trace "Redirect to login";
-              # We have a login page so internally redirect there!
-              $_[REX][REDIRECT]=$options{login};#$_[REX][URI];
-
-              # Also store the intended target as a cookie
-              \my $set_cookies=\$_[OUT_HEADER]{HTTP_SET_COOKIE()};
-              push $set_cookies->@*, cookie_struct  "target_uri", $_[REX][URI], path=> "/";
-
-              #return &rex_redirect_internal;
-
-              return &rex_redirect_found;
-            }
-            else {
-              # authentication fail, drop connection
-              Log::OK::TRACE and log_trace "JUST DROP THE CONNECTION";
-              $_[REX][REDIRECT]=$_[REX][URI];
-              $_[REX][STATUS]=HTTP_UNAUTHORIZED;
-              $_[PAYLOAD]="NO access baby";
-
-                # Use the error uri for the site
-                return &rex_error;
-            }
-          }
-        }
-      }
-    };
-  };
-
-  my $outer=sub {
-    my $next=shift;
-    sub {
-
-      &$next;
-    };
-  };
+  my @methods=@_; # an array of hashes
   
-  my $error=undef;
+  my @http_methods;
+  my @cookie_methods;
 
+  # Iterate through each of the methods and make sure handlers are set
+  for(@methods){
+    $_->{scheme}=lc $_->{scheme};
+    if($_->{scheme} eq "basic"){
+      $_->{parser}//=basic_parser();
+      #$_->{serializer}//=\&basic_serializer;
+      push @http_methods, $_;
+    }
+    elsif($_->{scheme} eq "digest"){
+      $_->{parser}//=digest_parser();
+      #$_->{serializer}//=\&digest_serializer;
+      push @http_methods, $_;
+    }
+    elsif($_->{scheme} eq "bearer"){
+      $_->{parser}//=bearer_parser();
+      #$_->{serializer}//=\&bearer_serializer;
+      push @http_methods, $_;
+    }
+    elsif($_->{scheme} eq "cookie"){
+      $_->{parser}//=cookie_parser();
+      #$_->{serializer}//=\&cookie_serializer;
+      push @cookie_methods, $_;
+    }
+    else {
+      die "No parser specified for $_->{scheme}";
+    }
+    
+  }
 
-  $container_site->add_site($login_site);
-  $container_site->add_site($protected_site);
+  # Determin the default error/redirect for mixeed mode routes
+  my $redirect_location;
 
-  $protected_site->add_middleware( [$inner, $outer, $error]);
-
-
-  # Add builtin routes if user has not provided routes for login and log out
-  if($use_builtin_routes){
-    # Routes to HTML interface for login and log out
-    $login_site->add_route("GET", "login", 
-      sub {
-        # $_[PAYLOAD]="THIS IS LOGIN PAGE"; 1}
-        $_[PAYLOAD]=qq{
-        <html>
-        <body>
-        <form submit="login" method="POST">
-        <input type="text" name="username"></input>
-        <input type="password" name="password"></input>
-        <input type="submit" name="login">Login</input>
-        </form>
-        </body>
-        </html>
-        };
-      }
-    );
-
-    $login_site->add_route("GET", "logout", sub {
-        $_[PAYLOAD]=qq{
-        <html>
-        <body>
-          <form submit="logout" method="POST">
-            <input type="submit" name="logout">Logout</input>
-          </form>
-        </body>
-        </html>
-        };
-      }
-    );
-
-    # Built in submission for Login and log out forms
-    #
-    $login_site->add_route("POST", "login",   uhm_decode_form, sub {
-        
-        use uSAC::HTTP::Route;
-        Log::OK::TRACE and log_trace " AUTH POST side state management route is: $_[ROUTE][0] site  $_[ROUTE][1][ROUTE_SITE] ";
-        my $username=$_[PAYLOAD][0][1]{username};
-        my $password=$_[PAYLOAD][0][1]{password};
-
-        #$_[PAYLOAD]= Dumper $_[PAYLOAD];
-        $_[PAYLOAD].= "Username is $username, password is $password";
-        #$_[PAYLOAD].= Dumper $_[REX][STATE];
-
-
-        # Decode the form
-
-        # For now assume authenticated
-
-        # Also store the intended target as a cookie
-        \my $set_cookies=\$_[OUT_HEADER]{HTTP_SET_COOKIE()};
-        push $set_cookies->@*, cookie_struct  $state_name, $state_encode->({username=>$username, data=>"abcd"}), path=> "/";
-        push $set_cookies->@*, cookie_struct  "target_uri", "", "Max-Age"=>0, path=> "/";
-
-        $_[REX][REDIRECT]=$_[REX][STATE]{target_uri}[0];
-        Log::OK::TRACE and log_trace " AUTH POST side state management route before call is: $_[ROUTE][0] site  $_[ROUTE][1][ROUTE_SITE] ";
-        &rex_redirect_found;
-
-        0;
-
-      }
-    );
-
-    $login_site->add_route("POST", "logout",  uhm_decode_form, sub {
-        #$_[PAYLOAD]= Dumper $_[PAYLOAD];
-
-        # redirect to home page
-        #
-       
-        # Expire authentications
-        \my $set_cookies=\$_[OUT_HEADER]{HTTP_SET_COOKIE()};
-        push $set_cookies->@*, cookie_struct  $state_name, $state_encode->({}), "Max-Age"=>0, path=> "/";
-      }
-    );
-
-    # Static files for log in
-    $protected_site->add_route("GET", "test", sub {
-        #$_[PAYLOAD]=Dumper $_[REX][AUTHENTICATION];
-        1
-      }
-    );
+  my $web_error_mode;
+  if(($methods[0]//{})->{scheme} eq "cookie"){
+    $web_error_mode="redirect";
+    $redirect_location=$methods[0]->{redirect};
   }
 
 
-  $container_site;
+
+  [sub {
+      my ($next, $index)=@_;
+      sub {
+
+          asay $STDERR, "WOrking on auth oi";
+        if($_[OUT_HEADER]){
+
+          asay_now $STDERR, "WOrking on auth";
+          my @parsed_http;
+          my @parsed_cookie;
+          my $counter;
+
+
+          if(@http_methods){
+            for($_[IN_HEADER]{HTTP_AUTHORIZATION()}){
+              if($_){
+                my ($scheme, $credentials)=split " ", $_, 2;
+                $scheme=lc $scheme;
+
+                for(@http_methods){
+                  next unless $_->{scheme} eq $scheme;
+
+
+                  # Call scheme handler
+                  my $parser=$_->{parser};
+                  my $params=$parser->($_, $credentials);
+
+
+                  $counter++;
+                  push @parsed_http, $_, $params; 
+
+                  last; # only ever process one
+                }
+              }
+            }
+          }
+
+          if(@cookie_methods){
+            adump $STDERR, "Cookie method ";
+            for my $state($_[REX][STATE]//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}}){
+              adump $STDERR, "state ", $state;
+              for(@cookie_methods){
+                my $credentials=$state->{$_->{name}};
+                if($credentials){
+                  my $parser=$_->{parser};
+                  my $params=$parser->($_, $credentials);
+                  push @parsed_cookie, $_, $params; 
+                }
+                else {
+                  #none
+                }
+              }
+            }
+          }
+          
+
+          $counter+=@parsed_cookie/2;
+          my $total=$counter;
+
+          if($counter == 0){
+            # No authentication even attempted..header or cookie... send the
+            # required reqponse
+            #
+            my @header;
+            for(@http_methods){
+              push @header, $_->{parser}->($_);
+            }
+            $_[OUT_HEADER]{HTTP_WWW_AUTHENTICATE()}=join ", ", @header;
+              adump $STDERR, @header;
+
+
+
+            if($web_error_mode eq "redirect"){
+              # uSes the first cookie spec as location
+              $_[REX][REDIRECT]=$redirect_location;
+              return &rex_redirect_see_other;
+            }
+            else {
+              return &rex_error_unauthorized;
+            }
+          }
+
+          else {
+            my @args=@_;
+            my @authenticated;
+            my $cb= sub {
+              adump $STDERR, "Doing callback with auth results ", @_;
+              # Call back with authentication information
+              #push $_[REX][AUTHENTICATION]->@*,
+              push @authenticated, @_;
+              $counter--;
+              if($counter==0){
+                # if both headers sent and any fail, error unauthorised
+                # If a auth header (only) was sent and fails, error unauthorised
+                # If cookie (only) was sent without no auth headers, and auth fails, redirect and code?
+                # If no auth header or cookie , redirect to login
+                
+                if(@authenticated != $total){
+                  # at  least one authentication failure... UN AUTHORISED
+                  if(@parsed_http){
+                    #http or both http and cookie headers sent. fail with unauthorized
+                    my @header;
+                    for(@http_methods){
+                      push @header, $_->{parser}->($_);
+                    }
+                    $_[OUT_HEADER]{HTTP_WWW_AUTHENTICATE()}=join ", ", @header;
+                    &rex_error_unauthorized;
+                  }
+                  elsif(@parsed_cookie){
+                    # only cookie header used. fail with redirect
+                    $_[REX][REDIRECT]=$redirect_location;
+                    &rex_redirect_see_other;
+                  }
+                }
+                else {
+                  # all authenticated! continue!
+                  push $_[REX][AUTHENTICATION]->@*, @authenticated;
+                  $next->(@args);
+                }
+              }
+              else {
+                # Work still outstanding
+                # Need to setup up a time out to destroy this sub
+              }
+            };
+
+            # Call all the authentication methods
+            # and wait for callbacks
+            for my($s, $v) (@parsed_http, @parsed_cookie){
+              $s->{auth_cb}($v, $cb);
+            }
+          }
+        }
+        else {
+          &$next;
+        }
+      }
+  }
+  ]
+}
+
+sub basic_parser {
+  sub {
+    if($_[1]){
+      my $credentials=eval {MIME::Base64::decode_base64($_[1])};
+      my ($user, $pass)=split ":", $credentials, 2;
+      my %params=(
+        username=>$user,
+        password=>$pass.
+        realm=>$_[0]{realm},
+        label=>$_[0]{label},
+        scheme=>$_[0]{scheme}
+      );
+
+      return  \%params;
+    }
+    else {
+      my $h="Basic ";
+      return $h.=qq{realm="$_[0]{realm}"};
+    }
+  }
+
 }
 
 
+  sub digest_parser{
+    my $nonce;
+    my $cnonce;
+    my $opaque;
+    my $domain;
+    my $algorithm;
+    my $realm;
+    my $qop;
+    my $userhash;
+    my $charset;
+    my $nc;
+    my $response;
+
+    my $secret;
+    my $hash=sub{};
+    my %params;
+    sub {
+      my ($info, $credentials)=@_;
+
+      if($credentials){
+        # Parse
+        my @pairs=split ", ", $credentials;
+        for (@pairs){
+          my ($k,$v)=split "=";
+          $v=~s/^"//;
+          $v=~s/"$//;
+
+          $params{$k}=$v;
+        }
+
+        # Find username, or at least hashed username from external
+        #
+        #
+        my $username;
+
+        # and get password
+        #
+        my $password;
+
+
+        # Calculate server side
+        my $A1;
+        my $A2;
+        if($params{algorithm}=~/-sess/){
+          #A1 = H( unq(username) ":" unq(realm) ":" passwd ) ":" unq(nonce-prime) ":" unq(cnonce-prime)
+        }
+        else {
+          #A1 = unq(username) ":" unq(realm) ":" passwd
+          $A1=$hash->("$username:$realm:$password");
+
+        }
+
+        for($params{$qop}){
+          if($_ eq "auth"){
+            $A2="$_[REX][METHOD]:$_[REX][URI]";
+          }
+          elsif($_ eq "auth-int"){
+            $A2="$_[REX][METHOD]:$_[REX][URI]:". $hash->($_[PAYLOAD]);
+          }
+          else {
+            # error
+          }
+        }
+
+
+        my $hash_A1=$hash->($A1);
+        my $hash_A2=$hash->($A2);
+
+
+        my $server_gen_response=$hash->("$hash_A1:"."$nonce:$nc:$cnonce:$qop:$hash_A2");
+        #compare with what the client sent
+        if($server_gen_response eq $response){
+          #Authenticated
+        }
+        else {
+          # Failed
+          # #write the headers
+        }
+        $params{scheme}=$_[0]{scheme};
+        $params{label}=$_[0]{label};
+        # Write header
+        #
+        return \%params;
+      }
+      else {
+        #Write out headers
+      }
+    }
+}
+
+
+sub bearer_parser {
+  sub {
+    my ($info, $credentials)=@_;
+    my %params;
+    if($credentials){
+      %params=(
+        token=>$_[1],
+        realm=>$_[0]{realm},
+        label=>$_[0]{label},
+        scheme=>$_[0]{scheme}
+      );
+      return \%params;
+    }
+    else {
+      #write header?
+      my $h="Bearer ";
+      return $h.=qq{realm="$_[0]{realm}"};
+    }
+  }
+    
+}
+
+sub cookie_parser {
+  sub {
+    my ($info, $credentials)=@_;
+    my %params;
+    if($credentials){
+      %params=(
+        token=>$_[1],
+        label=>$_[0]{label},
+        scheme=>$_[0]{scheme}
+      );
+      return \%params;
+    }
+    else {
+      #write header?
+      #Require a redirect?
+      asay $STDERR, "NOTHING TO RETURN";
+      return ();
+    }
+  }
+}
 1;

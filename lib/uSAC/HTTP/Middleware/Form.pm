@@ -1,19 +1,18 @@
 use v5.36;
 package uSAC::HTTP::Middleware::Form;
-#use uSAC::IO;
-#use uSAC::Main;
 
 
-use Cpanel::JSON::XS;
 
 use uSAC::HTTP;
 
 use URL::Encode qw<url_decode_utf8>;
+use constant::more qw<PART_HEADER=0 PART_CONTENT>;
 
-use Export::These qw<decode_urlencoded_form uhm_decode_form generate_protection_token verify_protection_token>;
+use Export::These qw<decode_urlencoded_form uhm_decode_form generate_protection_token verify_protection_token PART_HEADER PART_CONTENT>;
 
 use UUID qw<uuid4>;
 use Crypt::JWT ":all";
+
 
 # Stores the count of each form CSRF token instance.
 
@@ -163,13 +162,13 @@ sub uhm_decode_form {
       for my $part ($_[PAYLOAD]->@*){
         my $ph=$part->[0];
         for($part->[0]{'content-type'}){
-
           if($_ eq "application/x-www-form-urlencoded"){
             # this is a special case where the main header content type has been copied into the 'part'
             $part->[1]=decode_urlencoded_form $part->[1]  ;
           }
           elsif($_ eq "application/json"){
-            $part->[1]=decode_json $part->[1];
+            require Cpanel::JSON::XS;
+            $part->[1]=Cpanel::JSON::XS::decode_json $part->[1];
           }
         }
       }
