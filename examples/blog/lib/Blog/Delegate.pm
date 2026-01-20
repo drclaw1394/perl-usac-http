@@ -10,7 +10,7 @@ use Template::Plexsite::URLTable;
 use HTTP::State::Cookie ":all";
 use Import::These qw<uSAC::HTTP::Middleware::
   Static Log Deflate Log
-  Gzip Slurp ScriptWrap
+  Gzip ScriptWrap
   TemplatePlex2
   Redirect State
 >;
@@ -66,6 +66,7 @@ sub auto_route_hook {
 
     ->get("public")
     ->get("home", uhm_http_authentication(
+        schemes=>[
         {
           scheme=>"cookie",
           realm=>"asdf",
@@ -73,8 +74,25 @@ sub auto_route_hook {
           name=>"SESSION_ID",
           redirect=>"/login",
           auth_cb=> sub {
-            asay $STDERR, "GOT AUTH CALLBACK cookie";
-            $_[1]->({username=>"test"});
+
+            if(ref $_){
+              # Encode (json, jwt, etc) and return contents for a set cookie header
+
+              # look up  credentials/session/etc
+
+              my $is_check;
+              # update internal session details if required
+              
+              #my $data=
+              #$_[1]->(
+
+            }
+            else {
+              # Decode a string into 
+              asay $STDERR, "GOT AUTH CALLBACK cookie";
+              $_[1]->({username=>"test"});
+
+            }
           }
         },
         {
@@ -82,10 +100,17 @@ sub auto_route_hook {
           realm=>"asdf",
           charset=>"utf8",
           auth_cb=> sub {
-            asay $STDERR, "GOT AUTH CALLBACK basic";
-            $_[1]->({username=>"test"});
+            if(ref $_){
+              # Encode
+            }
+            else {
+              # Decode
+              asay $STDERR, "GOT AUTH CALLBACK basic";
+              $_[1]->({username=>"test"});
+            }
           }
-        },
+        }
+      ]
         #################################################
         # {                                             #
         #   scheme=>"bearer",                           #
@@ -193,18 +218,19 @@ sub auto_route_hook {
 
 sub _POST__begin__login_ {
   (
-    uhm_slurp(),    # Ensure the entire contents of the request are received #
 
+    uhm_decode_form(),
     sub {
-      adump $STDERR, "post loin";
-      my $details=decode_urlencoded_form $_[PAYLOAD][0][1];
+
+      adump $STDERR, "post login", $_[PAYLOAD][0][PART_CONTENT];
+      my $details=$_[PAYLOAD][0][PART_CONTENT];
+
       # Check the CSRF token is valid
       adump $STDERR, $details;
 
-
-      for($details->{authentication_token}){
+      for($details->{protection_token}){
         my $data=verify_protection_token($_);
-        #my $jwt=decode_jwt(token=>$_, key=>$secret);
+
         adump $STDERR, $data;
 
         if(defined $data){
@@ -215,6 +241,7 @@ sub _POST__begin__login_ {
         else {
           &rex_error_forbidden;
         }
+
       }
       1;
     }
@@ -225,10 +252,11 @@ sub _POST__exact__posts_ {
   # handle form submission
   (
     uhm_decode_form(),
+
     sub {
       adump $STDERR, $_[PAYLOAD];
 
-      my $token=$_[PAYLOAD][0][PART_CONTENT]{authentication_token};
+      my $token=$_[PAYLOAD][0][PART_CONTENT]{protection_token};
       asay $STDERR, $token;
       my $data=verify_protection_token($token);
       

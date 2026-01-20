@@ -6,8 +6,8 @@ no warnings "experimental";
 use uSAC::Log;
 use Log::OK;
 
-            use uSAC::IO;
-            use Data::Dumper;
+use uSAC::IO;
+use Data::Dumper;
 
 use uSAC::HTTP::Rex;
 use Encode qw<find_encoding decode encode decode_utf8>;

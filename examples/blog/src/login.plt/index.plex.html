@@ -1,6 +1,7 @@
 @{[
   init {
     use Data::Dumper;
+    use uSAC::HTTP;
     use uSAC::HTTP::Middleware::Form;
     # Render login screen
     output location=>"login", inline=>1;
@@ -11,20 +12,20 @@
 
 
 @{[fill_slot footer=>"Dynamic login"]}
-@{[do {
-q{<h1> logo goes here </h1>
-    <form action="/login" method="POST">
-      <label for="username">Username</label>
-      <input name="username">
+<h1> logo goes here </h1>
+<form action="/login" method="POST">
+  <label for="username">Username</label>
+  <input name="username">
 
-      <label for="password">Password</label>
-      <input name="password" type="password">
+  <label for="password">Password</label>
+  <input name="password" type="password">
 
-      <input name="target" hidden value="/home">
-      <input name="authentication_token" hidden value="@{[generate_protection_token '/home']}">
-      <input type="submit">
-    </form>
-    };
-    }
-]}
+  <input name="target" hidden value="/home">
+  <input name="protection_token" hidden value="@{[generate_protection_token '/home']}">
+  <input type="submit">
+</form>
+
+@{[ do {
+"Rex method is: <pre>", $fields{rex}[METHOD], "</pre>"
+}]}
 

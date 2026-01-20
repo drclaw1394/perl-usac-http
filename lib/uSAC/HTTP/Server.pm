@@ -2,6 +2,9 @@ use v5.36;
 package uSAC::HTTP::Server; 
 our $VERSION = 'v0.1.0';
 #use feature "try";
+use IO::FD;               # IO
+use uSAC::IO;             # Readers/writers
+use uSAC::IO::Acceptor;   # Acceptors
 
 use Time::HiRes qw<time>;
 use Object::Pad;          # Class
@@ -12,9 +15,6 @@ use Log::OK;
 use Socket::More;         # Socket symbols and passive socket
 
 
-use IO::FD;               # IO
-use uSAC::IO;             # Readers/writers
-use uSAC::IO::Acceptor;   # Acceptors
 
 use uSAC::HTTP;           # uSAC::HTTP Core code
 use uSAC::HTTP::Session;  # 'session' stuff

@@ -69,15 +69,24 @@ The auth callback is passed the either the parsed kv pairs or the raw token valu
 
 =cut
 
+
+=head2 uhm_http_authentication
+
+Middleware to handling the http authorizing and cookie based authentication.
+Takes 1 or more  schemes to implement restricted access to a resource
+
+=cut 
+
 sub uhm_http_authentication {
   
-  my @methods=@_; # an array of hashes
+  my %options=@_;
+  my $methods=$options{schemes}//[]; # an array of hashes
   
   my @http_methods;
   my @cookie_methods;
 
   # Iterate through each of the methods and make sure handlers are set
-  for(@methods){
+  for(@$methods){
     $_->{scheme}=lc $_->{scheme};
     if($_->{scheme} eq "basic"){
       $_->{parser}//=basic_parser();
@@ -109,9 +118,9 @@ sub uhm_http_authentication {
   my $redirect_location;
 
   my $web_error_mode;
-  if(($methods[0]//{})->{scheme} eq "cookie"){
+  if(($methods->[0]//{})->{scheme} eq "cookie"){
     $web_error_mode="redirect";
-    $redirect_location=$methods[0]->{redirect};
+    $redirect_location=$methods->[0]{redirect};
   }
 
   [sub {
@@ -397,6 +406,7 @@ sub cookie_parser {
     my ($info, $credentials)=@_;
     my %params;
     if($credentials){
+      #parser
       %params=(
         token=>$_[1],
         label=>$_[0]{label},
@@ -405,6 +415,7 @@ sub cookie_parser {
       return \%params;
     }
     else {
+      # serializer
       #write header?
       #Require a redirect?
       asay $STDERR, "NOTHING TO RETURN";
@@ -412,4 +423,86 @@ sub cookie_parser {
     }
   }
 }
+
+
+sub uhm_login {
+  my %options=@_;
+
+  my $auth_cb=$options{auth_cb}//sub {};
+  my $name=$options{name}//"SESSION_ID";
+  
+  (
+    uhm_decode_form(),
+    [
+      sub {
+        my ($next)=@_;
+        sub {
+          #process the form
+          adump $STDERR, "post login", $_[PAYLOAD][0][PART_CONTENT];
+          my $details=$_[PAYLOAD][0][PART_CONTENT];
+
+          # Check the CSRF token is valid
+          adump $STDERR, $details;
+
+          my @args=@_;
+          my @authenticated;
+
+          my $cb= sub {
+            # Called by auth_cb   with SERIALISED results
+            push @authenticated, @_;
+            unless(@authenticated){
+              # Failed.. no session
+              # only cookie header used. fail with redirect
+              $_[REX][REDIRECT]=".";
+              &rex_redirect_see_other;
+            }
+            else {
+              # Got a result
+              # set cookie
+              push $args[OUT_HEADER]{HTTP_SET_COOKIE()}->@*, encode_set_cookie $name, $authenticated[0];
+
+              $_[REX][REDIRECT]="/success";
+              # redirect to target page
+            }
+            &rex_redirect_see_other;
+            
+          };
+
+          
+          for($details->{protection_token}){
+            my $data=verify_protection_token($_);
+
+            adump $STDERR, $data;
+
+            if(defined $data){
+              # Here we validate the content of the form
+              # $details MUST BE A REF for checking and getting an encded repoonse
+              $auth_cb->($details, $cb);
+            }
+            else {
+              # Form is not permitted.. somehting bad
+              &rex_error_forbidden;
+            }
+
+          }
+
+        }
+      }
+    ]
+  )
+  # Middleware to generate a session
+      
+  # Expects a post request 
+}
+
+sub uhm_logout {
+  # Middleware to end a sesssion
+
+}
+
+# Create a site/group
+sub uhs_authenticate {
+    #add a login/ and logout route
+}
+
 1;
