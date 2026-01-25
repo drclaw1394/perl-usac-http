@@ -1,21 +1,19 @@
-use v5.36;
 package uSAC::HTTP::Middleware::Authentication;
+use v5.36;
 use feature "refaliasing";
 no warnings "experimental";
 use uSAC::IO;
-use Import::These qw<uSAC::HTTP:: Code Rex Constants>;
 
-use Export::These qw<uhm_http_authentication>;
+use Import::These qw<uSAC::HTTP:: Code Rex Constants>;
 use HTTP::State::Cookie qw<:all>;
 use uSAC::HTTP::Middleware::Form;
-use uSAC::HTTP::Code;# qw<:constants>;
+
+#use uSAC::HTTP::Code;# qw<:constants>;
 use uSAC::HTTP::Header;# qw<:constants>;
-use Log::OK;
-use uSAC::Log;
+#use Log::OK;
+#use uSAC::Log;
 
-use Cpanel::JSON::XS;
-use Crypt::JWT;
-
+use Export::These qw<uhm_http_authentication uhm_login uhm_logout>;
 
 =pod
 
@@ -65,7 +63,11 @@ All  require 'auth_cb' and scheme.
 
 =head3 auth_cb
 
-The auth callback is passed the either the parsed kv pairs or the raw token value, as the first arugument. THe second argument is the finalising callback function to pass the authorised information and can be called asynchronously.
+The auth callback is passed either the parsed a data ref or the raw token value as a string as the first arugument.
+If a ref, it has already been decoded, checks are performed
+if not a ref, 
+
+THe second argument is the finalising callback function to pass the authorised information and can be called asynchronously.
 
 =cut
 
@@ -165,7 +167,7 @@ sub uhm_http_authentication {
             for my $state($_[REX][STATE]//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}}){
               adump $STDERR, "state ", $state;
               for(@cookie_methods){
-                my $credentials=$state->{$_->{name}};
+                my $credentials=$state->{$_->{cookie_name}};
                 if($credentials){
                   my $parser=$_->{parser};
                   my $params=$parser->($_, $credentials);
@@ -424,67 +426,60 @@ sub cookie_parser {
   }
 }
 
+# Slurp and decode a form
+#
+# Options:
+#   CSRF_name   - name of field for CSRF 
+#   cookie_name - defult SESSION_ID
+#   auth_cb     - the sub to test credentials
+#
 
 sub uhm_login {
-  my %options=@_;
 
-  my $auth_cb=$options{auth_cb}//sub {};
-  my $name=$options{name}//"SESSION_ID";
-  
+  my %options=@_;
+  my $auth_cb=    $options{auth_cb}//=sub {};
+  my $name=       $options{cookie_name}//="SESSION_ID";
+
+  # Cookie options 
+  #
   (
-    uhm_decode_form(),
+    uhm_decode_form(%options),
     [
       sub {
         my ($next)=@_;
         sub {
           #process the form
-          adump $STDERR, "post login", $_[PAYLOAD][0][PART_CONTENT];
           my $details=$_[PAYLOAD][0][PART_CONTENT];
 
           # Check the CSRF token is valid
-          adump $STDERR, $details;
 
           my @args=@_;
           my @authenticated;
 
           my $cb= sub {
+
             # Called by auth_cb   with SERIALISED results
-            push @authenticated, @_;
-            unless(@authenticated){
+            #
+
+            unless(@_){
               # Failed.. no session
-              # only cookie header used. fail with redirect
-              $_[REX][REDIRECT]=".";
-              &rex_redirect_see_other;
+              # only cookie header used. fail with redirect to same to try again
+              $args[REX][REDIRECT]=".";
             }
             else {
               # Got a result
               # set cookie
-              push $args[OUT_HEADER]{HTTP_SET_COOKIE()}->@*, encode_set_cookie $name, $authenticated[0];
+              push $args[OUT_HEADER]{HTTP_SET_COOKIE()}->@*, encode_set_cookie cookie_struct $name, $_[0];
 
-              $_[REX][REDIRECT]="/success";
               # redirect to target page
+              $args[REX][REDIRECT]="/home";
             }
-            &rex_redirect_see_other;
-            
+
+            rex_redirect_see_other(@args);
           };
 
-          
-          for($details->{protection_token}){
-            my $data=verify_protection_token($_);
-
-            adump $STDERR, $data;
-
-            if(defined $data){
-              # Here we validate the content of the form
-              # $details MUST BE A REF for checking and getting an encded repoonse
-              $auth_cb->($details, $cb);
-            }
-            else {
-              # Form is not permitted.. somehting bad
-              &rex_error_forbidden;
-            }
-
-          }
+          #  
+          $auth_cb->($details, $cb);
 
         }
       }
@@ -497,12 +492,21 @@ sub uhm_login {
 
 sub uhm_logout {
   # Middleware to end a sesssion
+  my %options=@_;
+  my $cookie_name=$options{cookie_name}//="SESSION_ID";
+  (
+    sub {
+      my $set=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
+      push @$set, cookie_struct $cookie_name=>"", "max-age"=>1, path=>"/";
 
+      $_[PAYLOAD]="";
+      $_[REX][REDIRECT]="/login/";
+      return &rex_redirect_see_other;
+      1;
+    }
+  )
 }
 
-# Create a site/group
-sub uhs_authenticate {
-    #add a login/ and logout route
-}
+
 
 1;

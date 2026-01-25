@@ -7,25 +7,20 @@ use uSAC::HTTP::Middleware::Authentication;
 use Template::Plexsite::URLTable;
 
 
-use HTTP::State::Cookie ":all";
 use Import::These qw<uSAC::HTTP::Middleware::
   Static Log Deflate Log
   Gzip ScriptWrap
   TemplatePlex2
   Redirect State
 >;
+
 no warnings "experimental";
 
-#use Import::These qw<uSAC::HTTP::Middleware:: Log Static State Slurp>;
 
-use HTTP::State::Cookie qw<:all>;
 use uSAC::Util;
+
 my $url_table=Template::Plexsite::URLTable->new(src=>path(\"../../src"), html_root=>path(\"../../static"), local=>undef);
 
-  # Seed the table
-  #$url_table->add_resource("index.plt");
-
-  #$url_table->build();
 #=========
 # Hooks.
 #  Hooks return a sub to actually be called
@@ -53,11 +48,25 @@ sub auto_route_hook {
   sub {
     asay $STDERR, "Deletage auto route sub";
     my $site=shift; 
-    $site->post("login")
-    ->get("logout")
+    $site->post("login", uhm_login auth_cb => sub {
+        if(ref $_[0]){
+          #  Test the details against db, ....
+
+          #  Call the callback with the data to encode in the cookie
+          #
+          $_[1]->("auth data") ;
+        }
+        else {
+          # Decode and authenticate and return structure
+        }
+      }
+    );
+
+    $site->post("logout", uhm_logout);
+
 
     #->post("posts/create")
-    ->post("exact","posts")
+    $site->post("exact","posts")
     ->get("=~", "posts/($Decimal)", "posts_id")
 
     #->get("=~", "posts/$Decimal/edit")
@@ -71,11 +80,12 @@ sub auto_route_hook {
           scheme=>"cookie",
           realm=>"asdf",
           charset=>"utf8",
-          name=>"SESSION_ID",
+          cookie_name=>"SESSION_ID",
           redirect=>"/login",
           auth_cb=> sub {
+            adump $STDERR, "-home auth ",@_;
 
-            if(ref $_){
+            if(ref $_[0]){
               # Encode (json, jwt, etc) and return contents for a set cookie header
 
               # look up  credentials/session/etc
@@ -84,7 +94,7 @@ sub auto_route_hook {
               # update internal session details if required
               
               #my $data=
-              #$_[1]->(
+              $_[1]->("serialized auth");
 
             }
             else {
@@ -100,7 +110,7 @@ sub auto_route_hook {
           realm=>"asdf",
           charset=>"utf8",
           auth_cb=> sub {
-            if(ref $_){
+            if(ref $_[0]){
               # Encode
             }
             else {
@@ -217,35 +227,19 @@ sub auto_route_hook {
 #
 
 sub _POST__begin__login_ {
-  (
+  uhm_login auth_cb => sub {
+    if(ref $_[0]){
+      #  Test the details against db, ....
 
-    uhm_decode_form(),
-    sub {
 
-      adump $STDERR, "post login", $_[PAYLOAD][0][PART_CONTENT];
-      my $details=$_[PAYLOAD][0][PART_CONTENT];
-
-      # Check the CSRF token is valid
-      adump $STDERR, $details;
-
-      for($details->{protection_token}){
-        my $data=verify_protection_token($_);
-
-        adump $STDERR, $data;
-
-        if(defined $data){
-          # Here we validate the content of the form
-          $_[PAYLOAD]=$details;
-          &_handle_login_cb;
-        }
-        else {
-          &rex_error_forbidden;
-        }
-
-      }
-      1;
+      #  Call the callback with the data to encode in the cookie
+      #
+      $_[1]->("auth data") ;
     }
-  )
+    else {
+      # Decode and authenticate and return structure
+    }
+  }
 }
 
 sub _POST__exact__posts_ {
@@ -258,7 +252,6 @@ sub _POST__exact__posts_ {
 
       my $token=$_[PAYLOAD][0][PART_CONTENT]{protection_token};
       asay $STDERR, $token;
-      my $data=verify_protection_token($token);
       
       $_[REX][REDIRECT]="/posts/";
       &rex_redirect_found; 
@@ -279,37 +272,11 @@ sub _GET__regexp__posts_id_ {
 }
 
 
-sub _handle_login_cb {
-  adump $STDERR, "in handle long in cb";
-  my $details=$_[PAYLOAD];
-  my $set=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
-  for($details->{username}){
-    push @$set, 
-    cookie_struct 
-    "SESSION_ID"=>ref?$_->[0]:$_, 
-    #"Max-Age"=>100, 
-    path=> '/';
-  }
-  $_[REX][REDIRECT]=$details->{target}|| "/home";
-  return &rex_redirect_see_other;
-}
-
-
-sub _GET__begin__logout_ {
+sub _POST__begin__logout_ {
   (
-    sub {
-      my $set=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];
-      push @$set, cookie_struct SESSION_ID=>"", "max-age"=>1, path=>"/";
-
-      $_[PAYLOAD]="";
-      $_[REX][REDIRECT]="/login/";
-      &rex_redirect_see_other;
-      1;
-    }
+    uhm_logout
   )
 }
-
-
 
 
 sub _GET__begin__public_ {

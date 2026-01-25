@@ -148,6 +148,22 @@ sub decode_urlencoded_form {
 # Basic wrapper to simply give the key value pairs from slurped url
 # encoded form
 sub uhm_decode_form {
+  adump $STDERR, "DECODE FORM OPTIONS", @_;
+  my %options=@_;
+
+  my $CSRF_field_name=$options{CSRF_name}//="protection_token";
+  my $decoders=%options{decoders};
+
+  unless($decoders){
+    # Setup Default decoders
+    $decoders->{"application/x-www-form-urlencoded"}= \&decode_urlencoded_form;
+    $decoders->{"application/json"}= \&Cpanel::JSON::XS::decode_json;
+
+    # Note that multipare forms are alreaded deocded
+  }
+
+#
+
 
   require uSAC::HTTP::Middleware::Multipart;
   require uSAC::HTTP::Middleware::Slurp;
@@ -158,18 +174,37 @@ sub uhm_decode_form {
     uSAC::HTTP::Middleware::Slurp::uhm_slurp(),             # Slurp the contents into memory or files
                                                             # Also makes a single part if required
 
+
     sub { 
       # Prcess all parts of the upload, using the content disposition header
       for my $part ($_[PAYLOAD]->@*){
-        my $ph=$part->[0];
-        for($part->[0]{'content-type'}){
-          if($_ eq "application/x-www-form-urlencoded"){
-            # this is a special case where the main header content type has been copied into the 'part'
-            $part->[1]=decode_urlencoded_form $part->[1]  ;
+        #my $ph=$part->[0];
+        for($part->[PART_HEADER]{'content-type'}){
+          adump $STDERR, "Part is: ", $part;
+          my $decoder=$decoders->{$_};
+          if($decoder){
+            # Do it
+            $part->[PART_CONTENT]=$decoder->($part->[PART_CONTENT])
           }
-          elsif($_ eq "application/json"){
-            require Cpanel::JSON::XS;
-            $part->[1]=Cpanel::JSON::XS::decode_json $part->[1];
+          else {
+            # Unsupported mime type
+            return &rex_error_unsupported_media_type;
+          }
+        }
+        # If a CSRF_field name is specifed, enable protection checking
+        for($part->[PART_CONTENT]{$CSRF_field_name}//()){
+          adump $STDERR, "CSRF data is ", $_;
+          my $data=verify_protection_token($_);
+          adump $STDERR, "CSRF data parsed is ", $data;
+          if($data){
+            $_=$data;
+
+          }
+          else {
+            # Failed CSRF protection measurses
+            #
+
+            return &rex_error_unauthorized;
           }
         }
       }

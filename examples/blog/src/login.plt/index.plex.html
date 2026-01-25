@@ -21,9 +21,23 @@
   <input name="password" type="password">
 
   <input name="target" hidden value="/home">
-  <input name="protection_token" hidden value="@{[generate_protection_token '/home']}">
+  <input name="protection_token" hidden value="@{[$token=generate_protection_token '/home']}">
   <input type="submit">
 </form>
+$token;
+@{[
+
+pl { 
+  ##################################################################################
+  # for($fields{out_header}{HTTP_SET_COOKIE()}){                                   #
+  #       $_//=[];                                                                 #
+  #       use HTTP::State::Cookie ":all";                                          #
+  #       push $_->@*, encode_set_cookie cookie_struct "protection_token"=>$token; #
+  # }                                                                              #
+  ##################################################################################
+}
+
+]}
 
 @{[ do {
 "Rex method is: <pre>", $fields{rex}[METHOD], "</pre>"
