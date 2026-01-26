@@ -746,7 +746,8 @@ method add_delegate {
 
     if (($ref  ne "ARRAY" and $ref ne "HASH") or %{$_."::"}){
       # Other object or namespace
-      $self->_delegate($_);
+      #$self->_delegate($_);
+      $_delegate=$_;
     }
   }
 }
@@ -1116,10 +1117,20 @@ method process_cli_options{
   $self;
 }
 
+# Loads a applicaiton  from a script or package
+# THe loaded script needs to have as its last value
+#   a package name
+#   object reference
+#   sub reference to app hook
+#
+#   The the 
 method load {
 	my $path=pop;
 	my %options=@_;
-  $path=path $path, [caller];
+
+  # Adjust relative paths spec only if its a ref
+  #
+  $path=path $path, [caller] if ref $path;
 	
 	$options{package}//=(caller)[0];
 	
@@ -1148,7 +1159,24 @@ method load {
     local $@;
     #eval { need $path };
     try {
-      need $path;
+
+      # Expects a package name or an object
+      my $package=need $path;
+      if(ref $package eq "CODE"){
+        # Call dirctly
+        $package->()->($self);
+      }
+      elsif(ref($package) !~ /::/){
+        # Assume an object  and call the  
+        $self->add_delegate(ref $package);
+        $package->app->($self);
+
+      }
+      else {
+        # Assume a package name
+        $self->add_delegate($package);
+        $package->app->($self);
+      }
     }
     catch($error){
       #if($@){

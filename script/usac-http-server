@@ -320,6 +320,10 @@ sub run {
         # perl script to run as  
         $current->load($target);
       }
+      elsif(/\:\:/){
+        Log::OK::INFO and log_info "Loading Routes from APP:\n $_";
+        $current->load($_);
+      }
       else {
         # Assume a dir for serving static files from
         Log::OK::INFO and log_info "Serving static files from source:\n $target";

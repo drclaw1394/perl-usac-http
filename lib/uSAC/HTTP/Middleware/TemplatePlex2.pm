@@ -71,7 +71,7 @@ sub uhm_template_plex2 {
           $p=uri_unescape $_[PAYLOAD]||$_[REX][PATH];
           $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
 
-          $p=substr $p, length $prefix if ($prefix and index($p, $prefix)==0);
+          $p=substr $p, length $prefix if (defined $prefix and index($p, $prefix)==0);
 
           #Update variables
           $vars->@{qw<route rex in_header out_header payload callback>}=@_;

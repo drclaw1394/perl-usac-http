@@ -19,35 +19,92 @@ no warnings "experimental";
 
 use uSAC::Util;
 
-my $url_table=Template::Plexsite::URLTable->new(src=>path(\"../../src"), html_root=>path(\"../../static"), local=>undef);
+my @middleware=(
+  uhm_http_authentication(
+            schemes=>[
+              {
+                scheme=>"cookie",
+                realm=>"asdf",
+                charset=>"utf8",
+                cookie_name=>"SESSION_ID",
+                redirect=>"/login",
+                auth_cb=> sub {
+                  adump $STDERR, "-home auth ",@_;
 
-#=========
-# Hooks.
-#  Hooks return a sub to actually be called
+                  if(ref $_[0]){
+                    # Encode (json, jwt, etc) and return contents for a set cookie header
+
+                    # look up  credentials/session/etc
+
+                    my $is_check;
+                    # update internal session details if required
+
+                    #my $data=
+                    $_[1]->("serialized auth");
+
+                  }
+                  else {
+                    # Decode a string into 
+                    asay $STDERR, "GOT AUTH CALLBACK cookie";
+                    $_[1]->({username=>"test"});
+
+                  }
+                }
+              },
+              {
+                scheme=>"basic",
+                realm=>"asdf",
+                charset=>"utf8",
+                auth_cb=> sub {
+                  if(ref $_[0]){
+                    # Encode
+                  }
+                  else {
+                    # Decode
+                    asay $STDERR, "GOT AUTH CALLBACK basic";
+                    $_[1]->({username=>"test"});
+                  }
+                }
+              }
+            ]
+            #################################################
+            # {                                             #
+            #   scheme=>"bearer",                           #
+            #   realm=>"my relm",                           #
+            #   auth_cb=>sub {                              #
+            #     asay $STDERR, "GOT AUTH CALLBACK bearer"; #
+            #     ({username=>"test"});                     #
+            #                                               #
+            #   }                                           #
+            # }                                             #
+            #################################################
+          )
+);
+
+# Factory method. Returns the sub
+# The sub modifies the site, does not return anything
 #
+sub app {
 
-sub process_cli_options_hook {
-  sub {
-    asay $STDERR, "CLI options hook in delegate ". __PACKAGE__;#, $_[0]->@*;
-  }
-}
-
-# return a list of middleware to add before calling each delegate method
-sub middleware_hook {
+  # Return a hook
   sub {
     my $site=shift;
-    #$site->add_middleware( uhm_state);
-    #$site->add_middleware( _authenticate());
 
-  }
-}
+    # Set the delegate to resolve implicit routes.. 
+    # must be manually set if a code ref is returned
+    $site->add_delegate(__PACKAGE__);
 
-# What to add as a route, in what order
-# resolved names delegate methods automatically
-sub auto_route_hook {
-  sub {
+
+    my $url_table=Template::Plexsite::URLTable->new(
+      src=>path(\"../../src"), 
+      html_root=>path(\"../../static"), 
+      local=>undef
+    );
+
+
+    # What to add as a route, in what order
+    # resolved names delegate methods automatically
     asay $STDERR, "Deletage auto route sub";
-    my $site=shift; 
     $site->post("login", uhm_login auth_cb => sub {
         if(ref $_[0]){
           #  Test the details against db, ....
@@ -62,78 +119,31 @@ sub auto_route_hook {
       }
     );
 
-    $site->post("logout", uhm_logout);
+    $site->get(begin=>login=>
+      uhm_template_plex2( url_table=>$url_table, prefix=>"")
+    );
 
 
+    my $protected=uSAC::HTTP::Site->new(delegate=>__PACKAGE__);
+    $protected->add_middleware(@middleware);
+
+    $protected->post("logout", uhm_logout);
     #->post("posts/create")
-    $site->post("exact","posts")
-    ->get("=~", "posts/($Decimal)", "posts_id")
+    $protected->post("exact","posts")
+
+
+
+
+    ->get("=~", "posts/($Decimal)","posts_id")
 
     #->get("=~", "posts/$Decimal/edit")
     #->add_route("PUT","=~","posts/$Decimal")
     #->add_route("DELETE","=~","posts/$Decimal")
 
-    ->get("public")
-    ->get("home", uhm_http_authentication(
-        schemes=>[
-        {
-          scheme=>"cookie",
-          realm=>"asdf",
-          charset=>"utf8",
-          cookie_name=>"SESSION_ID",
-          redirect=>"/login",
-          auth_cb=> sub {
-            adump $STDERR, "-home auth ",@_;
 
-            if(ref $_[0]){
-              # Encode (json, jwt, etc) and return contents for a set cookie header
+    ->get("public", "public")
+    ->get("home", "home")
 
-              # look up  credentials/session/etc
-
-              my $is_check;
-              # update internal session details if required
-              
-              #my $data=
-              $_[1]->("serialized auth");
-
-            }
-            else {
-              # Decode a string into 
-              asay $STDERR, "GOT AUTH CALLBACK cookie";
-              $_[1]->({username=>"test"});
-
-            }
-          }
-        },
-        {
-          scheme=>"basic",
-          realm=>"asdf",
-          charset=>"utf8",
-          auth_cb=> sub {
-            if(ref $_[0]){
-              # Encode
-            }
-            else {
-              # Decode
-              asay $STDERR, "GOT AUTH CALLBACK basic";
-              $_[1]->({username=>"test"});
-            }
-          }
-        }
-      ]
-        #################################################
-        # {                                             #
-        #   scheme=>"bearer",                           #
-        #   realm=>"my relm",                           #
-        #   auth_cb=>sub {                              #
-        #     asay $STDERR, "GOT AUTH CALLBACK bearer"; #
-        #     ({username=>"test"});                     #
-        #                                               #
-        #   }                                           #
-        # }                                             #
-        #################################################
-      ),
-      "home")
 
     ->add_route('exact', 'static/hot.txt'
       => uhm_static_file(
@@ -198,7 +208,7 @@ sub auto_route_hook {
     ###############################################################################
 
 
-    $site->add_route([qw<GET HEAD>],''
+    $protected->add_route([qw<GET HEAD>],''
       => uhm_gzip()
       => uhm_template_plex2(url_table=>$url_table)
       => uhm_static_root(
@@ -208,20 +218,23 @@ sub auto_route_hook {
         #template=>qr/\/$/
       )
 
+
     );
 
-    $site->add_route("");
-  $site->add_route("more_testing"=>sub {
-      $_[PAYLOAD]="asdf";
-      1;
-    });
+    $site->add_site($protected);
 
-  #$site->add_route($Any_Method, "");
+    $site->add_route("");
+    $site->add_route("more_testing"=>sub {
+        $_[PAYLOAD]="asdf";
+        1;
+      });
+
+    #$site->add_route($Any_Method, "");
+
 
 
   }
 }
-
 
 # Implicit routing
 #
@@ -252,7 +265,7 @@ sub _POST__exact__posts_ {
 
       my $token=$_[PAYLOAD][0][PART_CONTENT]{protection_token};
       asay $STDERR, $token;
-      
+
       $_[REX][REDIRECT]="/posts/";
       &rex_redirect_found; 
 
@@ -305,48 +318,40 @@ sub _GET__begin__home_ {
 
 sub _GET__begin___ {
   sub {
-   $_[REX][STATUS]=HTTP_OK;
-   $_[PAYLOAD]="lkjalsdkjalkjasdf";
-   1;
+    $_[REX][STATUS]=HTTP_OK;
+    $_[PAYLOAD]="lkjalsdkjalkjasdf";
+    1;
   }
 }
 
+#=========
+# Hooks.
+#  Hooks return a sub to actually be called
+#
 
-###################################################################################
-# sub _authenticate {                                                             #
-#   [                                                                             #
-#     sub {                                                                       #
-#       my ($next, $index)=(shift, shift);                                        #
-#       sub{                                                                      #
-#         # session id is stored in cookie. check if session is valid             #
-#         for my $state ($_[REX][STATE]){                                         #
-#           $state//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};               #
-#                                                                                 #
-#           if($state->{"SESSION_ID"}){                                           #
-#             # Validate the session and continue                                 #
-#             &$next;                                                             #
-#           }                                                                     #
-#           else {                                                                #
-#             # No session_ID. Force a showing of a login page, redirect to login #
-#             unless($_[REX][PATH] =~ m"^/login"){                                #
-#               $_[REX][REDIRECT]="/login";#$_[REX][PATH];                        #
-#               $_[PAYLOAD]="/login";#?target=$in_header{':path'}";               #
-#               &rex_redirect_see_other ;                                         #
-#               return undef;                                                     #
-#             }                                                                   #
-#             else {                                                              #
-#               # This is the login page                                          #
-#               &$next;                                                           #
-#             }                                                                   #
-#                                                                                 #
-#           }                                                                     #
-#         }                                                                       #
-#       }                                                                         #
-#     }                                                                           #
-#   ]                                                                             #
-# }                                                                               #
-###################################################################################
+sub process_cli_options_hook {
+  sub {
+    asay $STDERR, "CLI options hook in delegate ". __PACKAGE__;#, $_[0]->@*;
+  }
+}
 
-# return the name of the package... 
+# return a list of middleware to add before calling each delegate method
+sub middleware_hook {
+  sub {
+    my $site=shift;
+    #$site->add_middleware( uhm_state);
+    #$site->add_middleware( _authenticate());
+
+  }
+}
+
+sub auto_route_hook {
+  sub {
+  }
+}
+
+# return the name of the package...
+
 __PACKAGE__;
 
+\&app;
