@@ -348,7 +348,8 @@ sub run {
 
   # Run!
   # TODO: Need to debug why asap is required here...
-  asap sub{$server->start};
+  #asap sub{$server->start};
+  $server->start;
   $uSAC::HTTP::Site=$server;
   if($enable_repl){
     # Run REPL if specified

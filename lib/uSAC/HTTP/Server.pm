@@ -866,8 +866,9 @@ method dump_routes {
   #my ($self)=@_;
   say STDERR "-----DUMPING ROUTES=------";
   use re qw(is_regexp regexp_pattern);
-  try {
+
     require Text::Table;
+  try {
     for my $host (sort keys $self->host_tables->%*){
       my $table= $self->host_tables->{$host};
       my $sep=\"|";
@@ -1014,6 +1015,9 @@ method process_cli_options{
   #Attempt to parse the CLI options
   require Getopt::Long;
   my %options;
+  local $SIG{__WARN__}=sub {
+    #print STDOUT "WARN: @_\n";
+  };
   my $parser=Getopt::Long::Parser->new;
   $parser->configure("pass_through");
 
@@ -1021,7 +1025,7 @@ method process_cli_options{
   $parser->getoptionsfromarray($options, \%options,
     "workers=i",
     "listener=s@",
-    "show:s@",
+    "show=s@",
     "read-size=i"
     
   ) or die "Invalid arguments";
@@ -1035,11 +1039,10 @@ method process_cli_options{
       $self->add_listeners($_) for(@$value);
     }
     elsif($key eq "show"){
-      #$_options->{show_routes}//=[];
-      for my $v (@$value){
-	      
-      	$v=".*" unless $v;	# Force match anything if nothing set
-      }
+      print STDERR "SHOW OPTIONS @$value\n";
+
+      push @$value, ".*" unless @$value;
+
       $_options->{show_routes}= $value;
     }
     elsif($key eq "read-size"){

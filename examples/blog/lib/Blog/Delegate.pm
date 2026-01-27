@@ -128,84 +128,34 @@ sub app {
     $protected->add_middleware(@middleware);
 
     $protected->post("logout", uhm_logout);
-    #->post("posts/create")
-    $protected->post("exact","posts")
+
+
+
+    $protected->get("posts/create");
+    $protected->post("exact","posts");
 
 
 
 
-    ->get("=~", "posts/($Decimal)","posts_id")
 
     #->get("=~", "posts/$Decimal/edit")
     #->add_route("PUT","=~","posts/$Decimal")
     #->add_route("DELETE","=~","posts/$Decimal")
 
 
-    ->get("public", "public")
-    ->get("home", "home")
+    $protected->get("=~",     "posts/($Decimal)", "posts_id");
+    $protected->get("public", "public");
+    $protected->get("home",   "home");
 
-
-    ->add_route('exact', 'static/hot.txt'
+    $protected;
+    $protected->add_route('exact', 'static/hot.txt'
       => uhm_static_file(
         #headers=>{"transfer-encoding"=>"chunked"},
-        \"../../static/hot.txt")
+        \"../../static/hot.txt"
+      )
     );
 
-    #->add_route('exact', 'static/hot.txt' => uhm_static_content "static/hot.txt");
 
-    ###############################################################################
-    # ->add_route(qr|getme/(($Comp)/)*($Comp)|n                                   #
-    #   =>sub {                                                                   #
-    #     $_[PAYLOAD]=join ", ", $_[IN_HEADER]{":captures"}->@*;                  #
-    #     1;                                                                      #
-    #   }                                                                         #
-    # );                                                                          #
-    #                                                                             #
-    # $site->add_route("delay",                                                   #
-    #   [                                                                         #
-    #     sub {                                                                   #
-    #       my $next=shift;                                                       #
-    #       sub{                                                                  #
-    #         use Time::HiRes "time";                                             #
-    #         state $counter=0;                                                   #
-    #         state $prev_counter=0;                                              #
-    #         state $timer=uSAC::IO::timer 0, 2, sub {                            #
-    #                                                                             #
-    #           asay $STDERR, "Rate = @{[($counter-$prev_counter)/(2)]}";         #
-    #           $prev_counter=$counter;                                           #
-    #         };                                                                  #
-    #                                                                             #
-    #                                                                             #
-    #         $counter++;                                                         #
-    #         ##############################                                      #
-    #         # my @msg=@_;                #                                      #
-    #         # uSAC::IO::timer 2,0, sub { #                                      #
-    #         #     $msg[PAYLOAD]=time;    #                                      #
-    #         #     $next->(@msg);         #                                      #
-    #         # };                         #                                      #
-    #         ##############################                                      #
-    #                                                                             #
-    #         $_[PAYLOAD]=time;                                                   #
-    #                                                                             #
-    #         if($_[REX][STATE]->%*){                                             #
-    #           adump $STDERR, $_[REX][STATE];                                    #
-    #           \my @sc=$_[OUT_HEADER]{HTTP_SET_COOKIE()}//=[];                   #
-    #           push @sc, cookie_struct "sid1"=>"asdf";                           #
-    #           push @sc, cookie_struct "sid2", "value1";                         #
-    #         }                                                                   #
-    #                                                                             #
-    #         &$next;                                                             #
-    #       }                                                                     #
-    #     }                                                                       #
-    #   ]                                                                         #
-    # );                                                                          #
-    # $site->add_route("redirect"                                                 #
-    #   =>sub {                                                                   #
-    #     $_[REX][STATUS]=301;                                                    #
-    #     $_[OUT_HEADER]{HTTP_LOCATION()}="http://localhost:8084/static/hot.txt"; #
-    #   }                                                                         #
-    # )                                                                           #
-    ###############################################################################
 
 
     $protected->add_route([qw<GET HEAD>],''
@@ -224,15 +174,6 @@ sub app {
     $site->add_site($protected);
 
     $site->add_route("");
-    $site->add_route("more_testing"=>sub {
-        $_[PAYLOAD]="asdf";
-        1;
-      });
-
-    #$site->add_route($Any_Method, "");
-
-
-
   }
 }
 
@@ -272,6 +213,10 @@ sub _POST__exact__posts_ {
       1;
     }
   )
+}
+
+sub _GET__begin__posts__create_ {
+  
 }
 
 sub _GET__regexp__posts_id_ {
