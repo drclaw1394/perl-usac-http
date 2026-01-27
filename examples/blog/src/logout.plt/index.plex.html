@@ -1,0 +1,26 @@
+@{[
+  init {
+    use Data::Dumper;
+    use uSAC::HTTP;
+    use uSAC::HTTP::Middleware::Form;
+    # Render login screen
+    output location=>"logout", inline=>1;
+    inherit "parent.plt";
+  }
+  ]}
+
+@{[fill_slot header=>"Time: ".time]}
+
+
+@{[fill_slot footer=>"Dynamic logout"]}
+<h1> logo goes here </h1>
+<form action="/logout" method="POST">
+  <input name="target" hidden value="/home">
+  <input name="protection_token" hidden value="@{[generate_protection_token '/home']}">
+  <input type="submit">
+</form>
+
+@{[ do {
+"Rex method is: <pre>", $fields{rex}[METHOD], "</pre>"
+}]}
+
