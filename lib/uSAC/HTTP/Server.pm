@@ -64,7 +64,7 @@ sub _reexport {
   # Preload common middleware  if asked
   #
   if(grep /:common/, @_){
-    for(<uSAC::HTTP::Middleware::{Trace,Static,Slurp,Redirect,Log,TemplatePlex}>){
+    for(<uSAC::HTTP::Middleware::{Trace,Static,Slurp,Redirect,Log,TemplatePlex2}>){
       { local $Exporter::ExportLevel=0; need $_; }
       $_->import;
     }
