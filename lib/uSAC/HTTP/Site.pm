@@ -67,7 +67,7 @@ field $_id                :mutator :param=undef;
 field $_prefix            :mutator :param =undef;
 field $_host              :reader :param =[];
 field $_error_uris        :param={};
-field $_delegate          :param=undef;
+field $_delegate          :param=0;
 field $_innerware         :mutator :param=[];
 field $_outerware         :mutator :param=[];
 field $_errorware         :mutator :param=[];
@@ -80,6 +80,8 @@ field $_mime_lookup       :mutator;   # lookup table (hash) of
 field $_unsupported;
 field $_built_label;
 field $_label;
+
+field $_static_headers :mutator;
 
 field $_sites :reader;   # Hash of unique sites (shared accros hosts)
                          # Route files can query if a site exits
@@ -127,13 +129,19 @@ BUILD{
   # ... and a prefix
   $_prefix//="";
 
+	$_static_headers={};#STATIC_HEADERS;
+
   # No staged routes at this point
   $_staged_routes//=[];
 
   # Only add delegate if specified
   #
-  $_delegate=$self unless $_delegate;
-  $self->add_delegate($_delegate);
+  #$_delegate=$self 
+  ($_delegate)=caller if $_delegate==0; # Was not set in constructor
+                                    # this allows manual set of undef in constructor
+
+
+  $self->add_delegate($_delegate) if $_delegate; 
 
   # Normalize host
   if(defined($_host) and ref $_host ne "ARRAY"){
@@ -637,7 +645,7 @@ method resolve_mime_default {
 # Add a the callee to the supplied object
 method add_to {
   my $parent=pop;
-  $self->parent_site=$parent;
+  #$self->parent_site=$parent;
 	my $root=$self->find_root;
   if( exists $root->sites->{$self->id}){
     die "Duplicate site id not allowed: @{[$self->id]}";
@@ -652,13 +660,15 @@ method add_to {
 # Add a site to the callee object
 method add_site {
   for my $site(@_){
-    my $root=$self->find_root;
-    if( exists $root->sites->{$site->id}){
-      Exception::Class::Base->throw( "Duplicate site id not allowed: @{[$site->id]}");
-    }
-    $root->sites->{$site->id}=$site;
-    $site->mode=$root->mode;
-    $site->parent_site=$self;
+    ######################################################################################
+    # my $root=$self->find_root;                                                         #
+    # if( exists $root->sites->{$site->id}){                                             #
+    #   Exception::Class::Base->throw( "Duplicate site id not allowed: @{[$site->id]}"); #
+    # }                                                                                  #
+    # $root->sites->{$site->id}=$site;                                                   #
+    # $site->mode=$root->mode;                                                           #
+    # $site->parent_site=$self;                                                          #
+    ######################################################################################
     $self->add_route($site);
   }
   $self;
@@ -775,11 +785,21 @@ method add_route {
   my @middleware;
   
   my $item;
-      use Data::Dumper;
   LOOP: while(defined ($item =shift @_)){
     if($state eq  "SITE"){
       # Direct push if another site object
       if($item isa uSAC::HTTP::Site){
+        # Link
+        my $root=$self->find_root;
+        if( exists $root->sites->{$item->id}){
+          Exception::Class::Base->throw( "Duplicate site id not allowed: @{[$item->id]}");
+        }
+        $root->sites->{$item->id}=$item;
+        $item->mode=$root->mode;
+        $item->parent_site=$self;
+
+
+
         push @$_staged_routes, $item; # Copy to staging
         return; # bypass
       }
@@ -855,14 +875,16 @@ method add_route {
       # Test for delegate methods
       if(ref($item) eq ""){
         my $del_meth=$item;
-        unless($del_meth){
-          $del_meth="__";
-        }
-        else {
-          $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1;
-        }
-        my $_type=$type?$type:"regexp";
-        $del_meth="_${method}__${_type}_$del_meth";
+        #################################################################
+        # unless($del_meth){                                            #
+        #   $del_meth="__";                                             #
+        # }                                                             #
+        # else {                                                        #
+        #   $del_meth=join "", map {"_${_}_"} split "/", $del_meth, -1; #
+        # }                                                             #
+        # my $_type=$type?$type:"regexp";                               #
+        # $del_meth="_${method}__${_type}_$del_meth";                   #
+        #################################################################
         push @middleware, $del_meth;
       }
       else {
@@ -895,6 +917,11 @@ method add_route {
   push @$_staged_routes, $copy;
 
   return $self;
+}
+
+# alias for add_route
+method add {
+  $self->add_route(@_);
 }
 
 
@@ -1125,7 +1152,8 @@ method process_cli_options{
 #
 #   The the 
 method load {
-	my $path=pop;
+  adump $STDERR, "load called with ", @_;
+	my $path=shift;
 	my %options=@_;
 
   # Adjust relative paths spec only if its a ref
@@ -1147,7 +1175,7 @@ method load {
 
 		for my $file (@files){
       #local $uSAC::HTTP::Site=$self;
-			$self->load( %options, $file);
+			$self->load( $file, %options);
 		}
 	}
   else{
@@ -1164,18 +1192,20 @@ method load {
       my $package=need $path;
       if(ref $package eq "CODE"){
         # Call dirctly
-        $package->()->($self);
+        adump $STDERR, " Loaded via code ref ", %options;
+        $package->(%options)->($self);
       }
       elsif(ref($package) !~ /::/){
         # Assume an object  and call the  
-        $self->add_delegate(ref $package);
-        $package->app->($self);
+        #$self->add_delegate(ref $package);
+        adump $STDERR, " Loaded from package name ", %options;
+        $package->app(%options)->($self);
 
       }
       else {
         # Assume a package name
-        $self->add_delegate($package);
-        $package->app->($self);
+        #$self->add_delegate($package);
+        $package->app(%options)->($self);
       }
     }
     catch($error){

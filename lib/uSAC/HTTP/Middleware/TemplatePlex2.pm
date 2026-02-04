@@ -64,6 +64,9 @@ sub uhm_template_plex2 {
               $_[REX][REDIRECT]=$_[REX][PATH]."/";
               return &rex_redirect_see_other;
             }
+
+            # Attempt to collapse path by extracting matching parameters
+             
           }
 
           # Strip prefix
@@ -99,9 +102,8 @@ sub uhm_template_plex2 {
             say STDERR " INPUT PATH FOR OUTPUT: $path ||||   $output";
 
             #$path=substr $path, 1;
-            $url_table->add_resource($path);
+            if($url_table->add_resource($path)){
 
-            if($path){
               my %res=$url_table->build($path, $vars);
               $_[PAYLOAD]=$res{$path};
 

@@ -121,7 +121,7 @@ field $_pool;
 field $_options :reader;
 field $_application_parser :param=undef;
 field $_total_requests;
-field $_static_headers :mutator;
+#field $_static_headers :mutator;
 
 field $_start_time :mutator;
 field $_end_time   :mutator;
@@ -144,7 +144,6 @@ BUILD {
 	$self->host_tables={};
   $_zombies=[];
 	$_zombie_limit//=100;
-	$_static_headers={};#STATIC_HEADERS;
 
   $self->mode//=1; #Only set to server mode if it hasn't been defined.
 
