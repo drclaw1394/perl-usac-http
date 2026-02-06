@@ -715,7 +715,7 @@ sub uhm_static_root {
           $path=$html_root."/".$p;
 
           #$path=$html_root.$p;
-        say STDERR " path is $path";
+          #say STDERR " path is $path";
           #
           # First this is to report not found  and call next middleware
           # if the allow doesn't match (if a ignore exists)
@@ -783,7 +783,7 @@ sub uhm_static_root {
           }
 
           else {
-            say STDERR "NORMAL FILE SERVE";
+            #say STDERR "NORMAL FILE SERVE";
             # Attempt a normal file serve
             #
             Log::OK::TRACE and log_trace "Working on opening normal file";

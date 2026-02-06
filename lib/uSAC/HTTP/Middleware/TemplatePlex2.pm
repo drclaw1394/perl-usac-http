@@ -47,9 +47,9 @@ sub uhm_template_plex2 {
     my ($next, $index)=@_;
       my $p;
       sub {
-        # Check the url ends witha slash. If it doesnt. tell the client to redirect
-        if($_[OUT_HEADER] and ($_[REX][STATUS]//HTTP_NOT_FOUND == HTTP_NOT_FOUND())){
+        if($_[OUT_HEADER] and (($_[REX][STATUS]//HTTP_NOT_FOUND) == HTTP_NOT_FOUND())){
 
+          # Check the url ends witha slash. If it doesnt. tell the client to redirect
           for($_[REX][PATH]){
             my @comp =split "/";
 

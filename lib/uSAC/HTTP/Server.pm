@@ -658,6 +658,7 @@ method rebuild_dispatch {
     # requests
     #
   my $table;
+  my $h_tables=$self->host_tables;
   $_cb=sub {
     use Time::HiRes qw<time>;
     Log::OK::TRACE and  log_trace "IN SERVER CB: @_";
@@ -666,10 +667,25 @@ method rebuild_dispatch {
     #my ($host, $input);
     
     # input is "method url"
-    $table=$_[0]?$self->host_tables->{$_[0]}//$any_host : $any_host;
+    #$table=$_[0]?$self->host_tables->{$_[0]}//$any_host : $any_host;
+    $table=$_[0]?$h_tables->{$_[0]}//$any_host : $any_host;
 
-    #Log::OK::TRACE and  log_trace  join ", ",$table->@*;
-    (my $route, my $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
+    # direct hash lookup
+    my $route;
+    my $captures;
+    for($table->[uSAC::HTTP::Site::HOST_TABLE_CACHE]{$_[1]}){
+      if(defined){
+        $route=$_->[0];
+        $captures=$_->[1];
+      }
+      else {
+
+        ($route, $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
+      }
+      
+    }
+
+    #(my $route, my $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
 
     #Hustle table entry structure:
     #[matcher, value, type default]
