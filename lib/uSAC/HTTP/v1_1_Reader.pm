@@ -491,7 +491,7 @@ sub make_serialize{
   my $i=1;
   my $ctx;
 
-  my $dummy_cb=sub {};
+  my $dummy_cb=undef;#sub {};
 
   sub {
         
