@@ -687,7 +687,9 @@ sub uhm_static_root {
         # middleware argument.
         #
         #$p=$_[PAYLOAD]||$_[IN_HEADER]{":path_stripped"};
-        $p=uri_unescape $_[PAYLOAD]||$_[REX][PATH];
+
+        #$p=uri_unescape $_[PAYLOAD]||$_[REX][PATH];
+        $p=uri_unescape $_[REX][PATH];
 
         #
         # Strip the prefix if its specified

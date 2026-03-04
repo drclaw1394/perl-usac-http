@@ -273,21 +273,70 @@ calling.
 
 =cut
 sub rex_redirect_found {
-  my $url=$_[REX][REDIRECT];
-  Log::OK::TRACE and log_trace " redirect side management route during call is: $_[ROUTE][0] site  $_[ROUTE][1][ROUTE_SITE] ";
-  Log::OK::TRACE and log_trace "REX redirect ROUTE SITE is ".$_[ROUTE][1][ROUTE_SITE];
-  Log::OK::TRACE and log_trace $url;
-  $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;
-  $_[REX][STATUS]=HTTP_FOUND;
 
-  for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){
+  my $rex=$_[REX];
+  #my $path=$_[REX][REDIRECT];
+  
+  my $uri;
+  if($_[REX][REDIRECT]){
+    # Break in to path and query
+    $uri=$_[REX][URI]=$_[REX][REDIRECT];
+
+            my $_i=index $uri, "?"; 
+            if($_i>=0){
+              $rex->[QUERY]=substr($uri, $_i+1);
+
+              $uri=$rex->[PATH]=substr($uri, 0, $_i);
+            }
+            else {
+              $uri=$rex->[PATH]=$uri;
+            }
+  }  
+
+  my $path=$_[REX][PATH];
+  
+  
+  # If a scalar reference, 
+  $path=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$path if ref $path;
+
+  if(substr($path, 0, 1) ne "/"){
+    $path="/".$path;	
+  }
+  $_[REX][STATUS]=HTTP_FOUND;
+  if($_[REX][QUERY]){
+
+    $uri="$_[REX][PATH]?$_[REX][QUERY]";
+  }
+  else {
+    $uri=$_[REX][PATH];
+  }
+
+  for my ($k, $v)(HTTP_LOCATION, $uri, HTTP_CONTENT_LENGTH, 0){
     $_[OUT_HEADER]{$k}=$v;
   }
   $_[PAYLOAD]="";
   $_[REX][serializer_]->&*;
-  #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
-  #&$s; 
-  undef;
+  undef
+
+
+  ################################################################################################################################
+  # my $url=$_[REX][REDIRECT];                                                                                                   #
+  # Log::OK::TRACE and log_trace " redirect site management route during call is: $_[ROUTE][0] site  $_[ROUTE][1][ROUTE_SITE] "; #
+  # Log::OK::TRACE and log_trace "REX redirect ROUTE SITE is ".$_[ROUTE][1][ROUTE_SITE];                                         #
+  # Log::OK::TRACE and log_trace $url;                                                                                           #
+  #                                                                                                                              #
+  # $url=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$url if ref $url;                                                    #
+  # $_[REX][STATUS]=HTTP_FOUND;                                                                                                  #
+  #                                                                                                                              #
+  # for my ($k, $v)(HTTP_LOCATION, $url, HTTP_CONTENT_LENGTH, 0){                                                                #
+  #   $_[OUT_HEADER]{$k}=$v;                                                                                                     #
+  # }                                                                                                                            #
+  # $_[PAYLOAD]="";                                                                                                              #
+  # $_[REX][serializer_]->&*;                                                                                                    #
+  # #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();                                                                 #
+  # #&$s;                                                                                                                        #
+  # undef;                                                                                                                       #
+  ################################################################################################################################
 	
 }
 
@@ -466,11 +515,16 @@ sub rex_error_internal_server_error {
 
   return &rex_redirect_internal
 
-Redirects the current request to another route, specified in the
-C<$_[PAYLOAD]> parameter.
+Redirects the current request to another route.  It is important the current
+middleware chain is prevented from continuing execution by returning
+immediately after calling this routine.
 
-It is important the current middleware chain is prevented from continuing
-execution by returning immediately after calling this routine.
+If the rex paramter  REDIRECT is set, it is parsed into path and query
+components, and the PATh and QUERY rex parameters are set from there.
+
+The PATH and QUERY can be set directly instead. On simply left along and change
+the METHOD 
+
 
 =cut
 #Rewrites the uri and matches through the dispatcher
@@ -478,14 +532,31 @@ execution by returning immediately after calling this routine.
 sub rex_redirect_internal {
 
   my $rex=$_[REX];
-  my $uri=$_[REX][REDIRECT];
-  $_[REX][URI]=$_[REX][REDIRECT];
+  #my $path=$_[REX][REDIRECT];
+  
+  my $uri;
+  if($_[REX][REDIRECT]){
+    # Break in to path and query
+    $uri=$_[REX][URI]=$_[REX][REDIRECT];
+
+            my $_i=index $uri, "?"; 
+            if($_i>=0){
+              $rex->[QUERY]=substr($uri, $_i+1);
+
+              $uri=$rex->[PATH]=substr($uri, 0, $_i);
+            }
+            else {
+              $uri=$rex->[PATH]=$uri;
+            }
+  }  
+  my $path=$_[REX][PATH];
+  
   
   # If a scalar reference, 
-  $uri=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$uri if ref $uri;
+  $path=join "/", $_[ROUTE][1][ROUTE_SITE]->built_prefix, $$path if ref $path;
 
-	if(substr($uri, 0, 1) ne "/"){
-		$uri="/".$uri;	
+	if(substr($path, 0, 1) ne "/"){
+		$path="/".$path;	
 	}
 
   # TODO: 
@@ -499,7 +570,7 @@ sub rex_redirect_internal {
 
 	if(($rex->[recursion_count_]) > 10){
 		$rex->[recursion_count_]=0;
-		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $uri");	
+		Log::OK::ERROR and log_error("Loop detected. Last attempted url: $path");	
     $_[REX][STATUS]=HTTP_LOOP_DETECTED;
     $_[REX][serializer_]->&*;
     #my $s=$_[REX][uSAC::HTTP::Rex::session_]->get_serializer();
@@ -508,7 +579,7 @@ sub rex_redirect_internal {
 	}
 
   $rex->[in_progress_]=undef;
-  $_[REX][PATH]=$uri;
+  #$_[REX][PATH]=$path;
   #
   #Here we reenter the main processing chain with a  new url, potential
   #undef $_[0];

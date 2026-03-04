@@ -49,7 +49,7 @@ uSAC::Main::usac_listen("server/shutdown/graceful", sub {
 # The reurned value is the value to be added to a form
 #
 sub generate_protection_token {
-  my $data=shift;
+  my $data=shift//1;
 
   my $timeout=shift//5*60; # five minutes
 
@@ -151,7 +151,13 @@ sub uhm_decode_form {
   adump $STDERR, "DECODE FORM OPTIONS", @_;
   my %options=@_;
 
-  my $CSRF_field_name=$options{CSRF_name}//="protection_token";
+  my $merge_multipart=1;
+
+
+  # By default  the field name is 'protection token' is is looked for 
+  # user can specifiy undef to disable checks
+  my $CSRF_field_name=exists($options{CSRF_name})?$options{CSRF_name}:"protection_token";
+
   my $decoders=%options{decoders};
 
   unless($decoders){
@@ -159,7 +165,10 @@ sub uhm_decode_form {
     $decoders->{"application/x-www-form-urlencoded"}= \&decode_urlencoded_form;
     $decoders->{"application/json"}= \&Cpanel::JSON::XS::decode_json;
 
-    # Note that multipare forms are alreaded deocded
+    $decoders->{"multipart/form-data"}= sub { 
+      return @_;
+    }
+
   }
 
 #
@@ -177,37 +186,89 @@ sub uhm_decode_form {
 
     sub { 
       # Prcess all parts of the upload, using the content disposition header
+      if($merge_multipart and $_[PAYLOAD]->@*>1){
+        # Any parts without a content type are removed and combined into a single part at the start
+        # Any remaining parts (ie file uploads) are left as is
+        my %new_contents;
+
+        for(my $i=$_[PAYLOAD]->@* -1; $i>=0; $i--){
+          my $part=$_[PAYLOAD][$i];
+          if($part->[PART_HEADER]{'content-type'}){
+            # leave as is
+          }
+          else {
+            #move to merged part
+            splice $_[PAYLOAD]->@*, $i, 1;
+            $new_contents{$part->[PART_HEADER]{_name}}=$part->[PART_CONTENT];
+          }
+        }
+
+        if(keys %new_contents){
+          #unshift a new part
+          unshift $_[PAYLOAD]->@*, [{"content-disposition"=>"form-data"},\%new_contents];
+        }
+
+      }
+
+
       for my $part ($_[PAYLOAD]->@*){
+
         #my $ph=$part->[0];
-        for($part->[PART_HEADER]{'content-type'}){
-          adump $STDERR, "Part is: ", $part;
+        #
+        for($part->[PART_HEADER]{'content-type'}//()){
+          # Only decode if a content-type is present 
+        
           my $decoder=$decoders->{$_};
           if($decoder){
             # Do it
-            $part->[PART_CONTENT]=$decoder->($part->[PART_CONTENT])
+            $part->[PART_CONTENT]=$decoder->($part->[PART_CONTENT]);
           }
           else {
             # Unsupported mime type
-            return &rex_error_unsupported_media_type;
+            #return &rex_error_unsupported_media_type;
           }
         }
-        # If a CSRF_field name is specifed, enable protection checking
-        for($part->[PART_CONTENT]{$CSRF_field_name}//()){
-          adump $STDERR, "CSRF data is ", $_;
-          my $data=verify_protection_token($_);
-          adump $STDERR, "CSRF data parsed is ", $data;
-          if($data){
-            $_=$data;
 
-          }
-          else {
-            # Failed CSRF protection measurses
-            #
 
-            return &rex_error_unauthorized;
+
+
+
+      }
+
+        adump $STDERR, "CSRF name is ", $CSRF_field_name;
+        # If a CSRF_field name is specifed in the first part, enable protection checking
+        if($CSRF_field_name and ref($_[PAYLOAD][0][PART_CONTENT]) eq "HASH"){
+
+          # only test if name is found?
+
+          for($_[PAYLOAD][0][PART_CONTENT]{$CSRF_field_name}){
+
+            return &rex_error_unauthorized unless $_;
+            adump $STDERR, "CSRF data is ", $_;
+
+
+            my $data=verify_protection_token($_);
+            adump $STDERR, "CSRF data parsed is ", $data;
+            if($data){
+              $_=$data;
+
+            }
+            else {
+              # Failed CSRF protection measurses
+              #
+
+              return &rex_error_unauthorized;
+            }
           }
+        }
+
+      # Decode query parameters if not already decoded
+      for($_[REX][QUERY]||()){
+        unless(ref){
+          $_=decode_urlencoded_form($_);
         }
       }
+
       1;
     },
   );

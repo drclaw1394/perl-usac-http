@@ -269,7 +269,7 @@ sub uhm_http_authentication {
 sub basic_parser {
   sub {
     if($_[1]){
-      my $credentials=eval {MIME::Base64::decode_base64($_[1])};
+      my $credentials=eval {MIME::Base64::decode_base64url($_[1])};
       my ($user, $pass)=split ":", $credentials, 2;
       my %params=(
         username=>$user,

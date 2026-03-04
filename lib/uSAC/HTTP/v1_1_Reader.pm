@@ -138,7 +138,7 @@ sub make_parser{
     my $processed=0;
     my $rex;#=$pipeline->[$pipeline->@*-1];
 
-    $rex=$pipeline->[0];
+    $rex=$pipeline->[-1]; # Each time we call this we use the last item
 
     # Set default HTTP code
     $code=-1;
@@ -163,7 +163,8 @@ sub make_parser{
           # Don't process new request until existing request is done.
           # Rely on reader being pumped at output stage to retrigger
           
-          return if $mode == MODE_RESPONSE and $pipeline->@*;
+          #return if $mode == MODE_RESPONSE and $pipeline->@*;
+          #
           $pos3=index $buf, CRLF2;#, $ppos;
           # Header is not complete. need more
           return if($pos3<=0);
@@ -185,7 +186,10 @@ sub make_parser{
           }
           
 
-          for my ($k, $val)(map split(": ", $_, 2), @lines){
+          #for my ($k, $val)(map split(": ", $_, 2), @lines){
+          my ($k, $val);
+          for(@lines){
+            ($k, $val)=split(": ", $_, 2);
             $k=lc $k;
             if($k eq "set-cookie"){
               # Set-Cookie could occur multiple times and is not listable.
@@ -194,7 +198,7 @@ sub make_parser{
             }
             else {
               # RFC 6265 Cookie SHOULD NOT occur more than once. So treat as 'listable'
-              $_ = defined $_ ? $_.",".$val : $val for $h{$k};
+              $_ = defined $_ ? $_ . "," . $val : $val for $h{$k};
             }
           }
 
@@ -219,11 +223,12 @@ sub make_parser{
 
           if( $version eq "HTTP/1.0"){
             # Explicit keep alive
-            $closeme=($connection!~ /keep-alive/ai);
+            $closeme=($connection !~ /keep-alive/ai);
           }
           else{
             # Explicit close
-            $closeme=($connection and $connection=~ /close/ai);
+            #$closeme=($connection and $connection=~ /close/ai);
+            $closeme=($connection and index($connection, "close")>0);
           }
 
 
@@ -237,7 +242,8 @@ sub make_parser{
           
           if($mode==MODE_RESPONSE){
 
-            $rex=uSAC::HTTP::Rex->new($r, $ex);#, $route);
+            #$rex=uSAC::HTTP::Rex->new($r, $ex);#, $route);
+            $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, $ex);#, $route);
             Log::OK::DEBUG and log_debug  "New rex object: $rex";
             push @$pipeline, $rex;
             $out_header={};

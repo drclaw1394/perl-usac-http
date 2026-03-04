@@ -6,6 +6,7 @@ use uSAC::HTTP::Constants;
 use uSAC::Util;
 use URI::Escape;
 
+use uSAC::HTTP::Middleware::Form;
 
 use Template::Plexsite;
 use Template::Plexsite::URLTable;
@@ -50,7 +51,8 @@ sub uhm_template_plex2 {
         if($_[OUT_HEADER] and (($_[REX][STATUS]//HTTP_NOT_FOUND) == HTTP_NOT_FOUND())){
 
           # Check the url ends witha slash. If it doesnt. tell the client to redirect
-          for($_[REX][PATH]){
+          my $path=$_[REX][PATH];
+          for($path){
             my @comp =split "/";
 
             # If the last component looks like a file.. go next
@@ -61,7 +63,7 @@ sub uhm_template_plex2 {
             
             # Redirect to url ending with slash if need be
             unless(m|/$|){
-              $_[REX][REDIRECT]=$_[REX][PATH]."/";
+              $_[REX][REDIRECT]=$path."/";
               return &rex_redirect_see_other;
             }
 
@@ -71,10 +73,15 @@ sub uhm_template_plex2 {
 
           # Strip prefix
           #
-          $p=uri_unescape $_[PAYLOAD]||$_[REX][PATH];
+          #$p=uri_unescape $_[PAYLOAD]||$path;#$_[REX][PATH];
+          $p=uri_unescape $path;
           $prefix//=ref($_[ROUTE][1][ROUTE_PATH]) ? "" : $_[ROUTE][1][ROUTE_PATH];
 
           $p=substr $p, length $prefix if (defined $prefix and index($p, $prefix)==0);
+
+          for($_[REX][QUERY]//()){
+            $_=decode_urlencoded_form($_) unless ref;
+          }
 
           #Update variables
           $vars->@{qw<route rex in_header out_header payload callback>}=@_;
