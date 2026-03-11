@@ -67,7 +67,7 @@ field $_id                :mutator :param=undef;
 field $_prefix            :mutator :param =undef;
 field $_host              :reader :param =[];
 field $_error_uris        :param={};
-field $_delegate          :param=0;
+field $_delegate          :param="-1";
 field $_innerware         :mutator :param=[];
 field $_outerware         :mutator :param=[];
 field $_errorware         :mutator :param=[];
@@ -137,7 +137,7 @@ BUILD{
   # Only add delegate if specified
   #
   #$_delegate=$self 
-  ($_delegate)=caller if $_delegate==0; # Was not set in constructor
+  ($_delegate)=caller if $_delegate eq "-1"; # Was not set in constructor
                                     # this allows manual set of undef in constructor
 
 
@@ -1190,21 +1190,23 @@ method load {
 
       # Expects a package name or an object
       my $package=need $path;
+      adump $STDERR, " Return from need", $package;
       if(ref $package eq "CODE"){
         # Call dirctly
         adump $STDERR, " Loaded via code ref ", %options;
         $package->(%options)->($self);
       }
-      elsif(ref($package) !~ /::/){
+      elsif(ref($package) =~ /::/){
         # Assume an object  and call the  
         #$self->add_delegate(ref $package);
-        adump $STDERR, " Loaded from package name ", %options;
+        adump $STDERR, " Loaded from object ", %options;
         $package->app(%options)->($self);
 
       }
       else {
         # Assume a package name
         #$self->add_delegate($package);
+        adump $STDERR, " Loaded from package name...", %options;
         $package->app(%options)->($self);
       }
     }
