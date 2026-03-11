@@ -178,9 +178,9 @@ sub uhm_decode_form {
   require uSAC::HTTP::Middleware::Slurp;
 
   (
-    uSAC::HTTP::Middleware::Multipart::uhm_multipart(),     # process multipart if applicable,
+    uSAC::HTTP::Middleware::Multipart::uhm_multipart(%options),     # process multipart if applicable,
     
-    uSAC::HTTP::Middleware::Slurp::uhm_slurp(),             # Slurp the contents into memory or files
+    uSAC::HTTP::Middleware::Slurp::uhm_slurp(%options),             # Slurp the contents into memory or files
                                                             # Also makes a single part if required
 
 

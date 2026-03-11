@@ -11,6 +11,8 @@ use Log::OK;
 
 use uSAC::HTTP;
 use IO::FD;
+use UUID qw<generate_v4>;
+use MIME::Base64;
 use Fcntl qw<O_CREAT O_RDWR>;
 use File::Spec::Functions qw<catfile>;
 
@@ -138,8 +140,15 @@ sub uhm_slurp {
             #open new one
             my $h=$payload->[0];
 
-            if($h->{_filename} and !$mem_flag){
-              my $path=IO::FD::mktemp catfile $upload_dir, "X" x 10;
+            if($h->{_filename} and $h->{"content-type"} and !$mem_flag){
+
+              # only write do disk if non memory mode and if the header has a content type
+              #
+              #my $path=IO::FD::mktemp catfile $upload_dir, "X" x 10;
+              my $path;
+              generate_v4($path);
+              $path="$upload_dir/".MIME::Base64::encode_base64url($path);
+
               my $error;
 
               if(defined IO::FD::sysopen(my $fd, $path, O_CREAT|O_RDWR)){

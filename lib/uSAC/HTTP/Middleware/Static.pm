@@ -49,7 +49,7 @@ sub send_file_uri {
   $rex->[uSAC::HTTP::Rex::in_progress_]=1;
   # my $in_fh=$entry->[File::Meta::Cache::fd_];
 
-  my ($content_length, $mod_time)=($entry->[File::Meta::Cache::stat_][7], $entry->[File::Meta::Cache::stat_][9]);
+  my ($content_length, $mod_time)=($entry->[File::Meta::Cache::STAT][7], $entry->[File::Meta::Cache::STAT][9]);
 
   #process caching headers
   my $headers=$_[IN_HEADER];
@@ -110,7 +110,7 @@ sub send_file_uri {
   }
 
   for my($k, $v)(
-    $entry->[File::Meta::Cache::user_]->@*, 
+    $entry->[File::Meta::Cache::USER]->@*, 
     #HTTP_VARY, "Accept", 
     HTTP_ACCEPT_RANGES, "bytes" #// Even when used as cache, we can repsonde with byte range
   ){
@@ -237,7 +237,7 @@ sub send_file_uri {
 
     $do_sendfile=sub {
       Log::OK::TRACE  and log_trace "Doing send file";
-      $total+=$rc=IO::FD::sendfile($out_fh, $entry->[File::Meta::Cache::fd_], $read_size, $offset);
+      $total+=$rc=IO::FD::sendfile($out_fh, $entry->[File::Meta::Cache::FD], $read_size, $offset);
 
       $offset+=$rc;
 
@@ -321,7 +321,7 @@ sub send_file_uri {
       $sz=$read_size;# if $sz>$read_size;
       #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset";
       $reply//="";
-      $total+=$rc=IO::FD::pread $entry->[File::Meta::Cache::fd_], $reply, $sz, $offset;
+      $total+=$rc=IO::FD::pread $entry->[File::Meta::Cache::FD], $reply, $sz, $offset;
       #Log::OK::TRACE and log_trace "Size of read is $sz,  offset id $offset rc is $rc  for rex $rex";
       $offset+=$rc;
 
@@ -740,7 +740,7 @@ sub uhm_static_root {
 
           my $entry;
           my $enc="";
-          my $content_type;
+          my $content_type=$_[OUT_HEADER]{HTTP_CONTENT_TYPE()};   # Force content type if available
 
           if(substr($path, -1) eq "/") {
             # Attempt to match a file within a directory to that in the index list
@@ -755,7 +755,7 @@ sub uhm_static_root {
                 if($entry){
                   my $index=rindex $_path, ".";
                   my $ext=lc substr $_path, $index+1;
-                  $content_type=$mime->{$ext}//$default_mime;
+                  $content_type//=$mime->{$ext}//$default_mime;
                   $path=$_path;
                   last;
                 }
@@ -791,7 +791,7 @@ sub uhm_static_root {
             Log::OK::TRACE and log_trace "Working on opening normal file";
             my $index=rindex $path, ".";
             my $ext=lc substr $path, $index+1;
-            $content_type=$mime->{$ext}//$default_mime;
+            $content_type//=$mime->{$ext}//$default_mime;
 
 
             if($pre_encoded and ($_[IN_HEADER]{"accept-encoding"}//"")=~/(gzip)/){
@@ -825,13 +825,13 @@ sub uhm_static_root {
           #unless($path_only){
             # Setup meta cache fields if they don't exist
             #
-            unless($entry->[File::Meta::Cache::user_]){
-              $entry->[File::Meta::Cache::user_]=[
+            unless($entry->[File::Meta::Cache::USER]){
+              $entry->[File::Meta::Cache::USER]=[
                 HTTP_CONTENT_TYPE, $content_type, 
                 HTTP_LAST_MODIFIED, POSIX::strftime("%a, %d %b %Y %T GMT",
-                  CORE::gmtime($entry->[File::Meta::Cache::stat_][9])),
+                  CORE::gmtime($entry->[File::Meta::Cache::STAT][9])),
 
-                HTTP_ETAG, "\"$entry->[File::Meta::Cache::stat_][9]-$entry->[File::Meta::Cache::stat_][7]\"",
+                HTTP_ETAG, "\"$entry->[File::Meta::Cache::STAT][9]-$entry->[File::Meta::Cache::STAT][7]\"",
               ];
             }
 

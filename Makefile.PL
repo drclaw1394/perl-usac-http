@@ -30,7 +30,6 @@ WriteMakefile(
     "constant::more"=> "v0.3.0",
 		"Log::OK"	=> "v0.2.1",
 		"Template::Plex"	=> "v0.9.1",
-    "uSAC::FastPack" => 0,      # Message brokering
     "Text::Table"=>0,
 
 
