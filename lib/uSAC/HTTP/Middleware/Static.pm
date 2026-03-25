@@ -43,7 +43,7 @@ sub send_file_uri {
 
   my ($matcher, $rex, $in_header, $out_headers, $reply, $cb, $next, $read_size, $sendfile, $entry, $closer)=@_;
 
-  Log::OK::TRACE and log_trace("send file no range");
+  Log::OK::TRACE and say STDERR ("send file no range");
 
 
   $rex->[uSAC::HTTP::Rex::in_progress_]=1;
@@ -79,7 +79,7 @@ sub send_file_uri {
       $rex->[STATUS]=HTTP_OK and last unless $time;
 
       for($time){
-        Log::OK::TRACE and log_trace " converting cookie expires from stamp to epoch";
+        Log::OK::TRACE and  say STDERR " converting cookie expires from stamp to epoch";
         my ($wday_key, $mday, $mon_key, $year, $hour, $min, $sec, $tz)=
          /([^,]+), (\d+).([^-]{3}).(\d{4}) (\d+):(\d+):(\d+) (\w+)/;
          #TODO support parsing of other deprecated data formats
@@ -120,7 +120,7 @@ sub send_file_uri {
   }
 
   if(!$as_error and $headers->{range}){
-    Log::OK::DEBUG and log_debug "----RANGE REQUEST IS: $headers->{range}";
+    Log::OK::DEBUG and  say STDERR "----RANGE REQUEST IS: $headers->{range}";
     #@ranges=_check_ranges $rex, $content_length;
 
     # parse ranges here
@@ -170,7 +170,7 @@ sub send_file_uri {
 
 
     unless(@ranges){
-      Log::OK::TRACE and log_trace "Range not satisfiable";
+      Log::OK::TRACE and  say STDERR "Range not satisfiable";
       $rex->[STATUS]=HTTP_RANGE_NOT_SATISFIABLE;
 
       $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
@@ -179,7 +179,7 @@ sub send_file_uri {
       return;
     }
     elsif(@ranges==1){
-      Log::OK::TRACE and log_trace "Range Single";
+      Log::OK::TRACE and  say STDERR "Range Single";
       $rex->[STATUS]=HTTP_PARTIAL_CONTENT();
 
       my $total_length=0;
@@ -199,12 +199,12 @@ sub send_file_uri {
 
       $content_length=$total_length;
       $offset= $ranges[0][0];
-      Log::OK::TRACE and log_trace "Content length for single range: $content_length, offset $offset";
+      Log::OK::TRACE and  say STDERR "Content length for single range: $content_length, offset $offset";
       shift @ranges;
     }
     else{
       $_[OUT_HEADER]{HTTP_CONTENT_TYPE()}="multipart/byteranges";
-      Log::OK::TRACE and log_trace "Range multiple .. not implemented";
+      Log::OK::TRACE and  say STDERR "Range multiple .. not implemented";
 
     }
   }
@@ -216,7 +216,7 @@ sub send_file_uri {
 
 
   if(($rex->[METHOD] eq "HEAD" or $rex->[STATUS]==HTTP_NOT_MODIFIED)){
-    Log::OK::TRACE and log_trace "Range was head request";
+    Log::OK::TRACE and  say STDERR "Range was head request";
     #$closer->(delete $ctx{$rex});
     my $t=delete $ctx{$rex};
     $closer->($t->[0]);
@@ -236,7 +236,7 @@ sub send_file_uri {
     my $out_fh=$session->fh;
 
     $do_sendfile=sub {
-      Log::OK::TRACE  and log_trace "Doing send file";
+      Log::OK::TRACE  and  say STDERR "Doing send file";
       $total+=$rc=IO::FD::sendfile($out_fh, $entry->[File::Meta::Cache::FD], $read_size, $offset);
 
       $offset+=$rc;
@@ -276,12 +276,12 @@ sub send_file_uri {
       }
 
       else {  
-        Log::OK::TRACE and log_trace "Static file read: EAGAIN";
+        Log::OK::TRACE and  say STDERR "Static file read: EAGAIN";
       }
 
     };
 
-    Log::OK::TRACE  and log_trace "Writing sendfile header";
+    Log::OK::TRACE  and  say STDERR "Writing sendfile header";
 
     # Use a 0 for the callback to indicate we don't want one
     # and not to execute the default
@@ -292,7 +292,7 @@ sub send_file_uri {
     #
     # the normal copy and write
     #
-    Log::OK::TRACE and log_trace  'Normal file read/copy/write';
+    Log::OK::TRACE and  say STDERR 'Normal file read/copy/write';
 
     #Clamp the readsize to the file size if its smaller
     #$read_size=$content_length if $content_length < $read_size;
@@ -301,12 +301,12 @@ sub send_file_uri {
     my $count=0;
     my $sub;
     $sub=sub {
-      Log::OK::TRACE and log_trace __SUB__."--- MAIN STATIC CALLBACK for $rex from ".caller;
+      Log::OK::TRACE and say STDERR __SUB__."--- MAIN STATIC CALLBACK for $rex from ".caller;
       $count++;
       #This is the callback for itself
       #if no arguments an error occured
       unless(@_){
-        Log::OK::TRACE and log_trace __PACKAGE__." Handing error in normal file read/copy/write for $rex";
+        Log::OK::TRACE and say STDERR __PACKAGE__." Handing error in normal file read/copy/write for $rex";
         my $t=delete $ctx{$rex};
         $closer->($t->[0]);
         @$t=();
@@ -318,7 +318,7 @@ sub send_file_uri {
       #NON Send file
       #
       my $sz=($content_length-$total);
-      $sz=$read_size;# if $sz>$read_size;
+      $sz=$read_size if $sz>$read_size;
       #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset";
       $reply//="";
       $total+=$rc=IO::FD::pread $entry->[File::Meta::Cache::FD], $reply, $sz, $offset;
@@ -330,9 +330,9 @@ sub send_file_uri {
 
       #When we have read the required amount of data
       if($total==$content_length){
-        Log::OK::TRACE and log_trace "Full file content read: $total";
+        Log::OK::TRACE and say STDERR "Full file content read: $total";
         if(@ranges){
-          Log::OK::TRACE and log_trace "Ranges to send still";
+          Log::OK::TRACE and say STDERR "Ranges to send still";
           return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {
               unless(@_){
                 return __SUB__->();
@@ -350,8 +350,8 @@ sub send_file_uri {
             })
         }
         else{
-          Log::OK::TRACE and log_trace "No more ranges to send";
-          Log::OK::TRACE and log_trace __PACKAGE__."------REMOVING CONTEXT before sending file $rex";
+          Log::OK::TRACE and say STDERR "No more ranges to send";
+          Log::OK::TRACE and say STDERR __PACKAGE__."------REMOVING CONTEXT before sending file $rex";
           my $t=delete $ctx{$rex};
           $closer->($t->[0]);
           #$t->[1]=undef;
@@ -365,28 +365,28 @@ sub send_file_uri {
 
       #Data read but more to do
       if($rc){
-        Log::OK::TRACE and log_trace "We have a and RC $rc";
+        Log::OK::TRACE and say STDERR "We have a and RC $rc";
         if ($rex){
 
           $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__);
           return;
         }
         else {
-          log_error " NO REX in ....";
+          say STDERR " NO REX in ....";
           return;
         }
       }
       else{
-        Log::OK::TRACE and log_trace "DO NOT HAVE RC $rc";
+        Log::OK::TRACE and say STDERR "DO NOT HAVE RC $rc";
       }
 
 
       #if ($rc);
       #No data but error
       if( !defined($rc) and $! != EAGAIN and  $! != EINTR){
-        log_error "Static files: READ ERROR from file";
-        log_error "Error: $!";
-        Log::OK::ERROR and log_error Dumper $entry;
+        say STDERR "Static files: READ ERROR from file";
+        say STDERR "Error: $!";
+        Log::OK::ERROR and say STDERR Dumper $entry;
         $rex->[uSAC::HTTP::Rex::session_]->error();;
       }
     };
@@ -487,10 +487,10 @@ sub _make_list_dir {
 
 		my $abs_path=$html_root.uri_unescape $uri;
 		stat $abs_path;
-    Log::OK::TRACE and log_trace "DIR LISTING for $abs_path";
-    Log::OK::TRACE and log_trace "HTML ROOT is $html_root";
+    Log::OK::TRACE and say STDERR "DIR LISTING for $abs_path";
+    Log::OK::TRACE and say STDERR "HTML ROOT is $html_root";
 		unless(-d _ and  -r _){
-      Log::OK::TRACE and log_trace "No dir here $abs_path";
+      Log::OK::TRACE and say STDERR "No dir here $abs_path";
       $_[REX][STATUS]=HTTP_NOT_FOUND;
 
       $_[PAYLOAD]="";
@@ -587,6 +587,7 @@ sub uhm_static_root {
   my $pre_encoded=$options{pre_encoded}//{};
   my $prefix=$options{prefix};
   my $meta_cache_limit=$options{meta_cacche_limit}//10;
+  my $enable_redirect=$options{enable_redirect}//0;
   \my @roots=$options{roots};
 
   \my @indexes=($options{index}//$options{indexes}//[]);
@@ -625,19 +626,19 @@ sub uhm_static_root {
 
   #TODO: Need to check only supported encodings are provided.
 
-  Log::OK::DEBUG and log_debug ("Static files from: ".join ", ", $options{roots}->@*);
-  Log::OK::DEBUG and log_debug "DIR Listing: ".($do_dir?"yes":"no");
-  Log::OK::DEBUG and log_debug "DIR index: ".(@indexes?join(", ", @indexes):"no");
-  Log::OK::DEBUG and log_debug "Filename Allow Filter: ".($allow?$allow:"**NONE**");
-  Log::OK::DEBUG and log_debug "Filename block Filter: ".($block?$block:"**NONE**");
-  Log::OK::DEBUG and log_debug "Readsize: $read_size";
-  Log::OK::DEBUG and log_debug "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
+  Log::OK::DEBUG and say STDERR ("Static files from: ".join ", ", $options{roots}->@*);
+  Log::OK::DEBUG and say STDERR "DIR Listing: ".($do_dir?"yes":"no");
+  Log::OK::DEBUG and say STDERR "DIR index: ".(@indexes?join(", ", @indexes):"no");
+  Log::OK::DEBUG and say STDERR "Filename Allow Filter: ".($allow?$allow:"**NONE**");
+  Log::OK::DEBUG and say STDERR "Filename block Filter: ".($block?$block:"**NONE**");
+  Log::OK::DEBUG and say STDERR "Readsize: $read_size";
+  Log::OK::DEBUG and say STDERR "No encoding filter: ".($no_encoding?$no_encoding:"**NONE**");
 
   local $"=", ";
-  Log::OK::DEBUG and log_debug "Preencoding filter: ".(%$pre_encoded?(%$pre_encoded):"**NONE**");
-  Log::OK::DEBUG and log_debug "Sendfile: ".($sendfile?"yes $sendfile":"no");
+  Log::OK::DEBUG and say STDERR "Preencoding filter: ".(%$pre_encoded?(%$pre_encoded):"**NONE**");
+  Log::OK::DEBUG and say STDERR "Sendfile: ".($sendfile?"yes $sendfile":"no");
 
-  Log::OK::TRACE and log_trace "OPTIONS IN: ".join(", ", %options);
+  Log::OK::TRACE and say STDERR "OPTIONS IN: ".join(", ", %options);
 
 
   my $opener=$fmc->opener;
@@ -654,7 +655,7 @@ sub uhm_static_root {
   # Register for gracefull shutdown. No new connections should be accepted
 
   uSAC::Main::usac_listen("server/shutdown/graceful", sub {
-      Log::OK::INFO and log_info 'SERVER GRACEFULL SHUTDOWN IN STATIC';
+      Log::OK::INFO and say STDERR 'SERVER GRACEFULL SHUTDOWN IN STATIC';
       uSAC::IO::timer_cancel $timer if $timer;
   });
   
@@ -729,7 +730,7 @@ sub uhm_static_root {
 
 
 
-          Log::OK::TRACE and log_trace "static: html_root: $html_root";
+          Log::OK::TRACE and say STDERR "static: html_root: $html_root";
 
 
           # File and Directory serving 
@@ -748,10 +749,10 @@ sub uhm_static_root {
             #
             if(@suffix_indexes ){
 
-              Log::OK::TRACE and log_trace "Static: Index searching PATH: $path";
+              Log::OK::TRACE and say STDERR "Static: Index searching PATH: $path";
               for(@suffix_indexes){
                 my $_path=$path.$_;
-                $entry=$opener->($_path, $open_modes);#, \@suffix_indexes);
+                $entry=$opener->($_path, $open_modes, undef, $enable_redirect);#, \@suffix_indexes);
                 if($entry){
                   my $index=rindex $_path, ".";
                   my $ext=lc substr $_path, $index+1;
@@ -760,7 +761,7 @@ sub uhm_static_root {
                   last;
                 }
                 else {
-                  Log::OK::TRACE and log_trace "Static: did not locate index: $path";
+                  Log::OK::TRACE and say STDERR "Static: did not locate index: $path";
                 }
               }
             }
@@ -769,7 +770,7 @@ sub uhm_static_root {
             if($do_dir and !$entry){
               # Don't want an index file, just a dir listing
               #
-              Log::OK::TRACE and log_trace "Static: Listing dir $p";
+              Log::OK::TRACE and say STDERR "Static: Listing dir $p";
               #dir listing
               $_[PAYLOAD]=$p;   # hack
               $_[CB]=$next;     # hack
@@ -788,7 +789,7 @@ sub uhm_static_root {
             #say STDERR "NORMAL FILE SERVE";
             # Attempt a normal file serve
             #
-            Log::OK::TRACE and log_trace "Working on opening normal file";
+            Log::OK::TRACE and say STDERR "Working on opening normal file";
             my $index=rindex $path, ".";
             my $ext=lc substr $path, $index+1;
             $content_type//=$mime->{$ext}//$default_mime;
@@ -799,21 +800,21 @@ sub uhm_static_root {
               #
               $enc=$1;
               my $enc_ext=$pre_encoded->{$1};
-              $entry=$opener->($path.$enc_ext, $open_modes) if $enc_ext;
+              $entry=$opener->($path.$enc_ext, $open_modes, undef, $enable_redirect) if $enc_ext;
               unless($entry){
-                Log::OK::TRACE and log_trace "NO Existing entry for opening file!";
-                $entry=$opener->($path, $open_modes);
+                Log::OK::TRACE and say STDERR "NO Existing entry for opening file!";
+                $entry=$opener->($path, $open_modes,undef, $enable_redirect);
                 $enc=($no_encoding and $ext=~/$no_encoding/)?"identity":"";
 
               }
               else {
-                Log::OK::TRACE and log_trace "Existing entry for opening file!";
+                Log::OK::TRACE and say STDERR "Existing entry for opening file!";
               }
             }
             else{
               # No preencoded files enabled
-              $entry=$opener->($path, $open_modes);
-		Log::OK::TRACE and log_trace "Same entry? : ".$entry;
+              $entry=$opener->($path, $open_modes, undef, $enable_redirect);
+		Log::OK::TRACE and say STDERR "Same entry? : ".$entry;
             }
 
             next unless($entry)
@@ -847,12 +848,12 @@ sub uhm_static_root {
             }
 
             $ctx{$_[REX]}=[$entry, undef]; # Save this for error processing
-            Log::OK::TRACE and log_trace __PACKAGE__."------SAVING CONTEXT before sending file $_[REX]";
+            Log::OK::TRACE and say STDERR __PACKAGE__."------SAVING CONTEXT before sending file $_[REX]";
 
             return send_file_uri(@_, $next, $read_size, $sendfile, $entry, $closer);
         }
 
-		    Log::OK::DEBUG and log_debug "Could not find anything for $path in any root for rex:". $_[REX];
+		    Log::OK::DEBUG and say STDERR "Could not find anything for $path in any root for rex:". $_[REX];
 
         # Didn't match anything in the roots. Set payload to stripped path
         # for next middleware to look for it
@@ -882,7 +883,7 @@ sub uhm_static_root {
       #
 
       #my @keys=map $_->[0], values %ctx;
-      Log::OK::DEBUG and log_debug "---- STATIC ERROR MIDDLEWARE CALLED  for rex: $_[REX]";
+      Log::OK::DEBUG and say STDERR "---- STATIC ERROR MIDDLEWARE CALLED  for rex: $_[REX]";
 
       
       if($_[REX]){

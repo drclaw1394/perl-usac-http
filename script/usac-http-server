@@ -127,7 +127,9 @@ sub run {
   my $current=$server_proxy;
   my %cur_opts=(
     list_dir=>1,
-    headers=>\@static_headers
+    headers=>\@static_headers,
+    enable_redirect=>1
+
   );
 
   $options=\%cur_opts;
