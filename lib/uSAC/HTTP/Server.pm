@@ -492,7 +492,7 @@ method make_stream_accept {
     my $i=0;
     # Lookup the spec entry from fd_table
     my $entry=$_fd_table->{$passive_fd};
-    adump $STDERR, $entry;
+    #adump $STDERR, $entry;
     for my $fh(@$fhs){
       # TCP_NODELY etc here?
       #

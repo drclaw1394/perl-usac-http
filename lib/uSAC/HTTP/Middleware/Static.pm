@@ -27,7 +27,7 @@ use Export::These (
 
 use Errno qw<EAGAIN EINTR EBUSY>;
 
-use constant::more  READ_SIZE=>4096*32;
+use constant::more  READ_SIZE=>4096*256;
 
 
 use Time::Local qw<timelocal_modern>;
@@ -121,6 +121,7 @@ sub send_file_uri {
 
   if(!$as_error and $headers->{range}){
     Log::OK::DEBUG and  say STDERR "----RANGE REQUEST IS: $headers->{range}";
+    say STDERR "----RANGE REQUEST IS: $headers->{range} PATH: $rex->[PATH] $rex";
     #@ranges=_check_ranges $rex, $content_length;
 
     # parse ranges here
@@ -170,7 +171,8 @@ sub send_file_uri {
 
 
     unless(@ranges){
-      Log::OK::TRACE and  say STDERR "Range not satisfiable";
+      #Log::OK::TRACE and  say STDERR "Range not satisfiable";
+      say STDERR "Range not satisfiable";
       $rex->[STATUS]=HTTP_RANGE_NOT_SATISFIABLE;
 
       $out_headers->{HTTP_CONTENT_RANGE()}="bytes */$content_length";
@@ -217,6 +219,7 @@ sub send_file_uri {
 
   if(($rex->[METHOD] eq "HEAD" or $rex->[STATUS]==HTTP_NOT_MODIFIED)){
     Log::OK::TRACE and  say STDERR "Range was head request";
+    say STDERR "was head request";
     #$closer->(delete $ctx{$rex});
     my $t=delete $ctx{$rex};
     $closer->($t->[0]);
@@ -307,6 +310,7 @@ sub send_file_uri {
       #if no arguments an error occured
       unless(@_){
         Log::OK::TRACE and say STDERR __PACKAGE__." Handing error in normal file read/copy/write for $rex";
+        say STDERR __PACKAGE__." Handing error in normal file read/copy/write for $rex";
         my $t=delete $ctx{$rex};
         $closer->($t->[0]);
         @$t=();
@@ -331,6 +335,7 @@ sub send_file_uri {
       #When we have read the required amount of data
       if($total==$content_length){
         Log::OK::TRACE and say STDERR "Full file content read: $total";
+        #say STDERR "Full file content read: $total $rex->[PATH] $rex";
         if(@ranges){
           Log::OK::TRACE and say STDERR "Ranges to send still";
           return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {

@@ -1,7 +1,7 @@
 package uSAC::HTTP::Session;
 use Object::Pad;
 class uSAC::HTTP::Session;
-use feature qw<state refaliasing>;
+use feature qw<state refaliasing say>;
 no warnings "experimental";
 
 use uSAC::Log;
@@ -85,7 +85,7 @@ method init {
   $_do_error=sub {
     Log::OK::DEBUG and log_debug "IN do_Error  session: $_id";
     Log::OK::DEBUG and log_debug "Session do_Error called from: ".join ", " , caller;
-    $_sr->buffer="";
+    $_sr->buffer=[""];
     $_sw->reset;
     #$_read_stack[-1](); 
     #$_parser->();   # THIS PUSHES 
@@ -120,6 +120,7 @@ method init {
   $_dropper=sub {
     ####################################################################################
     Log::OK::DEBUG and log_debug "Session: Dropper start";                           #
+    #say STDERR "Session: Dropper start";
     # Log::OK::DEBUG and log_debug "Session: closeme: $_closeme";                      #
     # Log::OK::DEBUG and log_debug "Session dropper called from: ".join ", " , caller; #
     ####################################################################################
@@ -143,6 +144,7 @@ method init {
     delete $_sessions->{$_id};
     IO::FD::close $_fh;
     #IO::FD::shutdown $_fh, 1;
+    #say STDERR "SESSION fh closed";
 
     $_fh=undef;
     $_id=undef;
