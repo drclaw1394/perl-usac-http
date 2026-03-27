@@ -295,7 +295,7 @@ sub send_file_uri {
     #
     # the normal copy and write
     #
-    Log::OK::TRACE and  say STDERR 'Normal file read/copy/write';
+    Log::OK::TRACE and  say STDERR "Normal file read/copy/write $content_length $total";
 
     #Clamp the readsize to the file size if its smaller
     #$read_size=$content_length if $content_length < $read_size;
@@ -305,6 +305,7 @@ sub send_file_uri {
     my $sub;
     $sub=sub {
       Log::OK::TRACE and say STDERR __SUB__."--- MAIN STATIC CALLBACK for $rex from ".caller;
+      say STDERR __SUB__."--- MAIN STATIC CALLBACK for $rex from ".caller;
       $count++;
       #This is the callback for itself
       #if no arguments an error occured
@@ -335,7 +336,7 @@ sub send_file_uri {
       #When we have read the required amount of data
       if($total==$content_length){
         Log::OK::TRACE and say STDERR "Full file content read: $total";
-        #say STDERR "Full file content read: $total $rex->[PATH] $rex";
+        say STDERR "Full file content read: $total $rex->[PATH] $rex";
         if(@ranges){
           Log::OK::TRACE and say STDERR "Ranges to send still";
           return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {

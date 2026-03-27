@@ -652,15 +652,16 @@ sub make_serialize{
         $reply->[0].= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
         $reply->[0].="00".CRLF.CRLF unless $_[CB];
 
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
       }
       else {
-        $reply->[0].=$_[PAYLOAD];
+       $_[REX][uSAC::HTTP::Rex::write_]($reply);
+      $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
+      #$reply->[0].=$_[PAYLOAD];
       }
-      Log::OK::TRACE and log_trace "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
+      #Log::OK::TRACE and log_trace "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
 
-      #Log::OK::TRACE and log_trace "--- dropper is currently ". $_[REX][uSAC::HTTP::Rex::dropper_];
-      $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
-      #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$_[REX][uSAC::HTTP::Rex::dropper_]);
+      #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
 
       # If logging is enabled call logging middleware on a seperate chain
     }
