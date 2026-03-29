@@ -83,13 +83,15 @@ method init {
   #################################
 
   $_do_error=sub {
+    #say STDERR "Do error called from ". caller(0);
+    #say STDERR "fd $_fh, Error: @_";
     Log::OK::DEBUG and log_debug "IN do_Error  session: $_id";
     Log::OK::DEBUG and log_debug "Session do_Error called from: ".join ", " , caller;
     $_sr->buffer=[""];
     $_sw->reset;
     #$_read_stack[-1](); 
     #$_parser->();   # THIS PUSHES 
-    $_closeme=1; $_dropper->()
+    $_closeme=1; $_dropper->(1)
   };
 
   #weaken $_sr;
@@ -98,7 +100,7 @@ method init {
   $_sr=uSAC::IO::SReader::create(
     fh=>$_fh,
     max_read_size=>$_read_size//MAX_READ_SIZE,
-    on_eof =>$_do_error, #sub { Log::OK::ERROR and log_error "End of file..... @_"; &$_do_error },
+    #on_eof =>$_do_error, #sub { Log::OK::ERROR and log_error "End of file..... @_"; &$_do_error },
     on_error=>$_do_error, #sub {Log::OK::ERROR and log_error "ON error .... @_"; &$_do_error},
     time=>\$_time,
     clock=>\$Time,
@@ -118,6 +120,7 @@ method init {
   #if a true value is present then no dropping is performed
   #if a false or non existent value is present, session is closed
   $_dropper=sub {
+    #say STDERR "TOP OF DROPPER";
     ####################################################################################
     Log::OK::DEBUG and log_debug "Session: Dropper start";                           #
     #say STDERR "Session: Dropper start";
@@ -125,12 +128,13 @@ method init {
     # Log::OK::DEBUG and log_debug "Session dropper called from: ".join ", " , caller; #
     ####################################################################################
 
-    $_fh or return;	#don't drop if already dropped
+    #$_fh or return;	#don't drop if already dropped
     #shift @$_rex; #shift rex pipeline
-    unless($_closeme or !@_){
+    #say STDERR "CLOSE ME FLAG is: $_closeme    has no args: @_ ". caller;
+    if(!$_closeme and !@_){
       #IF no error or closeme then return after pumping the reader
-      log_debug "--- SESSION- pumping  via dropper";
-      $_sr->pump;
+      #say STDERR "--- SESSION- pumping  via dropper";
+      #$_sr->pump;
       return;
     }
     
@@ -139,10 +143,14 @@ method init {
     #End of session transactions
     #
     Log::OK::DEBUG and log_debug "---Session: Dropper ".$_id;
-    $_sr->pause;
-    $_sw->pause;
+    #$_sr->pause;
+    #$_sw->pause;
+    #
+    #say STDERR "REMOVE SESSION FROM HASH";
+    #
     delete $_sessions->{$_id};
     IO::FD::close $_fh;
+
     #IO::FD::shutdown $_fh, 1;
     #say STDERR "SESSION fh closed";
 
@@ -166,7 +174,7 @@ method init {
     #if( undef==$_[0] and @zombies < 100){
     if(0){
     #if(@$zombies < 100){
-      #if(1){
+    #if(1){
       # NOTE: Complete reuses of a zombie may still be causing corruption
       # Suspect that the rex object is not being release intime 
       # when service static files.
@@ -183,22 +191,26 @@ method init {
   #find_cycle($_dropper);
     }
     else{
-      $_sr->destroy();
-      #find_cycle($_sw);
-      $_sr=undef;
+      if($_sr){
+        $_sr->destroy();
+        #find_cycle($_sw);
+        $_sr=undef;
 
-      $_write=undef;
-      $_sw->destroy();
-      $_sw=undef;
-      #dropper was called without an argument. ERROR. Do not reuse 
-      #
+      }
+      if($_sw){
+        $_write=undef;
+        $_sw->destroy();
+        $_sw=undef;
+        #dropper was called without an argument. ERROR. Do not reuse 
+        #
+      }
       $_dropper=undef;
 
       undef $_rex;
       undef $self;
-      $_route=undef;
-      #$_do_error=undef;
-      $_rex=undef;
+      #$_route=undef;
+      $_do_error=undef;
+      #$_rex=undef;
 
       Log::OK::DEBUG and log_debug "NO Pushed zombie";
     }
@@ -250,7 +262,7 @@ method error {
   $_do_error->();
 }
 method drop {
-	$_dropper->(@_);
+	$_dropper and $_dropper->(@_);
 }
 
 #Accessors

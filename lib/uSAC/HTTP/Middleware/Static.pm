@@ -121,7 +121,7 @@ sub send_file_uri {
 
   if(!$as_error and $headers->{range}){
     Log::OK::DEBUG and  say STDERR "----RANGE REQUEST IS: $headers->{range}";
-    say STDERR "----RANGE REQUEST IS: $headers->{range} PATH: $rex->[PATH] $rex";
+    #say STDERR "----RANGE REQUEST IS: $headers->{range} PATH: $rex->[PATH] $rex";
     #@ranges=_check_ranges $rex, $content_length;
 
     # parse ranges here
@@ -305,13 +305,13 @@ sub send_file_uri {
     my $sub;
     $sub=sub {
       Log::OK::TRACE and say STDERR __SUB__."--- MAIN STATIC CALLBACK for $rex from ".caller;
-      say STDERR __SUB__."--- MAIN STATIC CALLBACK for $rex from ".caller;
+      #say STDERR __SUB__."--- MAIN STATIC CALLBACK for $rex from ".caller;
       $count++;
       #This is the callback for itself
       #if no arguments an error occured
-      unless(@_){
+      if(@_){
         Log::OK::TRACE and say STDERR __PACKAGE__." Handing error in normal file read/copy/write for $rex";
-        say STDERR __PACKAGE__." Handing error in normal file read/copy/write for $rex";
+        #say STDERR __PACKAGE__." Handing error in normal file read/copy/write for $rex";
         my $t=delete $ctx{$rex};
         $closer->($t->[0]);
         @$t=();
@@ -336,7 +336,7 @@ sub send_file_uri {
       #When we have read the required amount of data
       if($total==$content_length){
         Log::OK::TRACE and say STDERR "Full file content read: $total";
-        say STDERR "Full file content read: $total $rex->[PATH] $rex";
+        #say STDERR "Full file content read: $total $rex->[PATH] $rex";
         if(@ranges){
           Log::OK::TRACE and say STDERR "Ranges to send still";
           return $next->( $matcher, $rex, $in_header, $out_headers, $reply, sub {
@@ -371,7 +371,7 @@ sub send_file_uri {
 
       #Data read but more to do
       if($rc){
-        Log::OK::TRACE and say STDERR "We have a and RC $rc";
+        Log::OK::TRACE and say STDERR "We have a and RC $rc. rex? $rex";
         if ($rex){
 
           $next->($matcher, $rex, $in_header, $out_headers, $reply, __SUB__);
@@ -397,7 +397,7 @@ sub send_file_uri {
       }
     };
     $ctx{$rex}[1]=$sub; ## and sub to ctx
-    $sub->(undef); #call with an argument to prevent error
+    $sub->(); 
   }
 }
 

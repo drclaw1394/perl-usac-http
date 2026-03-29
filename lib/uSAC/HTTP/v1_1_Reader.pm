@@ -497,7 +497,6 @@ sub make_serialize{
   my $i=1;
   my $ctx;
 
-  my $dummy_cb=undef;#sub {};
 
   sub {
         
@@ -530,6 +529,7 @@ sub make_serialize{
 
 
     $ctx=undef;
+    #say STDERR "TOP OF Serialize for Rex $_[REX]";
 
     # Getting this far in the middleware indicates we really are in progress
     # Force this setting to make sure.
@@ -551,6 +551,7 @@ sub make_serialize{
     # saves call
     #
     my $cb=$_[CB];
+    my $dummy_cb=$_[REX][uSAC::HTTP::Rex::dropper_];
 
     my $reply=[""];
     #Log::OK::ERROR and log_error "IN SERIALIZE";
@@ -639,7 +640,7 @@ sub make_serialize{
       #$reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      Log::OK::TRACE and log_trace "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
+      Log::OK::TRACE and say STDERR "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
 
       # mark headers as done, if not informational
       #
@@ -652,16 +653,19 @@ sub make_serialize{
         $reply->[0].= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
         $reply->[0].="00".CRLF.CRLF unless $_[CB];
 
+        #say STDERR "Call write ..header , chuncked with body";
         $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
       }
       else {
-       $_[REX][uSAC::HTTP::Rex::write_]($reply);
-      $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
-      #$reply->[0].=$_[PAYLOAD];
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply);
+       #$_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
+       
+        $reply->[0].=$_[PAYLOAD];
+        #say STDERR "Call write .. header, with body";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
       }
       #Log::OK::TRACE and log_trace "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
 
-      #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
 
       # If logging is enabled call logging middleware on a seperate chain
     }
@@ -681,13 +685,16 @@ sub make_serialize{
           delete $out_ctx{$_[REX]};
         }
 
+        #say STDERR "Call write .. no header, chunked, just body";
         $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
       }
       else{
         #Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
         #Log::OK::DEBUG and log_debug "normal write $cb";
         # not chunked, so just write
+        #say STDERR "Call write .. no header, known size, just body";
         $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
+         
       }
 
     }
