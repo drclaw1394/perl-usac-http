@@ -1,5 +1,5 @@
-#!/usr/bin/env -S usac --backend AnyEvent
-#
+#!/usr/bin/env -S perl -MEV -MAnyEvent -MuSAC -E0
+
 use v5.36;
 no warnings "experimental";
 our $VERSION="v0.1.0";

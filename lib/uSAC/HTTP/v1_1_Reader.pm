@@ -522,7 +522,7 @@ sub make_serialize{
     # saves call
     #
     my $cb=$_[CB];
-    my $dummy_cb=$_[REX][uSAC::HTTP::Rex::dropper_];
+    my $dummy_cb=undef;#$_[REX][uSAC::HTTP::Rex::dropper_];
 
     my $reply=[""];
     #Log::OK::ERROR and log_error "IN SERIALIZE";
