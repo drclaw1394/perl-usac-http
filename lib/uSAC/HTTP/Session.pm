@@ -181,6 +181,9 @@ method init {
       # Forced rex to be undef on IO error in static server.. Lets
       # see if that fixes the issue.
       # Otherwise comment out the line below
+      #
+      #
+      # NOTE: if reuse is intended. then FORCE flag must be used to ensure the read and writer are correctly destroyed
       unshift @$zombies, $self;
       #$self=undef;
       ###################################################################################
@@ -191,6 +194,7 @@ method init {
   #find_cycle($_dropper);
     }
     else{
+
       if($_sr){
         $_sr->destroy();
         #find_cycle($_sw);
