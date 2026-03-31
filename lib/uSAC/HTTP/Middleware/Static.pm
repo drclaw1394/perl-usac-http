@@ -27,7 +27,7 @@ use Export::These (
 
 use Errno qw<EAGAIN EINTR EBUSY>;
 
-use constant::more  READ_SIZE=>4096*256;
+use constant::more  READ_SIZE=>4096*64;
 
 
 use Time::Local qw<timelocal_modern>;

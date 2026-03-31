@@ -499,35 +499,6 @@ sub make_serialize{
 
 
   sub {
-        
-        ##############################################################
-        # my $seq=$_[REX][uSAC::HTTP::Rex::sequence_];               #
-        # my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];          #
-        #                                                            #
-        # if($seq->{$_[REX][uSAC::HTTP::Rex::id_]}){                 #
-        #   push $seq->{$_[REX][uSAC::HTTP::Rex::id_]}->@*, \@_;     #
-        #                                                            #
-        #                                                            #
-        #   # Use the first rex as key and call middleware           #
-        #   my $rex=$pipeline->[0];                                  #
-        #   my $args=shift $seq->{$rex->[uSAC::HTTP::Rex::id_]}->@*; #
-        #   @_=@$args;                                               #
-        #                                                            #
-        #   # If the CB was not set, then that was the end           #
-        #   # of the rex so shift it off                             #
-        #   unless ($args->[CB]){                                    #
-        #     shift @$pipeline;                                      #
-        #     delete $seq->{$rex->[uSAC::HTTP::Rex::id_]};           #
-        #   }                                                        #
-        # }                                                          #
-        # else {                                                     #
-        #   # short cut.                                             #
-        #   shift @$pipeline unless ($_[CB]);                        #
-        # }                                                          #
-        ##############################################################
-
-
-
     $ctx=undef;
     #say STDERR "TOP OF Serialize for Rex $_[REX]";
 
