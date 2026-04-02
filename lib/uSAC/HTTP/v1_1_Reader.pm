@@ -522,7 +522,7 @@ sub make_serialize{
     # saves call
     #
     my $cb=$_[CB];
-    my $dummy_cb=undef;#$_[REX][uSAC::HTTP::Rex::dropper_];
+    #my $dummy_cb=undef;#$_[REX][uSAC::HTTP::Rex::dropper_];
 
     my $reply=[""];
     #Log::OK::ERROR and log_error "IN SERIALIZE";
@@ -625,15 +625,15 @@ sub make_serialize{
         $reply->[0].="00".CRLF.CRLF unless $_[CB];
 
         #say STDERR "Call write ..header , chuncked with body";
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
       }
       else {
-        #$_[REX][uSAC::HTTP::Rex::write_]($reply);
-       #$_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
        
         $reply->[0].=$_[PAYLOAD];
         #say STDERR "Call write .. header, with body";
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
       }
       #Log::OK::TRACE and log_trace "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
 
@@ -657,14 +657,16 @@ sub make_serialize{
         }
 
         #say STDERR "Call write .. no header, chunked, just body";
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
       }
       else{
         #Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
         #Log::OK::DEBUG and log_debug "normal write $cb";
         # not chunked, so just write
         #say STDERR "Call write .. no header, known size, just body";
-        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
+        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb);
          
       }
 
@@ -674,13 +676,12 @@ sub make_serialize{
     unless($cb){
       if($mode == MODE_RESPONSE){
         ## ONLY shift he pipeline when its a respoonse (SERVER MODE)
-        my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
-        shift @$pipeline;
-        #$_[REX][uSAC::HTTP::Rex::serializer_]=undef;
-        #$_[REX]=undef;
+        #my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
+        #shift @$pipeline;
+        shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
       }
       else {
-        my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
+        #my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
       }
     }
 
