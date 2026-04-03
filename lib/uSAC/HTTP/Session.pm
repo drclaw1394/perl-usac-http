@@ -134,7 +134,7 @@ method init {
     if(!$_closeme and !@_){
       #IF no error or closeme then return after pumping the reader
       #say STDERR "--- SESSION- pumping  via dropper";
-      #$_sr->pump;
+      $_sr->pump;
       return;
     }
     
@@ -384,7 +384,7 @@ sub _ticker {
 #Bypasses method calls for accessors
 method exports {
   #[\$_closeme, $_dropper, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence, $_parser, $_serializer];#, \$_route];
-	[\$_closeme, undef, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence, $_parser, $_serializer];#, \$_route];
+	[\$_closeme, $_dropper, \$_server, $_rex, \$_in_progress, $_write, $_peer, $_sequence, $_parser, $_serializer];#, \$_route];
 
 }
 ##################################################################################

@@ -138,6 +138,7 @@ sub make_parser{
     my $processed=0;
     my $rex;#=$pipeline->[$pipeline->@*-1];
 
+    # The rex the parser will add to is always the last one in pipeline
     $rex=$pipeline->[-1]; # Each time we call this we use the last item
 
     # Set default HTTP code
@@ -146,7 +147,7 @@ sub make_parser{
       \my $buf=\$_[0][0];
 
       #while ( $len=length $buf) {
-      while ($buf) {
+      while ($buf or $pipeline->@*) {
         #Dual mode variables:
         #	server:
         #	$method => method
@@ -247,6 +248,11 @@ sub make_parser{
             Log::OK::DEBUG and log_debug  "New rex object: $rex";
             push @$pipeline, $rex;
             $out_header={};
+
+
+            $rex->[uSAC::HTTP::Rex::out_headers_]=$out_header;
+            $rex->[uSAC::HTTP::Rex::in_headers_]=\%h;
+
             $rex->[URI]=$uri;
             $rex->[METHOD]=$method;
 
@@ -256,6 +262,7 @@ sub make_parser{
 
             
             $rex->[PROTOCOL]=$version;
+
 
             $_i=index $uri, "?"; 
             if($_i>=0){
@@ -322,6 +329,11 @@ sub make_parser{
           #Before calling the dispatch, setup the parser to process further data.
           #Attempt to further parse the message. It is up to middleware or application
           #to reject the further processing of POST/PUT after the first 'chunk' has been parsed.
+
+          my $current=$rex == $pipeline->[0];
+          # Stop the parsing if the rex is not the first in the list. 
+          
+          last unless $current;
 
           #Push reader. 
           $processed=0; 
@@ -679,6 +691,9 @@ sub make_serialize{
         #my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
         #shift @$pipeline;
         shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
+        # Call dropper with no error to trigger pump
+        #$_[REX][uSAC::HTTP::Rex::session_]->drop if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
+        $_[REX][uSAC::HTTP::Rex::dropper_]->() if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
       }
       else {
         #my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];

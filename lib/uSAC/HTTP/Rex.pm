@@ -94,6 +94,7 @@ use constant::more qw<
   sequence_
   parser_
   serializer_
+  in_headers_
 
   STATUS  
   METHOD
