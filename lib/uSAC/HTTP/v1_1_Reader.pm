@@ -148,7 +148,7 @@ sub make_parser{
       \my $buf=\$_[0][0];
 
       #while ( $len=length $buf) {
-      while ($buf) {
+      while ($buf and $pipeline->@* < 5) {
         #Dual mode variables:
         #	server:
         #	$method => method
