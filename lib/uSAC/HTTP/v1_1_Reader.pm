@@ -128,6 +128,7 @@ sub make_parser{
   my $dummy_cb=sub {};
   my @lines;
 
+  my $id=0;
   #TODO: this needs to be an argument supplied by the server
   # Currently set from the PSGI middleware
 
@@ -147,7 +148,7 @@ sub make_parser{
       \my $buf=\$_[0][0];
 
       #while ( $len=length $buf) {
-      while ($buf or $pipeline->@*) {
+      while ($buf) {
         #Dual mode variables:
         #	server:
         #	$method => method
@@ -244,7 +245,26 @@ sub make_parser{
           if($mode==MODE_RESPONSE){
 
             #$rex=uSAC::HTTP::Rex->new($r, $ex);#, $route);
-            $rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, $ex);#, $route);
+            #$rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, $ex);#, $route);
+
+
+            $rex=[];
+            $rex->[uSAC::HTTP::Rex::closeme_]=$ex->[0];
+            $rex->[uSAC::HTTP::Rex::dropper_]=$ex->[1];
+            $rex->[uSAC::HTTP::Rex::server_]=$ex->[2];
+            $rex->[uSAC::HTTP::Rex::pipeline_]=$ex->[3];
+
+            $rex->[uSAC::HTTP::Rex::write_]=$ex->[5];
+            $rex->[uSAC::HTTP::Rex::peer_]=$ex->[6];
+            $rex->[uSAC::HTTP::Rex::sequence_]=$ex->[7];
+            #$rex->[uSAC::HTTP::Rex::parser_]=$ex->[8];
+            $rex->[uSAC::HTTP::Rex::serializer_]=$ex->[9];
+
+            $rex->[uSAC::HTTP::Rex::recursion_count_]=0;
+            $rex->[uSAC::HTTP::Rex::id_]=$id++;
+            $rex->[uSAC::HTTP::Rex::AUTHENTICATION]=[];
+
+
             Log::OK::DEBUG and log_debug  "New rex object: $rex";
             push @$pipeline, $rex;
             $out_header={};
@@ -333,7 +353,6 @@ sub make_parser{
           my $current=$rex == $pipeline->[0];
           # Stop the parsing if the rex is not the first in the list. 
           
-          last unless $current;
 
           #Push reader. 
           $processed=0; 
@@ -341,23 +360,30 @@ sub make_parser{
           if($body_len){
             # Fixed body length. Single part
               $state=STATE_BODY_CONTENT;
+
+              #Stop parser unless the first in pipeline is the current
+              last unless $current;
           }
           elsif(index($h{"transfer-encoding"}//"", "chunked")>=0){
             # Ignore content length and treat as chunked
               $state=STATE_BODY_CHUNKED;
               $chunked_state=0;
+
+              #Stop parser unless the first in pipeline is the current
+              last unless $current;
               #next;
           }
           else{
             # no body length specifed assumed no body
+            #
+            # restart the parsing loop
             $state=$start_state;
-            $payload="";
-            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
 
           }
           #$state=$start_state;
         }
         elsif($state==STATE_BODY_CONTENT){
+          $pipeline->[0][uSAC::HTTP::Rex::in_progress_]=1;
           #Process the body until the content length was found or last chunk found.
 
           my $new=length($buf)-$processed;	#length of read buffer
@@ -393,6 +419,7 @@ sub make_parser{
         }
 
         elsif($state==STATE_BODY_CHUNKED){
+          $pipeline->[0][uSAC::HTTP::Rex::in_progress_]=1;
           #CHUNKED
           #If transfer encoding is chunked, then we process as a series of chunks
           #Again, an undef callback indicats a final write
@@ -448,6 +475,16 @@ sub make_parser{
         }
         else {
           #Error state
+        }
+      }
+
+      # Pipeline support for requests with no body.
+      # Check the first rex object. if not in progress. the trigger
+      for($pipeline->[0]//()){
+        if(!$_->[uSAC::HTTP::Rex::in_progress_]){
+          $_->[uSAC::HTTP::Rex::in_progress_]=1;
+          my $route=$_->[uSAC::HTTP::Rex::route_];
+          $route->[1][ROUTE_INNER_HEAD]($route, $_, $_->[uSAC::HTTP::Rex::in_headers_], $_->[uSAC::HTTP::Rex::out_headers_], my $a="", my $cb=undef);
         }
       }
     }
@@ -692,7 +729,7 @@ sub make_serialize{
         #shift @$pipeline;
         shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
         # Call dropper with no error to trigger pump
-        #$_[REX][uSAC::HTTP::Rex::session_]->drop if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
+        #$_[REX[uSAC::HTTP::Rex::session_]->drop if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
         $_[REX][uSAC::HTTP::Rex::dropper_]->() if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
       }
       else {
