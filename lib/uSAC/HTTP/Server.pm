@@ -676,16 +676,19 @@ method rebuild_dispatch {
     for($table->[uSAC::HTTP::Site::HOST_TABLE_CACHE]{$_[1]}){
       if(defined){
         $route=$_->[0];
+        $route->[1][ROUTE_COUNTER]++;	
         $captures=$_->[1];
+        return ($route,$captures);
       }
       else {
 
         ($route, $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
+        $route->[1][ROUTE_COUNTER]++;	
+        delete $table->[uSAC::HTTP::Site::HOST_TABLE_CACHE]{$_[1]} if $route->[3];
+        return ($route, $captures);
       }
       
     }
-
-    #(my $route, my $captures)= $table->[uSAC::HTTP::Site::HOST_TABLE_DISPATCH]($_[1]);
 
     #Hustle table entry structure:
     #[matcher, value, type default]
@@ -694,23 +697,7 @@ method rebuild_dispatch {
     #[site, linked_innerware, linked_outerware, counter]
     #  0 ,		1 	,	            2		,           3
 
-    Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route;
-    Log::OK::DEBUG and log_debug __PACKAGE__." ROUTE: ".join " ,",$route->@*;
 
-    #
-    # Increment the counter on the route
-    #
-    $route->[1][ROUTE_COUNTER]++;	
-
-
-    # TODO: Better Routing Cache management.
-    # if the is_default flag is set, this is an unkown match.
-    # so do not cache it
-
-    delete $table->[uSAC::HTTP::Site::HOST_TABLE_CACHE]{$_[1]} if $route->[3];
-    #return the entry sub for body forwarding
-    Log::OK::TRACE and log_trace "END OF SERVER CB";
-    ($route, $captures);
   };
 }
 

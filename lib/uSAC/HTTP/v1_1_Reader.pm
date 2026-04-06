@@ -95,6 +95,7 @@ sub make_parser{
   my $route;
 
   my $pipeline=$ex->[3];
+  my %route_cache;
   
 
   use Scalar::Util qw<weaken>;
@@ -181,7 +182,7 @@ sub make_parser{
           
           # If static first line is specified, use.  For LSP support:
           if($mode){
-            ($method, $uri, $version)=split " ", shift @lines; #substr $buf, 0, $vi;
+            ($method, $uri, $version)=split " ", shift @lines, 3; #substr $buf, 0, $vi;
           }
           else {
               ($method, $uri, $version)=split " ", $force_first_line;
@@ -190,8 +191,25 @@ sub make_parser{
 
           #for my ($k, $val)(map split(": ", $_, 2), @lines){
           my ($k, $val);
+          my $_in;
+
+          if($mode==MODE_RESPONSE){
           for(@lines){
-            ($k, $val)=split(": ", $_, 2);
+            #($k, $val)=split(": ", $_, 2);
+            $_in=index $_, ": ";
+            $k=substr $_, 0, $_in;
+            $val=substr $_, $_in+2;
+            $k=lc $k;
+            # RFC 6265 Cookie SHOULD NOT occur more than once. So treat as 'listable'
+            $_ = defined $_ ? $_ . "," . $val : $val for $h{$k};
+          }
+        }
+          if($mode==MODE_REQUEST){
+          for(@lines){
+            #($k, $val)=split(": ", $_, 2);
+            $_in=index $_, ": ";
+            $k=substr $_, 0, $_in;
+            $val=substr $_, $_in+2;
             $k=lc $k;
             if($k eq "set-cookie"){
               # Set-Cookie could occur multiple times and is not listable.
@@ -203,38 +221,44 @@ sub make_parser{
               $_ = defined $_ ? $_ . "," . $val : $val for $h{$k};
             }
           }
+        }
 
           $buf=substr $buf, $pos3+4;
 
 
-          if($psgi_compat){
-
-            # If the package variable for PSGI compatibility is set
-            # we make sure our in header more like psgi environment
-            #  Upper case headers sent from the client
-            #  combine multiple headers into a single comma separated list
-            for my ($k, $e)(%h){
-              $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e;
-
-            }
-          }
+          ######################################################################
+          # if($psgi_compat){                                                  #
+          #                                                                    #
+          #   # If the package variable for PSGI compatibility is set          #
+          #   # we make sure our in header more like psgi environment          #
+          #   #  Upper case headers sent from the client                       #
+          #   #  combine multiple headers into a single comma separated list   #
+          #   for my ($k, $e)(%h){                                             #
+          #     $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e; #
+          #                                                                    #
+          #   }                                                                #
+          # }                                                                  #
+          ######################################################################
 
           $host=$h{host};
           $body_len=$h{"content-length"};
           $connection=$h{"connection"};
 
-          if( $version eq "HTTP/1.0"){
-            # Explicit keep alive
-            $closeme=($connection !~ /keep-alive/ai);
-          }
-          else{
-            # Explicit close
-            #$closeme=($connection and $connection=~ /close/ai);
-            $closeme=($connection and index($connection, "close")>0);
-          }
+          ###############################################################
+          # if( $version eq "HTTP/1.0"){                                #
+          #   # Explicit keep alive                                     #
+          #   $closeme=($connection !~ /keep-alive/ai);                 #
+          # }                                                           #
+          # else{                                                       #
+          #   # Explicit close                                          #
+          #   #$closeme=($connection and $connection=~ /close/ai);      #
+          #   $closeme=($connection and index($connection, "close")>0); #
+          # }                                                           #
+          ###############################################################
 
+          $closeme=($connection and index($connection, "close")>0);
 
-          $closeme=(!$keep_alive or $closeme);
+          #$closeme=(!$keep_alive or $closeme);
 
           Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
           Log::OK::DEBUG and log_debug "URI/Code: $uri";
@@ -298,18 +322,32 @@ sub make_parser{
             # processing and a rex needs to be created
             #
             #($route, $h{":captures"}) = $cb->($host, "$method $uri");
-            ($route, $rex->[CAPTURES]) = $cb->($host, "$method $uri");
+            my $key="$host $method $uri";
+            my $temp=$route_cache{$key};
+            $route=$temp->[0];
+            $rex->[CAPTURES]=$temp->[1];
+
+            unless($route){
+              ($route, $rex->[CAPTURES]) = $cb->($host, "$method $uri");
+              $route_cache{$key}=[$route,$rex->[CAPTURES]];
+            }
+
             #adump $STDERR, \%+;
 
             # Set the route for this rex
             $rex->[uSAC::HTTP::Rex::route_]=$route;
 
-            # Work around for HTTP/1.0
+            ###############################################################################
+            # # Work around for HTTP/1.0                                                  #
+            # if($closeme){                                                               #
+            #   $out_header->{HTTP_CONNECTION()}="close";                                 #
+            # }                                                                           #
+            # else{                                                                       #
+            #   $out_header->{HTTP_CONNECTION()}="Keep-Alive" if($version eq "HTTP/1.0"); #
+            # }                                                                           #
+            ###############################################################################
             if($closeme){
               $out_header->{HTTP_CONNECTION()}="close";
-            }
-            else{
-              $out_header->{HTTP_CONNECTION()}="Keep-Alive" if($version eq "HTTP/1.0");
             }
 
           }
@@ -571,7 +609,7 @@ sub make_serialize{
     # saves call
     #
     my $cb=$_[CB];
-    #my $dummy_cb=undef;#$_[REX][uSAC::HTTP::Rex::dropper_];
+    my $dummy_cb=0;#sub {};#undef;#$_[REX][uSAC::HTTP::Rex::dropper_];
 
     my $reply=[""];
     #Log::OK::ERROR and log_error "IN SERIALIZE";
@@ -674,15 +712,15 @@ sub make_serialize{
         $reply->[0].="00".CRLF.CRLF unless $_[CB];
 
         #say STDERR "Call write ..header , chuncked with body";
-        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
       }
       else {
        
         $reply->[0].=$_[PAYLOAD];
         #say STDERR "Call write .. header, with body";
-        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
       }
       #Log::OK::TRACE and log_trace "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
 
@@ -706,16 +744,16 @@ sub make_serialize{
         }
 
         #say STDERR "Call write .. no header, chunked, just body";
-        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
-        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
       }
       else{
         #Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
         #Log::OK::DEBUG and log_debug "normal write $cb";
         # not chunked, so just write
         #say STDERR "Call write .. no header, known size, just body";
-        #$_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
-        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb);
+        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb);
          
       }
 
@@ -729,8 +767,7 @@ sub make_serialize{
         #shift @$pipeline;
         shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
         # Call dropper with no error to trigger pump
-        #$_[REX[uSAC::HTTP::Rex::session_]->drop if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
-        $_[REX][uSAC::HTTP::Rex::dropper_]->() if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
+        #$_[REX][uSAC::HTTP::Rex::dropper_]->() if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
       }
       else {
         #my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
