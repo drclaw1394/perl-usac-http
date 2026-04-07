@@ -45,6 +45,7 @@ our $KEEP_ALIVE=1;
 use Import::These qw<uSAC::HTTP:: Code Method Header>;
 
 use constant::more MAX_READ_SIZE => 128 * 1024, CRLF2=>CRLF.CRLF;
+use constant::more PIPELINE_LIMIT => 100;
 
 
 sub parse_form {
@@ -96,6 +97,7 @@ sub make_parser{
 
   my $pipeline=$ex->[3];
   my %route_cache;
+  my $pipeline_limit=$options{pipeline_limit}//PIPELINE_LIMIT;
   
 
   use Scalar::Util qw<weaken>;
@@ -149,7 +151,7 @@ sub make_parser{
       \my $buf=\$_[0][0];
 
       #while ( $len=length $buf) {
-      while ($buf and $pipeline->@* < 5) {
+      while ($buf and $pipeline->@* < $pipeline_limit) {
         #Dual mode variables:
         #	server:
         #	$method => method
@@ -291,6 +293,7 @@ sub make_parser{
 
             Log::OK::DEBUG and log_debug  "New rex object: $rex";
             push @$pipeline, $rex;
+	    #say STDERR "PIPE LINE IS @$pipeline long";
             $out_header={};
 
 
@@ -767,7 +770,7 @@ sub make_serialize{
         #shift @$pipeline;
         shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
         # Call dropper with no error to trigger pump
-        #$_[REX][uSAC::HTTP::Rex::dropper_]->() if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
+        $_[REX][uSAC::HTTP::Rex::dropper_]->() if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
       }
       else {
         #my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
