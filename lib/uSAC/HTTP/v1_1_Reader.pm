@@ -107,7 +107,7 @@ sub make_parser{
   my ($method, $uri, $version, $len, $pos, $req);
   my $line;
 
-  my %h;		#Define the header storage here, once per connection
+  my $h;		#Define the header storage here, once per connection
 
   #Temp variables
   my $host;
@@ -132,11 +132,23 @@ sub make_parser{
   my @lines;
 
   my $id=0;
+            my @rex_idx=(
+            uSAC::HTTP::Rex::closeme_,
+            uSAC::HTTP::Rex::dropper_,
+            uSAC::HTTP::Rex::server_,
+            uSAC::HTTP::Rex::pipeline_,
+            uSAC::HTTP::Rex::write_,
+            uSAC::HTTP::Rex::peer_,
+            uSAC::HTTP::Rex::sequence_,
+            uSAC::HTTP::Rex::serializer_,
+          );
+          my @ex_idx=(0,1,2,3,5,6,7,9);
   #TODO: this needs to be an argument supplied by the server
   # Currently set from the PSGI middleware
 
   #use Scalar::Util qw<weaken>;
   #weaken $r;
+  if($mode==MODE_RESPONSE){
   sub {
     Log::OK::TRACE and log_trace "--TOp of parser";
     my $processed=0;
@@ -176,7 +188,702 @@ sub make_parser{
           
           # Header is received completely
           #
-          %h=();
+          #$h={};
+          $body_type=undef;	
+          $body_len=undef;
+            
+          @lines=split "\015\12", substr($buf,0, $pos3);
+          
+          # If static first line is specified, use.  For LSP support:
+            ($method, $uri, $version)=split " ", shift @lines, 3; #substr $buf, 0, $vi;
+          
+
+          #for my ($k, $val)(map split(": ", $_, 2), @lines){
+          my ($k, $val);
+          my $_in;
+          my %pairs;
+          for(@lines){
+            $_in=index $_, ": ";
+            #$h->{lc substr $_, 0, $_in}=substr $_, $_in+2;
+            $pairs{lc substr $_, 0, $_in}= substr $_, $_in+2;
+            # RFC 6265 Cookie SHOULD NOT occur more than once.
+          }
+          $h=\%pairs;
+
+          $buf=substr $buf, $pos3+4;
+
+
+          ######################################################################
+          # if($psgi_compat){                                                  #
+          #                                                                    #
+          #   # If the package variable for PSGI compatibility is set          #
+          #   # we make sure our in header more like psgi environment          #
+          #   #  Upper case headers sent from the client                       #
+          #   #  combine multiple headers into a single comma separated list   #
+          #   for my ($k, $e)(%h){                                             #
+          #     $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e; #
+          #                                                                    #
+          #   }                                                                #
+          # }                                                                  #
+          ######################################################################
+
+          #$host=$h->{host};
+          #$body_len=$h->{"content-length"};
+          #$connection=$h->{"connection"};
+
+          ($host, $body_len, $connection)=$h->@{qw<host content-length connection>};
+          #$body_len=$h->{"content-length"};
+          #$connection=$h->{"connection"};
+
+          ###############################################################
+          # if( $version eq "HTTP/1.0"){                                #
+          #   # Explicit keep alive                                     #
+          #   $closeme=($connection !~ /keep-alive/ai);                 #
+          # }                                                           #
+          # else{                                                       #
+          #   # Explicit close                                          #
+          #   #$closeme=($connection and $connection=~ /close/ai);      #
+          #   $closeme=($connection and index($connection, "close")>0); #
+          # }                                                           #
+          ###############################################################
+
+          $closeme=($connection and index($connection, "close")>0);
+
+          #$closeme=(!$keep_alive or $closeme);
+
+          Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
+          Log::OK::DEBUG and log_debug "URI/Code: $uri";
+          Log::OK::DEBUG and log_debug "verison/description: $version";
+
+          # Find route
+          
+
+            #$rex=uSAC::HTTP::Rex->new($r, $ex);#, $route);
+            #$rex=uSAC::HTTP::Rex::new("uSAC::HTTP::Rex", $r, $ex);#, $route);
+
+
+            my @rrex;
+            $rex=\@rrex;
+            ################################################
+            # $rex->[uSAC::HTTP::Rex::closeme_]=$ex->[0];  #
+            # $rex->[uSAC::HTTP::Rex::dropper_]=$ex->[1];  #
+            # $rex->[uSAC::HTTP::Rex::server_]=$ex->[2];   #
+            # $rex->[uSAC::HTTP::Rex::pipeline_]=$ex->[3]; #
+            ################################################
+
+
+            ##################################################
+            # $rex->[uSAC::HTTP::Rex::write_]=$ex->[5];      #
+            # $rex->[uSAC::HTTP::Rex::peer_]=$ex->[6];       #
+            # $rex->[uSAC::HTTP::Rex::sequence_]=$ex->[7];   #
+            # #$rex->[uSAC::HTTP::Rex::parser_]=$ex->[8];    #
+            # $rex->[uSAC::HTTP::Rex::serializer_]=$ex->[9]; #
+            ##################################################
+
+            @rrex[
+            uSAC::HTTP::Rex::closeme_,
+            uSAC::HTTP::Rex::dropper_,
+            uSAC::HTTP::Rex::server_,
+            uSAC::HTTP::Rex::pipeline_,
+            uSAC::HTTP::Rex::write_,
+            uSAC::HTTP::Rex::peer_,
+            uSAC::HTTP::Rex::sequence_,
+            uSAC::HTTP::Rex::serializer_,
+            ]=$ex->@[0,1,2,3,5,6,7,9];
+
+            #$rex->@[@rex_idx]=$ex->@[@ex_idx];
+
+            $rrex[uSAC::HTTP::Rex::recursion_count_]=0;
+            $rrex[uSAC::HTTP::Rex::id_]=$id++;
+            $rrex[uSAC::HTTP::Rex::AUTHENTICATION]=[];
+
+
+            Log::OK::DEBUG and log_debug  "New rex object: $rex";
+            push @$pipeline, $rex;
+	    #say STDERR "PIPE LINE IS @$pipeline long";
+            $out_header={};
+
+
+            $rrex[uSAC::HTTP::Rex::out_headers_]=$out_header;
+            $rrex[uSAC::HTTP::Rex::in_headers_]=$h;
+
+            $rrex[URI]=$uri;
+            $rrex[METHOD]=$method;
+
+            $rrex[SCHEME]="http";
+
+            $rrex[AUTHORITY]=$host;
+
+            
+            $rrex[PROTOCOL]=$version;
+
+
+            $_i=index $uri, "?"; 
+            if($_i>=0){
+              $rrex[QUERY]=substr($uri, $_i+1);
+
+              $uri=$rrex[PATH]=substr($uri, 0, $_i);
+            }
+            else {
+              $uri=$rrex[PATH]=$uri;
+            }
+
+            # In server mode, the route need needs to be matched for incomming
+            # processing and a rex needs to be created
+            #
+            #($route, $h{":captures"}) = $cb->($host, "$method $uri");
+            my $key="$host $method $uri";
+            my $temp=$route_cache{$key};
+            $route=$temp->[0];
+            $rrex[CAPTURES]=$temp->[1];
+
+            unless($route){
+              ($route, $rrex[CAPTURES]) = $cb->($host, "$method $uri");
+              $route_cache{$key}=[$route,$rrex[CAPTURES]];
+            }
+
+            #adump $STDERR, \%+;
+
+            # Set the route for this rex
+            $rrex[uSAC::HTTP::Rex::route_]=$route;
+
+            ###############################################################################
+            # # Work around for HTTP/1.0                                                  #
+            # if($closeme){                                                               #
+            #   $out_header->{HTTP_CONNECTION()}="close";                                 #
+            # }                                                                           #
+            # else{                                                                       #
+            #   $out_header->{HTTP_CONNECTION()}="Keep-Alive" if($version eq "HTTP/1.0"); #
+            # }                                                                           #
+            ###############################################################################
+            if($closeme){
+              $out_header->{HTTP_CONNECTION()}="close";
+            }
+
+
+
+          #Before calling the dispatch, setup the parser to process further data.
+          #Attempt to further parse the message. It is up to middleware or application
+          #to reject the further processing of POST/PUT after the first 'chunk' has been parsed.
+
+          
+
+          #Push reader. 
+          $processed=0; 
+
+          if($body_len){
+            # Fixed body length. Single part
+              $state=STATE_BODY_CONTENT;
+
+              #Stop parser unless the first in pipeline is the current
+              last unless $rex == $pipeline->[0];
+          }
+          elsif(index($h->{"transfer-encoding"}//"", "chunked")>=0){
+            # Ignore content length and treat as chunked
+              $state=STATE_BODY_CHUNKED;
+              $chunked_state=0;
+
+              #Stop parser unless the first in pipeline is the current
+              last unless $rex == $pipeline->[0];
+              #next;
+          }
+          else{
+            # no body length specifed assumed no body
+            #
+            # restart the parsing loop
+            $state=$start_state;
+
+          }
+          #$state=$start_state;
+        }
+        elsif($state==STATE_BODY_CONTENT){
+          $pipeline->[0][uSAC::HTTP::Rex::in_progress_]=1;
+          #Process the body until the content length was found or last chunk found.
+
+          my $new=length($buf)-$processed;	#length of read buffer
+
+          Log::OK::TRACE and log_trace ("DOING BODY CONTENT......... $new");
+          $new=$new>$body_len?$len:$new;		#clamp to content length
+          $processed+=$new;			#track how much we have processed
+
+          my $payload=substr $buf, 0, $new, "";
+
+          if($processed==$body_len){
+            Log::OK::TRACE and log_trace ("DOING BODY CONTENT last ......... $new");
+            #
+            # Last send
+            #
+            $state=$start_state;
+            $processed=0;
+            #$_[PAYLOAD]="";#substr $buf, 0, $new, "";
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
+          }
+          else {
+            Log::OK::TRACE and log_trace ("DOING BODY CONTENT not last ......... $new");
+            # 
+            # Not last send
+            #
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, $dummy_cb);
+            $body_len-=$new;
+
+            #First pass always sets the header to undef for subsequent middleware
+            #$out_header=undef;
+          }
+
+        }
+
+        elsif($state==STATE_BODY_CHUNKED){
+          $pipeline->[0][uSAC::HTTP::Rex::in_progress_]=1;
+          #CHUNKED
+          #If transfer encoding is chunked, then we process as a series of chunks
+          #Again, an undef callback indicats a final write
+          #my $lengh=
+          if($chunked_state == 0){
+            #Size line
+            my $index = index $buf, CRLF;
+            my $index2= index $buf, CRLF, $index+2;
+
+            my $size=hex substr($buf, 0, $index);
+
+            if(($index2-$index)==2){
+              #Last one
+              $state=$start_state;
+              my $payload="";
+              $buf=substr $buf, $index2+2;
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
+
+            }
+            elsif($index>=0) {
+              # Not the last one 
+              $buf=substr $buf, $index+2;
+              $chunked_state=$size;
+            }
+            else {
+              #ERROR CRLF NOT FOUND
+              #$state=STATE_ERROR;
+              last;
+            }
+          }
+          else {
+            
+            if(length($buf) >= ($chunked_state +2)){
+              #$buf=substr $buf, $chunked_state+2;
+              my $payload=substr $buf, 0, $chunked_state;
+              $buf=substr $buf,  $chunked_state+2;
+              $chunked_state=0;
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, $dummy_cb);
+              #$out_header=undef;
+            }
+            else {
+              # need more data
+              last;
+            }
+            
+          }
+          #$state=$start_state;
+
+        }
+        elsif($state==STATE_ERROR){
+          $body_len=0;
+          last;
+        }
+        else {
+          #Error state
+        }
+      }
+
+      # Pipeline support for requests with no body.
+      # Check the first rex object. if not in progress. the trigger
+      for($pipeline->[0]//()){
+        if(!$_->[uSAC::HTTP::Rex::in_progress_]){
+          $_->[uSAC::HTTP::Rex::in_progress_]=1;
+          my $route=$_->[uSAC::HTTP::Rex::route_];
+          $route->[1][ROUTE_INNER_HEAD]($route, $_, $_->[uSAC::HTTP::Rex::in_headers_], $_->[uSAC::HTTP::Rex::out_headers_], my $a="", my $cb=undef);
+        }
+      }
+    }
+    catch($e){
+      #If debugging is enabled. dump the stack trace?
+
+      require Error::Show;
+
+      my $context;
+      if(ref($e)){
+        $context=Error::Show::context(message=>$e, frames=>[reverse $e->trace->frames]);
+      }
+      else {
+        $context=Error::Show::context($e);
+      }
+      Log::OK::ERROR and log_error  $context;
+
+      if(Log::OK::DEBUG){
+        $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
+        # my $s=$rex->[uSAC::HTTP::Rex::session_]->get_serializer();
+        #$route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+        my $s =$_[REX][uSAC::HTTP::Rex::serializer_]->&*;
+        $s->($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+      }
+      else {
+        $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
+        #my $s=$rex->[uSAC::HTTP::Rex::session_]->get_serializer();
+        my $s =$_[REX][uSAC::HTTP::Rex::serializer_]->&*;
+        #$route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0}, my $c="", my $d=undef);
+        $s->($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0}, my $c="", my $d=undef);
+      }
+    }
+  };
+  }
+  elsif($mode==MODE_REQUEST){
+  sub {
+    Log::OK::TRACE and log_trace "--TOp of parser";
+    my $processed=0;
+    my $rex;#=$pipeline->[$pipeline->@*-1];
+
+    # The rex the parser will add to is always the last one in pipeline
+    $rex=$pipeline->[-1]; # Each time we call this we use the last item
+
+    # Set default HTTP code
+    $code=-1;
+    try {
+      \my $buf=\$_[0][0];
+
+      #while ( $len=length $buf) {
+      while ($buf and $pipeline->@* < $pipeline_limit) {
+        #Dual mode variables:
+        #	server:
+        #	$method => method
+        #	$url => uri
+        #	$version => http version
+        #
+        #	client:
+        #	$method=> http version
+        #	$url=> status code
+        #	$version => comment
+        #
+        #if ($state== STATE_RESPONSE or $state == STATE_REQUEST) {
+        if ($state < STATE_HEADERS) {
+          # Don't process new request until existing request is done.
+          # Rely on reader being pumped at output stage to retrigger
+          
+          #return if $mode == MODE_RESPONSE and $pipeline->@*;
+          #
+          $pos3=index $buf, CRLF2;#, $ppos;
+          # Header is not complete. need more
+          return if($pos3<=0);
+          
+          # Header is received completely
+          #
+          $h={};
+          $body_type=undef;	
+          $body_len=undef;
+            
+          @lines=split "\015\12", substr($buf,0, $pos3);
+          
+          # If static first line is specified, use.  For LSP support:
+            ($method, $uri, $version)=split " ", shift @lines, 3; #substr $buf, 0, $vi;
+          
+
+          #for my ($k, $val)(map split(": ", $_, 2), @lines){
+          my ($k, $val);
+          my $_in;
+
+          for(@lines){
+            #($k, $val)=split(": ", $_, 2);
+            $_in=index $_, ": ";
+            $k=substr $_, 0, $_in;
+            $val=substr $_, $_in+2;
+            $k=lc $k;
+            if($k eq "set-cookie"){
+              # Set-Cookie could occur multiple times and is not listable.
+              # Special case
+              push @$_, $val  for $h->{$k}; # auto viv?
+            }
+            else {
+              # RFC 6265 Cookie SHOULD NOT occur more than once. So treat as 'listable'
+              $_ = defined $_ ? $_ . "," . $val : $val for $h->{$k};
+            }
+          }
+
+          $buf=substr $buf, $pos3+4;
+
+
+          ######################################################################
+          # if($psgi_compat){                                                  #
+          #                                                                    #
+          #   # If the package variable for PSGI compatibility is set          #
+          #   # we make sure our in header more like psgi environment          #
+          #   #  Upper case headers sent from the client                       #
+          #   #  combine multiple headers into a single comma separated list   #
+          #   for my ($k, $e)(%h){                                             #
+          #     $h{"HTTP_".((uc $k) =~tr/-/_/r)}=ref $e? join ", ", $e->@*:$e; #
+          #                                                                    #
+          #   }                                                                #
+          # }                                                                  #
+          ######################################################################
+
+          $host=$h->{host};
+          $body_len=$h->{"content-length"};
+          $connection=$h->{"connection"};
+
+          ###############################################################
+          # if( $version eq "HTTP/1.0"){                                #
+          #   # Explicit keep alive                                     #
+          #   $closeme=($connection !~ /keep-alive/ai);                 #
+          # }                                                           #
+          # else{                                                       #
+          #   # Explicit close                                          #
+          #   #$closeme=($connection and $connection=~ /close/ai);      #
+          #   $closeme=($connection and index($connection, "close")>0); #
+          # }                                                           #
+          ###############################################################
+
+          $closeme=($connection and index($connection, "close")>0);
+
+          #$closeme=(!$keep_alive or $closeme);
+
+          Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
+          Log::OK::DEBUG and log_debug "URI/Code: $uri";
+          Log::OK::DEBUG and log_debug "verison/description: $version";
+
+          # Find route
+          
+            #$rex=$pipeline->[0];
+            $route=$rex->[uSAC::HTTP::Rex::route_];
+
+            # In client mode the route (and the rex) is already defined.
+            # However the headers from incomming request and the response code
+            # need updating. 
+            #
+            #$rex->[uSAC::HTTP::Rex::headers_]=\%h;
+            $code=$uri; # NOTE: variable is called $uri, but doubles as code in client mode
+
+            # Set the status in the innerware on the existing rex
+            $rex->[STATUS]=$code;
+
+            # Loopback the output headers to the input side of the chain.
+            # 
+            ########################################################
+            # unless($enable_pipeline){                            #
+            #   #Session stores the outgoing rex for clients       #
+            #   $out_header=$rex->[uSAC::HTTP::Rex::out_headers_]; #
+            #   $route=$rex->[uSAC::HTTP::Rex::route_];            #
+            #                                                      #
+            # }                                                    #
+            ########################################################
+
+
+          #Before calling the dispatch, setup the parser to process further data.
+          #Attempt to further parse the message. It is up to middleware or application
+          #to reject the further processing of POST/PUT after the first 'chunk' has been parsed.
+
+          
+
+          #Push reader. 
+          $processed=0; 
+
+          if($body_len){
+            # Fixed body length. Single part
+              $state=STATE_BODY_CONTENT;
+
+              #Stop parser unless the first in pipeline is the current
+              last unless $rex == $pipeline->[0];
+          }
+          elsif(index($h->{"transfer-encoding"}//"", "chunked")>=0){
+            # Ignore content length and treat as chunked
+              $state=STATE_BODY_CHUNKED;
+              $chunked_state=0;
+
+              #Stop parser unless the first in pipeline is the current
+              last unless $rex == $pipeline->[0];
+              #next;
+          }
+          else{
+            # no body length specifed assumed no body
+            #
+            # restart the parsing loop
+            $state=$start_state;
+
+          }
+          #$state=$start_state;
+        }
+        elsif($state==STATE_BODY_CONTENT){
+          $pipeline->[0][uSAC::HTTP::Rex::in_progress_]=1;
+          #Process the body until the content length was found or last chunk found.
+
+          my $new=length($buf)-$processed;	#length of read buffer
+
+          Log::OK::TRACE and log_trace ("DOING BODY CONTENT......... $new");
+          $new=$new>$body_len?$len:$new;		#clamp to content length
+          $processed+=$new;			#track how much we have processed
+
+          my $payload=substr $buf, 0, $new, "";
+
+          if($processed==$body_len){
+            Log::OK::TRACE and log_trace ("DOING BODY CONTENT last ......... $new");
+            #
+            # Last send
+            #
+            $state=$start_state;
+            $processed=0;
+            #$_[PAYLOAD]="";#substr $buf, 0, $new, "";
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
+          }
+          else {
+            Log::OK::TRACE and log_trace ("DOING BODY CONTENT not last ......... $new");
+            # 
+            # Not last send
+            #
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, $dummy_cb);
+            $body_len-=$new;
+
+            #First pass always sets the header to undef for subsequent middleware
+            #$out_header=undef;
+          }
+
+        }
+
+        elsif($state==STATE_BODY_CHUNKED){
+          $pipeline->[0][uSAC::HTTP::Rex::in_progress_]=1;
+          #CHUNKED
+          #If transfer encoding is chunked, then we process as a series of chunks
+          #Again, an undef callback indicats a final write
+          #my $lengh=
+          if($chunked_state == 0){
+            #Size line
+            my $index = index $buf, CRLF;
+            my $index2= index $buf, CRLF, $index+2;
+
+            my $size=hex substr($buf, 0, $index);
+
+            if(($index2-$index)==2){
+              #Last one
+              $state=$start_state;
+              my $payload="";
+              $buf=substr $buf, $index2+2;
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
+
+            }
+            elsif($index>=0) {
+              # Not the last one 
+              $buf=substr $buf, $index+2;
+              $chunked_state=$size;
+            }
+            else {
+              #ERROR CRLF NOT FOUND
+              #$state=STATE_ERROR;
+              last;
+            }
+          }
+          else {
+            
+            if(length($buf) >= ($chunked_state +2)){
+              #$buf=substr $buf, $chunked_state+2;
+              my $payload=substr $buf, 0, $chunked_state;
+              $buf=substr $buf,  $chunked_state+2;
+              $chunked_state=0;
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, $dummy_cb);
+              #$out_header=undef;
+            }
+            else {
+              # need more data
+              last;
+            }
+            
+          }
+          #$state=$start_state;
+
+        }
+        elsif($state==STATE_ERROR){
+          $body_len=0;
+          last;
+        }
+        else {
+          #Error state
+        }
+      }
+
+      # Pipeline support for requests with no body.
+      # Check the first rex object. if not in progress. the trigger
+      for($pipeline->[0]//()){
+        if(!$_->[uSAC::HTTP::Rex::in_progress_]){
+          $_->[uSAC::HTTP::Rex::in_progress_]=1;
+          my $route=$_->[uSAC::HTTP::Rex::route_];
+          $route->[1][ROUTE_INNER_HEAD]($route, $_, $_->[uSAC::HTTP::Rex::in_headers_], $_->[uSAC::HTTP::Rex::out_headers_], my $a="", my $cb=undef);
+        }
+      }
+    }
+    catch($e){
+      #If debugging is enabled. dump the stack trace?
+
+      require Error::Show;
+
+      my $context;
+      if(ref($e)){
+        $context=Error::Show::context(message=>$e, frames=>[reverse $e->trace->frames]);
+      }
+      else {
+        $context=Error::Show::context($e);
+      }
+      Log::OK::ERROR and log_error  $context;
+
+      if(Log::OK::DEBUG){
+        $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
+        # my $s=$rex->[uSAC::HTTP::Rex::session_]->get_serializer();
+        #$route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+        my $s =$_[REX][uSAC::HTTP::Rex::serializer_]->&*;
+        $s->($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>length $context} ,my $c=$context, my $d=undef);
+      }
+      else {
+        $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
+        #my $s=$rex->[uSAC::HTTP::Rex::session_]->get_serializer();
+        my $s =$_[REX][uSAC::HTTP::Rex::serializer_]->&*;
+        #$route and $route->[1][ROUTE_SERIALIZE]($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0}, my $c="", my $d=undef);
+        $s->($route, $rex, {}, my $b={HTTP_CONTENT_LENGTH()=>0}, my $c="", my $d=undef);
+      }
+    }
+  };
+  }
+  else {
+  sub {
+    Log::OK::TRACE and log_trace "--TOp of parser";
+    my $processed=0;
+    my $rex;#=$pipeline->[$pipeline->@*-1];
+
+    # The rex the parser will add to is always the last one in pipeline
+    $rex=$pipeline->[-1]; # Each time we call this we use the last item
+
+    # Set default HTTP code
+    $code=-1;
+    try {
+      \my $buf=\$_[0][0];
+
+      #while ( $len=length $buf) {
+      while ($buf and $pipeline->@* < $pipeline_limit) {
+        #Dual mode variables:
+        #	server:
+        #	$method => method
+        #	$url => uri
+        #	$version => http version
+        #
+        #	client:
+        #	$method=> http version
+        #	$url=> status code
+        #	$version => comment
+        #
+        #if ($state== STATE_RESPONSE or $state == STATE_REQUEST) {
+        if ($state < STATE_HEADERS) {
+          # Don't process new request until existing request is done.
+          # Rely on reader being pumped at output stage to retrigger
+          
+          #return if $mode == MODE_RESPONSE and $pipeline->@*;
+          #
+          $pos3=index $buf, CRLF2;#, $ppos;
+          # Header is not complete. need more
+          return if($pos3<=0);
+          
+          # Header is received completely
+          #
+          $h={};
           $body_type=undef;	
           $body_len=undef;
             
@@ -197,14 +904,21 @@ sub make_parser{
 
           if($mode==MODE_RESPONSE){
           for(@lines){
-            #($k, $val)=split(": ", $_, 2);
             $_in=index $_, ": ";
-            $k=substr $_, 0, $_in;
-            $val=substr $_, $_in+2;
-            $k=lc $k;
-            # RFC 6265 Cookie SHOULD NOT occur more than once. So treat as 'listable'
-            $_ = defined $_ ? $_ . "," . $val : $val for $h{$k};
+            $h->{lc substr $_, 0, $_in}=substr $_, $_in+2;
+            # RFC 6265 Cookie SHOULD NOT occur more than once.
           }
+          ###############################################################################
+          # for(@lines){                                                                #
+          #   #($k, $val)=split(": ", $_, 2);                                           #
+          #   $_in=index $_, ": ";                                                      #
+          #   $k=substr $_, 0, $_in;                                                    #
+          #   $val=substr $_, $_in+2;                                                   #
+          #   $k=lc $k;                                                                 #
+          #   # RFC 6265 Cookie SHOULD NOT occur more than once. So treat as 'listable' #
+          #   $_ = defined $_ ? $_ . "," . $val : $val for $h{$k};                      #
+          # }                                                                           #
+          ###############################################################################
         }
           if($mode==MODE_REQUEST){
           for(@lines){
@@ -216,11 +930,11 @@ sub make_parser{
             if($k eq "set-cookie"){
               # Set-Cookie could occur multiple times and is not listable.
               # Special case
-              push @$_, $val  for $h{$k}; # auto viv?
+              push @$_, $val  for $h->{$k}; # auto viv?
             }
             else {
               # RFC 6265 Cookie SHOULD NOT occur more than once. So treat as 'listable'
-              $_ = defined $_ ? $_ . "," . $val : $val for $h{$k};
+              $_ = defined $_ ? $_ . "," . $val : $val for $h->{$k};
             }
           }
         }
@@ -242,9 +956,9 @@ sub make_parser{
           # }                                                                  #
           ######################################################################
 
-          $host=$h{host};
-          $body_len=$h{"content-length"};
-          $connection=$h{"connection"};
+          $host=$h->{host};
+          $body_len=$h->{"content-length"};
+          $connection=$h->{"connection"};
 
           ###############################################################
           # if( $version eq "HTTP/1.0"){                                #
@@ -298,7 +1012,7 @@ sub make_parser{
 
 
             $rex->[uSAC::HTTP::Rex::out_headers_]=$out_header;
-            $rex->[uSAC::HTTP::Rex::in_headers_]=\%h;
+            $rex->[uSAC::HTTP::Rex::in_headers_]=$h;
 
             $rex->[URI]=$uri;
             $rex->[METHOD]=$method;
@@ -391,8 +1105,6 @@ sub make_parser{
           #Attempt to further parse the message. It is up to middleware or application
           #to reject the further processing of POST/PUT after the first 'chunk' has been parsed.
 
-          my $current=$rex == $pipeline->[0];
-          # Stop the parsing if the rex is not the first in the list. 
           
 
           #Push reader. 
@@ -403,15 +1115,15 @@ sub make_parser{
               $state=STATE_BODY_CONTENT;
 
               #Stop parser unless the first in pipeline is the current
-              last unless $current;
+              last unless $rex == $pipeline->[0];
           }
-          elsif(index($h{"transfer-encoding"}//"", "chunked")>=0){
+          elsif(index($h->{"transfer-encoding"}//"", "chunked")>=0){
             # Ignore content length and treat as chunked
               $state=STATE_BODY_CHUNKED;
               $chunked_state=0;
 
               #Stop parser unless the first in pipeline is the current
-              last unless $current;
+              last unless $rex == $pipeline->[0];
               #next;
           }
           else{
@@ -443,14 +1155,14 @@ sub make_parser{
             $state=$start_state;
             $processed=0;
             #$_[PAYLOAD]="";#substr $buf, 0, $new, "";
-            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
           }
           else {
             Log::OK::TRACE and log_trace ("DOING BODY CONTENT not last ......... $new");
             # 
             # Not last send
             #
-            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, $dummy_cb);
+            $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, $dummy_cb);
             $body_len-=$new;
 
             #First pass always sets the header to undef for subsequent middleware
@@ -477,7 +1189,7 @@ sub make_parser{
               $state=$start_state;
               my $payload="";
               $buf=substr $buf, $index2+2;
-              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, my $cb=undef);
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
 
             }
             elsif($index>=0) {
@@ -498,7 +1210,7 @@ sub make_parser{
               my $payload=substr $buf, 0, $chunked_state;
               $buf=substr $buf,  $chunked_state+2;
               $chunked_state=0;
-              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, \%h, $out_header, $payload, $dummy_cb);
+              $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, $dummy_cb);
               #$out_header=undef;
             }
             else {
@@ -559,6 +1271,7 @@ sub make_parser{
       }
     }
   };
+  }
 }
 
 
@@ -586,8 +1299,309 @@ sub make_serialize{
   my $index;
   my $i=1;
   my $ctx;
+  
+  if($mode==MODE_RESPONSE){
+  sub {
+    $ctx=undef;
+    #say STDERR "TOP OF Serialize for Rex $_[REX]";
+
+    # Getting this far in the middleware indicates we really are in progress
+    # Force this setting to make sure.
+
+    $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
 
 
+
+    # If the callback is undefined, use the dropper to 'end' the session
+    # Otherwise use the provided callback.
+    # The writer will only execute the callback if it is a 'true' value.
+    # If middleware explicitly sets the callback to 0, it effectively causes
+    # a synchronous write with now callback. Which is  useful writing out 
+    # small amounts of header data before a body.
+    #
+    #NOTE: experimenting with not using dropper when undefined.
+    # For HTTP/1.1 dropper will be called from other locations on error
+    # for HTTP/1.0 dropper is called on close anyhow.
+    # saves call
+    #
+    my $cb=$_[CB];
+    my $dummy_cb=0;#sub {};#undef;#$_[REX][uSAC::HTTP::Rex::dropper_];
+
+    my @rreply=("");
+    my $reply=\@rreply;
+    #Log::OK::ERROR and log_error "IN SERIALIZE";
+    if($_[OUT_HEADER]){
+
+      # If no valid code is set then set default 200
+      #
+      my $code= $_[REX][STATUS]//HTTP_OK;
+
+
+
+        $rreply[0]=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
+        # Render headers
+        #
+
+        $rreply[0].=$static_headers;
+
+        # TODO: fix with multipart uploads? what is the content length
+        #
+        if($_[PAYLOAD] and not exists($_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}) and $enable_chunked){
+
+          # force 
+          # Only set if
+          $_[OUT_HEADER]{HTTP_TRANSFER_ENCODING()}||="chunked";
+          $ctx=1; #Mark as needing chunked
+          $out_ctx{$_[REX]}=$ctx if $_[CB]; #Save only if we have a callback
+        }
+        elsif(!$_[PAYLOAD] and $code != HTTP_NOT_MODIFIED){
+
+          # No content but client might not have indicated a close. Force a content length of 0
+          $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0;
+        }
+        
+        # Render date header
+        #$_[OUT_HEADER]{HTTP_DATE()}//=$uSAC::HTTP::Session::Date;
+        $rreply[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
+
+        my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
+
+        for my ($k, $v)(%{$_[OUT_HEADER]}){
+          $rreply[0].= $k.": ".$v.CRLF;
+        }
+
+        for(@$v){
+          if(ref){
+            $_=encode_set_cookie $_;
+          }
+          # else assume already encoded
+          $rreply[0].= HTTP_SET_COOKIE().": ".$_.CRLF  
+        }
+
+
+
+
+
+      #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
+
+      #RFC 6265 -> duplicate cookies with the same name not permitted in same
+      #response
+      # Special handling of set cookie header for multiple values
+
+
+      #for my ($k, $v)(%{$_[OUT_HEADER]}){
+      #$reply->[0].= $k.": ".$v.CRLF;
+      #}
+
+      #$reply->[0].=$static_headers;
+      $rreply[0].=CRLF;
+
+      Log::OK::TRACE and say STDERR "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
+
+      # mark headers as done, if not informational
+      #
+      $_[OUT_HEADER]=undef if  $code>=HTTP_OK;
+
+
+      if($ctx){
+        # this is only set if we want chunked
+        #
+        $rreply[0].= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+        $rreply[0].="00".CRLF.CRLF unless $_[CB];
+
+        #say STDERR "Call write ..header , chuncked with body";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      }
+      else {
+       
+        $rreply[0].=$_[PAYLOAD];
+        #say STDERR "Call write .. header, with body";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      }
+      #Log::OK::TRACE and log_trace "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
+
+
+      # If logging is enabled call logging middleware on a seperate chain
+    }
+    else{
+      #Log::OK::DEBUG and log_debug "BODYONLY in serialize. length: ". length $_[PAYLOAD];
+      #Log::OK::DEBUG and log_debug "cb is $cb";
+      # No header specified. Just a body
+      #
+      if($ctx//=$out_ctx{$_[REX]}){
+        #Log::OK::DEBUG and log_debug "chunked write... ";
+        $rreply[0]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+
+        unless($_[CB]){
+          # Marked as last call
+          Log::OK::DEBUG and log_debug "chunked write... last calle (CB=undef)";
+          $rreply[0].="00".CRLF.CRLF;
+          delete $out_ctx{$_[REX]};
+        }
+
+        #say STDERR "Call write .. no header, chunked, just body";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      }
+      else{
+        #Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
+        #Log::OK::DEBUG and log_debug "normal write $cb";
+        # not chunked, so just write
+        #say STDERR "Call write .. no header, known size, just body";
+        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb);
+         
+      }
+
+    }
+
+    # The rex has been processed, LAST CALL
+    unless($cb){
+        ## ONLY shift he pipeline when its a respoonse (SERVER MODE)
+        #my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
+        #shift @$pipeline;
+        shift $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
+        # Call dropper with no error to trigger pump
+        $_[REX][uSAC::HTTP::Rex::dropper_]->() if $_[REX][uSAC::HTTP::Rex::pipeline_]->@*;
+    }
+
+  }
+  }
+  elsif($mode==MODE_REQUEST){
+  sub {
+    $ctx=undef;
+    #say STDERR "TOP OF Serialize for Rex $_[REX]";
+
+    # Getting this far in the middleware indicates we really are in progress
+    # Force this setting to make sure.
+
+    $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
+
+
+
+    # If the callback is undefined, use the dropper to 'end' the session
+    # Otherwise use the provided callback.
+    # The writer will only execute the callback if it is a 'true' value.
+    # If middleware explicitly sets the callback to 0, it effectively causes
+    # a synchronous write with now callback. Which is  useful writing out 
+    # small amounts of header data before a body.
+    #
+    #NOTE: experimenting with not using dropper when undefined.
+    # For HTTP/1.1 dropper will be called from other locations on error
+    # for HTTP/1.0 dropper is called on close anyhow.
+    # saves call
+    #
+    my $cb=$_[CB];
+    my $dummy_cb=0;#sub {};#undef;#$_[REX][uSAC::HTTP::Rex::dropper_];
+
+    my $reply=[""];
+    #Log::OK::ERROR and log_error "IN SERIALIZE";
+    if($_[OUT_HEADER]){
+
+      # If no valid code is set then set default 200
+      #
+      my $code= $_[REX][STATUS]//HTTP_OK;
+
+
+
+        return &{$_[ROUTE][1][ROUTE_ERROR_HEAD]} unless $code;
+
+        # serialize in client mode is a request
+        #
+        $reply->[0]="$_[REX][METHOD] $_[REX][PATH] $protocol".CRLF;
+
+        $reply->[0].=$static_headers;
+
+        for my ($k, $v)(%{$_[OUT_HEADER]}){
+          $reply->[0].= $k.": ".$v.CRLF;
+        }
+
+
+      #$_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=0 unless($_[PAYLOAD]);
+
+      #RFC 6265 -> duplicate cookies with the same name not permitted in same
+      #response
+      # Special handling of set cookie header for multiple values
+
+
+      #for my ($k, $v)(%{$_[OUT_HEADER]}){
+      #$reply->[0].= $k.": ".$v.CRLF;
+      #}
+
+      #$reply->[0].=$static_headers;
+      $reply->[0].=CRLF;
+
+      Log::OK::TRACE and say STDERR "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
+
+      # mark headers as done, if not informational
+      #
+      $_[OUT_HEADER]=undef if  $code>=HTTP_OK;
+
+
+      if($ctx){
+        # this is only set if we want chunked
+        #
+        $reply->[0].= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+        $reply->[0].="00".CRLF.CRLF unless $_[CB];
+
+        #say STDERR "Call write ..header , chuncked with body";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      }
+      else {
+       
+        $reply->[0].=$_[PAYLOAD];
+        #say STDERR "Call write .. header, with body";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      }
+      #Log::OK::TRACE and log_trace "HEADER AND BODY in serialize for $_[REX] length: ". length($reply->[0]). "callback: $cb";
+
+
+      # If logging is enabled call logging middleware on a seperate chain
+    }
+    else{
+      #Log::OK::DEBUG and log_debug "BODYONLY in serialize. length: ". length $_[PAYLOAD];
+      #Log::OK::DEBUG and log_debug "cb is $cb";
+      # No header specified. Just a body
+      #
+      if($ctx//=$out_ctx{$_[REX]}){
+        #Log::OK::DEBUG and log_debug "chunked write... ";
+        $reply->[0]= $_[PAYLOAD]?sprintf("%02X".CRLF, length $_[PAYLOAD]).$_[PAYLOAD].CRLF : "";
+
+        unless($_[CB]){
+          # Marked as last call
+          Log::OK::DEBUG and log_debug "chunked write... last calle (CB=undef)";
+          $reply->[0].="00".CRLF.CRLF;
+          delete $out_ctx{$_[REX]};
+        }
+
+        #say STDERR "Call write .. no header, chunked, just body";
+        $_[REX][uSAC::HTTP::Rex::write_]($reply, $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]($reply, $cb);
+      }
+      else{
+        #Log::OK::DEBUG and log_debug "Las Non chunked write" unless $cb;
+        #Log::OK::DEBUG and log_debug "normal write $cb";
+        # not chunked, so just write
+        #say STDERR "Call write .. no header, known size, just body";
+        $_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb//$dummy_cb);
+        #$_[REX][uSAC::HTTP::Rex::write_]([$_[PAYLOAD]], $cb);
+         
+      }
+
+    }
+
+    # The rex has been processed, LAST CALL
+    unless($cb){
+        #my $pipeline=$_[REX][uSAC::HTTP::Rex::pipeline_];
+    }
+
+  }
+  }
+  else {
   sub {
     $ctx=undef;
     #say STDERR "TOP OF Serialize for Rex $_[REX]";
@@ -648,8 +1662,8 @@ sub make_serialize{
         }
         
         # Render date header
-        $_[OUT_HEADER]{HTTP_DATE()}//=$uSAC::HTTP::Session::Date;
-        #$reply->[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
+        #$_[OUT_HEADER]{HTTP_DATE()}//=$uSAC::HTTP::Session::Date;
+        $reply->[0].=HTTP_DATE.": ".$uSAC::HTTP::Session::Date.CRLF;
 
         my $v=delete $_[OUT_HEADER]{HTTP_SET_COOKIE()};
 
@@ -778,6 +1792,8 @@ sub make_serialize{
     }
 
   }
+  }
+
 };
 
 
