@@ -192,25 +192,37 @@ sub make_parser{
           $body_type=undef;	
           $body_len=undef;
             
-          @lines=split "\015\12", substr($buf,0, $pos3);
-          
-          # If static first line is specified, use.  For LSP support:
-            ($method, $uri, $version)=split " ", shift @lines, 3; #substr $buf, 0, $vi;
-          
+          s/: /\015\012/g and @lines= split "\015\12" for substr($buf, 0, $pos3+4,"");
 
-          #for my ($k, $val)(map split(": ", $_, 2), @lines){
-          my ($k, $val);
-          my $_in;
+          ($method, $uri, $version)=split " ", shift @lines, 3;
+
           my %pairs;
-          for(@lines){
-            $_in=index $_, ": ";
-            #$h->{lc substr $_, 0, $_in}=substr $_, $_in+2;
-            $pairs{lc substr $_, 0, $_in}= substr $_, $_in+2;
+          for my ($k, $v)(@lines){
+            $pairs{lc $k}=$v
             # RFC 6265 Cookie SHOULD NOT occur more than once.
           }
           $h=\%pairs;
-
-          $buf=substr $buf, $pos3+4;
+          
+          #################################################################################
+          # @lines=split "\015\12", substr($buf,0, $pos3);                                #
+          # # If static first line is specified, use.  For LSP support:                   #
+          #   ($method, $uri, $version)=split " ", shift @lines, 3; #substr $buf, 0, $vi; #
+          #                                                                               #
+          #                                                                               #
+          # #for my ($k, $val)(map split(": ", $_, 2), @lines){                           #
+          # my ($k, $val);                                                                #
+          # my $_in;                                                                      #
+          # my %pairs;                                                                    #
+          # for(@lines){                                                                  #
+          #   $_in=index $_, ": ";                                                        #
+          #   #$h->{lc substr $_, 0, $_in}=substr $_, $_in+2;                             #
+          #   $pairs{lc substr $_, 0, $_in}= substr $_, $_in+2;                           #
+          #   # RFC 6265 Cookie SHOULD NOT occur more than once.                          #
+          # }                                                                             #
+          # $h=\%pairs;                                                                   #
+          #                                                                               #
+          # $buf=substr $buf, $pos3+4;                                                    #
+          #################################################################################
 
 
           ######################################################################
