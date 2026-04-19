@@ -507,9 +507,9 @@ sub make_parser{
       # Pipeline support for requests with no body.
       # Check the first rex object. if not in progress. the trigger
       for($pipeline->[0]//()){
-        if(!$_->[uSAC::HTTP::Rex::in_progress_]){
-          $_->[uSAC::HTTP::Rex::in_progress_]=1;
-          my $route=$_->[uSAC::HTTP::Rex::route_];
+        unless($_->[uSAC::HTTP::Rex::in_progress_]++){
+          #$_->[uSAC::HTTP::Rex::in_progress_]=1;
+          $route=$_->[uSAC::HTTP::Rex::route_];
           $route->[1][ROUTE_INNER_HEAD]($route, $_, $_->[uSAC::HTTP::Rex::in_headers_], $_->[uSAC::HTTP::Rex::out_headers_], my $a="", my $cb=undef);
         }
       }
@@ -1348,7 +1348,9 @@ sub make_serialize{
       #
       my $code= $_[REX][STATUS]//HTTP_OK;
 
-
+      # force content length if we have header (first call) but no callback
+      #
+        $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $_[PAYLOAD] unless $_[CB];
 
         $rreply[0]=$protocol." ".$code." ". $code_to_name->[$code]. CRLF;
         # Render headers

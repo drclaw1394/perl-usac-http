@@ -786,7 +786,7 @@ method _run {
       Log::OK::TRACE and log_trace "-----PUSHING NEW WORKER--"; 
       push @$_pool, uSAC::Worker->new(rpc=>{}, work=> sub {
 
-          if($self->mode ==1){
+          if($self->mode == 1){
             $self->do_accept;
             #Start the acceptors running on this worker 
             $_->start for(values $_aws->%*);
