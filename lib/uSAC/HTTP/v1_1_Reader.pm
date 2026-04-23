@@ -192,9 +192,10 @@ sub make_parser{
           $body_type=undef;	
           $body_len=undef;
             
-          s/: /\015\012/g and @lines= split "\015\12" for substr($buf, 0, $pos3+4,"");
+          #s/: /\015\012/go and @lines= split "\015\012" for substr($buf, 0, $pos3+4, "");
+          tr/\015\012/: / and @lines= split ": " for substr($buf, 0, $pos3+4, "");
 
-          ($method, $uri, $version)=split " ", shift @lines, 3;
+          ($method, $uri, $version)=split / /, shift @lines, 3;
 
           my %pairs;
           for my ($k, $v)(@lines){

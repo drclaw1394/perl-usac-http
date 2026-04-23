@@ -271,7 +271,7 @@ method _setup_stream_passive {
 			or warn "chmod $l->{path} failed: $!";
 	}
 	else {
-    #IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
+    IO::FD::setsockopt $fh, IPPROTO_TCP, TCP_NODELAY, pack "i", 1;
 	}
 
 
