@@ -82,7 +82,8 @@ sub make_parser{
   my $cb=$options{callback};  # Callback for new rex  processing and route location
 
   #default is server mode to handle client requests
-  my $start_state = 0;#$mode == MODE_REQUEST? STATE_RESPONSE : STATE_REQUEST;
+  #my $start_state = $mode == MODE_REQUEST? STATE_RESPONSE : STATE_REQUEST;
+  my $start_state = $mode == MODE_RESPONSE? STATE_RESPONSE : STATE_REQUEST;
 
   my $psgi_compat=$options{psgi_compat}//$PSGI_COMPAT;
   my $keep_alive=$options{keep_alive}//$KEEP_ALIVE;
@@ -175,14 +176,30 @@ sub make_parser{
         #	$url=> status code
         #	$version => comment
         #
-        #if ($state== STATE_RESPONSE or $state == STATE_REQUEST) {
-        if ($state < STATE_HEADERS) {
+        #say STDERR "mode is $mode, state is $state";
+        if ($state == STATE_RESPONSE) {
+          $pos3=index $buf, CRLF;
+          ($method, $uri, $version)=split / /, substr($buf, 0, $pos3+2, ""), 3;
+          # Test version
+          chop $version;
+          chop $version;
+          unless($version eq "HTTP/1.1"){
+            #say STDERR " MOVE TO STATE ERROR";
+            $state=STATE_ERROR;
+          }
+          else {
+            #say STDERR " MOVE TO STATE HEADERS";
+            $state=STATE_HEADERS;
+          }
+        }
+        elsif ($state == STATE_HEADERS) {
           # Don't process new request until existing request is done.
           # Rely on reader being pumped at output stage to retrigger
           
           #return if $mode == MODE_RESPONSE and $pipeline->@*;
           #
           $pos3=index $buf, CRLF2;#, $ppos;
+
           # Header is not complete. need more
           return if($pos3<=0);
           
@@ -195,7 +212,7 @@ sub make_parser{
           #s/: /\015\012/go and @lines= split "\015\012" for substr($buf, 0, $pos3+4, "");
           tr/\015\012/: / and @lines= split ": " for substr($buf, 0, $pos3+4, "");
 
-          ($method, $uri, $version)=split / /, shift @lines, 3;
+          #($method, $uri, $version)=split / /, shift @lines, 3;
 
           my %pairs;
           for my ($k, $v)(@lines){
@@ -497,7 +514,13 @@ sub make_parser{
 
         }
         elsif($state==STATE_ERROR){
+
           $body_len=0;
+          $pos3=0;
+          $processed=0;
+          # call dropper 
+          #
+          $ex->[1](1);
           last;
         }
         else {
