@@ -35,7 +35,7 @@ sub uhm_template_plex2 {
   for my ($k, $v)($url_table->table->%*){
     if($v->{template}){
       $reverse{"/".$v->{output}}=$k;
-      say STDERR "/$v->{output} -> $k";
+      asay $STDERR, "/$v->{output} -> $k";
     }
   }
 
@@ -106,7 +106,7 @@ sub uhm_template_plex2 {
             my $path=join "/", @comps;
 
 
-            say STDERR " INPUT PATH FOR OUTPUT: $path ||||   $output";
+            asay $STDERR, " INPUT PATH FOR OUTPUT: $path ||||   $output";
 
             #$path=substr $path, 1;
             if($url_table->add_resource($path)){
@@ -123,7 +123,7 @@ sub uhm_template_plex2 {
             }
           }
           catch($e){
-            say $e;
+            asay $STDERR, $e;
             $_[PAYLOAD]= $e;
             $_[REX][STATUS]=HTTP_INTERNAL_SERVER_ERROR;
           }

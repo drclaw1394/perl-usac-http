@@ -100,7 +100,7 @@ sub run {
 
   # Map of ID to sites
   my %sites;
-
+  my %listen_specs;
   # Simple wrapper containing all sub sites. This allows the server to be created
   # at the end and simply add this group
   #
@@ -124,7 +124,9 @@ sub run {
   my $server_proxy=$server->sites->{"/"};
   $sites{"/"}=$server_proxy;
 
-  my $current=$server_proxy;
+  my $current_site=$server_proxy;
+  my $current_list_spec="po=5001,addr=::,t=stream";
+
   my %cur_opts=(
     list_dir=>1,
     headers=>\@static_headers,
@@ -137,15 +139,15 @@ sub run {
   # DEBUG#
   #
   use Devel::MAT::Dumper;
-  $current->add_route("dump", sub {
+  $current_site->add_route("dump", sub {
       use Devel::MAT::Dumper;
       asay $STDERR, "DUMPING MAT FILE";
       Devel::MAT::Dumper::dump("pmat.dat");
       1;
     });
 
-  #$current->add_middleware(uhm_state);#, uhs_authentication);
-  #$current->add_site(uhs_authentication);
+  #$current_site->add_middleware(uhm_state);#, uhs_authentication);
+  #$current_site->add_site(uhs_authentication);
   my $counter=0;
   my @unknown;
   my @roots;
@@ -157,7 +159,7 @@ sub run {
 
       # process any existing static file service location 
       #
-      $current->add_route("", uhm_static_root roots=>[@roots], %cur_opts) if @roots;
+      $current_site->add_route("", uhm_static_root roots=>[@roots], %cur_opts) if @roots;
       @roots=(); # Reset roots
 
       $_=shift;
@@ -171,16 +173,16 @@ sub run {
 
         # an existing site
         Log::OK::WARN and log_warn "Site prefix changed from ".$found->id. "to $spec->{id}" if $found->id ne $spec->{id};
-        $current=$found; 
+        $current_site=$found; 
       }
       else {
         # a new site
 
         my $new=uSAC::HTTP::Site->new($spec->%*);
         $sites{$spec->{id}}=$new;
-        $current->add_site($new);
-        $current=$new;
-        #$current->add_middleware(uhm_state);
+        $current_site->add_site($new);
+        $current_site=$new;
+        #$current_site->add_middleware(uhm_state);
       }
 
       next;
@@ -211,7 +213,7 @@ sub run {
       $cur_opts{log}=!$1;
 
   
-      $current->add_middleware( uhm_log dump_headers=>1, color=>1) if $cur_opts{log};
+      $current_site->add_middleware( uhm_log dump_headers=>1, color=>1) if $cur_opts{log};
 
     }
     elsif(/^-{1,2}ws/){
@@ -248,7 +250,7 @@ sub run {
       my $reader=uSAC::IO::SReader->new(fh=>$in_fd);
       my $writer=uSAC::IO::SWriter->new(fh=>$out_fd);
 
-      $current->add_route("",
+      $current_site->add_route("",
         uSAC::HTTP::Middleware::Websocket::uhm_websocket()=>
         sub {
           my $ws=$_[PAYLOAD];
@@ -290,7 +292,7 @@ sub run {
         push @middle, @e?@e:$_;
       }
       Log::OK::INFO and log_info "--MIDDLE WARES: @middle";
-      $current->add_route(@middle);
+      $current_site->add_route(@middle);
 
       
      next; 
@@ -315,22 +317,22 @@ sub run {
         #
         Log::OK::INFO and log_info "Loading PSGI from source:\n $target";
         require uSAC::HTTP::Middleware::PSGI;
-        $current->add_route("", uSAC::HTTP::Middleware::PSGI::uhm_psgi($_));
+        $current_site->add_route("", uSAC::HTTP::Middleware::PSGI::uhm_psgi($_));
       }
       elsif(/\.route$|\.pl$/){
         Log::OK::INFO and log_info "Loading Routes from source:\n $target";
         # perl script to run as  
-        $current->load($target);
+        $current_site->load($target);
       }
       elsif(/\:\:/){
         Log::OK::INFO and log_info "Loading Routes from APP:\n $_";
-        $current->load($_);
+        $current_site->load($_);
       }
       else {
         # Assume a dir for serving static files from
         Log::OK::INFO and log_info "Serving static files from source:\n $target";
         push @roots, $_;
-        #$current->add_route("", uhm_static_root roots=>[$_], %cur_opts);
+        #$current_site->add_route("", uhm_static_root roots=>[$_], %cur_opts);
       }
     }
     else {
@@ -343,7 +345,7 @@ sub run {
   # process any remaining static file service location 
   #
   say STDERR "-----STATIC ROOTS is @roots";
-  $current->add_route("", uhm_static_root roots=>[@roots], %cur_opts) if @roots;
+  $current_site->add_route("", uhm_static_root roots=>[@roots], %cur_opts) if @roots;
   @roots=(); # Reset roots
 
 
@@ -515,4 +517,4 @@ Enable logging of requests
 
 #set default listener if non provided
 
-
+--listen "po=90,pr=stream,f=INET,data='tls'
