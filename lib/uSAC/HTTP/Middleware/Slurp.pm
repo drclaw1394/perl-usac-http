@@ -6,6 +6,7 @@ use feature qw<current_sub refaliasing state>;
 our $UPLOAD_LIMIT=1_000_000;
 our $PART_LIMIT=$UPLOAD_LIMIT;
 use uSAC::Log;
+use uSAC::IO;
 
 use Log::OK;
 
@@ -28,9 +29,11 @@ my $dummy_cb=sub {};
 sub uhm_slurp {
   my %options=@_;
   
+  #adump $STDERR, "OPTIONS FOR slurp ", \%options;
   my $upload_dir=$options{upload_dir};
 	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
   my $close_on_complete=$options{close_on_complete}//1; # Default is to close
+
   my $mem_flag;
 
   my $fields_to_file=$options{fields_to_file}//[];   #list of field names to store to disk
@@ -57,6 +60,7 @@ sub uhm_slurp {
         Log::OK::TRACE and log_trace "---SLurp top for rex: ". $_[REX];
         my $c=$ctx{$_[REX]};
         my $payload=$_[PAYLOAD];
+        #adump $STDERR, $payload;
         $_[PAYLOAD]=""; # Consume payload
         unless($c){
           Log::OK::TRACE and log_trace "--Slurp context does not exist for rex";
@@ -109,7 +113,9 @@ sub uhm_slurp {
           for($_[IN_HEADER]{HTTP_CONTENT_TYPE()}//()){
             $head->{HTTP_CONTENT_TYPE()}=$_;
           }
-          $head->{_filename}//="single_part";
+          if($head->{HTTP_CONTENT_TYPE()} ne "application/x-www-form-urlencoded"){
+            $head->{_filename}//="single_part";
+          }
           $payload=[$head, $payload];
         }
 
@@ -146,16 +152,65 @@ sub uhm_slurp {
               #
               #my $path=IO::FD::mktemp catfile $upload_dir, "X" x 10;
               my $path;
-              generate_v4($path);
-              $path="$upload_dir/".MIME::Base64::encode_base64url($path);
+              my $pp;
+
+              my $index=rindex $h->{_filename}, ".";
+              my $ext=lc substr $h->{_filename}, $index+1;
+              $ext=".$ext" if $ext;
+
+              while(!$pp){
+
+                generate_v4($path);
+
+                  # NOTE: 
+                  # Base64 encoding is CASE sensitive. The file system might not be...
+                  # UUID collision doe to case will be very small. But to make sure it isn't an issue
+                  # we check if the file exists, if it does, generate a new uuid
+                  #
+                  #$path="$upload_dir/". MIME::Base64::encode_base64url($path);
+                  $path=MIME::Base64::encode_base64url($path);
+
+
+                  my $l1=substr $path,0, 3;
+
+                  my $l2=substr $path, 3,3;
+
+                  #adump $STDERR, "---file", $l1, $l2, "file name $h->{_filename}";
+              
+                  my $p="$upload_dir/$l1";
+
+                  (!-e $p) and mkdir $p or die $!;
+
+                  $p.="/$l2";
+
+                  (!-e $p) and mkdir $p or die $!;
+
+                  # Attempt tto add file extension
+                  
+
+                  $pp="$p/$path$ext";      # system level
+
+                  $path="$l1/$l2/$path$ext";  #url level relative to dir
+    
+
+                if( ! -e $p){
+                  last;
+                }
+
+                #Otherwise we repeat and try a different uuid
+
+              }
 
               my $error;
-
-              if(defined IO::FD::sysopen(my $fd, $path, O_CREAT|O_RDWR)){
+              print STDERR "Attempt to create a file at $path\n";
+              print STDERR "Attempt to create a file at $pp\n";
+              print STDERR "-------";
+              if(defined IO::FD::sysopen(my $fd, $pp, O_CREAT|O_RDWR)){
                 #store the file descriptor in the body field of the payload     
 
                 if(defined IO::FD::syswrite $fd, $payload->[1]){
                   $payload->[0]{_path}=$path;
+                  $payload->[0]{_root}=$upload_dir;
                   $payload->[1]=$fd;#$close_on_complete?undef:$fd;
                   push @$c, $payload;
                 }

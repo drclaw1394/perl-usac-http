@@ -29,13 +29,16 @@ use Data::Dumper;
 
 
 use Export::These qw<uhm_state_form encode_html_state_from>;
+
+use uSAC::HTTP::Middleware::Form;
+
 # Encodes state in application page (html) using a global form.
 # The middleware extracts the state into the parameters
 # Templates must render the state as a hiddin input
 
 my $defualt_name="state_asdfasdf";
 sub uhm_state_form{
-  my %options=@_;
+  my %options=my @options=@_;
 
   my $name=$options{name}//$defualt_name;
   
@@ -58,6 +61,7 @@ sub uhm_state_form{
 
 
   (
+    uhm_decode_form(@options),
     [ 
       # inner
       sub {
@@ -85,7 +89,7 @@ sub uhm_state_form{
           }
 
 
-          if(ref $_[PAYLOAD]){
+          if($_[REX][METHOD] ne "GET" and ref $_[PAYLOAD]){
             adump $STDERR , "--- USING PAYLOAD TO UPDATE STATE-- ", $_[PAYLOAD];
             # this decodedd payload from previous middlware or even redirect internal
             my $d=$_[PAYLOAD][0][PART_CONTENT];

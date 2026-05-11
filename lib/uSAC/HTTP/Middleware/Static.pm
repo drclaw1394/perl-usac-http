@@ -714,6 +714,7 @@ sub uhm_static_root {
 
         ROOTS:
         for my $html_root(@roots){
+          asay $STDERR, "--Searching root : $html_root for $p";
           #
           # Previous middleware did not find anything, or we don't have a
           # response just yet

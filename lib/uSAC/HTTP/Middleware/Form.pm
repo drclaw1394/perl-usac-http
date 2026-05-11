@@ -5,6 +5,7 @@ package uSAC::HTTP::Middleware::Form;
 
 use uSAC::HTTP;
 
+use uSAC::IO;
 use URL::Encode qw<url_decode_utf8>;
 use constant::more qw<PART_HEADER=0 PART_CONTENT>;
 
@@ -12,6 +13,7 @@ use Export::These qw<decode_urlencoded_form uhm_decode_form generate_protection_
 
 use UUID qw<uuid4>;
 use Crypt::JWT ":all";
+use Data::Dumper;
 
 
 # Stores the count of each form CSRF token instance.
@@ -118,7 +120,7 @@ sub verify_protection_token {
       }
       else {
         # Limit reached or maybe expired or doesn't exist
-        asay $STDERR, "Limit Reached or expired... removing ";
+        asay $STDERR,"Limit Reached or expired... removing ";
         delete $entry->{$csrf};
         return undef;
       }
@@ -148,7 +150,7 @@ sub decode_urlencoded_form {
 # Basic wrapper to simply give the key value pairs from slurped url
 # encoded form
 sub uhm_decode_form {
-  adump $STDERR, "DECODE FORM OPTIONS", @_;
+  asay  $STDERR, "DECODE FORM OPTIONS", Dumper @_;
   my %options=@_;
 
   my $merge_multipart=1;
@@ -235,7 +237,8 @@ sub uhm_decode_form {
 
       }
 
-        adump $STDERR, "CSRF name is ", $CSRF_field_name;
+        asay $STDERR, "CSRF name is ", $CSRF_field_name;
+        adump $STDERR, $_[PAYLOAD];
         # If a CSRF_field name is specifed in the first part, enable protection checking
         if($CSRF_field_name and ref($_[PAYLOAD][0][PART_CONTENT]) eq "HASH"){
 
@@ -244,11 +247,11 @@ sub uhm_decode_form {
           for($_[PAYLOAD][0][PART_CONTENT]{$CSRF_field_name}){
 
             return &rex_error_unauthorized unless $_;
-            adump $STDERR, "CSRF data is ", $_;
+            asay $STDERR, "CSRF data is ", $_;
 
 
             my $data=verify_protection_token($_);
-            adump $STDERR, "CSRF data parsed is ", $data;
+            asay  $STDERR, "CSRF data parsed is ", $data;
             if($data){
               $_=$data;
 

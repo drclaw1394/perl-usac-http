@@ -15,6 +15,13 @@ use uSAC::HTTP::Site;
 #use MIME::Base64;
 #use HTTP::State::Cookie qw<:encode :decode>;
 #use Cpanel::JSON::XS;
+#
+
+use Import::These qw<uSAC::HTTP::Middleware:: Multipart Slurp Form State::Form>;
+
+
+
+##    (Multipart -> Slurp -> Form Decode )->  State Form    -> History -> Template (render state)
 
 
 use Export::These qw<uhm_history>;
@@ -41,11 +48,12 @@ sub create_stack {
 # TODO 
 # need to check origin of referer
 sub uhm_history{
-  my %options=@_;
+  my %options=my @options=@_;
   my $name_space=$options{name_space};
   my $name=$options{name}//"viewstack";
   my $start_url=$options{start_url};
-
+  (
+    uhm_state_form(name=>$name_space, @options),
   [
     sub {
       my ($next)=@_;
@@ -55,6 +63,7 @@ sub uhm_history{
           adump $STDERR, "REX URI is", $_[REX][URI];
 
           adump $STDERR, "REX PATH is", $_[REX][PATH];
+
           return &$next if $_[REX][PATH]=~m{\.};  # if it looks like a file... leave it alone
 
           for my $state ($_[REX][STATE]{$name_space}){
@@ -144,14 +153,14 @@ sub uhm_history{
             else{
               # No stack or referer. Redirect to start, if we are not already there
               if($current->path ne $start_url){
-                adump $STDERR, "URI is NOT equal to start. REX:",$current->path, "start:", $start_url;
+                say STDERR "URI is NOT equal to start. REX:",$current->path, "start:", $start_url;
                 $_[REX][REDIRECT]=$start_url;
                 $_[REX][QUERY]="";
                 return &rex_redirect_found;
               }
               @$stack=($_[REX][URI]);
             }
-            adump $STDERR, "---RESULT OF STACK ON THIS PAGE---", $stack;
+            say STDERR "---RESULT OF STACK ON THIS PAGE---", $stack;
             &$next;
             # Now up to templates to use above url functions to render  links in html
           }
@@ -170,6 +179,7 @@ sub uhm_history{
     }
 
   ]
+)
 }
 
 

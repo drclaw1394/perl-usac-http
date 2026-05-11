@@ -5,6 +5,7 @@ no warnings "experimental";
 
 use uSAC::HTTP::Constants;
 use uSAC::HTTP::Header;
+use uSAC::IO;
 #use Exporter "import";
 
 use Export::These qw<uhm_multipart>;
@@ -13,7 +14,7 @@ use Export::These qw<uhm_multipart>;
 
 
 use constant::more qw<state_=0 first_ buff_ boundary_ b_len_>;
-use constant::more qw<BOUNDARY_SEARCH=0 PROCESS_HEADER>;
+use constant::more qw<BOUNDARY_SEARCH=0 PROCESS_HEADER PROCESS_BODY>;
 
 my $dummy_cb=sub {};
 
@@ -29,13 +30,16 @@ sub uhm_multipart {
     
     my $form_headers;
     my $processed;
+    my $last_part;
     sub {
-      my $ctx;
+      my $ctx=$in_ctx{$_[REX]};
+      
+      unless($ctx){
 
-      if($_[OUT_HEADER]){
         # skip if not multipart
         #
         return &$next unless ($_[IN_HEADER]{HTTP_CONTENT_TYPE()}//"") =~/multipart/i;
+
 
         my $boundary="--".(split("=", $_[IN_HEADER]{HTTP_CONTENT_TYPE()}))[1]; #boundary
         $ctx=[
@@ -51,80 +55,88 @@ sub uhm_multipart {
       }
       
       # Get the context if not already set
-      $ctx//=$in_ctx{$_[REX]};
+
       # If not set, not multipart;
-      return &$next unless $ctx;
+      #return &$next unless $ctx;
 
       \my $buf=\($ctx->[buff_]);
 
       $buf.=$_[PAYLOAD];
 
+      my $index;
+      my $offset;
       #TODO: check for content-disposition and filename if only a single part.
       while(length $buf){
         if($ctx->[state_]==BOUNDARY_SEARCH){
+          #asay $STDERR, "---STATE is BOUNDARY SEARCH";
+          #asay $STDERR, $buf;
           #TODO: Should this be a search from the back?
           #
-          my $index=index($buf, $ctx->[boundary_]);
+          $index=index($buf, $ctx->[boundary_]);
+
           if($index>=0){
-            # Found full boundary.  end of part
-            my $len=($index-2);
+            #asay $STDERR, "FOUND boundary at $index";
+            $offset=$index+$ctx->[b_len_];
 
-            #test if last
-            my $offset=$index+$ctx->[b_len_];
+            $last_part=substr($buf, $offset, 4) eq "--".CRLF;
+            #asay $STDERR, "is last part $last_part";
+            #adump $STDERR, $ctx;
+            if($ctx->[first_]){
+              # Strip the first boundary away and redo loop
+              #asay $STDERR, "---REMOVE FIRST BOUNDARY";
+              $buf = substr $buf, $offset+2;
+              $ctx->[first_]=undef;
+              $ctx->[state_]=PROCESS_HEADER;
+            }
+            else {
+              #asay $STDERR, "NON FIRST BONDARY";
+              #adump $STDERR, [{}, $buf];
 
-            if(substr($buf, $offset, 4) eq "--".CRLF){
-              # Last part
-              #
-              $ctx->[first_]=1;	#reset first.. maybe not needed as destroyed
-
-              # Set next state
-              $ctx->[state_]=BOUNDARY_SEARCH;
+              my $len=($index-2);
               my $data=substr($buf, 0, $len);
-              
+
               $_[PAYLOAD]=[$form_headers, $data];
-              $_[CB]=undef;
+
+              if($last_part){
+
+                # Last part
+
+                $buf=substr $buf, $offset+4;
+                #
+                #$ctx->[first_]=1;	#reset first.. maybe not needed as destroyed
+
+                # Set next state
+
+                $_[CB]=undef;
+              }
+              else{
+                # Not last part
+                $buf=substr $buf, $offset+2;
+                $_[CB]=$dummy_cb;
+              }
+              $ctx->[state_]=PROCESS_HEADER;
               &$next;
 
-              $buf=substr $buf, $offset+4;
-            }
-            elsif(substr($buf, $offset, 2) eq CRLF){
-              #not last, regular part
-              my $data=substr($buf, 0, $len);
-
-              unless($ctx->[first_]){
-                # first boundary is start marker....
-                $_[PAYLOAD]=[$form_headers, $data];
-                $_[CB]=$dummy_cb;
-                &$next;
-                #$_[OUT_HEADER]=undef;
-              }
-              $ctx->[first_]=0;
-              #move past data and boundary
-              $buf=substr $buf, $offset+2;
-
-              # Allocate new part header here as we are about 
-              # process headers. Each part has a new hash ref for header
-              #
-              $form_headers={};
-              $ctx->[state_]=PROCESS_HEADER;
-              redo;
 
             }
-            else{
-              #need more
-              #return
-            }
-
           }
 
           else {
+            # No boundary found....
+            #asay $STDERR, "FULL BOUNDARY NOT FOUND..";
             # Full boundary not found, send partial, upto boundary length
-            my $len=length($buf)-$ctx->[b_len_];		#don't send boundary
-            my $data=substr($buf, 0, $len);
+            # NOTE: THIS ASSUMES THERE IS NOT PARIAL BOUNDARY MARKER
+            #
+            #my $len=length($buf)-$ctx->[b_len_];		#don't send boundary
+            #substr($buf, 0, $len);
+            my $data=$buf;
+            $buf="";
             $_[PAYLOAD]=[$form_headers, $data];
             $_[CB]=$dummy_cb;
             &$next;
-            $buf=substr $buf, $len;
+
+            #$buf=substr $buf, $len;
+            #asay  $STDERR, $buf;
             #wait for next read now
             return;
           }
@@ -134,8 +146,16 @@ sub uhm_multipart {
 
         }
         elsif($ctx->[state_]==PROCESS_HEADER){
+          #asay $STDERR, "PROCESSING HEADER STATE";
+          #asay $STDERR, $buf;
+          $form_headers={};
           #read any headers
           pos($buf)=0;#$processed;
+          
+          my $hindex=index $buf, CRLF.CRLF;
+
+
+          return unless $hindex>=0;
 
           while (){
             #TODO:  Clean this up
@@ -162,6 +182,7 @@ sub uhm_multipart {
                   $form_headers->{"_$k"}=$v;
                 }
               }
+              
               #need to split to isolate name and filename
               redo;
             }
@@ -169,16 +190,20 @@ sub uhm_multipart {
               $processed=pos($buf);
 
               #readjust the buffer no
-              $buf=substr $buf,$processed;
+              $buf=substr $buf, $processed;
               $processed=0;
+              $index-=($hindex+4);
 
-              #headers done. setup
+              #headers done. Remainder of part is data
+              #
+              
 
               #go back to state 0 and look for boundary
               $ctx->[state_]=BOUNDARY_SEARCH;
               last;
             }
             else {
+              
               die "other multipart header problem";
             }
           }
