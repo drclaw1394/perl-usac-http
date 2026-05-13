@@ -56,7 +56,7 @@ sub uhm_state_form{
   sub encode_html_state_from{
     my $hash=$_[0]//{$name=>{}};
     say STDERR "encoding html state  input is ", Dumper $hash;
-    return MIME::Base64::encode_base64url encode_json $hash->{$name}//{};
+    return MIME::Base64::encode_base64url(encode_json $hash->{$name}//{});
   }
 
 

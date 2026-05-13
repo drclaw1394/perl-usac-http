@@ -60,6 +60,7 @@ sub uhm_history{
 
       sub {
         if($_[OUT_HEADER]){
+          adump $STDERR, '=-=-==-=-=-=-=-=-=-=-=-=-==-=--=-=-=-=-=-=-==-';
           adump $STDERR, "REX URI is", $_[REX][URI];
 
           adump $STDERR, "REX PATH is", $_[REX][PATH];
@@ -68,19 +69,22 @@ sub uhm_history{
 
           for my $state ($_[REX][STATE]{$name_space}){
 
+              
             # decode state if it need if
             #
             #$state//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};
            
-            adump $STDERR, "REX STATE in URL::STACK", $state;
-            adump $STDERR, "stack is expected in : $name_space";
-            adump $STDERR, " stack is at: {$name_space}{$name}";
+            #adump $STDERR, "REX STATE in URL::STACK", $state;
+            #adump $STDERR, "stack is expected in : $name_space";
+            #adump $STDERR, " stack is at: {$name_space}{$name}";
             adump $STDERR, " stack value is: ", $_[REX][STATE]{$name_space}{$name};
 
 
-            my $stack=$_[REX][STATE]{$name_space}{$name}//=[];
 
-            my $referer=  $_[IN_HEADER]{HTTP_REFERER()}; # from header
+            my $stack=$_[REX][STATE]{$name_space}{$name}//=[];
+            my $replace=delete $_[REX][STATE]{$name_space}{replace};
+
+            my $referer=  $_[IN_HEADER]{HTTP_REFERER()};
 
             # TODO check the referer is of same origin. If not then reset the stack and redirect to start
             #
@@ -97,34 +101,36 @@ sub uhm_history{
             # Strip out state variable
             my $rex_url=$_[REX][URI] =~ s/&{0,1}$name_space=\w*//r;
 
-            # strip out replace flag
-
-            my $replace;
-
-            $rex_url=~ s/&{0,1}_replace_=(\w*)//;
-            $replace=!!$1;
-
+            adump $STDERR, "Request rex_url", $rex_url;
+            adump $STDERR, "org rex_url", $_[REX][URI];;
               
             my $current="URI"->new($_[REX][URI]);
 
             if($ref_path and $ref_path eq $current->path){
+              asay $STDERR, "---REF path and current resquest have equal paths";
               # referer is self... ie a post form submission with a redirect
-              # do not modify the stack  if we have on
+              # do not modify the stack  if we have one
            
 
               # Could also be a manual reload. In this case reset stack
               @$stack=($_[REX][URI]) unless @$stack;
 
+
+
             }
             elsif($ref_path and $ref_path eq "URI"->new($stack->[-1])->path) {
+              asay $STDERR, "---REF path and top of stack equal paths";
+
               # Have a referer and top of stack is the referer.
               # GOING FORWARD OR BACKARD
               #
                 asay $STDERR, "Have a referer and is equal to top of stack";
 
 
-              if("URI"->new($rex_url)->path eq "URI"->new($stack->[-2])->path){
+                if("URI"->new($rex_url)->path eq "URI"->new($stack->[-2])->path){
+                #if(undef){
 
+                asay $STDERR, "---current path and  second last stack are equal";
                 # Current URL is actually the previous page so pop stack
                 #
                 asay $STDERR, "--Backwards";
@@ -133,6 +139,7 @@ sub uhm_history{
                 pop @$stack;
               }
               else {
+                asay $STDERR, "---current path and  second last stack are NOT equal";
                 asay $STDERR, "--Forward";
                 
 
@@ -142,7 +149,18 @@ sub uhm_history{
                 # Replace the top of the stack if replace is set
                 pop @$stack if $replace;
                 adump $STDERR, "Replacing top of stack going forward?", $replace;
+
+
+
+                # Here we support the POST REDIRECT GET (PRG) pattern
+                # Push to stack if NOT a post
+                #
+                # Also only push if the new url is different to the current top
+                #
                 if($_[REX][METHOD] ne "POST"){
+
+
+                
                   push @$stack, $rex_url unless $rex_url eq $stack->[-1];
                 }
               }
@@ -151,16 +169,26 @@ sub uhm_history{
             # Referer is not top of stack. So redirect to  home or  top of stack
 
             else{
-              # No stack or referer. Redirect to start, if we are not already there
-              if($current->path ne $start_url){
-                say STDERR "URI is NOT equal to start. REX:",$current->path, "start:", $start_url;
-                $_[REX][REDIRECT]=$start_url;
-                $_[REX][QUERY]="";
-                return &rex_redirect_found;
+              asay $STDERR, "---REF path is OTHER";
+              asay $STDERR, $current->path, ("URI"->new($stack->[-1])->path);
+
+              if($current->path eq "URI"->new($stack->[-1])->path) {
+                # Current path is top of stack... We when back... do nothing.
+
               }
-              @$stack=($_[REX][URI]);
-            }
-            say STDERR "---RESULT OF STACK ON THIS PAGE---", $stack;
+              else {
+
+                # No stack or referer. Redirect to start, if we are not already there
+                if($current->path ne $start_url){
+                  asay $STDERR, "URI is NOT equal to start. REX:",$current->path, "start:", $start_url;
+                  $_[REX][REDIRECT]=$start_url;
+                  $_[REX][QUERY]="";
+                  return &rex_redirect_found;
+                }
+                @$stack=($_[REX][URI]);
+              }
+          }
+            asay $STDERR, "---RESULT OF STACK ON THIS PAGE---", $stack;
             &$next;
             # Now up to templates to use above url functions to render  links in html
           }
@@ -175,7 +203,19 @@ sub uhm_history{
     # Short circuit as we don't modify
     sub {
       my ($next)=@_;
-      $next;
+      sub {
+            if($_[REX][METHOD] =~ /(?:POST)|(?:PUT)|(?:PATCH)/){
+
+              #my $q="$name_space=$_[PAYLOAD][0][PART_CONTENT]{$name_space}";
+               my $q="$name_space=".encode_html_state_from $_[REX][STATE], $name_space;
+              #my $a=$_[REX][REDIRECT]=$_[REX][PATH]."?$q";
+              $_[REX][QUERY]=join "&", $_[REX][QUERY]//(), $q;
+              return &rex_redirect_found;
+            }
+            else {
+              &$next;
+            }
+      }
     }
 
   ]
