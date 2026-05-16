@@ -196,7 +196,6 @@ method rebuild_routes {
     else {
       # Assume "normal" route
       local $"="|";
-      say "REBUILDING NORMAL ROUTE @$r";
       $result=$self->_add_route(@$r);
       Exception::Class::Base->throw("Route Addition: attempt to use unsupported method. Must use explicit method with paths not starting with /") unless $result;
     }
@@ -278,6 +277,7 @@ method _add_route {
   my $inner_head;
   if(@inner){
     my $middler=Sub::Middler->new();
+
     for(@inner){
       $middler->register($_);
     }
@@ -563,9 +563,10 @@ method build_broker {
   
   my $parent=$self; 
   while($parent){
-    $broker=$self->broker; 
+    $broker=$parent->broker; 
+    #asay $STDERR, "Building broker in $self, parent: $parent, broker: $broker";
     last if $broker;
-    $parent=$_parent_site;
+    $parent=$parent->parent_site;
   }
   $broker;
 }
@@ -776,7 +777,6 @@ method post {
 #   
 method add_route {
       local $"="|";
-  asay $STDERR, "CALLED ADD ROUTE @_";
   # METHOD, path, type, middlewares
   my $state="SITE";
   my $method;

@@ -55,7 +55,7 @@ sub uhm_state_form{
 
   sub encode_html_state_from{
     my $hash=$_[0]//{$name=>{}};
-    say STDERR "encoding html state  input is ", Dumper $hash;
+    #asay $STDERR,"encoding html state  input is ", Dumper $hash;
     return MIME::Base64::encode_base64url(encode_json $hash->{$name}//{});
   }
 
@@ -69,10 +69,10 @@ sub uhm_state_form{
         sub {
           # Decode query if not decoded
           for($_[REX][QUERY]||()){
-            adump $STDERR, "URL is $_[REX][URI]";
-            adump $STDERR, "Query is", $_;
+            #adump $STDERR, "URL is $_[REX][URI]";
+            #adump $STDERR, "Query is", $_;
               $_=decode_urlencoded_form $_ unless ref;
-            adump $STDERR, "decoded query is", $_;
+              #adump $STDERR, "decoded query is", $_;
 
               for($_->{$name}){
                 # Continue decoding into scratch
@@ -81,7 +81,7 @@ sub uhm_state_form{
                   $_[REX][STATE]{$name}=decode_json MIME::Base64::decode_base64url $_;
                 }
                 catch($e){
-                  adump $STDERR, "Error in decoding state ", $e;
+                  #adump $STDERR, "Error in decoding state ", $e;
                   $_[REX][STATE]{$name}={};
                 }
                 # Set in scratch for use in rest of application
@@ -90,12 +90,12 @@ sub uhm_state_form{
 
 
           if($_[REX][METHOD] ne "GET" and ref $_[PAYLOAD]){
-            adump $STDERR , "--- USING PAYLOAD TO UPDATE STATE-- ", $_[PAYLOAD];
+            #adump $STDERR , "--- USING PAYLOAD TO UPDATE STATE-- ", $_[PAYLOAD];
             # this decodedd payload from previous middlware or even redirect internal
             my $d=$_[PAYLOAD][0][PART_CONTENT];
             
             my $post_state=$d->{$name};
-            adump $STDERR, "POST HTML STATE DATA for $name", $d;
+            #adump $STDERR, "POST HTML STATE DATA for $name", $d;
             $_[REX][STATE]{$name}=decode_json MIME::Base64::decode_base64url $post_state;
 
             

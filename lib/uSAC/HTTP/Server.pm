@@ -130,6 +130,7 @@ field $_end_time   :mutator;
 BUILD {
   
   $self->broker//=uSAC::FastPack::Broker->new();# This could be default broker...
+  #asay $STDERR, "---- TOP LEVEL SERVER IS $self with broker ".$self->broker;
   $_pool=[];
   # Hash of all sites on this server (indexed by id)
 

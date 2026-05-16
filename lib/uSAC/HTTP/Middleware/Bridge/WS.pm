@@ -26,10 +26,11 @@ sub uhm_bridge_ws{
         
         # If external broker not set, find the closes one in site hierrachy
         my $broker=$options{broker};
+        asay $STDERR, "Site in linking bridge middleware", $opts{site};
         $broker//=($opts{site}->build_broker);
-
         # Lastley,, we just make our own... 
-        $broker//=uSAC::FastPack::Broker->new();
+        #$broker//=uSAC::FastPack::Broker->new();
+        asay $STDERR, "--Broker for bride", $broker;
         
         sub {
           my $bridge;

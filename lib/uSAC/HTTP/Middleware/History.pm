@@ -60,10 +60,10 @@ sub uhm_history{
 
       sub {
         if($_[OUT_HEADER]){
-          adump $STDERR, '=-=-==-=-=-=-=-=-=-=-=-=-==-=--=-=-=-=-=-=-==-';
-          adump $STDERR, "REX URI is", $_[REX][URI];
+          #adump $STDERR, '=-=-==-=-=-=-=-=-=-=-=-=-==-=--=-=-=-=-=-=-==-';
+          #adump $STDERR, "REX URI is", $_[REX][URI];
 
-          adump $STDERR, "REX PATH is", $_[REX][PATH];
+          #adump $STDERR, "REX PATH is", $_[REX][PATH];
 
           return &$next if $_[REX][PATH]=~m{\.};  # if it looks like a file... leave it alone
 
@@ -77,7 +77,7 @@ sub uhm_history{
             #adump $STDERR, "REX STATE in URL::STACK", $state;
             #adump $STDERR, "stack is expected in : $name_space";
             #adump $STDERR, " stack is at: {$name_space}{$name}";
-            adump $STDERR, " stack value is: ", $_[REX][STATE]{$name_space}{$name};
+            #adump $STDERR, " stack value is: ", $_[REX][STATE]{$name_space}{$name};
 
 
 
@@ -89,25 +89,25 @@ sub uhm_history{
             # TODO check the referer is of same origin. If not then reset the stack and redirect to start
             #
 
-            adump $STDERR, "Referer", $referer;
+            #adump $STDERR, "Referer", $referer;
 
             use URI;
             my $url="URI"->new($referer);
             my $ref_path=$url->path;
 
-            adump $STDERR, "Referer path", $ref_path;
+            #adump $STDERR, "Referer path", $ref_path;
 
 
             # Strip out state variable
             my $rex_url=$_[REX][URI] =~ s/&{0,1}$name_space=\w*//r;
 
-            adump $STDERR, "Request rex_url", $rex_url;
-            adump $STDERR, "org rex_url", $_[REX][URI];;
+            ##adump $STDERR, "Request rex_url", $rex_url;
+            #adump $STDERR, "org rex_url", $_[REX][URI];;
               
             my $current="URI"->new($_[REX][URI]);
 
             if($ref_path and $ref_path eq $current->path){
-              asay $STDERR, "---REF path and current resquest have equal paths";
+              #asay $STDERR, "---REF path and current resquest have equal paths";
               # referer is self... ie a post form submission with a redirect
               # do not modify the stack  if we have one
            
@@ -119,28 +119,28 @@ sub uhm_history{
 
             }
             elsif($ref_path and $ref_path eq "URI"->new($stack->[-1])->path) {
-              asay $STDERR, "---REF path and top of stack equal paths";
+              #asay $STDERR, "---REF path and top of stack equal paths";
 
               # Have a referer and top of stack is the referer.
               # GOING FORWARD OR BACKARD
               #
-                asay $STDERR, "Have a referer and is equal to top of stack";
+              #asay $STDERR, "Have a referer and is equal to top of stack";
 
 
                 if("URI"->new($rex_url)->path eq "URI"->new($stack->[-2])->path){
                 #if(undef){
 
-                asay $STDERR, "---current path and  second last stack are equal";
+                #asay $STDERR, "---current path and  second last stack are equal";
                 # Current URL is actually the previous page so pop stack
                 #
-                asay $STDERR, "--Backwards";
+                #asay $STDERR, "--Backwards";
 
                 # going backwards Remove state
                 pop @$stack;
               }
               else {
-                asay $STDERR, "---current path and  second last stack are NOT equal";
-                asay $STDERR, "--Forward";
+                #asay $STDERR, "---current path and  second last stack are NOT equal";
+                #asay $STDERR, "--Forward";
                 
 
                 # assume going forward, push current to stack, unless the the uri is the same as current stack top
@@ -148,7 +148,7 @@ sub uhm_history{
 
                 # Replace the top of the stack if replace is set
                 pop @$stack if $replace;
-                adump $STDERR, "Replacing top of stack going forward?", $replace;
+                #adump $STDERR, "Replacing top of stack going forward?", $replace;
 
 
 
@@ -169,8 +169,8 @@ sub uhm_history{
             # Referer is not top of stack. So redirect to  home or  top of stack
 
             else{
-              asay $STDERR, "---REF path is OTHER";
-              asay $STDERR, $current->path, ("URI"->new($stack->[-1])->path);
+              #asay $STDERR, "---REF path is OTHER";
+              #asay $STDERR, $current->path, ("URI"->new($stack->[-1])->path);
 
               if($current->path eq "URI"->new($stack->[-1])->path) {
                 # Current path is top of stack... We when back... do nothing.
@@ -180,7 +180,7 @@ sub uhm_history{
 
                 # No stack or referer. Redirect to start, if we are not already there
                 if($current->path ne $start_url){
-                  asay $STDERR, "URI is NOT equal to start. REX:",$current->path, "start:", $start_url;
+                  #asay $STDERR, "URI is NOT equal to start. REX:",$current->path, "start:", $start_url;
                   $_[REX][REDIRECT]=$start_url;
                   $_[REX][QUERY]="";
                   return &rex_redirect_found;
@@ -188,7 +188,7 @@ sub uhm_history{
                 @$stack=($_[REX][URI]);
               }
           }
-            asay $STDERR, "---RESULT OF STACK ON THIS PAGE---", $stack;
+          #asay $STDERR, "---RESULT OF STACK ON THIS PAGE---", $stack;
             &$next;
             # Now up to templates to use above url functions to render  links in html
           }

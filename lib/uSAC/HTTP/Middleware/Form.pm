@@ -77,8 +77,8 @@ sub generate_protection_token {
 sub verify_protection_token {
 
     my $token=shift;
-    asay $STDERR, "verify token";
-    adump $STDERR, $token;
+    #asay $STDERR, "verify token";
+    #adump $STDERR, $token;
     my $jwt;
     
     my $key;
@@ -120,7 +120,7 @@ sub verify_protection_token {
       }
       else {
         # Limit reached or maybe expired or doesn't exist
-        asay $STDERR,"Limit Reached or expired... removing ";
+        #asay $STDERR,"Limit Reached or expired... removing ";
         delete $entry->{$csrf};
         return undef;
       }
@@ -150,7 +150,7 @@ sub decode_urlencoded_form {
 # Basic wrapper to simply give the key value pairs from slurped url
 # encoded form
 sub uhm_decode_form {
-  asay  $STDERR, "DECODE FORM OPTIONS", Dumper @_;
+  #asay  $STDERR, "DECODE FORM OPTIONS", Dumper @_;
   my %options=@_;
 
   my $merge_multipart=1;
@@ -237,8 +237,8 @@ sub uhm_decode_form {
 
       }
 
-        asay $STDERR, "CSRF name is ", $CSRF_field_name;
-        adump $STDERR, $_[PAYLOAD];
+      #asay $STDERR, "CSRF name is ", $CSRF_field_name;
+        #adump $STDERR, $_[PAYLOAD];
         # If a CSRF_field name is specifed in the first part, enable protection checking
         if($CSRF_field_name and ref($_[PAYLOAD][0][PART_CONTENT]) eq "HASH"){
 
@@ -247,11 +247,11 @@ sub uhm_decode_form {
           for($_[PAYLOAD][0][PART_CONTENT]{$CSRF_field_name}){
 
             return &rex_error_unauthorized unless $_;
-            asay $STDERR, "CSRF data is ", $_;
+            #asay $STDERR, "CSRF data is ", $_;
 
 
             my $data=verify_protection_token($_);
-            asay  $STDERR, "CSRF data parsed is ", $data;
+            #asay  $STDERR, "CSRF data parsed is ", $data;
             if($data){
               $_=$data;
 

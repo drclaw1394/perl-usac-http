@@ -267,10 +267,11 @@ sub rex_redirect_see_other{
 
   return &rex_redirect_found;
 
-Uses the current value of $_[PAYLOAD] as a URL target of client to
-redirect to. This invokes the serialiser and the current middleware
-chain will be halted immediately. Ensure code returns immediately after
-calling.
+Uses the fields to render a redirect
+
+If REDIRECT is specified is present it is used directly
+IF QUERY is present, it is combined with the PATH
+
 
 =cut
 sub rex_redirect_found {

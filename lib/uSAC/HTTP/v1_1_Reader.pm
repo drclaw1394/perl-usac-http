@@ -319,7 +319,8 @@ sub make_parser{
             uSAC::HTTP::Rex::peer_,
             uSAC::HTTP::Rex::sequence_,
             uSAC::HTTP::Rex::serializer_,
-            ]=$ex->@[0,1,2,3,5,6,7,9];
+            uSAC::HTTP::Rex::session_,
+            ]=($ex->@[0,1,2,3,5,6,7,9],$r);
 
             #$rex->@[@rex_idx]=$ex->@[@ex_idx];
 
@@ -1434,7 +1435,7 @@ sub make_serialize{
       #$reply->[0].=$static_headers;
       $rreply[0].=CRLF;
 
-      Log::OK::TRACE and say STDERR "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
+      Log::OK::TRACE and asay $STDERR, "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
 
       # mark headers as done, if not informational
       #
@@ -1571,7 +1572,7 @@ sub make_serialize{
       #$reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      Log::OK::TRACE and say STDERR "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
+      Log::OK::TRACE and asay $STDERR, "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
 
       # mark headers as done, if not informational
       #
@@ -1753,7 +1754,7 @@ sub make_serialize{
       #$reply->[0].=$static_headers;
       $reply->[0].=CRLF;
 
-      Log::OK::TRACE and say STDERR "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
+      Log::OK::TRACE and asay $STDERR, "->Serialize: headers=|$_[REX]\n$reply->[0]|=";
 
       # mark headers as done, if not informational
       #
