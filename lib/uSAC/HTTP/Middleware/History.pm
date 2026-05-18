@@ -1,5 +1,17 @@
 package uSAC::HTTP::Middleware::History;
 
+=head1 NAME 
+
+  uSAC::HTTP::Middleware::History -  Stateful history management, with out cookies
+
+=head1 DESCRIPTION
+
+Using query parameters and post forms inconjuction with clients side, implements a history stack.
+The user can traverse the user inteface stack independently in multiple windows. doesn't use cookies
+
+Rendered via template
+
+=cut
 use v5.36;
 use feature "try";
 
@@ -49,11 +61,11 @@ sub create_stack {
 # need to check origin of referer
 sub uhm_history{
   my %options=my @options=@_;
-  my $name_space=$options{name_space};
+  my $state_name=$options{state_name};
   my $name=$options{name}//"viewstack";
   my $start_url=$options{start_url};
   (
-    uhm_state_form(name=>$name_space, @options),
+    uhm_state_form(name=>$state_name, @options),
   [
     sub {
       my ($next)=@_;
@@ -67,7 +79,7 @@ sub uhm_history{
 
           return &$next if $_[REX][PATH]=~m{\.};  # if it looks like a file... leave it alone
 
-          for my $state ($_[REX][STATE]{$name_space}){
+          for my $state ($_[REX][STATE]{$state_name}){
 
               
             # decode state if it need if
@@ -75,14 +87,14 @@ sub uhm_history{
             #$state//={decode_cookies $_[IN_HEADER]{HTTP_COOKIE()}};
            
             #adump $STDERR, "REX STATE in URL::STACK", $state;
-            #adump $STDERR, "stack is expected in : $name_space";
-            #adump $STDERR, " stack is at: {$name_space}{$name}";
-            #adump $STDERR, " stack value is: ", $_[REX][STATE]{$name_space}{$name};
+            #adump $STDERR, "stack is expected in : $state_name";
+            #adump $STDERR, " stack is at: {$state_name}{$name}";
+            #adump $STDERR, " stack value is: ", $_[REX][STATE]{$state_name}{$name};
 
 
 
-            my $stack=$_[REX][STATE]{$name_space}{$name}//=[];
-            my $replace=delete $_[REX][STATE]{$name_space}{replace};
+            my $stack=$_[REX][STATE]{$state_name}{$name}//=[];
+            my $replace=delete $_[REX][STATE]{$state_name}{replace};
 
             my $referer=  $_[IN_HEADER]{HTTP_REFERER()};
 
@@ -99,7 +111,7 @@ sub uhm_history{
 
 
             # Strip out state variable
-            my $rex_url=$_[REX][URI] =~ s/&{0,1}$name_space=\w*//r;
+            my $rex_url=$_[REX][URI] =~ s/&{0,1}$state_name=\w*//r;
 
             ##adump $STDERR, "Request rex_url", $rex_url;
             #adump $STDERR, "org rex_url", $_[REX][URI];;
@@ -206,8 +218,8 @@ sub uhm_history{
       sub {
             if($_[REX][METHOD] =~ /(?:POST)|(?:PUT)|(?:PATCH)/){
 
-              #my $q="$name_space=$_[PAYLOAD][0][PART_CONTENT]{$name_space}";
-               my $q="$name_space=".encode_html_state_from $_[REX][STATE], $name_space;
+              #my $q="$state_name=$_[PAYLOAD][0][PART_CONTENT]{$state_name}";
+               my $q="$state_name=".encode_html_state_from $_[REX][STATE], $state_name;
               #my $a=$_[REX][REDIRECT]=$_[REX][PATH]."?$q";
               $_[REX][QUERY]=join "&", $_[REX][QUERY]//(), $q;
               return &rex_redirect_found;
