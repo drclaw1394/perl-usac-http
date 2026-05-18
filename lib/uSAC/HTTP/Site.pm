@@ -499,6 +499,12 @@ method _wrap_middleware {
 
       $string='$_delegate->'.s/\$$//r;
   
+      if(ref $_delegate){
+        $string.='->($_delegate)';
+      }
+      else{
+        $string.=q{->("$_delegate")};
+      }
       Log::OK::TRACE and log_trace "........DELEGATE STRING: $string";
       
       Log::OK::TRACE and log_trace "=====DELEGATE is: $_delegate";
@@ -1194,20 +1200,20 @@ method load {
       if(ref $package eq "CODE"){
         # Call dirctly
         adump $STDERR, " Loaded via code ref ", %options;
-        $package->(%options)->($self);
+        $package->()->($self, %options);
       }
       elsif(ref($package) =~ /::/){
         # Assume an object  and call the  
         #$self->add_delegate(ref $package);
         adump $STDERR, " Loaded from object ", %options;
-        $package->app(%options)->($self);
+        $package->app()->($self, %options);
 
       }
       else {
         # Assume a package name
         #$self->add_delegate($package);
         adump $STDERR, " Loaded from package name...", %options;
-        $package->app(%options)->($self);
+        $package->app()->($self, %options);
       }
     }
     catch($error){
