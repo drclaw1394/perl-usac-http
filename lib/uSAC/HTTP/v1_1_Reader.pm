@@ -151,7 +151,7 @@ sub make_parser{
   #weaken $r;
   if($mode==MODE_RESPONSE){
   sub {
-    Log::OK::TRACE and log_trace "--TOp of parser";
+    Log::OK::TRACE and asay $STDERR, "--TOp of parser";
     my $processed=0;
     my $rex;#=$pipeline->[$pipeline->@*-1];
 
@@ -281,9 +281,9 @@ sub make_parser{
 
           #$closeme=(!$keep_alive or $closeme);
 
-          Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
-          Log::OK::DEBUG and log_debug "URI/Code: $uri";
-          Log::OK::DEBUG and log_debug "verison/description: $version";
+          Log::OK::DEBUG and asay $STDERR, "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
+          Log::OK::DEBUG and asay $STDERR, "URI/Code: $uri";
+          Log::OK::DEBUG and asay $STDERR, "verison/description: $version";
 
           # Find route
           
@@ -329,7 +329,7 @@ sub make_parser{
             $rrex[uSAC::HTTP::Rex::AUTHENTICATION]=[];
 
 
-            Log::OK::DEBUG and log_debug  "New rex object: $rex";
+            Log::OK::DEBUG and asay $STDERR, "New rex object: $rex";
             push @$pipeline, $rex;
 	    #say STDERR "PIPE LINE IS @$pipeline long";
             $out_header={};
@@ -433,14 +433,14 @@ sub make_parser{
 
           my $new=length($buf)-$processed;	#length of read buffer
 
-          Log::OK::TRACE and log_trace ("DOING BODY CONTENT......... $new");
+          Log::OK::TRACE and adump $STDERR, ("DOING BODY CONTENT......... $buf");
           $new=$new>$body_len?$len:$new;		#clamp to content length
           $processed+=$new;			#track how much we have processed
 
           my $payload=substr $buf, 0, $new, "";
 
           if($processed==$body_len){
-            Log::OK::TRACE and log_trace ("DOING BODY CONTENT last ......... $new");
+            Log::OK::TRACE and asay $STDERR, ("DOING BODY CONTENT last ......... $new");
             #
             # Last send
             #
@@ -450,7 +450,7 @@ sub make_parser{
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
           }
           else {
-            Log::OK::TRACE and log_trace ("DOING BODY CONTENT not last ......... $new");
+            Log::OK::TRACE and asay $STDERR, ("DOING BODY CONTENT not last ......... $new");
             # 
             # Not last send
             #
@@ -551,7 +551,7 @@ sub make_parser{
       else {
         $context=Error::Show::context($e);
       }
-      Log::OK::ERROR and log_error  $context;
+      Log::OK::ERROR and asay $STDERR, $context;
 
       if(Log::OK::DEBUG){
         $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
@@ -572,7 +572,7 @@ sub make_parser{
   }
   elsif($mode==MODE_REQUEST){
   sub {
-    Log::OK::TRACE and log_trace "--TOp of parser";
+    Log::OK::TRACE and asay $STDERR, "--TOp of parser";
     my $processed=0;
     my $rex;#=$pipeline->[$pipeline->@*-1];
 
@@ -678,9 +678,9 @@ sub make_parser{
 
           #$closeme=(!$keep_alive or $closeme);
 
-          Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
-          Log::OK::DEBUG and log_debug "URI/Code: $uri";
-          Log::OK::DEBUG and log_debug "verison/description: $version";
+          Log::OK::DEBUG and asay $STDERR, "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
+          Log::OK::DEBUG and asay $STDERR, "URI/Code: $uri";
+          Log::OK::DEBUG and asay $STDERR, "verison/description: $version";
 
           # Find route
           
@@ -749,14 +749,14 @@ sub make_parser{
 
           my $new=length($buf)-$processed;	#length of read buffer
 
-          Log::OK::TRACE and log_trace ("DOING BODY CONTENT......... $new");
+          Log::OK::TRACE and asay $STDERR, ("DOING BODY CONTENT......... $new");
           $new=$new>$body_len?$len:$new;		#clamp to content length
           $processed+=$new;			#track how much we have processed
 
           my $payload=substr $buf, 0, $new, "";
 
           if($processed==$body_len){
-            Log::OK::TRACE and log_trace ("DOING BODY CONTENT last ......... $new");
+            Log::OK::TRACE and asay $STDERR, ("DOING BODY CONTENT last ......... $new");
             #
             # Last send
             #
@@ -766,7 +766,7 @@ sub make_parser{
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
           }
           else {
-            Log::OK::TRACE and log_trace ("DOING BODY CONTENT not last ......... $new");
+            Log::OK::TRACE and asay $STDERR, ("DOING BODY CONTENT not last ......... $new");
             # 
             # Not last send
             #
@@ -861,7 +861,7 @@ sub make_parser{
       else {
         $context=Error::Show::context($e);
       }
-      Log::OK::ERROR and log_error  $context;
+      Log::OK::ERROR and asay $STDERR, $context;
 
       if(Log::OK::DEBUG){
         $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
@@ -882,7 +882,7 @@ sub make_parser{
   }
   else {
   sub {
-    Log::OK::TRACE and log_trace "--TOp of parser";
+    Log::OK::TRACE and asay $STDERR, "--TOp of parser";
     my $processed=0;
     my $rex;#=$pipeline->[$pipeline->@*-1];
 
@@ -1013,9 +1013,9 @@ sub make_parser{
 
           #$closeme=(!$keep_alive or $closeme);
 
-          Log::OK::DEBUG and log_debug "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
-          Log::OK::DEBUG and log_debug "URI/Code: $uri";
-          Log::OK::DEBUG and log_debug "verison/description: $version";
+          Log::OK::DEBUG and asay $STDERR, "Version/method: $method, Close me set to: ". ($closeme?"true":"false");
+          Log::OK::DEBUG and asay $STDERR, "URI/Code: $uri";
+          Log::OK::DEBUG and asay $STDERR, "verison/description: $version";
 
           # Find route
           
@@ -1042,7 +1042,7 @@ sub make_parser{
             $rex->[uSAC::HTTP::Rex::AUTHENTICATION]=[];
 
 
-            Log::OK::DEBUG and log_debug  "New rex object: $rex";
+            Log::OK::DEBUG and asay $STDERR, "New rex object: $rex";
             push @$pipeline, $rex;
 	    #say STDERR "PIPE LINE IS @$pipeline long";
             $out_header={};
@@ -1178,14 +1178,14 @@ sub make_parser{
 
           my $new=length($buf)-$processed;	#length of read buffer
 
-          Log::OK::TRACE and log_trace ("DOING BODY CONTENT......... $new");
+          Log::OK::TRACE and asay $STDERR, ("DOING BODY CONTENT......... $new");
           $new=$new>$body_len?$len:$new;		#clamp to content length
           $processed+=$new;			#track how much we have processed
 
           my $payload=substr $buf, 0, $new, "";
 
           if($processed==$body_len){
-            Log::OK::TRACE and log_trace ("DOING BODY CONTENT last ......... $new");
+            Log::OK::TRACE and asay $STDERR, ("DOING BODY CONTENT last ......... $new");
             #
             # Last send
             #
@@ -1195,7 +1195,7 @@ sub make_parser{
             $route and $route->[1][ROUTE_INNER_HEAD]($route, $rex, $h, $out_header, $payload, my $cb=undef);
           }
           else {
-            Log::OK::TRACE and log_trace ("DOING BODY CONTENT not last ......... $new");
+            Log::OK::TRACE and asay $STDERR, ("DOING BODY CONTENT not last ......... $new");
             # 
             # Not last send
             #
@@ -1290,7 +1290,7 @@ sub make_parser{
       else {
         $context=Error::Show::context($e);
       }
-      Log::OK::ERROR and log_error  $context;
+      Log::OK::ERROR and asay $STDERR, $context;
 
       if(Log::OK::DEBUG){
         $rex->[STATUS]=HTTP_INTERNAL_SERVER_ERROR;
@@ -1475,7 +1475,7 @@ sub make_serialize{
 
         unless($_[CB]){
           # Marked as last call
-          Log::OK::DEBUG and log_debug "chunked write... last calle (CB=undef)";
+          Log::OK::DEBUG and asay $STDERR, "chunked write... last calle (CB=undef)";
           $rreply[0].="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
@@ -1612,7 +1612,7 @@ sub make_serialize{
 
         unless($_[CB]){
           # Marked as last call
-          Log::OK::DEBUG and log_debug "chunked write... last calle (CB=undef)";
+          Log::OK::DEBUG and asay $STDERR, "chunked write... last calle (CB=undef)";
           $reply->[0].="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
@@ -1794,7 +1794,7 @@ sub make_serialize{
 
         unless($_[CB]){
           # Marked as last call
-          Log::OK::DEBUG and log_debug "chunked write... last calle (CB=undef)";
+          Log::OK::DEBUG and asay $STDERR, "chunked write... last calle (CB=undef)";
           $reply->[0].="00".CRLF.CRLF;
           delete $out_ctx{$_[REX]};
         }
@@ -1844,7 +1844,7 @@ sub make_error {
   #
   sub {
     if($_[REX]){
-      Log::OK::DEBUG and log_debug "v1_1 error called--------";
+      Log::OK::DEBUG and asay $STDERR, "v1_1 error called--------";
       #
       #There might not be rex. ie could be a complete reply and client closes
       # connection which will trigger this 

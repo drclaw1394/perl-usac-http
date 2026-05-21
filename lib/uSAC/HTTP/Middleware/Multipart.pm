@@ -3,6 +3,7 @@ use v5.36;
 use feature "refaliasing";
 no warnings "experimental";
 
+use uSAC::HTTP::Rex;
 use uSAC::HTTP::Constants;
 use uSAC::HTTP::Header;
 use uSAC::IO;
@@ -32,15 +33,21 @@ sub uhm_multipart {
     my $processed;
     my $last_part;
     sub {
+        asay $STDERR, "---TOP OF MULTIPART";
+          asay $STDERR, $_[REX][URI];
       my $ctx=$in_ctx{$_[REX]};
       
       unless($ctx){
 
-        # skip if not multipart
+        # skip if not a modification request 
+        # skip if not a multipart 
         #
+        return &$next unless ($_[REX][METHOD] =~ /(?:POST)|(?:PUT)|(?:PATCH)/);
+
         return &$next unless ($_[IN_HEADER]{HTTP_CONTENT_TYPE()}//"") =~/multipart/i;
 
 
+        asay $STDERR, "---doing multipart";
         my $boundary="--".(split("=", $_[IN_HEADER]{HTTP_CONTENT_TYPE()}))[1]; #boundary
         $ctx=[
           0,    #state

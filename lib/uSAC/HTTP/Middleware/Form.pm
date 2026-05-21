@@ -187,8 +187,21 @@ sub uhm_decode_form {
 
 
     sub { 
+        asay $STDERR, "---TOP OF FORM";
+          return 1 unless $_[OUT_HEADER];
+      # If the body is normal scalar (not a ref) then it was not parsed successfully through slurp,
+      #
+      # So we bypass
+      #return 1 unless ref $_[PAYLOAD];
+      asay $STDERR, "---doing form";
+      asay $STDERR, $_[REX][URI];
+      asay $STDERR, $_[REX][METHOD];
+      asay $STDERR, $_[REX][STATUS];
+      asay $STDERR, Dumper $_[PAYLOAD];
+
       # Prcess all parts of the upload, using the content disposition header
-      if($merge_multipart and $_[PAYLOAD]->@*>1){
+      if(ref $_[PAYLOAD]){
+        if($merge_multipart and $_[PAYLOAD]->@*>1){
         # Any parts without a content type are removed and combined into a single part at the start
         # Any remaining parts (ie file uploads) are left as is
         my %new_contents;
@@ -223,7 +236,8 @@ sub uhm_decode_form {
           my $decoder=$decoders->{$_};
           if($decoder){
             # Do it
-            $part->[PART_CONTENT]=$decoder->($part->[PART_CONTENT]);
+            $part->[PART_CONTENT]=$decoder->($part->[PART_CONTENT])//{};
+            say STDERR "DECODED CONTENT", Dumper $part;
           }
           else {
             # Unsupported mime type
@@ -264,6 +278,7 @@ sub uhm_decode_form {
             }
           }
         }
+      }
 
       # Decode query parameters if not already decoded
       for($_[REX][QUERY]||()){

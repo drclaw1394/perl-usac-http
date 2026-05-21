@@ -325,6 +325,7 @@ sub send_file_uri {
       #
       my $sz=($content_length-$total);
       $sz=$read_size if $sz>$read_size;
+      Log::OK::TRACE and asay $STDERR, "Read size is $sz, offset $offset";
       #Log::OK::TRACE and log_trace "Total size: $total, content length: $content_length  difference: @{[$content_length-$total]}, size $sz  offset $offset";
       $reply//="";
       $total+=$rc=IO::FD::pread $entry->[File::Meta::Cache::FD], $reply, $sz, $offset;
@@ -812,6 +813,7 @@ sub uhm_static_root {
               unless($entry){
                 Log::OK::TRACE and asay $STDERR, "NO Existing entry for opening file!";
                 $entry=$opener->($path, $open_modes,undef, $enable_redirect);
+                Log::OK::TRACE and asay $STDERR, Dumper $entry;
                 $enc=($no_encoding and $ext=~/$no_encoding/)?"identity":"";
 
               }

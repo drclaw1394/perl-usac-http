@@ -1,4 +1,5 @@
-package uSAC::HTTP::Middleware::TemplatePlex2;
+package uSAC::HTTP::Middleware::Plexsite;
+
 use v5.36;
 use feature "try";
 use uSAC::HTTP;
@@ -11,11 +12,11 @@ use uSAC::HTTP::Middleware::Form;
 use Template::Plexsite;
 use Template::Plexsite::URLTable;
 
-use Export::These 'uhm_template_plex2';
+use Export::These 'uhm_plexsite';
 # Template::Plex middleware driver 
 
 
-sub uhm_template_plex2 {
+sub uhm_plexsite {
 
   my %options=@_;
 
@@ -49,6 +50,8 @@ sub uhm_template_plex2 {
       my $p;
       sub {
         if($_[OUT_HEADER] and (($_[REX][STATUS]//HTTP_NOT_FOUND) == HTTP_NOT_FOUND())){
+          $_[REX][PATH]=~s|($Decimal)$||;
+          $_[REX][SCRATCH]{id}=$1;
 
           # Check the url ends witha slash. If it doesnt. tell the client to redirect
           my $path=$_[REX][PATH];
@@ -116,6 +119,8 @@ sub uhm_template_plex2 {
 
               $_[REX][STATUS]=HTTP_OK;
               $_[OUT_HEADER]{HTTP_CONTENT_LENGTH()}=length $_[PAYLOAD];
+              $_[OUT_HEADER]{HTTP_CACHE_CONTROL()}="No-Store";
+              # Mark as non cacheable
             }
             else {
               $_[REX][STATUS]=HTTP_NOT_FOUND;

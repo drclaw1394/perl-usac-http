@@ -67,6 +67,9 @@ sub uhm_state_form{
       sub {
         my ($next)=@_;
         sub {
+          asay $STDERR, "---TOP OF STATE FORM";
+          asay $STDERR, $_[REX][URI];
+          return &$next unless $_[OUT_HEADER];
           # Decode query if not decoded
           for($_[REX][QUERY]||()){
             #adump $STDERR, "URL is $_[REX][URI]";
@@ -96,7 +99,13 @@ sub uhm_state_form{
             
             my $post_state=$d->{$name};
             #adump $STDERR, "POST HTML STATE DATA for $name", $d;
-            $_[REX][STATE]{$name}=decode_json MIME::Base64::decode_base64url $post_state;
+            try {
+              $_[REX][STATE]{$name}=decode_json MIME::Base64::decode_base64url $post_state;
+            }
+            catch($e){
+                  adump $STDERR, "Error in decoding POST state ", $e;
+                  $_[REX][STATE]{$name}={};
+            }
 
             
             ###################################################################################

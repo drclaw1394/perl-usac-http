@@ -45,7 +45,7 @@ sub uhm_slurp {
   }
   else {
     # warn about memory only slurping
-    Log::OK::WARN and log_warn "No upload dir destination. Content slurping is memory only";
+    Log::OK::WARN and asay $STDERR, "No upload dir destination. Content slurping is memory only";
     $mem_flag=1;
   }
   # Test if upload directory exists;
@@ -57,13 +57,17 @@ sub uhm_slurp {
     my $next=shift;
     my $last;
     sub {
-        Log::OK::TRACE and log_trace "---SLurp top for rex: ". $_[REX];
+        # Slurp only requests with a potential body
+        #
+        return &$next unless ($_[REX][METHOD] =~ /(?:POST)|(?:PUT)|(?:PATCH)/);
+
+        Log::OK::TRACE and asay $STDERR, "---SLurp top for rex: ". $_[REX];
         my $c=$ctx{$_[REX]};
         my $payload=$_[PAYLOAD];
         #adump $STDERR, $payload;
         $_[PAYLOAD]=""; # Consume payload
         unless($c){
-          Log::OK::TRACE and log_trace "--Slurp context does not exist for rex";
+          Log::OK::TRACE and asay $STDERR, "--Slurp context does not exist for rex";
           #first call, create a new context
           $c=$ctx{$_[REX]}=[];
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
@@ -89,7 +93,7 @@ sub uhm_slurp {
         # Wrap payload if presenting as a normal body
         unless(ref $payload){
 
-          Log::OK::TRACE and log_trace "--Slurp payload not a ref... single part";
+          Log::OK::TRACE and asay $STDERR, "--Slurp payload not a ref... single part";
           # Reuse the head created of the first (and only) part if it exists
           my $head=@$c?$c->[0][0]:{};
 
@@ -226,7 +230,7 @@ sub uhm_slurp {
             }
             else {
               # Append into memory
-              Log::OK::TRACE and log_trace "--- APpend to memoy"; 
+              Log::OK::TRACE and asay $STDERR, "--- APpend to memoy"; 
               push @$c, $payload;
             }
           }
@@ -242,7 +246,7 @@ sub uhm_slurp {
           }
 
           $_[PAYLOAD]=delete $ctx{$_[REX]};
-          Log::OK::TRACE and log_trace "__Slurp complete .. calling next";
+          Log::OK::TRACE and asay $STDERR, "__Slurp complete .. calling next";
           &$next;
         }
       }
