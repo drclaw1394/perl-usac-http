@@ -160,7 +160,7 @@ sub uhm_decode_form {
   # user can specifiy undef to disable checks
   my $CSRF_field_name=exists($options{CSRF_name})?$options{CSRF_name}:"protection_token";
 
-  my $decoders=%options{decoders};
+  my $decoders=$options{decoders};
 
   unless($decoders){
     # Setup Default decoders
@@ -281,11 +281,13 @@ sub uhm_decode_form {
       }
 
       # Decode query parameters if not already decoded
-      for($_[REX][QUERY]||()){
-        unless(ref){
-          $_=decode_urlencoded_form($_);
-        }
-      }
+      ######################################
+      # for($_[REX][QUERY]||()){           #
+      #   unless(ref){                     #
+      #     $_=decode_urlencoded_form($_); #
+      #   }                                #
+      # }                                  #
+      ######################################
 
       1;
     },

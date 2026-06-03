@@ -219,9 +219,11 @@ sub uhm_history{
             if($_[REX][METHOD] =~ /(?:POST)|(?:PUT)|(?:PATCH)/){
 
               #my $q="$state_name=$_[PAYLOAD][0][PART_CONTENT]{$state_name}";
-               my $q="$state_name=".encode_html_state_from $_[REX][STATE], $state_name;
+              #my $q="$state_name=".encode_html_state_from $_[REX][STATE], $state_name;
               #my $a=$_[REX][REDIRECT]=$_[REX][PATH]."?$q";
-              $_[REX][QUERY]=join "&", $_[REX][QUERY]//(), $q;
+              adump $STDERR, "----- QUERY IN HISTORY OUTER WARE", $_[REX][QUERY];
+
+              $_[REX][QUERY]{$state_name}=encode_html_state_from $_[REX][STATE], $state_name;
               return &rex_redirect_found;
             }
             else {

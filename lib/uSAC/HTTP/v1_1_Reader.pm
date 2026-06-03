@@ -19,6 +19,7 @@ use uSAC::HTTP::Route;    # For routing structure
 
 use HTTP::State;
 use HTTP::State::Cookie qw<:all>;
+use uSAC::HTTP::Middleware::Form;
 
 use Export::These qw<
 		parse_form
@@ -352,6 +353,10 @@ sub make_parser{
             $_i=index $uri, "?"; 
             if($_i>=0){
               $rrex[QUERY]=substr($uri, $_i+1);
+
+              # Decode query if present
+              $_=decode_urlencoded_form  $_ for($$rex[QUERY]);
+
 
               $uri=$rrex[PATH]=substr($uri, 0, $_i);
             }

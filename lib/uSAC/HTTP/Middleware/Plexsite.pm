@@ -18,9 +18,10 @@ use Export::These 'uhm_plexsite';
 
 sub uhm_plexsite {
 
-  my %options=@_;
+  my %or_options=@_;
 
-  my $url_table=$options{url_table};
+  my $or_url_table=$or_options{url_table};
+
   my $vars={
     route=>undef, 
     rex=>undef, 
@@ -32,19 +33,25 @@ sub uhm_plexsite {
   
 
   my %reverse;
-  # built reverse index
-  for my ($k, $v)($url_table->table->%*){
-    if($v->{template}){
-      $reverse{"/".$v->{output}}=$k;
-      #asay $STDERR, "/$v->{output} -> $k";
-    }
-  }
 
-  my $prefix=$options{prefix};
+  my $prefix=$or_options{prefix};
 
   [
     sub {
-    #my %options=@_;
+    my %options=@_;
+
+    my $site=$options{site};
+    say STDERR "SITE is ".$site->id." ========";
+    my $url_table=$site->build_url_table;
+    $url_table//=$or_url_table;
+
+    # built reverse index
+    for my ($k, $v)($url_table->table->%*){
+      if($v->{template}){
+        $reverse{"/".$v->{output}}=$k;
+        #asay $STDERR, "/$v->{output} -> $k";
+      }
+    }
 
     my ($next, $index)=@_;
       my $p;
@@ -109,7 +116,7 @@ sub uhm_plexsite {
             my $path=join "/", @comps;
 
 
-            #asay $STDERR, " INPUT PATH FOR OUTPUT: $path ||||   $output";
+            asay $STDERR, " INPUT PATH FOR OUTPUT: $path ||||   $output";
 
             #$path=substr $path, 1;
             if($url_table->add_resource($path)){

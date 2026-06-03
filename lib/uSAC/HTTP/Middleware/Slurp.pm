@@ -33,6 +33,13 @@ sub uhm_slurp {
   my $upload_dir=$options{upload_dir};
 	my $upload_limit=$options{byte_limit}//$UPLOAD_LIMIT;
   my $close_on_complete=$options{close_on_complete}//1; # Default is to close
+  my $checksum=$options{checksum}//256;   # If not provided use 256, if 0 then disable, otherwise is exected sha hash size
+  if($checksum){
+    require Digest::SHA;
+
+    # Atempt to create a options
+      Digest::SHA->new($checksum);
+  }
 
   my $mem_flag;
 
@@ -53,6 +60,8 @@ sub uhm_slurp {
 
 
   my %ctx;
+  my %csum;
+
   my $inner=sub {
     my $next=shift;
     my $last;
@@ -64,12 +73,17 @@ sub uhm_slurp {
         Log::OK::TRACE and asay $STDERR, "---SLurp top for rex: ". $_[REX];
         my $c=$ctx{$_[REX]};
         my $payload=$_[PAYLOAD];
+        
+        my $sum=$csum{$_[REX]};
+
         #adump $STDERR, $payload;
         $_[PAYLOAD]=""; # Consume payload
         unless($c){
           Log::OK::TRACE and asay $STDERR, "--Slurp context does not exist for rex";
+
           #first call, create a new context
           $c=$ctx{$_[REX]}=[];
+
           $_[REX][uSAC::HTTP::Rex::in_progress_]=1;
 
           my $cb=$_[CB];
@@ -120,6 +134,7 @@ sub uhm_slurp {
           if($head->{HTTP_CONTENT_TYPE()} ne "application/x-www-form-urlencoded"){
             $head->{_filename}//="single_part";
           }
+          
           $payload=[$head, $payload];
         }
 
@@ -130,6 +145,10 @@ sub uhm_slurp {
           if(@$c and $payload->[0] == $c->[$last][0]){
             #Header information is the same. Append data
             #
+
+            # Do check sum if needed
+            $sum->add($payload->[1]) if $sum;
+
             if($c->[$last][0]{_filename} and !$mem_flag){
               my $fd=$c->[$last][1];
               if(defined IO::FD::syswrite $fd, $payload->[1]){
@@ -147,8 +166,16 @@ sub uhm_slurp {
             #
             IO::FD::close $c->[$last][1] if @$c and !$mem_flag and $c->[$last][0]{_filename} and $close_on_complete;
 
+            # Finish checksum... add the header
+            $c->[$last][0]{_checksum}=$sum->hexdigest if $checksum and $sum;
+
             #open new one
             my $h=$payload->[0];
+
+            if($checksum){
+              $sum=$csum{$_[REX]}=Digest::SHA->new($checksum);
+              $sum->add($payload->[1]);
+            }
 
             if($h->{_filename} and $h->{"content-type"} and !$mem_flag){
 
@@ -245,8 +272,14 @@ sub uhm_slurp {
             $c->[$last][1]=undef;
           }
 
+          # finalise checsum and delte csum context
+          if($checksum){
+            $c->[$last][0]{_checksum}=$sum->hexdigest;
+            delete $csum{$_[REX]};
+          }
           $_[PAYLOAD]=delete $ctx{$_[REX]};
           Log::OK::TRACE and asay $STDERR, "__Slurp complete .. calling next";
+          adump $STDERR, $_[PAYLOAD];
           &$next;
         }
       }

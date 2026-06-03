@@ -35,8 +35,9 @@ sub uhm_bridge_ws{
         sub {
           my $bridge;
           my $ws=$_[PAYLOAD];
-          
+          asay $STDERR, " == IN websocket callback"; 
           $ws->on_open=sub {
+            asay $STDERR, "in  WS OPEN";
             # Create a new bridge
             #
             $bridge=uSAC::FastPack::Broker::Bridge->new(broker=>$broker, forward=>$forward);
@@ -67,6 +68,7 @@ sub uhm_bridge_ws{
             ########################################################
 
             
+            asay $STDERR, " Setting payload";
             $_[PAYLOAD]=[$bridge, $broker];
 
             &$next;

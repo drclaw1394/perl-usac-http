@@ -305,9 +305,26 @@ sub rex_redirect_found {
     $path="/".$path;	
   }
   $_[REX][STATUS]=HTTP_FOUND;
+
+  use uSAC::IO;
+  adump $STDERR, "-- IN rex redirect found ", $_[REX][QUERY];
+
   if($_[REX][QUERY]){
 
+    if(ref $_[REX][QUERY]){
+    my $q="";
+    for my($k, $v)($_[REX][QUERY]->%*){
+      $q.="$k=$v&";
+    }
+
+    chop $q;
+
+    $uri="$_[REX][PATH]?$q";
+    #$uri="$_[REX][PATH]?$_[REX][QUERY]";
+    }
+    else {
     $uri="$_[REX][PATH]?$_[REX][QUERY]";
+    }
   }
   else {
     $uri=$_[REX][PATH];

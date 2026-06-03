@@ -92,6 +92,7 @@ field $_secrets        :mutator; # Hash table of host(no port num) to tls struct
 field $_host_tables    :mutator;
 
 field $_broker         :mutator :param=undef;         # Sites support have built in suppor for message brokering
+field $_url_table      :mutator :param=undef;         # Sites support have built in support  for plexsite templating
 
 
 my @supported_methods=qw<HEAD GET PUT POST OPTIONS PATCH DELETE UPDATE TRACE>;
@@ -575,6 +576,19 @@ method build_broker {
     $parent=$parent->parent_site;
   }
   $broker;
+}
+
+method build_url_table {
+  my $table;
+  
+  my $parent=$self; 
+  while($parent){
+    $table=$parent->url_table; 
+    #asay $STDERR, "Building broker in $self, parent: $parent, broker: $broker";
+    last if $table;
+    $parent=$parent->parent_site;
+  }
+  $table;
 }
 
 #find the root and unshift middlewares along the way
