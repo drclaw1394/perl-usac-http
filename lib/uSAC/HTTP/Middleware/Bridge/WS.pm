@@ -77,8 +77,23 @@ sub uhm_bridge_ws{
 
           $ws->on_message=sub {
             # Pass data from ws
-            Log::OK::TRACE and log_trace  Dumper $_[1];
-            $bridge->on_read_handler->([$_[1]]);
+            #
+            Log::OK::TRACE and log_trace  "--- WS BRIDGE on_message called, final? $_[2]";
+
+            # Accumulate comtinuation messagtes
+            state $buff="";
+            if($buff eq "" and $_[2]){
+              # No need to accumulate
+              $bridge->on_read_handler->([$_[1]]);
+            }
+            else {
+              #accumucate
+              $buff.=$_[1];
+              if($_[2]){
+                $bridge->on_read_handler->([$buff]);
+                $buff="";
+              }
+            }
           };
 
           $ws->on_close=sub {
