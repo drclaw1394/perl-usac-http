@@ -370,7 +370,8 @@ my @days= qw(Sun Mon Tue Wed Thu Fri Sat);
 ########################################################################################################################
 
 sub _ticker {
-	my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = gmtime($Time=time);
+  use Time::HiRes;
+	my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = gmtime($Time=Time::HiRes::time);
 	#export to globally available time?
 	#
 	#Format Tue, 15 Nov 1994 08:12:31 GMT

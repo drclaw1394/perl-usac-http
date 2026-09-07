@@ -22,6 +22,7 @@ sub uhm_plexsite {
 
   my $or_url_table=$or_options{url_table};
 
+  my $root=$or_options{src};
   my $vars={
     route=>undef, 
     rex=>undef, 
